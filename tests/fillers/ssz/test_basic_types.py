@@ -5,12 +5,9 @@ from typing import ClassVar
 from ssz import (
     BaseBitlist,
     BaseBitvector,
+    BaseByteList,
+    BaseBytes,
     Boolean,
-    ByteList512KiB,
-    Bytes4,
-    Bytes32,
-    Bytes52,
-    Bytes64,
     List,
     Uint8,
     Uint16,
@@ -21,6 +18,26 @@ from ssz import (
     Vector,
 )
 from ssz_testing import SSZTestFiller
+
+
+class Bytes4(BaseBytes):
+    LENGTH = 4
+
+
+class Bytes32(BaseBytes):
+    LENGTH = 32
+
+
+class Bytes52(BaseBytes):
+    LENGTH = 52
+
+
+class Bytes64(BaseBytes):
+    LENGTH = 64
+
+
+class ByteList512KiB(BaseByteList):
+    LIMIT = 512 * 1024
 
 
 class SampleBitvector8(BaseBitvector):

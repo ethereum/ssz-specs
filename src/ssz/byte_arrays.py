@@ -240,52 +240,6 @@ class BaseBytes(bytes, SSZType):
         return hash((type(self), bytes(self)))
 
 
-class Bytes4(BaseBytes):
-    """Fixed-size byte array of exactly 4 bytes."""
-
-    LENGTH = 4
-
-
-class Bytes16(BaseBytes):
-    """Fixed-size byte array of exactly 16 bytes (Poly1305 authentication tag)."""
-
-    LENGTH = 16
-
-
-class Bytes20(BaseBytes):
-    """Fixed-size byte array of exactly 20 bytes."""
-
-    LENGTH = 20
-
-
-class Bytes32(BaseBytes):
-    """Fixed-size byte array of exactly 32 bytes."""
-
-    LENGTH = 32
-
-
-class Bytes33(BaseBytes):
-    """Fixed-size byte array of exactly 33 bytes (compressed secp256k1 public key)."""
-
-    LENGTH = 33
-
-
-class Bytes52(BaseBytes):
-    """Fixed-size byte array of exactly 52 bytes."""
-
-    LENGTH = 52
-
-
-class Bytes64(BaseBytes):
-    """Fixed-size byte array of exactly 64 bytes (secp256k1 signature)."""
-
-    LENGTH = 64
-
-
-ZERO_HASH: Bytes32 = Bytes32.zero()
-"""All-zero 32-byte hash, used as a canonical empty/uninitialized root."""
-
-
 class BaseByteList(SSZModel):
     r"""
     Variable-length SSZ byte array with 0 to N bytes.
@@ -434,9 +388,3 @@ class BaseByteList(SSZModel):
     def hex(self) -> str:
         """Return the hexadecimal string representation of the underlying bytes."""
         return self.data.hex()
-
-
-class ByteList512KiB(BaseByteList):
-    """Variable-length byte list with a 512 KiB limit."""
-
-    LIMIT = 512 * 1024
