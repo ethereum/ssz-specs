@@ -37,7 +37,7 @@ class Bytes64(BaseBytes):
 
 
 class ByteList512KiB(BaseByteList):
-    LIMIT = Uint64(512 * 1024)
+    LIMIT = 512 * 1024
 
 
 class SampleBitvector8(BaseBitvector):
