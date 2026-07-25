@@ -24,6 +24,24 @@ class BaseUint(int, SSZType):
     BITS: ClassVar[int]
     """The number of bits in the integer (overridden by subclasses)."""
 
+    MAX_VALUE: ClassVar[int]
+    """Cached inclusive upper bound ``2**BITS - 1``, computed once per width."""
+
+    BYTE_LENGTH: ClassVar[int]
+    """Cached serialized byte width ``BITS // 8``, computed once per width."""
+
+    def __init_subclass__(cls, **kwargs: Any) -> None:
+        """
+        Cache the per-width constants so hot paths never recompute them.
+
+        ``BITS`` is fixed for each concrete width, so its derived bound and byte
+        length are hoisted to class attributes here instead of being recomputed
+        (an expensive ``2**BITS``) on every construction and arithmetic result.
+        """
+        super().__init_subclass__(**kwargs)
+        cls.MAX_VALUE = 2**cls.BITS - 1
+        cls.BYTE_LENGTH = cls.BITS // 8
+
     def __new__(cls, value: SupportsInt) -> Self:
         """
         Create and range-check a new instance.
@@ -35,12 +53,25 @@ class BaseUint(int, SSZType):
         # Bool subclasses int, so reject it explicitly before the value check.
         if not isinstance(value, int) or isinstance(value, bool):
             raise SSZTypeMismatch("int", type(value))
+        return cls._wrap(value)
 
-        int_value = int(value)
-        max_value = 2**cls.BITS - 1
-        if not (0 <= int_value <= max_value):
-            raise SSZRangeError(cls.__name__, int_value, max_value)
-        return super().__new__(cls, int_value)
+    @classmethod
+    def _wrap(cls, value: int) -> Self:
+        """
+        Range-check an integer and wrap it into a typed instance.
+
+        This is the shared fast path for both construction and arithmetic
+        results. It assumes ``value`` is already a non-bool integer, so it skips
+        the type guards the public constructor runs, uses the cached bound, and
+        constructs directly via ``int.__new__``.
+
+        Raises:
+            SSZValueError: If value is outside [0, 2**BITS - 1].
+        """
+        max_value = cls.MAX_VALUE
+        if not (0 <= value <= max_value):
+            raise SSZRangeError(cls.__name__, value, max_value)
+        return int.__new__(cls, value)
 
     @classmethod
     def __get_pydantic_core_schema__(
@@ -79,7 +110,7 @@ class BaseUint(int, SSZType):
     @override
     def get_byte_length(cls) -> int:
         """Byte length derived from the bit width."""
-        return cls.BITS // 8
+        return cls.BYTE_LENGTH
 
     @override
     def encode_bytes(self) -> bytes:
@@ -135,7 +166,7 @@ class BaseUint(int, SSZType):
     @classmethod
     def max_value(cls) -> Self:
         """The maximum value for this unsigned integer."""
-        return cls(2**cls.BITS - 1)
+        return cls(cls.MAX_VALUE)
 
     def _raise_type_error(self, other: Any, op_symbol: str) -> NoReturn:
         """Helper to raise a consistent TypeError."""
@@ -146,63 +177,73 @@ class BaseUint(int, SSZType):
 
     def __add__(self, other: Any) -> Self:
         """Forward addition."""
-        if type(other) is not type(self):
+        cls = type(self)
+        if type(other) is not cls:
             self._raise_type_error(other, "+")
-        return type(self)(super().__add__(other))
+        return cls._wrap(int.__add__(self, other))
 
     def __radd__(self, other: Any) -> Self:
         """Reverse addition."""
-        if type(other) is not type(self):
+        cls = type(self)
+        if type(other) is not cls:
             self._raise_type_error(other, "+")
-        return type(self)(int(other) + int(self))
+        return cls._wrap(int.__add__(other, self))
 
     def __sub__(self, other: Any) -> Self:
         """Forward subtraction."""
-        if type(other) is not type(self):
+        cls = type(self)
+        if type(other) is not cls:
             self._raise_type_error(other, "-")
-        return type(self)(super().__sub__(other))
+        return cls._wrap(int.__sub__(self, other))
 
     def __rsub__(self, other: Any) -> Self:
         """Reverse subtraction."""
-        if type(other) is not type(self):
+        cls = type(self)
+        if type(other) is not cls:
             self._raise_type_error(other, "-")
-        return type(self)(int(other) - int(self))
+        return cls._wrap(int.__sub__(other, self))
 
     def __mul__(self, other: Any) -> Self:
         """Forward multiplication."""
-        if type(other) is not type(self):
+        cls = type(self)
+        if type(other) is not cls:
             self._raise_type_error(other, "*")
-        return type(self)(super().__mul__(other))
+        return cls._wrap(int.__mul__(self, other))
 
     def __rmul__(self, other: Any) -> Self:
         """Reverse multiplication."""
-        if type(other) is not type(self):
+        cls = type(self)
+        if type(other) is not cls:
             self._raise_type_error(other, "*")
-        return type(self)(int(other) * int(self))
+        return cls._wrap(int.__mul__(other, self))
 
     def __floordiv__(self, other: Any) -> Self:
         """Forward floor division."""
-        if type(other) is not type(self):
+        cls = type(self)
+        if type(other) is not cls:
             self._raise_type_error(other, "//")
-        return type(self)(super().__floordiv__(other))
+        return cls._wrap(int.__floordiv__(self, other))
 
     def __rfloordiv__(self, other: Any) -> Self:
         """Reverse floor division."""
-        if type(other) is not type(self):
+        cls = type(self)
+        if type(other) is not cls:
             self._raise_type_error(other, "//")
-        return type(self)(int(other) // int(self))
+        return cls._wrap(int.__floordiv__(other, self))
 
     def __mod__(self, other: Any) -> Self:
         """Forward modulo."""
-        if type(other) is not type(self):
+        cls = type(self)
+        if type(other) is not cls:
             self._raise_type_error(other, "%")
-        return type(self)(super().__mod__(other))
+        return cls._wrap(int.__mod__(self, other))
 
     def __rmod__(self, other: Any) -> Self:
         """Reverse modulo."""
-        if type(other) is not type(self):
+        cls = type(self)
+        if type(other) is not cls:
             self._raise_type_error(other, "%")
-        return type(self)(int(other) % int(self))
+        return cls._wrap(int.__mod__(other, self))
 
     @overload
     def __pow__(self, value: int, mod: None = None, /) -> Self: ...
@@ -219,7 +260,7 @@ class BaseUint(int, SSZType):
         if mod is not None and type(mod) is not type(self):
             self._raise_type_error(mod, "**")
         power = pow(int(self), int(value), int(mod) if mod is not None else None)
-        return type(self)(power)
+        return type(self)._wrap(power)
 
     def __rpow__(self, base: int, modulo: int | None = None, /) -> Self:
         """Reverse exponentiation and three-argument pow."""
@@ -228,27 +269,30 @@ class BaseUint(int, SSZType):
         if modulo is not None and type(modulo) is not type(self):
             self._raise_type_error(modulo, "**")
         power = pow(int(base), int(self), int(modulo) if modulo is not None else None)
-        return type(self)(power)
+        return type(self)._wrap(power)
 
     def __divmod__(self, other: Any) -> tuple[Self, Self]:
         """Forward divmod."""
-        if type(other) is not type(self):
+        cls = type(self)
+        if type(other) is not cls:
             self._raise_type_error(other, "divmod")
-        quotient, remainder = super().__divmod__(other)
-        return type(self)(quotient), type(self)(remainder)
+        quotient, remainder = int.__divmod__(self, other)
+        return cls._wrap(quotient), cls._wrap(remainder)
 
     def __rdivmod__(self, other: Any) -> tuple[Self, Self]:
         """Reverse divmod."""
-        if type(other) is not type(self):
+        cls = type(self)
+        if type(other) is not cls:
             self._raise_type_error(other, "divmod")
-        quotient, remainder = super().__rdivmod__(other)
-        return type(self)(quotient), type(self)(remainder)
+        quotient, remainder = int.__rdivmod__(self, other)
+        return cls._wrap(quotient), cls._wrap(remainder)
 
     def __and__(self, other: Any) -> Self:
         """Forward bitwise AND."""
-        if type(other) is not type(self):
+        cls = type(self)
+        if type(other) is not cls:
             self._raise_type_error(other, "&")
-        return type(self)(super().__and__(other))
+        return cls._wrap(int.__and__(self, other))
 
     def __rand__(self, other: Any) -> Self:
         """Reverse bitwise AND."""
@@ -256,9 +300,10 @@ class BaseUint(int, SSZType):
 
     def __or__(self, other: Any) -> Self:
         """Forward bitwise OR."""
-        if type(other) is not type(self):
+        cls = type(self)
+        if type(other) is not cls:
             self._raise_type_error(other, "|")
-        return type(self)(super().__or__(other))
+        return cls._wrap(int.__or__(self, other))
 
     def __ror__(self, other: Any) -> Self:
         """Reverse bitwise OR."""
@@ -266,9 +311,10 @@ class BaseUint(int, SSZType):
 
     def __xor__(self, other: Any) -> Self:
         """Forward bitwise XOR."""
-        if type(other) is not type(self):
+        cls = type(self)
+        if type(other) is not cls:
             self._raise_type_error(other, "^")
-        return type(self)(super().__xor__(other))
+        return cls._wrap(int.__xor__(self, other))
 
     def __rxor__(self, other: Any) -> Self:
         """Reverse bitwise XOR."""
@@ -276,27 +322,31 @@ class BaseUint(int, SSZType):
 
     def __lshift__(self, other: Any) -> Self:
         """Forward left bit-shift."""
-        if type(other) is not type(self):
+        cls = type(self)
+        if type(other) is not cls:
             self._raise_type_error(other, "<<")
-        return type(self)(super().__lshift__(other))
+        return cls._wrap(int.__lshift__(self, other))
 
     def __rlshift__(self, other: Any) -> Self:
         """Reverse left bit-shift."""
-        if type(other) is not type(self):
+        cls = type(self)
+        if type(other) is not cls:
             self._raise_type_error(other, "<<")
-        return type(self)(int(other) << int(self))
+        return cls._wrap(int.__lshift__(other, self))
 
     def __rshift__(self, other: Any) -> Self:
         """Forward right bit-shift."""
-        if type(other) is not type(self):
+        cls = type(self)
+        if type(other) is not cls:
             self._raise_type_error(other, ">>")
-        return type(self)(super().__rshift__(other))
+        return cls._wrap(int.__rshift__(self, other))
 
     def __rrshift__(self, other: Any) -> Self:
         """Reverse right bit-shift."""
-        if type(other) is not type(self):
+        cls = type(self)
+        if type(other) is not cls:
             self._raise_type_error(other, ">>")
-        return type(self)(int(other) >> int(self))
+        return cls._wrap(int.__rshift__(other, self))
 
     def __eq__(self, other: object) -> bool:
         """Equality."""
