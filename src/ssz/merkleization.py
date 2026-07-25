@@ -154,8 +154,6 @@ def merkleize_progressive(chunks: Sequence[Chunk], num_leaves: int = 1) -> Root:
     r"""
     Compute the progressive Merkle root over a chunk sequence, per EIP-7916.
 
-    # Overview
-
     The tree is a right-leaning spine of binary subtrees, terminated by a zero node.
     The subtree at level n holds 4**(n - 1) chunks, counting levels from one.
     Capacity therefore grows with the data instead of with a declared bound.
@@ -173,19 +171,8 @@ def merkleize_progressive(chunks: Sequence[Chunk], num_leaves: int = 1) -> Root:
                                  /  \
             64: chunks[21 ..< 85]    0
 
-    Each level is an ordinary binary subtree, unchanged in its own layout.
-    Only the spine holding them together is new.
-
-    Level two in detail, holding the four chunks at indices 1 through 4:
-
-        leaves   :  c1     c2     c3     c4
-                     \____/        \____/
-                    h(c1,c2)      h(c3,c4)
-                        \______________/
-                            level root
-
-    A level holding fewer chunks than its width pads the gap with zero subtree roots.
-    Only depth is spent on that padding, never allocation.
+    Each level is an ordinary binary subtree, and only the spine above them is new.
+    A level short of its width pads with zero subtree roots, spending depth but no memory.
 
     # Layout
 
@@ -199,26 +186,20 @@ def merkleize_progressive(chunks: Sequence[Chunk], num_leaves: int = 1) -> Root:
         5       256            341            10_912
 
     After n levels the total is (4**n - 1) // 3 chunks.
-
-    An empty input opens no level at all, so its root is the zero node itself.
-    That is the root of the default value, before any length is mixed in.
+    An empty input opens no level, so its root is the zero node itself.
 
     # Why positions stay put
 
     A chunk's generalized index follows from its own index alone.
-    Indices below are taken with the progressive root numbered one, so they leave out
-    the step down from the length-mixed root that sits above it:
+    The indices below count the progressive root as one, leaving out the root above it
+    that the length is mixed into:
 
-        chunk 0   ->  gindex 2
-        chunk 1   ->  gindex 24
-        chunk 4   ->  gindex 27
-        chunk 5   ->  gindex 224
-        chunk 21  ->  gindex 1920
+        chunk 0  ->  2       chunk 5   ->  224
+        chunk 1  ->  24      chunk 21  ->  1920
 
-    Appending data extends the spine downward and moves nothing already placed.
+    Appending extends the spine downward and moves nothing already placed.
     A proof against one chunk therefore survives every later append.
-    A bounded tree cannot promise that.
-    Redefining its capacity changes its depth, which renumbers every leaf beneath it.
+    A bounded tree renumbers every leaf as soon as a new capacity changes its depth.
 
     Args:
         chunks: Leaf chunks, each exactly 32 bytes wide.
