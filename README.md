@@ -16,8 +16,12 @@ repository implements:
 - **Byte arrays**: fixed `Bytes4` … `Bytes64` and variable `ByteList`.
 - **Bitfields**: `Bitvector` and `Bitlist`.
 - **Composite types**: `Vector`, `List`, and `Container`.
+- **Progressive types** ([EIP-7916](https://eips.ethereum.org/EIPS/eip-7916)):
+  `ProgressiveList` and `ProgressiveBitlist`, which carry no capacity and hash into a
+  tree that grows with the data.
 - **(De)serialization**: canonical encode/decode with strict, offset-based decoding.
-- **Merkleization**: `hash_tree_root`, `merkleize`, and `mix_in_length`.
+- **Merkleization**: `hash_tree_root`, `merkleize`, `merkleize_progressive`, and
+  `mix_in_length`.
 
 ## Project Structure
 
@@ -29,8 +33,8 @@ src/ssz/
   boolean.py           # Boolean
   uint.py              # Uint8/16/32/64
   byte_arrays.py       # fixed byte vectors and byte lists
-  bitfields.py         # Bitvector / Bitlist
-  collections.py       # Vector / List
+  bitfields.py         # Bitvector / Bitlist / ProgressiveBitlist
+  collections.py       # Vector / List / ProgressiveList
   container.py         # Container
   exceptions.py        # SSZ error hierarchy
   merkleization.py     # hash_tree_root dispatch and Merkle primitives

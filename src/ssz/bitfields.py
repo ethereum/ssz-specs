@@ -3,12 +3,13 @@ SSZ bitfield types.
 
 A bitfield is a packed sequence of booleans serialized to bytes.
 
-Two flavors are defined by the SSZ spec:
+Three flavors are defined by the SSZ spec, the third added by EIP-7916:
 
 - Fixed-length: exactly N bits encoded in ceil(N / 8) bytes.
 - Variable-length: 0 to N bits encoded with a trailing delimiter bit that marks the end.
+- Progressive: any number of bits, encoded exactly like the variable-length flavor.
 
-Both flavors pack bits little-endian within each byte.
+All three flavors pack bits little-endian within each byte.
 Bit i of the input lands in byte i // 8 at position i % 8.
 """
 
@@ -191,29 +192,25 @@ class BaseBitvector(SSZCollection):
         return cls(data=[Boolean((data[i // 8] >> (i % 8)) & 1) for i in range(cls.LENGTH)])
 
 
-class BaseBitlist(SSZCollection):
+class _SSZBitlist(SSZCollection):
     """
-    Variable-length SSZ bitfield with 0 to N bits.
+    Shared behavior for the two delimited SSZ bitfield shapes.
 
-    - Subclasses pin the maximum bit count by setting the class-level limit.
-    - Serialization packs data bits little-endian, then appends a single 1 bit as a delimiter.
-    - The delimiter is what lets the decoder recover the original bit count.
+    The bounded bitlist and the progressive bitlist both build on this base:
 
-    For example, [1, 0, 1] (3 data bits) encodes to a single byte.
+    - A bounded bitlist caps its bit count at a declared limit.
+    - A progressive bitlist accepts any bit count.
 
-    list[i] lands at bit i, where bit 0 is the LSB (rightmost in the byte):
+    The base carries the bit field, and each shape carries its own count rule.
 
-        bit position:  7 6 5 4  3  2 1 0
-        byte 0:        0 0 0 0 [1] 1 0 1   ->  0b00001101   (bracketed bit is the delimiter)
+    Both encode identically.
+    Data bits pack little-endian, then one delimiter bit closes the sequence.
 
-    Without the delimiter, two different lists would collide:
+    They differ in exactly two places:
 
-        [1, 0, 1]                ->  0b00000101
-        [1, 0, 1, 0, 0, 0, 0, 0] ->  0b00000101
+    - The bit-count rule, applied on construction and again on decode.
+    - The Merkle tree shape, which lives in the merkleization module.
     """
-
-    LIMIT: ClassVar[int]
-    """Maximum number of bits allowed."""
 
     data: Sequence[Boolean] = Field(default_factory=tuple)
     """
@@ -223,32 +220,14 @@ class BaseBitlist(SSZCollection):
     Stored as an immutable tuple after validation.
     """
 
-    @field_validator("data", mode="before")
     @classmethod
-    def _coerce_and_validate(cls, bits_input: Any) -> tuple[Boolean, ...]:
-        """Enforce the maximum bit count and coerce inputs into booleans."""
-        # Subclasses must declare LIMIT before any instances can be validated.
-        if not hasattr(cls, "LIMIT"):
-            raise SSZDefinitionError(cls.__name__, "LIMIT")
+    def _reject_excess_bits(cls, count: int) -> None:
+        """
+        Reject a bit count the type cannot hold.
 
-        # Accept different input shapes:
-        #
-        #   - list or tuple    pass through directly.
-        #   - other iterables  materialize into a list so length is known.
-        #   - str or bytes     rejected — iterable but elements are not booleans.
-        if isinstance(bits_input, (list, tuple)):
-            elements = bits_input
-        elif hasattr(bits_input, "__iter__") and not isinstance(bits_input, (str, bytes)):
-            elements = list(bits_input)
-        else:
-            raise SSZTypeMismatch("iterable", type(bits_input))
-
-        # Variable-length type: any count is fine, up to LIMIT.
-        if len(elements) > cls.LIMIT:
-            raise SSZLimitError(cls.__name__, cls.LIMIT, len(elements))
-
-        # Wrap each value in Boolean — the constructor rejects anything outside 0 or 1.
-        return tuple(Boolean(bit) for bit in elements)
+        A progressive bitlist has no capacity, so it rejects nothing.
+        The bounded bitlist overrides this with its capacity check.
+        """
 
     @overload
     def __getitem__(self, key: int) -> Boolean: ...
@@ -263,8 +242,15 @@ class BaseBitlist(SSZCollection):
         return self.data[key]
 
     def __add__(self, other: Any) -> Self:
-        """Concatenate with another bit sequence."""
-        if isinstance(other, BaseBitlist):
+        """
+        Concatenate with another bit sequence.
+
+        The left operand decides the resulting type, whatever the right one is:
+
+        - Two bitlists of different capacities concatenate into the left one's type.
+        - A bounded and a progressive bitlist do too, and merkleize as that type.
+        """
+        if isinstance(other, _SSZBitlist):
             new_data = (*self.data, *other.data)
         elif isinstance(other, (list, tuple)):
             new_data = (*self.data, *(Boolean(b) for b in other))
@@ -275,7 +261,7 @@ class BaseBitlist(SSZCollection):
     @classmethod
     @override
     def is_fixed_size(cls) -> bool:
-        """Variable-size by definition — the bit count ranges from zero to the class limit."""
+        """Variable-size by definition — the bit count varies from one instance to the next."""
         return False
 
     @classmethod
@@ -384,7 +370,7 @@ class BaseBitlist(SSZCollection):
 
         Raises:
             SSZSerializationError: If the input is empty or contains no 1 bits.
-            SSZValueError: If the recovered bit count exceeds the class limit.
+            SSZValueError: If the recovered bit count exceeds a declared capacity.
         """
         # Phase 1: reject empty input.
         #
@@ -439,7 +425,112 @@ class BaseBitlist(SSZCollection):
         #
         # Recovered bits: [1, 0, 1]
         num_bits = delimiter_pos
-        if num_bits > cls.LIMIT:
-            raise SSZLimitError(cls.__name__, cls.LIMIT, num_bits)
+        # The count is checked here rather than left to the constructor so that an
+        # over-capacity payload reports its capacity before any bit is materialized.
+        cls._reject_excess_bits(num_bits)
 
         return cls(data=[Boolean((data[i // 8] >> (i % 8)) & 1) for i in range(num_bits)])
+
+
+class BaseBitlist(_SSZBitlist):
+    """
+    Variable-length SSZ bitfield with 0 to N bits.
+
+    - Subclasses pin the maximum bit count by setting the class-level limit.
+    - Serialization packs data bits little-endian, then appends a single 1 bit as a delimiter.
+    - The delimiter is what lets the decoder recover the original bit count.
+
+    For example, [1, 0, 1] (3 data bits) encodes to a single byte.
+
+    list[i] lands at bit i, where bit 0 is the LSB (rightmost in the byte):
+
+        bit position:  7 6 5 4  3  2 1 0
+        byte 0:        0 0 0 0 [1] 1 0 1   ->  0b00001101   (bracketed bit is the delimiter)
+
+    Without the delimiter, two different lists would collide:
+
+        [1, 0, 1]                ->  0b00000101
+        [1, 0, 1, 0, 0, 0, 0, 0] ->  0b00000101
+    """
+
+    LIMIT: ClassVar[int]
+    """Maximum number of bits allowed."""
+
+    @field_validator("data", mode="before")
+    @classmethod
+    def _coerce_and_validate(cls, bits_input: Any) -> tuple[Boolean, ...]:
+        """Enforce the maximum bit count and coerce inputs into booleans."""
+        # Subclasses must declare LIMIT before any instances can be validated.
+        if not hasattr(cls, "LIMIT"):
+            raise SSZDefinitionError(cls.__name__, "LIMIT")
+
+        # Accept the natural input shapes:
+        #
+        #   - list or tuple    pass through directly.
+        #   - other iterables  materialize into a list so the length is known.
+        #   - str or bytes     rejected — iterable, but the elements are not booleans.
+        if isinstance(bits_input, (list, tuple)):
+            elements = bits_input
+        elif hasattr(bits_input, "__iter__") and not isinstance(bits_input, (str, bytes)):
+            elements = list(bits_input)
+        else:
+            raise SSZTypeMismatch("iterable", type(bits_input))
+
+        # Variable-length type: any count is fine, up to LIMIT.
+        if len(elements) > cls.LIMIT:
+            raise SSZLimitError(cls.__name__, cls.LIMIT, len(elements))
+
+        # Wrap each value in Boolean — the constructor rejects anything outside 0 or 1.
+        return tuple(Boolean(bit) for bit in elements)
+
+    @classmethod
+    @override
+    def _reject_excess_bits(cls, count: int) -> None:
+        """
+        Reject a count above the declared capacity.
+
+        Raises:
+            SSZValueError: When the count exceeds the declared capacity.
+        """
+        if count > cls.LIMIT:
+            raise SSZLimitError(cls.__name__, cls.LIMIT, count)
+
+
+class ProgressiveBitlist(_SSZBitlist):
+    """
+    Variable-length SSZ bitfield with no capacity, per EIP-7916.
+
+    Any number of bits, packed and delimited like a bounded bitlist:
+
+        [1, 0, 1]  ->  byte 0:  0 0 0 0 [1] 1 0 1   ->  0b00001101
+
+    So the two encode to the same bytes, and only their Merkle trees differ.
+    A bounded bitlist pads its tree to the depth its limit needs.
+    Ten bits under a 2048-bit limit still hash through the depth 2048 bits need.
+    This shape grows its tree with the data instead:
+
+    - A short bitlist hashes through a shallow tree.
+    - A bit keeps its position however many bits follow it, so proofs survive growth.
+
+    The merkleization module builds that tree.
+
+    Nothing is declared to use the type, so it is instantiated directly:
+
+        ProgressiveBitlist(data=[1, 0, 1])
+    """
+
+    @field_validator("data", mode="before")
+    @classmethod
+    def _coerce_and_validate(cls, bits_input: Any) -> tuple[Boolean, ...]:
+        """Coerce inputs into booleans, with no count rule to apply."""
+        # The accepted input shapes are the ones the bounded bitlist takes, listed there.
+        # No capacity check follows, because every count this shape holds is valid.
+        if isinstance(bits_input, (list, tuple)):
+            elements = bits_input
+        elif hasattr(bits_input, "__iter__") and not isinstance(bits_input, (str, bytes)):
+            elements = list(bits_input)
+        else:
+            raise SSZTypeMismatch("iterable", type(bits_input))
+
+        # Wrap each value in Boolean — the constructor rejects anything outside 0 or 1.
+        return tuple(Boolean(bit) for bit in elements)
