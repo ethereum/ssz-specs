@@ -1,9 +1,10 @@
 """
-Fixed hash tree roots of the two progressive shapes, per EIP-7916.
+Fixed hash tree roots of the progressive shapes: the two of EIP-7916 and the container
+of EIP-7495.
 
 Every root is written out in full, never computed from the tree it describes:
 
-- A change to either tree shape fails here, whatever the rest of the suite does.
+- A change to any of these tree shapes fails here, whatever the rest of the suite does.
 - Another implementation can check itself against these values directly.
 """
 
@@ -15,6 +16,7 @@ from ssz import (
     Boolean,
     Container,
     ProgressiveBitlist,
+    ProgressiveContainer,
     ProgressiveList,
     Uint8,
     Uint16,
@@ -49,6 +51,47 @@ class ProgressiveHolder(Container):
     x: Uint64
     a: Uint64ProgressiveList
     b: ProgressiveBitlist
+
+
+class Square(ProgressiveContainer):
+    """EIP-7495's own example: side at position 0, a gap, then color at position 2."""
+
+    ACTIVE_FIELDS = (1, 0, 1)
+
+    side: Uint16
+    color: Uint8
+
+
+class Circle(ProgressiveContainer):
+    """The other half of that example: a gap, then radius at 1 and color at 2."""
+
+    ACTIVE_FIELDS = (0, 1, 1)
+
+    radius: Uint16
+    color: Uint8
+
+
+class SparseShape(ProgressiveContainer):
+    """Twenty-two positions holding two fields, so the leaves open the width-64 level."""
+
+    ACTIVE_FIELDS = (1, *([0] * 20), 1)
+
+    first: Uint16
+    last: Uint8
+
+
+class ShapeHolder(ProgressiveContainer):
+    """Progressive container holding a fixed field and both EIP-7916 shapes."""
+
+    ACTIVE_FIELDS = (1, 1, 1)
+
+    head: Uint64
+    numbers: Uint64ProgressiveList
+    flags: ProgressiveBitlist
+
+
+class SquareProgressiveList(ProgressiveList[Square]):
+    """Progressive list whose elements are progressive containers."""
 
 
 def root_hex(value: SSZType) -> str:
@@ -326,3 +369,123 @@ def test_container_holding_both_progressive_shapes_vector() -> None:
     assert value.encode_bytes().hex() == expected_bytes
     assert ProgressiveHolder.decode_bytes(value.encode_bytes()) == value
     assert root_hex(value) == "0x4d7b2d321882a440e729af4dd579ead329397efa0e61c6e1eeb5fa848a9e8f4e"
+
+
+def test_progressive_container_square_vector() -> None:
+    """
+    EIP-7495's Square: a field at position 0, a gap, then a field at position 2.
+
+    Leaves, one per position of the layout [1, 0, 1]:
+
+        position 0 : root(side)   = 3412 00.. (padded to a chunk)
+        position 1 : zero chunk   (the gap: no field occupies it)
+        position 2 : root(color)  = 56 00..
+
+    The spine takes leaf 0 at width one and leaves 1 and 2 at width four, and the
+    layout packs into the word 0x05 that is hashed in above the result.
+
+    The three bytes carry no trace of the layout, which is exactly why it is mixed in.
+    """
+    value = Square(side=Uint16(0x1234), color=Uint8(0x56))
+    assert value.encode_bytes().hex() == "341256"
+    assert Square.decode_bytes(value.encode_bytes()) == value
+    assert root_hex(value) == "0x5ebd038215d6c6868befbe172ffb9442b2f5ade276bd96eb304c1da38deff823"
+
+
+def test_progressive_container_circle_vector() -> None:
+    """
+    EIP-7495's Circle: a leading gap, then fields at positions 1 and 2.
+
+    Leaves, one per position of the layout [0, 1, 1]:
+
+        position 0 : zero chunk    (the gap)
+        position 1 : root(radius)  = 3412 00..
+        position 2 : root(color)   = 56 00..
+
+    Its color sits at position 2, the same position Square's does, so one proof shape
+    serves both. The layout packs into the word 0x06 instead of Square's 0x05.
+    """
+    value = Circle(radius=Uint16(0x1234), color=Uint8(0x56))
+    assert value.encode_bytes().hex() == "341256"
+    assert Circle.decode_bytes(value.encode_bytes()) == value
+    assert root_hex(value) == "0x44dd01593fff4f0bea317b62a9e70d20f063e7413f331598d681d9e645fa8eae"
+
+
+def test_square_and_circle_share_their_bytes_and_not_their_roots() -> None:
+    """
+    The two shapes encode to the same three bytes and merkleize to different roots.
+
+    This pair is the whole point of the shape: the wire format says nothing about which
+    positions a value occupies, so the layout has to reach the root some other way.
+    """
+    square = Square(side=Uint16(0x1234), color=Uint8(0x56))
+    circle = Circle(radius=Uint16(0x1234), color=Uint8(0x56))
+    assert square.encode_bytes() == circle.encode_bytes()
+    assert root_hex(square) != root_hex(circle)
+
+
+def test_progressive_container_sparse_layout_vector() -> None:
+    """
+    A layout of twenty-two positions holding two fields.
+
+    Every position is a leaf, gap or not, so the leaf count is the position count:
+
+        position 0      : root(first) = 3412 00..
+        positions 1..20 : zero chunks
+        position 21     : root(last)  = 56 00..
+
+    Twenty-two leaves fill the widths 1, 4 and 16 and open the width-64 level with a
+    single occupant. The layout packs into a word with bits 0 and 21 set.
+    """
+    value = SparseShape(first=Uint16(0x1234), last=Uint8(0x56))
+    # The gaps cost no bytes, so this encodes exactly as the three-position shapes do.
+    assert value.encode_bytes().hex() == "341256"
+    assert SparseShape.decode_bytes(value.encode_bytes()) == value
+    assert root_hex(value) == "0x4ced50eb70f7547000227b026e875c87dfe4d4daa3be3f308f570268c5a55dc7"
+
+
+def test_progressive_container_with_progressive_fields_vector() -> None:
+    """
+    A progressive container reaching both EIP-7916 shapes through offsets.
+
+    Layout:
+
+        bytes 0..7   : head = 7        (fixed-size field, inline)
+        bytes 8..11  : off_numbers=16  (list body starts at byte 16)
+        bytes 12..15 : off_flags = 40  (bitlist body starts at byte 40)
+        bytes 16..39 : numbers body    (three eight-byte elements)
+        byte  40     : flags body      (three bits plus the delimiter)
+
+    Each field contributes its own length-mixed root as one leaf, and all three
+    positions are occupied, so the layout packs into the word 0x07.
+    """
+    value = ShapeHolder(
+        head=Uint64(7),
+        numbers=Uint64ProgressiveList(data=[Uint64(1), Uint64(2), Uint64(3)]),
+        flags=ProgressiveBitlist(data=[Boolean(True), Boolean(False), Boolean(True)]),
+    )
+    expected_bytes = (
+        "070000000000000010000000280000000100000000000000020000000000000003000000000000000d"
+    )
+    assert value.encode_bytes().hex() == expected_bytes
+    assert ShapeHolder.decode_bytes(value.encode_bytes()) == value
+    assert root_hex(value) == "0x0c621f05791743c263be5a717c45dec81b4c175d19572e4cca0d5933f7044f0e"
+
+
+def test_progressive_list_of_progressive_containers_vector() -> None:
+    """
+    A progressive list whose elements are progressive containers.
+
+    Each element is fixed-size at three bytes, so the bodies sit back to back with no
+    offset table. Each element hands its own layout-mixed root to the spine as one leaf,
+    and the element count is mixed in above it.
+    """
+    value = SquareProgressiveList(
+        data=[
+            Square(side=Uint16(1), color=Uint8(2)),
+            Square(side=Uint16(3), color=Uint8(4)),
+        ]
+    )
+    assert value.encode_bytes().hex() == "010002030004"
+    assert SquareProgressiveList.decode_bytes(value.encode_bytes()) == value
+    assert root_hex(value) == "0xa892d5d4f0ef9b1f4e0c3f9fd9617f06d405561d56f676dcd9de228b2fbcbe59"

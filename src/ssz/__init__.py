@@ -7,8 +7,9 @@ from ssz.byte_arrays import (
     BaseBytes,
 )
 from ssz.collections import List, ProgressiveList, Vector
-from ssz.container import Container
+from ssz.container import Container, ProgressiveContainer
 from ssz.exceptions import (
+    SSZActiveFieldsError,
     SSZDefinitionError,
     SSZError,
     SSZFixedSizeError,
@@ -37,7 +38,9 @@ __all__ = [
     "Container",
     "List",
     "ProgressiveBitlist",
+    "ProgressiveContainer",
     "ProgressiveList",
+    "SSZActiveFieldsError",
     "SSZDefinitionError",
     "SSZError",
     "SSZFixedSizeError",

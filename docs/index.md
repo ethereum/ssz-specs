@@ -30,6 +30,22 @@ for root. The bounded `ByteList` types exist only as a bytes-backed convenience 
 list of single bytes, and with no capacity to specialize on, a progressive analogue would
 add nothing.
 
+### Progressive Containers
+
+[EIP-7495](https://eips.ethereum.org/EIPS/eip-7495) adds a struct whose fields keep their
+tree positions across versions. `ProgressiveContainer` in `src/ssz/container.py` carries a
+field layout of bits, declared as `ACTIVE_FIELDS`: a field is declared for each set bit,
+and a clear bit leaves a gap that no field occupies.
+
+The spec writes that layout as a call, `ProgressiveContainer(active_fields=[1, 0, 1])`. It
+is a class attribute here, the way a vector's `LENGTH` and a list's `LIMIT` stand in for
+the spec's `Vector[type, N]` and `List[type, N]`.
+
+Fields hash into the progressive tree at the positions their bits mark, so adding or
+dropping a field in a later version leaves every other field where it was. The layout is
+mixed into the root, which is what keeps a dropped field distinct from a field holding
+zero. Serialization is that of an ordinary container, and a gap costs no bytes.
+
 ### Merkleization
 
 The `hash_tree_root` dispatch and the Merkleization primitives live in
