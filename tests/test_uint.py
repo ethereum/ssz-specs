@@ -128,6 +128,37 @@ def test_instantiation_too_large(uint_class: Type[BaseUint]) -> None:
 
 
 @pytest.mark.parametrize("uint_class", ALL_UINT_TYPES)
+def test_instantiation_from_another_uint_instance(uint_class: Type[BaseUint]) -> None:
+    """
+    Any uint instance is an acceptable input value, whatever its width.
+
+    Uints compare strictly, so the range check must not let the input's own
+    comparison operators see the plain-int bounds it is checked against.
+    """
+    for source_class in ALL_UINT_TYPES:
+        uint_instance = uint_class(source_class(5))
+        assert type(uint_instance) is uint_class
+        assert uint_instance == uint_class(5)
+
+
+@pytest.mark.parametrize("uint_class", ALL_UINT_TYPES)
+def test_instantiation_from_a_subclass_instance(uint_class: Type[BaseUint]) -> None:
+    """An instance of a subtype of the target class narrows back to the target."""
+    subclass = type("Typed", (uint_class,), {})
+    uint_instance = uint_class(subclass(5))
+    assert type(uint_instance) is uint_class
+    assert uint_instance == uint_class(5)
+
+
+def test_instantiation_from_an_out_of_range_uint_instance() -> None:
+    """An input value too wide for the target reports a range error, not a type error."""
+    expected_message = f"{2**8} out of range for Uint8 [0, {2**8 - 1}]"
+    with pytest.raises(SSZValueError) as exception_info:
+        Uint8(Uint16(2**8))
+    assert str(exception_info.value) == expected_message
+
+
+@pytest.mark.parametrize("uint_class", ALL_UINT_TYPES)
 def test_max_method_returns_correct_value(uint_class: Type[BaseUint]) -> None:
     """Tests that the max_value() class method returns the correct value."""
     expected_max_int = (2**uint_class.BITS) - 1

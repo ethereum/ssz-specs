@@ -53,7 +53,11 @@ class BaseUint(int, SSZType):
         # Bool subclasses int, so reject it explicitly before the value check.
         if not isinstance(value, int) or isinstance(value, bool):
             raise SSZTypeMismatch("int", type(value))
-        return cls._wrap(value)
+        # An int subclass reaching here is another uint (a different width, or a
+        # subtype of this one), whose strict comparison operators reject plain
+        # ints. Narrow it to a plain int so the range check below compares
+        # against 0 and the bound with int's own operators.
+        return cls._wrap(value if type(value) is int else int(value))
 
     @classmethod
     def _wrap(cls, value: int) -> Self:
@@ -61,9 +65,11 @@ class BaseUint(int, SSZType):
         Range-check an integer and wrap it into a typed instance.
 
         This is the shared fast path for both construction and arithmetic
-        results. It assumes ``value`` is already a non-bool integer, so it skips
-        the type guards the public constructor runs, uses the cached bound, and
-        constructs directly via ``int.__new__``.
+        results. It assumes ``value`` is already a plain (non-bool, non-subclass)
+        integer, so it skips the type guards the public constructor runs, uses
+        the cached bound, and constructs directly via ``int.__new__``. A uint
+        instance must be narrowed by the caller, since its strict comparisons
+        would reject the plain ints the range check below compares it against.
 
         Raises:
             SSZValueError: If value is outside [0, 2**BITS - 1].
