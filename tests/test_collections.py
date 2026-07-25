@@ -246,11 +246,11 @@ class TestVectorValidator:
 
         assert tuple(instance) == (Uint8(1), Uint8(2), Uint8(3), Uint8(4))
 
-    def test_element_coercion_failure_includes_chained_cause(self) -> None:
-        """A failed element coercion surfaces both the outer and inner error message."""
+    def test_unrelated_element_class_rejected(self) -> None:
+        """A value whose class is not the element class or an ancestor is rejected."""
         with pytest.raises(TypeOrValidationError) as exception_info:
             Uint8Vector4(data=cast(Any, [1, "bad", 3, 4]))
-        assert str(exception_info.value) == "Expected Uint8, got str: Expected int, got str"
+        assert str(exception_info.value) == "Expected Uint8, got str"
 
     def test_too_few_elements_rejected(self) -> None:
         """A vector requires exactly LENGTH elements and rejects shorter inputs."""
@@ -452,11 +452,11 @@ class TestListValidator:
 
         assert list(instance) == [Uint8(1), Uint8(2), Uint8(3)]
 
-    def test_element_coercion_failure_includes_chained_cause(self) -> None:
-        """A failed element coercion surfaces both the outer and inner error message."""
+    def test_unrelated_element_class_rejected(self) -> None:
+        """A value whose class is not the element class or an ancestor is rejected."""
         with pytest.raises(TypeOrValidationError) as exception_info:
             Uint8List4(data=cast(Any, [1, "bad"]))
-        assert str(exception_info.value) == "Expected Uint8, got str: Expected int, got str"
+        assert str(exception_info.value) == "Expected Uint8, got str"
 
     def test_empty_list_allowed(self) -> None:
         """A list with zero elements is always valid, regardless of LIMIT."""

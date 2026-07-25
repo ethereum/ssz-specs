@@ -58,7 +58,7 @@ from ssz.exceptions import (
     SSZTypeMismatch,
     SSZValueError,
 )
-from ssz.ssz_base import BYTES_PER_LENGTH_OFFSET, SSZModel, SSZType
+from ssz.ssz_base import BYTES_PER_LENGTH_OFFSET, SSZCollection, SSZType
 from ssz.uint import Uint32
 
 
@@ -103,13 +103,18 @@ def _coerce_elements(element_type: type[SSZType], elements: Sequence[Any]) -> tu
     Coerce every element of an already-shaped sequence into the declared type.
 
     - Already-typed elements pass through untouched.
-    - Every other element goes through the element type's constructor.
+    - A value converts only from the element class itself or an ancestor of
+      it (such as a plain int for uints, or plain bytes for byte arrays).
+      Any other class is a type error, not a value to rewrap.
+    - Ancestor-class values go through the element type's constructor.
     - A coercion failure re-raises with the high-level expectation in the message.
     - The chained cause preserves the underlying coercion detail.
     """
     coerced: list[SSZType] = []
     for element in elements:
-        if isinstance(element, element_type):
+        if not issubclass(element_type, type(element)):
+            raise SSZTypeMismatch(element_type.__name__, type(element))
+        if type(element) is element_type:
             coerced.append(element)
             continue
         try:
@@ -121,7 +126,7 @@ def _coerce_elements(element_type: type[SSZType], elements: Sequence[Any]) -> tu
     return tuple(coerced)
 
 
-class _SSZSequence[T: SSZType](SSZModel):
+class _SSZSequence[T: SSZType](SSZCollection):
     """
     Shared scaffolding for fixed- and variable-length SSZ sequences.
 

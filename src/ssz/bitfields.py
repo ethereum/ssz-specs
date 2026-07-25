@@ -36,10 +36,10 @@ from ssz.exceptions import (
     SSZTypeMismatch,
     SSZValueError,
 )
-from ssz.ssz_base import SSZModel
+from ssz.ssz_base import SSZCollection
 
 
-class BaseBitvector(SSZModel):
+class BaseBitvector(SSZCollection):
     """
     Fixed-length SSZ bitfield with exactly N bits.
 
@@ -191,7 +191,7 @@ class BaseBitvector(SSZModel):
         return cls(data=[Boolean((data[i // 8] >> (i % 8)) & 1) for i in range(cls.LENGTH)])
 
 
-class BaseBitlist(SSZModel):
+class BaseBitlist(SSZCollection):
     """
     Variable-length SSZ bitfield with 0 to N bits.
 

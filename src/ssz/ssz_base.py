@@ -2,7 +2,7 @@
 
 import io
 from abc import ABC, abstractmethod
-from typing import IO, Final, Self
+from typing import IO, Any, Final, Self
 
 from ssz.base import StrictBaseModel
 from ssz.exceptions import SSZSerializationError
@@ -136,3 +136,43 @@ class SSZModel(StrictBaseModel, SSZType):
             return f"{cls_name}(data={list(data_field)!r})"
         field_strs = [f"{name}={getattr(self, name)!r}" for name in type(self).model_fields]
         return f"{cls_name}({' '.join(field_strs)})"
+
+
+class SSZCollection(SSZModel):
+    """
+    Pydantic-backed SSZ base for collections that wrap their contents in one data field.
+
+    Sequences, bitfields, and byte lists all share this base.
+    Containers do not — their contents live in named fields, not a single data field.
+
+    Construction passes the field by keyword, or the elements positionally
+    through the `of` factory:
+
+        Uint8List4(data=[1, 2, 3])
+        Uint8List4.of(1, 2, 3)
+    """
+
+    @classmethod
+    def of(cls, *elements: Any) -> Self:
+        r"""
+        Build an instance from the given elements.
+
+        Pydantic models are keyword-only, so the data field is normally passed by
+        keyword. This factory is the positional form: each argument is exactly one
+        element, and no argument is ever spread. Classmethods are inherited without
+        re-synthesis, so unlike a custom constructor this form stays fully visible
+        to static type checkers on every subclass.
+
+            Uint8List4.of(1, 2, 3)     ==  Uint8List4(data=[1, 2, 3])
+            Uint8List4.of()            ==  Uint8List4(data=[])
+            Uint8List4.of(*existing)   spreads an existing sequence
+            ByteList10.of(0xDE, 0xAD)  ==  ByteList10(data=b"\xde\xad")
+
+        Args:
+            *elements: The elements of the new collection.
+
+        Returns:
+            A new instance holding exactly the given elements.
+        """
+        # The data field is declared by each concrete subclass, not this base.
+        return cls(data=elements)  # ty: ignore[unknown-argument]
