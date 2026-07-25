@@ -152,8 +152,7 @@ def test_instantiation_from_another_uint_instance(uint_class: Type[BaseUint]) ->
 @pytest.mark.parametrize("uint_class", ALL_UINT_TYPES)
 def test_instantiation_from_a_subclass_instance(uint_class: Type[BaseUint]) -> None:
     """A value whose class derives from the target class is accepted and re-typed."""
-    # Applications derive semantic integer types from a width, such as a slot
-    # number that is a 64-bit unsigned integer.
+    # Applications derive semantic integer types from a width, such as a 64-bit slot number.
     subclass = type("Typed", (uint_class,), {})
     # The derived class inherits the width, so 5 is in range on both sides.
     uint_instance = subclass(5)
