@@ -4,12 +4,13 @@ from typing import Any, cast
 
 import pytest
 
-from ssz import Bytes32, SSZLimitError, SSZTypeMismatch, Uint8, Uint16, Uint32, Uint64
+from ssz import SSZLimitError, SSZTypeMismatch, Uint8, Uint16, Uint32, Uint64
 from ssz.bitfields import BaseBitlist, BaseBitvector
 from ssz.boolean import Boolean
 from ssz.byte_arrays import BaseByteList
 from ssz.collections import List, Vector
 from ssz.container import Container
+from ssz.merkleization import Root
 
 
 class Uint16List4(List[Uint16]):
@@ -34,8 +35,8 @@ class TypedUint16List4(List[TypedUint16]):
     LIMIT = 4
 
 
-class Bytes32List4(List[Bytes32]):
-    """A list with up to 4 Bytes32 values."""
+class RootList4(List[Root]):
+    """A list with up to 4 Root values."""
 
     LIMIT = 4
 
@@ -213,21 +214,21 @@ class TestSSZCollectionOf:
     def test_of_converts_plain_bytes_elements(self) -> None:
         """Plain bytes, such as bytes.fromhex output, convert into byte-array elements."""
         payload = bytes.fromhex("ab" * 32)
-        values = Bytes32List4.of(payload)
-        assert values == Bytes32List4(data=[Bytes32(payload)])
-        assert type(values.data[0]) is Bytes32
+        values = RootList4.of(payload)
+        assert values == RootList4(data=[Root(payload)])
+        assert type(values.data[0]) is Root
 
     def test_of_rejects_hex_string_elements(self) -> None:
         """A hex string is not bytes; convert it with bytes.fromhex first."""
         with pytest.raises(SSZTypeMismatch) as exception_info:
-            Bytes32List4.of("ab" * 32)
-        assert str(exception_info.value) == "Expected Bytes32, got str"
+            RootList4.of("ab" * 32)
+        assert str(exception_info.value) == "Expected Root, got str"
 
     def test_of_wrong_length_bytes_keeps_coercion_detail(self) -> None:
         """An ancestor-class element that fails construction chains the inner detail."""
         with pytest.raises(SSZTypeMismatch) as exception_info:
-            Bytes32List4.of(b"\xab\xcd")
-        expected = "Expected Bytes32, got bytes: Bytes32 requires exactly 32 bytes, got 2"
+            RootList4.of(b"\xab\xcd")
+        expected = "Expected Root, got bytes: Root requires exactly 32 bytes, got 2"
         assert str(exception_info.value) == expected
 
     def test_of_returns_the_subclass_type(self) -> None:
