@@ -9,10 +9,10 @@ from hashlib import sha256
 from itertools import accumulate, batched, repeat
 from typing import Final
 
-from ssz.bitfields import BaseBitlist, BaseBitvector
+from ssz.bitfields import BaseBitlist, BaseBitvector, ProgressiveBitlist
 from ssz.boolean import Boolean
 from ssz.byte_arrays import BaseByteList, BaseBytes
-from ssz.collections import List, Vector
+from ssz.collections import List, ProgressiveList, Vector
 from ssz.container import Container
 from ssz.exceptions import SSZTypeError, SSZValueError
 from ssz.uint import BaseUint
@@ -148,6 +148,101 @@ def merkleize(chunks: Sequence[Chunk], limit: int | None = None) -> Root:
     # so the loop above halves the level count down to exactly one root.
     assert len(level) == 1
     return Root(level[0])
+
+
+def merkleize_progressive(chunks: Sequence[Chunk], num_leaves: int = 1) -> Root:
+    r"""
+    Compute the progressive Merkle root over a chunk sequence, per EIP-7916.
+
+    # Overview
+
+    The tree is a right-leaning spine of binary subtrees, terminated by a zero node.
+    The subtree at level n holds 4**(n - 1) chunks, counting levels from one.
+    Capacity therefore grows with the data instead of with a declared bound.
+
+    An 85-chunk input fills four levels exactly:
+
+                           root
+                            /\
+                           /  \
+         1: chunks[0 ..< 1]   /\
+                             /  \
+           4: chunks[1 ..< 5]   /\
+                               /  \
+           16: chunks[5 ..< 21]   /\
+                                 /  \
+            64: chunks[21 ..< 85]    0
+
+    Each level is an ordinary binary subtree, unchanged in its own layout.
+    Only the spine holding them together is new.
+
+    Level two in detail, holding the four chunks at indices 1 through 4:
+
+        leaves   :  c1     c2     c3     c4
+                     \____/        \____/
+                    h(c1,c2)      h(c3,c4)
+                        \______________/
+                            level root
+
+    A level holding fewer chunks than its width pads the gap with zero subtree roots.
+    Only depth is spent on that padding, never allocation.
+
+    # Layout
+
+    A level opens only once every level before it is full:
+
+        level   chunks added   chunks total   bytes total
+        1       1              1              32
+        2       4              5              160
+        3       16             21             672
+        4       64             85             2_720
+        5       256            341            10_912
+
+    After n levels the total is (4**n - 1) // 3 chunks.
+
+    An empty input opens no level at all, so its root is the zero node itself.
+    That is the root of the default value, before any length is mixed in.
+
+    # Why positions stay put
+
+    A chunk's generalized index follows from its own index alone.
+    Indices below are taken with the progressive root numbered one, so they leave out
+    the step down from the length-mixed root that sits above it:
+
+        chunk 0   ->  gindex 2
+        chunk 1   ->  gindex 24
+        chunk 4   ->  gindex 27
+        chunk 5   ->  gindex 224
+        chunk 21  ->  gindex 1920
+
+    Appending data extends the spine downward and moves nothing already placed.
+    A proof against one chunk therefore survives every later append.
+    A bounded tree cannot promise that.
+    Redefining its capacity changes its depth, which renumbers every leaf beneath it.
+
+    Args:
+        chunks: Leaf chunks, each exactly 32 bytes wide.
+        num_leaves: Chunk capacity of the current level, quadrupling at each next level.
+            Callers keep the default of one, and the recursion supplies the wider levels.
+
+    Returns:
+        The progressive Merkle root.
+    """
+    # An exhausted input terminates the spine with a zero node.
+    #
+    # The terminator is a plain zero leaf, not a zero subtree of some depth:
+    # the level it stands for holds no data, so it has no width to pad out.
+    # The deepest occupied level is padded; everything past it collapses to this one node.
+    if len(chunks) == 0:
+        return ZERO_ROOT
+
+    # Left child: this level's chunks as a binary subtree, zero-padded to the level width.
+    subtree_root = merkleize(chunks[:num_leaves], limit=num_leaves)
+
+    # Right child: every chunk past this level, in a level four times as wide.
+    successor_root = merkleize_progressive(chunks[num_leaves:], num_leaves * 4)
+
+    return Root(sha256(subtree_root + successor_root).digest())
 
 
 def mix_in_length(root: Root, length: int) -> Root:
@@ -290,6 +385,27 @@ def _hash_tree_root_list(value: List) -> Root:
     else:
         root = merkleize([hash_tree_root(e) for e in value], limit=limit)
     return mix_in_length(root, len(value))
+
+
+@hash_tree_root.register
+def _hash_tree_root_progressive_list(value: ProgressiveList) -> Root:
+    element_type = type(value).ELEMENT_TYPE
+    if issubclass(element_type, (BaseUint, Boolean)):
+        # Basic elements pack their serialized bytes into a single byte stream before chunking.
+        # No capacity bounds the chunk count: the tree grows to hold whatever was packed.
+        root = merkleize_progressive(_pack_bytes(b"".join(e.encode_bytes() for e in value)))
+    else:
+        # Composite elements each contribute their own hash tree root as a leaf.
+        root = merkleize_progressive([hash_tree_root(e) for e in value])
+    # The count mixed in is the element count, not the number of packed chunks.
+    # A hundred eight-byte elements pack into 25 chunks, and 100 is the number mixed in.
+    return mix_in_length(root, len(value))
+
+
+@hash_tree_root.register
+def _hash_tree_root_progressive_bitlist(value: ProgressiveBitlist) -> Root:
+    # The count mixed in is the bit count, not the number of packed chunks.
+    return mix_in_length(merkleize_progressive(_pack_bits(value.data)), len(value.data))
 
 
 @hash_tree_root.register

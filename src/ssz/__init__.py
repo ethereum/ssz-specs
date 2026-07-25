@@ -1,12 +1,12 @@
 """SSZ primitive types and (de)serialization for Ethereum."""
 
-from ssz.bitfields import BaseBitlist, BaseBitvector
+from ssz.bitfields import BaseBitlist, BaseBitvector, ProgressiveBitlist
 from ssz.boolean import Boolean
 from ssz.byte_arrays import (
     BaseByteList,
     BaseBytes,
 )
-from ssz.collections import List, Vector
+from ssz.collections import List, ProgressiveList, Vector
 from ssz.container import Container
 from ssz.exceptions import (
     SSZDefinitionError,
@@ -36,6 +36,8 @@ __all__ = [
     "Boolean",
     "Container",
     "List",
+    "ProgressiveBitlist",
+    "ProgressiveList",
     "SSZDefinitionError",
     "SSZError",
     "SSZFixedSizeError",

@@ -10,6 +10,26 @@ type system, serialization, and Merkleization.
 The SSZ type system and (de)serialization live in `src/ssz/`: booleans, unsigned
 integers, byte arrays, bitfields, lists, vectors, and containers.
 
+### Progressive Types
+
+[EIP-7916](https://eips.ethereum.org/EIPS/eip-7916) adds two collections that declare no
+capacity: `ProgressiveList[type]` in `src/ssz/collections.py` and `ProgressiveBitlist` in
+`src/ssz/bitfields.py`.
+
+They serialize exactly like their bounded counterparts.
+Only the hash tree root tells the shapes apart.
+That root comes from `merkleize_progressive`, a spine of binary subtrees holding
+1, 4, 16, 64, ... chunks:
+
+- A short collection hashes through a shallow tree, with no padding out to a capacity.
+- Every chunk keeps one position in the tree however much data follows it.
+- Proofs therefore survive growth that a redefined capacity would invalidate.
+
+The EIP's `ProgressiveByteList` is `ProgressiveList[Uint8]` here, byte for byte and root
+for root. The bounded `ByteList` types exist only as a bytes-backed convenience over a
+list of single bytes, and with no capacity to specialize on, a progressive analogue would
+add nothing.
+
 ### Merkleization
 
 The `hash_tree_root` dispatch and the Merkleization primitives live in
