@@ -25,13 +25,15 @@ from ssz import (
 from ssz.bitfields import BaseBitlist, BaseBitvector, ProgressiveBitlist
 from ssz.boolean import Boolean
 from ssz.collections import List, ProgressiveList, Vector
-from ssz.container import Container
+from ssz.container import Container, ProgressiveContainer
 from ssz.merkleization import (
+    BYTES_PER_CHUNK,
     _next_pow2,
     _zero_tree_root,
     hash_tree_root,
     merkleize,
     merkleize_progressive,
+    mix_in_active_fields,
     mix_in_length,
 )
 
@@ -97,6 +99,34 @@ def naive_merkleize_progressive(chunks: Sequence[Chunk], num_leaves: int = 1) ->
         perfect_tree_root(chunks[:num_leaves], _next_pow2(num_leaves)),
         naive_merkleize_progressive(chunks[num_leaves:], num_leaves * 4),
     )
+
+
+def active_fields_word(active_fields: Sequence[int]) -> Chunk:
+    """
+    Pack a field layout into the single 32-byte word EIP-7495 mixes into the root.
+
+    Position i sets bit i % 8 of byte i // 8, so position 0 is the lowest bit of the
+    first byte. The indexing is spelled out byte by byte rather than reusing the
+    implementation's big-integer shift, so the expectation is derived independently.
+    """
+    word = bytearray(BYTES_PER_CHUNK)
+    for position, bit in enumerate(active_fields):
+        if bit:
+            word[position // 8] |= 1 << (position % 8)
+    return Chunk(bytes(word))
+
+
+def expected_progressive_container_root(
+    leaves: Sequence[Chunk], active_fields: Sequence[int]
+) -> Root:
+    """
+    Root of a progressive container, from its explicit leaf list and its layout.
+
+    The leaf list is written out by the caller: a field root at every set position and
+    a zero chunk at every gap. It is then fed to the naive transcription of the
+    progressive recursion, and the packed layout word is hashed in on top.
+    """
+    return h(naive_merkleize_progressive(leaves), active_fields_word(active_fields))
 
 
 # Chunk counts straddling every progressive level boundary.
@@ -226,6 +256,56 @@ def test_mix_in_length_error_on_negative() -> None:
     """Rejects negative lengths."""
     with pytest.raises(SSZValueError):
         mix_in_length(Root(sample_chunks[0]), -1)
+
+
+@pytest.mark.parametrize(
+    "active_fields, expected_word",
+    [
+        # An empty layout sets no bit, so the mixed-in word is all zero.
+        # No progressive container may declare it; the primitive is still defined on it.
+        pytest.param([], b"", id="empty"),
+        pytest.param([1], b"\x01", id="one_position_set"),
+        pytest.param([0, 1], b"\x02", id="second_position_set"),
+        pytest.param([0, 0, 1], b"\x04", id="third_position_set"),
+        # The EIP's own two layouts: bits 0 and 2, then bits 1 and 2.
+        pytest.param([1, 0, 1], b"\x05", id="square_layout"),
+        pytest.param([0, 1, 1], b"\x06", id="circle_layout"),
+        # Bits 0, 3 and 5 give 1 + 8 + 32.
+        pytest.param([1, 0, 0, 1, 0, 1], b"\x29", id="multiple_gaps"),
+        pytest.param([1] * 8, b"\xff", id="first_byte_full"),
+        # Position 8 is the lowest bit of the second byte, not the highest of the first.
+        pytest.param([1] * 9, b"\xff\x01", id="spills_into_second_byte"),
+        pytest.param([*([0] * 255), 1], b"\x00" * 31 + b"\x80", id="last_position_of_the_word"),
+    ],
+)
+def test_mix_in_active_fields_packs_the_layout_into_one_word(
+    active_fields: Sequence[int], expected_word: bytes
+) -> None:
+    """The layout mixes in as one 32-byte word, one bit per position, lowest bit first."""
+    root = Root(sample_chunks[1])
+    assert mix_in_active_fields(root, active_fields) == h(root, pad(expected_word))
+
+
+def test_mix_in_active_fields_fills_the_word_at_256_positions() -> None:
+    """A layout occupying all 256 positions leaves no padding in the mixed-in word."""
+    root = Root(sample_chunks[1])
+    # Every bit of every byte is set, so the word is 32 bytes of 0xff with nothing padded.
+    assert mix_in_active_fields(root, [1] * 256) == h(root, Chunk(b"\xff" * 32))
+
+
+def test_mix_in_active_fields_zero_pads_a_layout_below_256_positions() -> None:
+    """A layout narrower than the word is zero-padded up to it, not scaled to fit."""
+    root = Root(sample_chunks[1])
+    narrow_layout = [1]
+    padded_layout = [1, *([0] * 255)]
+    assert mix_in_active_fields(root, narrow_layout) == h(root, pad(b"\x01"))
+    assert mix_in_active_fields(root, padded_layout) == mix_in_active_fields(root, narrow_layout)
+
+
+def test_mix_in_active_fields_separates_two_layouts_over_one_root() -> None:
+    """The same tree under two layouts yields two roots, which is the point of the mix-in."""
+    root = Root(sample_chunks[1])
+    assert mix_in_active_fields(root, [1, 0, 1]) != mix_in_active_fields(root, [1, 1, 1])
 
 
 def test_zero_tree_root_internal() -> None:
@@ -629,6 +709,165 @@ class ProgressiveVar(Container):
 
 class EmptyContainer(Container):
     """Container with zero fields."""
+
+
+class OneFieldProgressive(ProgressiveContainer):
+    """Progressive container occupying the single position its layout declares."""
+
+    ACTIVE_FIELDS = (1,)
+
+    A: Uint16
+
+
+class GappedProgressive(ProgressiveContainer):
+    """EIP-7495's Square: a field at position 0, a gap, then a field at position 2."""
+
+    ACTIVE_FIELDS = (1, 0, 1)
+
+    A: Uint16
+    B: Uint8
+
+
+class LeadingGapProgressive(ProgressiveContainer):
+    """EIP-7495's Circle: a leading gap, then fields at positions 1 and 2."""
+
+    ACTIVE_FIELDS = (0, 1, 1)
+
+    A: Uint16
+    B: Uint8
+
+
+class TwoLeadingGapsProgressive(ProgressiveContainer):
+    """Two leading gaps, so the sole field is merkleized at position two."""
+
+    ACTIVE_FIELDS = (0, 0, 1)
+
+    C: Uint32
+
+
+class MultiGapProgressive(ProgressiveContainer):
+    """Three fields separated by gaps of differing widths."""
+
+    ACTIVE_FIELDS = (1, 0, 0, 1, 0, 1)
+
+    A: Uint8
+    B: Uint16
+    C: Uint32
+
+
+class BoundaryOneProgressive(ProgressiveContainer):
+    """One position: the leaves fill the width-one level exactly."""
+
+    ACTIVE_FIELDS = (1,)
+
+    A: Uint8
+
+
+class BoundaryFiveProgressive(ProgressiveContainer):
+    """Five positions: the leaves fill the width-one and width-four levels exactly."""
+
+    ACTIVE_FIELDS = (1, 0, 0, 0, 1)
+
+    A: Uint8
+    B: Uint8
+
+
+class BoundaryTwentyOneProgressive(ProgressiveContainer):
+    """Twenty-one positions: the leaves fill the first three levels exactly."""
+
+    ACTIVE_FIELDS = (1, *([0] * 19), 1)
+
+    A: Uint8
+    B: Uint8
+
+
+class BoundaryTwentyTwoProgressive(ProgressiveContainer):
+    """Twenty-two positions: one leaf past the third level, opening the width-64 level."""
+
+    ACTIVE_FIELDS = (1, *([0] * 20), 1)
+
+    A: Uint8
+    B: Uint8
+
+
+class BoundedListFieldProgressive(ProgressiveContainer):
+    """Progressive container whose second field is a bounded list."""
+
+    ACTIVE_FIELDS = (1, 0, 1)
+
+    A: Uint16
+    B: Uint16List1024
+
+
+class ProgressiveListFieldProgressive(ProgressiveContainer):
+    """Progressive container whose second field is a progressive list."""
+
+    ACTIVE_FIELDS = (1, 1)
+
+    A: Uint16
+    B: Uint16ProgressiveList
+
+
+class ProgressiveBitlistFieldProgressive(ProgressiveContainer):
+    """Progressive container whose second field is a progressive bitlist."""
+
+    ACTIVE_FIELDS = (1, 0, 1)
+
+    A: Uint8
+    B: ProgressiveBitlist
+
+
+class NestedProgressive(ProgressiveContainer):
+    """Progressive container holding another progressive container as a field."""
+
+    ACTIVE_FIELDS = (1, 0, 1)
+
+    A: Uint8
+    B: GappedProgressive
+
+
+class GappedList4(List[GappedProgressive]):
+    """Bounded list of progressive containers, four at most."""
+
+    LIMIT = 4
+
+
+class GappedProgressiveList(ProgressiveList[GappedProgressive]):
+    """Progressive list of progressive containers."""
+
+
+class ContainerWithProgressive(Container):
+    """Ordinary container holding a progressive container as its second field."""
+
+    A: Uint8
+    B: GappedProgressive
+
+
+class ThreeByteContainer(Container):
+    """Bounded container of three single-byte fields, the shape a progressive one mirrors."""
+
+    A: Uint8
+    B: Uint8
+    C: Uint8
+
+
+class ThreeSetProgressive(ProgressiveContainer):
+    """Three positions, all occupied: the version before a field was dropped."""
+
+    ACTIVE_FIELDS = (1, 1, 1)
+
+    A: Uint8
+    B: Uint8
+    C: Uint8
+
+
+class MiddleGapProgressive(ProgressiveContainer):
+    """The same three positions after the middle field was dropped."""
+
+    ACTIVE_FIELDS = (1, 0, 1)
+
+    A: Uint8
+    C: Uint8
 
 
 def le_padded(integer_value: int, byte_length: int) -> Chunk:
@@ -1187,6 +1426,272 @@ def test_hash_tree_root_vector_of_variable_containers() -> None:
     element_root_0 = var_root(b"\xad\xde", b"\x01\x00\x02\x00\x03\x00", 3, b"\x11")
     element_root_1 = var_root(b"\xef\xbe", b"\x04\x00\x05\x00\x06\x00", 3, b"\x22")
     assert hash_tree_root(variable_vector) == h(element_root_0, element_root_1)
+
+
+def test_hash_tree_root_progressive_container_single_field() -> None:
+    """One leaf fills the width-one level, and the layout word is mixed in above it."""
+    # leaves = [root(A)], so the spine is h(leaf, terminator) and the word is 0x01.
+    value = OneFieldProgressive(A=Uint16(0xABCD))
+    assert hash_tree_root(value) == h(h(pad(b"\xcd\xab"), Z[0]), pad(b"\x01"))
+
+
+def test_hash_tree_root_progressive_container_interior_gap() -> None:
+    """A cleared position contributes a zero leaf, which is what holds position two put."""
+    # leaves = [root(A), 0, root(B)]:
+    #   level 1 (width 1)  takes leaf 0,
+    #   level 2 (width 4)  takes the zero leaf and root(B), padded out to four,
+    #   level 3            is the terminator.
+    value = GappedProgressive(A=Uint16(0x1234), B=Uint8(0x56))
+    level_1 = pad(b"\x34\x12")
+    level_4 = h(h(Z[0], pad(b"\x56")), Z[1])
+    assert hash_tree_root(value) == h(h(level_1, h(level_4, Z[0])), pad(b"\x05"))
+
+
+def test_hash_tree_root_progressive_container_two_leading_gaps() -> None:
+    """Leading gaps put zero leaves at the front, so the sole field sits at position two."""
+    # leaves = [0, 0, root(C)], so the width-one level holds a zero leaf of its own.
+    value = TwoLeadingGapsProgressive(C=Uint32(0x11223344))
+    level_4 = h(h(Z[0], pad(b"\x44\x33\x22\x11")), Z[1])
+    assert hash_tree_root(value) == h(h(Z[0], h(level_4, Z[0])), pad(b"\x04"))
+
+
+@pytest.mark.parametrize(
+    "value, expected_leaves",
+    [
+        pytest.param(
+            OneFieldProgressive(A=Uint16(0xABCD)),
+            [pad(b"\xcd\xab")],
+            id="single_position",
+        ),
+        pytest.param(
+            GappedProgressive(A=Uint16(0x1234), B=Uint8(0x56)),
+            [pad(b"\x34\x12"), ZERO_ROOT, pad(b"\x56")],
+            id="interior_gap",
+        ),
+        pytest.param(
+            LeadingGapProgressive(A=Uint16(0x1234), B=Uint8(0x56)),
+            [ZERO_ROOT, pad(b"\x34\x12"), pad(b"\x56")],
+            id="leading_gap",
+        ),
+        pytest.param(
+            TwoLeadingGapsProgressive(C=Uint32(0x11223344)),
+            [ZERO_ROOT, ZERO_ROOT, pad(b"\x44\x33\x22\x11")],
+            id="two_leading_gaps",
+        ),
+        pytest.param(
+            MultiGapProgressive(A=Uint8(1), B=Uint16(0x0203), C=Uint32(0x04050607)),
+            [
+                pad(b"\x01"),
+                ZERO_ROOT,
+                ZERO_ROOT,
+                pad(b"\x03\x02"),
+                ZERO_ROOT,
+                pad(b"\x07\x06\x05\x04"),
+            ],
+            id="multiple_gaps",
+        ),
+    ],
+)
+def test_hash_tree_root_progressive_container_from_explicit_leaves(
+    value: ProgressiveContainer, expected_leaves: list[Chunk]
+) -> None:
+    """Field roots land at set positions and zero chunks at gaps, one leaf per position."""
+    assert len(expected_leaves) == len(type(value).ACTIVE_FIELDS)
+    assert hash_tree_root(value) == expected_progressive_container_root(
+        expected_leaves, type(value).ACTIVE_FIELDS
+    )
+
+
+@pytest.mark.parametrize(
+    "value, expected_leaves",
+    [
+        # One leaf fills the width-one level exactly.
+        pytest.param(
+            BoundaryOneProgressive(A=Uint8(1)),
+            [pad(b"\x01")],
+            id="one_position",
+        ),
+        # Five leaves fill the width-one and width-four levels exactly.
+        pytest.param(
+            BoundaryFiveProgressive(A=Uint8(1), B=Uint8(2)),
+            [pad(b"\x01"), ZERO_ROOT, ZERO_ROOT, ZERO_ROOT, pad(b"\x02")],
+            id="five_positions",
+        ),
+        # Twenty-one leaves fill the first three levels exactly, so width 64 stays the terminator.
+        pytest.param(
+            BoundaryTwentyOneProgressive(A=Uint8(1), B=Uint8(2)),
+            [pad(b"\x01"), *([ZERO_ROOT] * 19), pad(b"\x02")],
+            id="twenty_one_positions",
+        ),
+        # One leaf past that boundary opens the width-64 level with a single occupant.
+        pytest.param(
+            BoundaryTwentyTwoProgressive(A=Uint8(1), B=Uint8(2)),
+            [pad(b"\x01"), *([ZERO_ROOT] * 20), pad(b"\x02")],
+            id="twenty_two_positions",
+        ),
+    ],
+)
+def test_hash_tree_root_progressive_container_level_boundaries(
+    value: ProgressiveContainer, expected_leaves: list[Chunk]
+) -> None:
+    """A layout is as wide as its position count, so it crosses the spine's level widths."""
+    # The gaps are real leaves: a 22-position layout occupies 22 leaves whatever its field count.
+    assert len(expected_leaves) == len(type(value).ACTIVE_FIELDS)
+    assert hash_tree_root(value) == expected_progressive_container_root(
+        expected_leaves, type(value).ACTIVE_FIELDS
+    )
+
+
+def test_hash_tree_root_progressive_container_boundary_widths_differ() -> None:
+    """The 21- and 22-position layouts straddle a level width, so their roots differ."""
+    twenty_one = BoundaryTwentyOneProgressive(A=Uint8(1), B=Uint8(2))
+    twenty_two = BoundaryTwentyTwoProgressive(A=Uint8(1), B=Uint8(2))
+    assert twenty_one.encode_bytes() == twenty_two.encode_bytes()
+    assert hash_tree_root(twenty_one) != hash_tree_root(twenty_two)
+
+
+def test_hash_tree_root_progressive_container_with_bounded_list_field() -> None:
+    """A bounded list field contributes its own length-mixed root as one leaf."""
+    value = BoundedListFieldProgressive(
+        A=Uint16(0xABCD),
+        B=Uint16List1024(data=(Uint16(1), Uint16(2), Uint16(3))),
+    )
+    # The field's own root: its data padded to the 64-chunk capacity, then the element count.
+    field_b = h(merge(pad(b"\x01\x00\x02\x00\x03\x00"), Z[0:6]), pad(b"\x03"))
+    expected_leaves = [pad(b"\xcd\xab"), ZERO_ROOT, field_b]
+    assert hash_tree_root(value) == expected_progressive_container_root(expected_leaves, [1, 0, 1])
+
+
+def test_hash_tree_root_progressive_container_with_progressive_list_field() -> None:
+    """A progressive list field contributes its data root with the element count mixed in."""
+    value = ProgressiveListFieldProgressive(
+        A=Uint16(0xABCD),
+        B=Uint16ProgressiveList(data=[Uint16(1), Uint16(2), Uint16(3)]),
+    )
+    field_b = h(h(pad(b"\x01\x00\x02\x00\x03\x00"), Z[0]), pad(b"\x03"))
+    assert hash_tree_root(value) == expected_progressive_container_root(
+        [pad(b"\xcd\xab"), field_b], [1, 1]
+    )
+
+
+def test_hash_tree_root_progressive_container_with_empty_progressive_list_field() -> None:
+    """An empty progressive list field contributes the zero terminator with a zero count."""
+    value = ProgressiveListFieldProgressive(A=Uint16(0xABCD), B=Uint16ProgressiveList(data=()))
+    field_b = h(ZERO_ROOT, pad(b"\x00"))
+    assert hash_tree_root(value) == expected_progressive_container_root(
+        [pad(b"\xcd\xab"), field_b], [1, 1]
+    )
+
+
+def test_hash_tree_root_progressive_container_with_progressive_bitlist_field() -> None:
+    """A progressive bitlist field contributes its data root with the bit count mixed in."""
+    value = ProgressiveBitlistFieldProgressive(
+        A=Uint8(0xFF), B=ProgressiveBitlist(data=_bools(0, 1, 0))
+    )
+    field_b = h(h(pad(b"\x02"), Z[0]), pad(b"\x03"))
+    assert hash_tree_root(value) == expected_progressive_container_root(
+        [pad(b"\xff"), ZERO_ROOT, field_b], [1, 0, 1]
+    )
+
+
+def test_hash_tree_root_progressive_container_inside_a_progressive_container() -> None:
+    """A nested progressive field hands its own layout-mixed root up as one leaf."""
+    inner = GappedProgressive(A=Uint16(0x1234), B=Uint8(0x56))
+    inner_root = expected_progressive_container_root(
+        [pad(b"\x34\x12"), ZERO_ROOT, pad(b"\x56")], [1, 0, 1]
+    )
+    value = NestedProgressive(A=Uint8(1), B=inner)
+    assert hash_tree_root(value) == expected_progressive_container_root(
+        [pad(b"\x01"), ZERO_ROOT, inner_root], [1, 0, 1]
+    )
+
+
+def test_hash_tree_root_bounded_list_of_progressive_containers() -> None:
+    """Progressive containers are composite elements: each contributes one leaf."""
+    element_roots = [
+        expected_progressive_container_root(
+            [pad(bytes([side])), ZERO_ROOT, pad(bytes([color]))], [1, 0, 1]
+        )
+        for side, color in ((1, 2), (3, 4))
+    ]
+    value = GappedList4(
+        data=[
+            GappedProgressive(A=Uint16(1), B=Uint8(2)),
+            GappedProgressive(A=Uint16(3), B=Uint8(4)),
+        ]
+    )
+    # Two leaves in a four-element capacity, then the element count.
+    assert hash_tree_root(value) == h(h(h(element_roots[0], element_roots[1]), Z[1]), pad(b"\x02"))
+
+
+def test_hash_tree_root_progressive_list_of_progressive_containers() -> None:
+    """The progressive list places the same element roots on the spine instead."""
+    element_roots = [
+        expected_progressive_container_root(
+            [pad(bytes([side])), ZERO_ROOT, pad(bytes([color]))], [1, 0, 1]
+        )
+        for side, color in ((1, 2), (3, 4))
+    ]
+    value = GappedProgressiveList(
+        data=[
+            GappedProgressive(A=Uint16(1), B=Uint8(2)),
+            GappedProgressive(A=Uint16(3), B=Uint8(4)),
+        ]
+    )
+    assert hash_tree_root(value) == h(naive_merkleize_progressive(element_roots), pad(b"\x02"))
+
+
+def test_hash_tree_root_container_holding_a_progressive_container() -> None:
+    """An ordinary container merkleizes the progressive field's root as an ordinary leaf."""
+    inner_root = expected_progressive_container_root(
+        [pad(b"\x34\x12"), ZERO_ROOT, pad(b"\x56")], [1, 0, 1]
+    )
+    value = ContainerWithProgressive(
+        A=Uint8(1), B=GappedProgressive(A=Uint16(0x1234), B=Uint8(0x56))
+    )
+    assert hash_tree_root(value) == h(pad(b"\x01"), inner_root)
+
+
+def test_progressive_container_field_positions_are_stable_across_layouts() -> None:
+    """Two layouts sharing a position put that field's leaf at the very same index."""
+    square = GappedProgressive(A=Uint16(0x1234), B=Uint8(0x56))
+    circle = LeadingGapProgressive(A=Uint16(0x1234), B=Uint8(0x56))
+    color_leaf = pad(b"\x56")
+    # The leaf lists are written out position by position, from each layout's bits.
+    square_leaves = [pad(b"\x34\x12"), ZERO_ROOT, color_leaf]
+    circle_leaves = [ZERO_ROOT, pad(b"\x34\x12"), color_leaf]
+    # The shared field occupies index 2 of both lists, so its position in the tree is the same.
+    assert square_leaves[2] == circle_leaves[2] == color_leaf
+    assert hash_tree_root(square) == expected_progressive_container_root(square_leaves, [1, 0, 1])
+    assert hash_tree_root(circle) == expected_progressive_container_root(circle_leaves, [0, 1, 1])
+    # The bytes cannot tell the two shapes apart; only the mixed-in layout can.
+    assert square.encode_bytes() == circle.encode_bytes()
+    assert hash_tree_root(square) != hash_tree_root(circle)
+
+
+def test_progressive_container_gap_and_zero_field_share_leaves_but_not_roots() -> None:
+    """A dropped field and a field holding zero build one tree, and the layout separates them."""
+    # A zero Uint8 roots to the zero chunk, so both shapes present the same three leaves.
+    with_zero_field = ThreeSetProgressive(A=Uint8(1), B=Uint8(0), C=Uint8(0))
+    with_gap = MiddleGapProgressive(A=Uint8(1), C=Uint8(0))
+    shared_leaves = [pad(b"\x01"), ZERO_ROOT, ZERO_ROOT]
+    shared_data_root = naive_merkleize_progressive(shared_leaves)
+    assert hash_tree_root(with_zero_field) == h(shared_data_root, pad(b"\x07"))
+    assert hash_tree_root(with_gap) == h(shared_data_root, pad(b"\x05"))
+    assert hash_tree_root(with_zero_field) != hash_tree_root(with_gap)
+
+
+def test_progressive_and_bounded_container_share_bytes_but_not_roots() -> None:
+    """The two struct shapes serialize identically and merkleize differently."""
+    progressive = ThreeSetProgressive(A=Uint8(1), B=Uint8(2), C=Uint8(3))
+    bounded = ThreeByteContainer(A=Uint8(1), B=Uint8(2), C=Uint8(3))
+    leaves = [pad(b"\x01"), pad(b"\x02"), pad(b"\x03")]
+    assert progressive.encode_bytes() == bounded.encode_bytes()
+    # The bounded shape hashes a width-four tree; the progressive shape hashes a spine
+    # of three leaves and mixes its layout in on top.
+    assert hash_tree_root(bounded) == h(h(leaves[0], leaves[1]), h(leaves[2], Z[0]))
+    assert hash_tree_root(progressive) == h(naive_merkleize_progressive(leaves), pad(b"\x07"))
+    assert hash_tree_root(bounded) != hash_tree_root(progressive)
 
 
 @pytest.mark.parametrize(

@@ -8,6 +8,8 @@ identically everywhere it occurs, and its fields stay machine-readable.
 
 from __future__ import annotations
 
+from collections.abc import Sequence
+
 
 class SSZError(Exception):
     """Base class for every SSZ error."""
@@ -48,6 +50,17 @@ class SSZDefinitionError(SSZTypeError):
         self.type_name = type_name
         self.requirement = requirement
         super().__init__(f"{type_name} must define {requirement}")
+
+
+class SSZActiveFieldsError(SSZTypeError):
+    """A progressive container declares a field layout the spec does not permit."""
+
+    def __init__(self, type_name: str, active_fields: Sequence[int], reason: str) -> None:
+        """Record the type, the layout it declared, and the rule that layout breaks."""
+        self.type_name = type_name
+        self.active_fields = tuple(active_fields)
+        self.reason = reason
+        super().__init__(f"{type_name}: invalid active fields, {reason}")
 
 
 class SSZFixedSizeError(SSZTypeError):

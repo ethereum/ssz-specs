@@ -13,7 +13,7 @@ from ssz.bitfields import BaseBitlist, BaseBitvector, ProgressiveBitlist
 from ssz.boolean import Boolean
 from ssz.byte_arrays import BaseByteList, BaseBytes
 from ssz.collections import List, ProgressiveList, Vector
-from ssz.container import Container
+from ssz.container import Container, ProgressiveContainer
 from ssz.exceptions import SSZTypeError, SSZValueError
 from ssz.uint import BaseUint
 
@@ -248,6 +248,31 @@ def mix_in_length(root: Root, length: int) -> Root:
     return Root(sha256(root + length.to_bytes(32, "little")).digest())
 
 
+def mix_in_active_fields(root: Root, active_fields: Sequence[int]) -> Root:
+    """
+    Mix a field layout into a Merkle root, per EIP-7495.
+
+    The layout packs into a single 32-byte word, one bit per position, lowest bit first:
+
+        [1, 0, 1]  ->  05 00 00 ... 00
+
+    Mixing it in is what keeps a cleared position distinct from a field holding zero.
+    Both leave a zero leaf, so the leaf tree alone cannot separate them.
+    A version that drops a field would otherwise root exactly like one that zeroed it.
+
+    Args:
+        root: Merkle root over the field leaves.
+        active_fields: One 0 or 1 per position. The bound of 256 is enforced by the
+            type that declares the layout, not here.
+
+    Returns:
+        The layout-mixed root.
+    """
+    # At most 256 positions, so the whole layout always fits one 32-byte chunk.
+    packed_bits = sum(1 << i for i, bit in enumerate(active_fields) if bit)
+    return Root(sha256(root + packed_bits.to_bytes(BYTES_PER_CHUNK, "little")).digest())
+
+
 def _pack_bytes(data: bytes) -> list[Chunk]:
     """
     Right-pad serialized bytes to a chunk boundary and split into chunks.
@@ -387,6 +412,22 @@ def _hash_tree_root_progressive_list(value: ProgressiveList) -> Root:
 def _hash_tree_root_progressive_bitlist(value: ProgressiveBitlist) -> Root:
     # The count mixed in is the bit count, not the number of packed chunks.
     return mix_in_length(merkleize_progressive(_pack_bits(value.data)), len(value.data))
+
+
+@hash_tree_root.register
+def _hash_tree_root_progressive_container(value: ProgressiveContainer) -> Root:
+    cls = type(value)
+    # One leaf per layout position, not per field, though the spec's formula reads that way.
+    # A cleared bit keeps its zero leaf, the gap that holds every other field still.
+    leaves: list[Chunk] = [ZERO_ROOT] * len(cls.ACTIVE_FIELDS)
+
+    # Fields follow the set bits: the n-th field belongs at the n-th set position.
+    # A strict pairing fails loudly rather than hashing a field at the wrong one.
+    active_positions = (i for i, bit in enumerate(cls.ACTIVE_FIELDS) if bit)
+    for position, name in zip(active_positions, cls.model_fields, strict=True):
+        leaves[position] = hash_tree_root(getattr(value, name))
+
+    return mix_in_active_fields(merkleize_progressive(leaves), cls.ACTIVE_FIELDS)
 
 
 @hash_tree_root.register

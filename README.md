@@ -19,9 +19,12 @@ repository implements:
 - **Progressive types** ([EIP-7916](https://eips.ethereum.org/EIPS/eip-7916)):
   `ProgressiveList` and `ProgressiveBitlist`, which carry no capacity and hash into a
   tree that grows with the data.
+- **Progressive containers** ([EIP-7495](https://eips.ethereum.org/EIPS/eip-7495)):
+  `ProgressiveContainer` with an `ACTIVE_FIELDS` layout, whose fields keep their tree
+  positions as later versions add or drop fields.
 - **(De)serialization**: canonical encode/decode with strict, offset-based decoding.
-- **Merkleization**: `hash_tree_root`, `merkleize`, `merkleize_progressive`, and
-  `mix_in_length`.
+- **Merkleization**: `hash_tree_root`, `merkleize`, `merkleize_progressive`,
+  `mix_in_length`, and `mix_in_active_fields`.
 
 ## Project Structure
 
@@ -35,7 +38,7 @@ src/ssz/
   byte_arrays.py       # fixed byte vectors and byte lists
   bitfields.py         # Bitvector / Bitlist / ProgressiveBitlist
   collections.py       # Vector / List / ProgressiveList
-  container.py         # Container
+  container.py         # Container / ProgressiveContainer
   exceptions.py        # SSZ error hierarchy
   merkleization.py     # hash_tree_root dispatch and Merkle primitives
 tests/                 # pytest unit tests mirroring the source modules

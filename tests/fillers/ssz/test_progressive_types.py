@@ -46,7 +46,7 @@ class SampleNestedProgressiveList(ProgressiveList[SampleUint16ProgressiveList]):
     ELEMENT_TYPE = SampleUint16ProgressiveList
 
 
-class SampleProgressiveContainer(Container):
+class SampleContainerWithProgressiveList(Container):
     """Container embedding a progressive list between two fixed-size fields."""
 
     a: Uint16
@@ -465,8 +465,8 @@ def test_container_with_progressive_list_field(ssz_test: SSZTestFiller) -> None:
     - the decoded value equals the original.
     """
     ssz_test(
-        type_name="SampleProgressiveContainer",
-        value=SampleProgressiveContainer(
+        type_name="SampleContainerWithProgressiveList",
+        value=SampleContainerWithProgressiveList(
             a=Uint16(0xABCD),
             b=SampleUint64ProgressiveList(data=[Uint64(1), Uint64(2), Uint64(3)]),
             c=Uint8(0xFF),
@@ -492,8 +492,8 @@ def test_container_with_empty_progressive_list_field(ssz_test: SSZTestFiller) ->
     - the decoded value equals the original.
     """
     ssz_test(
-        type_name="SampleProgressiveContainer",
-        value=SampleProgressiveContainer(
+        type_name="SampleContainerWithProgressiveList",
+        value=SampleContainerWithProgressiveList(
             a=Uint16(0xABCD),
             b=SampleUint64ProgressiveList(data=[]),
             c=Uint8(0xFF),
