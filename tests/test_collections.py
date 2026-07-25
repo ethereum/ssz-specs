@@ -6,11 +6,19 @@ import pytest
 from hypothesis import given, strategies as st
 from pydantic import BaseModel, ValidationError
 
-from ssz import Bytes32, Uint8, Uint16, Uint32
+from ssz import Uint8, Uint16, Uint32
 from ssz.boolean import Boolean
+from ssz.byte_arrays import BaseBytes
 from ssz.collections import List, Vector, _validate_offsets
 from ssz.container import Container
 from ssz.exceptions import SSZSerializationError, SSZTypeError, SSZValueError
+
+
+class Bytes32(BaseBytes):
+    """A 32-byte array, as applications typically define for roots and hashes."""
+
+    LENGTH = 32
+
 
 ValueOrValidationError = (SSZValueError, ValidationError)
 TypeOrValidationError = (SSZTypeError, ValidationError)
