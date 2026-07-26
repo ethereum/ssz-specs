@@ -1,20 +1,47 @@
-"""SSZ Container Type."""
+"""
+SSZ container types.
+
+Two struct shapes are defined by the SSZ spec, the second added by EIP-7495:
+
+- A container merkleizes its fields into a tree sized by the field count.
+- A progressive container merkleizes each field at the position its layout assigns.
+
+A layout outlives any one version of a struct, so its fields keep their positions.
+Both encode identically: fixed-size fields inline, variable-size fields behind offsets.
+"""
 
 import io
 from itertools import pairwise
-from typing import IO, Any, Self, override
+from typing import IO, Any, ClassVar, Final, Self, override
 
 from pydantic import ConfigDict, model_validator
 from pydantic.functional_validators import ModelWrapValidatorHandler
 
-from ssz.exceptions import SSZError, SSZFixedSizeError, SSZSerializationError
+from ssz.exceptions import (
+    SSZActiveFieldsError,
+    SSZDefinitionError,
+    SSZError,
+    SSZFixedSizeError,
+    SSZSerializationError,
+)
 from ssz.ssz_base import BYTES_PER_LENGTH_OFFSET, SSZModel, SSZType
 from ssz.uint import Uint32
 
+MAX_ACTIVE_FIELDS: Final = 256
+"""Widest field layout a progressive container may declare.
 
-class Container(SSZModel):
+One layout is mixed into the root as a single 32-byte word, which holds 256 bits.
+That matches how a length is mixed into a list root.
+
+The value is the chunk width in bits, restated rather than imported: the merkleization
+module imports this one, so the dependency cannot run the other way."""
+
+
+class _SSZContainer(SSZModel):
     """
-    Ordered struct of named heterogeneous SSZ fields.
+    Shared wire format for the two SSZ struct shapes.
+
+    Both shapes encode the same way and differ only in how their fields are merkleized.
 
     Containers are mutable: assigning a field revalidates the value against
     the field's declared type, exactly as construction does. Assignment is
@@ -138,3 +165,129 @@ class Container(SSZModel):
     def from_hex(cls, value: str) -> Self:
         """Decode from a hex string with an optional 0x prefix."""
         return cls.decode_bytes(bytes.fromhex(value.removeprefix("0x")))
+
+
+class Container(_SSZContainer):
+    r"""
+    Ordered struct of named heterogeneous SSZ fields.
+
+    The Merkle tree holds one leaf per field, padded to the next power of two:
+
+        class Pair(Container):
+            a: Uint64
+            b: Uint64
+
+        leaves  :  root(a)   root(b)
+                      \________/
+                          root
+
+    A third field widens that tree to four leaves.
+    Both existing fields drop one level down.
+    A proof against the two-field version therefore stops verifying.
+    The progressive shape avoids that.
+    """
+
+
+class ProgressiveContainer(_SSZContainer):
+    """
+    Ordered struct whose fields keep their tree positions across versions, per EIP-7495.
+
+    - A layout of bits places the fields.
+    - A set bit merkleizes a field at that position.
+    - A clear bit leaves a zero leaf instead.
+
+    Fields are declared in the order of the set bits:
+
+        class Square(ProgressiveContainer):
+            ACTIVE_FIELDS = (1, 0, 1)
+
+            side: Uint16     # position 0
+            color: Uint8     # position 2
+
+        class Circle(ProgressiveContainer):
+            ACTIVE_FIELDS = (0, 1, 1)
+
+            radius: Uint16   # position 1
+            color: Uint8     # position 2
+
+        position    0            1              2
+        (1, 0, 1)   root(side)   ZERO           root(color)
+        (0, 1, 1)   ZERO         root(radius)   root(color)
+
+    So a position decides where a field is hashed, never a declaration index:
+
+    - A proof about the shared position verifies against either shape.
+    - Dropping a field clears its bit, leaving a zero leaf that holds the rest in place.
+    - Adding a position extends the tree past every position already placed.
+    - Two layouts share proofs only where a set position holds the same field.
+
+    The layout is mixed into the root.
+    A gap therefore never reads as a field that holds zero.
+
+    Encoding is that of an ordinary container, and a gap costs no bytes:
+
+        Square(side=0x1234, color=0x42)    ->  0x341242
+        Circle(radius=0x1234, color=0x42)  ->  0x341242
+
+    The same three bytes, and two different roots.
+
+    The spec writes the layout as a call, ProgressiveContainer(active_fields=[1, 0, 1]).
+    It is a class attribute here, as a vector's length and a list's limit are.
+    """
+
+    ACTIVE_FIELDS: ClassVar[tuple[int, ...]]
+    """Field layout, one bit per position, lowest position first, set where a field sits."""
+
+    @classmethod
+    def __pydantic_init_subclass__(cls, **kwargs: Any) -> None:
+        """
+        Enforce the layout rules of EIP-7495 on every declared shape.
+
+        Raises:
+            SSZTypeError: When no layout is declared.
+            SSZTypeError: When the layout is empty, ends in a gap, holds anything but
+                bits, is wider than the word it is mixed into, or disagrees with the
+                declared fields.
+        """
+        super().__pydantic_init_subclass__(**kwargs)
+
+        # Merkleization places each field by its position, so a shape needs a layout.
+        if not hasattr(cls, "ACTIVE_FIELDS"):
+            raise SSZDefinitionError(cls.__name__, "ACTIVE_FIELDS")
+
+        # Every shape is checked, not only the one that introduces a layout.
+        # A restated layout that disagrees with the fields would drop one from the tree.
+        layout, name = cls.ACTIVE_FIELDS, cls.__name__
+
+        # A layout is bits, so anything else is a typo rather than a value to coerce.
+        # The string "100" would otherwise read as three set positions.
+        if any(bit not in (0, 1) for bit in layout):
+            raise SSZActiveFieldsError(name, layout, "a position holds neither 0 nor 1")
+
+        # An empty layout admits no field, so the container would encode to zero bytes.
+        # A list of zero-byte elements has no recoverable element count.
+        if not layout:
+            raise SSZActiveFieldsError(name, layout, "the layout is empty")
+
+        # A trailing gap is a second spelling of one type, invisible to the packed word.
+        # At some widths the tree ignores it too, so (1, 1, 0) and (1, 1) root alike.
+        if not layout[-1]:
+            raise SSZActiveFieldsError(name, layout, "the layout ends in a gap")
+
+        # The whole layout is mixed into the root as one 32-byte word.
+        if len(layout) > MAX_ACTIVE_FIELDS:
+            raise SSZActiveFieldsError(
+                name,
+                layout,
+                f"the layout holds {len(layout)} positions, over the limit of {MAX_ACTIVE_FIELDS}",
+            )
+
+        # One field per set position, in declaration order.
+        active_count = sum(layout)
+        if len(cls.model_fields) != active_count:
+            raise SSZActiveFieldsError(
+                name,
+                layout,
+                f"the layout sets {active_count} positions, "
+                f"and the struct declares {len(cls.model_fields)}",
+            )

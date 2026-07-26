@@ -152,18 +152,18 @@ class SSZModel(StrictBaseModel, SSZType):
             super().__setattr__(name, value)
 
     def __len__(self) -> int:
-        """Element count for collections, field count for containers."""
-        data_field = getattr(self, "data", None)
-        if data_field is not None:
-            return len(data_field)
+        """Element count for a collection, field count for every other shape."""
+        # The base class decides, not the field name.
+        # A union names its payload field the way the spec does, and is not a collection.
+        if isinstance(self, SSZCollection):
+            return len(self.data)
         return len(type(self).model_fields)
 
     def __repr__(self) -> str:
-        """Show collection contents as data=[...] or container fields as name=value pairs."""
+        """Show a collection's contents, and any other shape's fields by name."""
         cls_name = type(self).__name__
-        data_field = getattr(self, "data", None)
-        if data_field is not None:
-            return f"{cls_name}(data={list(data_field)!r})"
+        if isinstance(self, SSZCollection):
+            return f"{cls_name}(data={list(self.data)!r})"
         field_strs = [f"{name}={getattr(self, name)!r}" for name in type(self).model_fields]
         return f"{cls_name}({' '.join(field_strs)})"
 
@@ -175,14 +175,22 @@ class SSZCollection[T](SSZModel):
     Sequences, bitfields, and byte lists all share this base.
     Containers do not — their contents live in named fields, not a single data field.
 
-    Unlike containers, collections are mutable. Mutation validates the
-    incoming elements and the resulting length by the same rules construction
-    applies. Elements already inside the collection were validated when they
-    entered, so they are left alone and mutation cost is proportional to the
-    change, not the collection size. Element assignment lives on this shared
-    base; only variable-size collections offer append and pop. Fixed-length
-    shapes accept element assignment but reject any length change. Mutability
-    itself is configurable through the inherited MUTABLE flag.
+    Every subclass wraps its contents in one field named data.
+
+    Construction passes the field by keyword, or the elements positionally
+    through the `of` factory:
+
+        Uint8List4(data=[1, 2, 3])
+        Uint8List4.of(1, 2, 3)
+
+    Collections mutate in place. Mutation validates the incoming elements and
+    the resulting length by the same rules construction applies. Elements
+    already inside the collection were validated when they entered, so they
+    are left alone and mutation cost is proportional to the change, not the
+    collection size. Element assignment lives on this shared base; only
+    variable-size collections offer append and pop. Fixed-length shapes accept
+    element assignment but reject any length change. Mutability itself is
+    configurable through the inherited MUTABLE flag.
 
     The type parameter is the declared element type: sequences bind their own
     element type, bitfields bind Boolean, and byte lists bind int. Mutation is
@@ -192,11 +200,32 @@ class SSZCollection[T](SSZModel):
 
     model_config = ConfigDict(frozen=False, validate_assignment=True)
 
-    if TYPE_CHECKING:
-        # Each concrete subclass declares the real data field with its own type.
-        # This annotation only teaches type checkers the attribute exists here,
-        # where the shared mutation methods assign it.
-        data: Any
+    data: Any
+    """The contents, declared with its concrete type and default by each subclass."""
+
+    @classmethod
+    def of(cls, *elements: Any) -> Self:
+        r"""
+        Build an instance from the given elements.
+
+        Pydantic models are keyword-only, so the data field is normally passed by
+        keyword. This factory is the positional form: each argument is exactly one
+        element, and no argument is ever spread. Classmethods are inherited without
+        re-synthesis, so unlike a custom constructor this form stays fully visible
+        to static type checkers on every subclass.
+
+            Uint8List4.of(1, 2, 3)     ==  Uint8List4(data=[1, 2, 3])
+            Uint8List4.of()            ==  Uint8List4(data=[])
+            Uint8List4.of(*existing)   spreads an existing sequence
+            ByteList10.of(0xDE, 0xAD)  ==  ByteList10(data=b"\xde\xad")
+
+        Args:
+            *elements: The elements of the new collection.
+
+        Returns:
+            A new instance holding exactly the given elements.
+        """
+        return cls(data=elements)
 
     def __setitem__(self, index: int | slice, value: T | Sequence[T]) -> None:
         """Replace the element(s) at ``index``, validating each new element."""

@@ -1,10 +1,11 @@
 """
 SSZ vector and list collections.
 
-Two sequence shapes are defined by the SSZ spec:
+Three sequence shapes are defined by the SSZ spec, the third added by EIP-7916:
 
 - A vector holds exactly LENGTH elements of one declared type.
 - A list holds between zero and LIMIT elements of one declared type.
+- A progressive list holds any number of elements of one declared type.
 
 A type is fixed-size when every value encodes to the same number of bytes.
 A variable-size type allows different values to encode to different widths.
@@ -103,13 +104,18 @@ def _coerce_elements(element_type: type[SSZType], elements: Sequence[Any]) -> li
     Coerce every element of an already-shaped sequence into the declared type.
 
     - Already-typed elements pass through untouched.
-    - Every other element goes through the element type's constructor.
+    - A value converts only from the element class itself or an ancestor of
+      it (such as a plain int for uints, or plain bytes for byte arrays).
+      Any other class is a type error, not a value to rewrap.
+    - Ancestor-class values go through the element type's constructor.
     - A coercion failure re-raises with the high-level expectation in the message.
     - The chained cause preserves the underlying coercion detail.
     """
     coerced: list[SSZType] = []
     for element in elements:
-        if isinstance(element, element_type):
+        if not issubclass(element_type, type(element)):
+            raise SSZTypeMismatch(element_type.__name__, type(element))
+        if type(element) is element_type:
             coerced.append(element)
             continue
         try:
@@ -125,14 +131,15 @@ class _SSZSequence[T: SSZType](SSZCollection[T]):
     """
     Shared scaffolding for fixed- and variable-length SSZ sequences.
 
-    Two subclasses concretize this base:
+    Three shapes concretize this base:
 
     - A vector pins the element count at LENGTH.
     - A list bounds the element count by LIMIT.
+    - A progressive list leaves the element count unbounded.
 
-    Both store elements in a Pydantic field named data.
-    Both expose tuple-style iteration and indexing.
-    Both share the offset-table writer used by variable-size encodings.
+    All of them store elements in a Pydantic field named data.
+    All of them expose tuple-style iteration and indexing.
+    All of them share the offset-table writer used by variable-size encodings.
 
     The element type is inferred from the generic parameter, once per subclass.
     """
@@ -154,26 +161,34 @@ class _SSZSequence[T: SSZType](SSZCollection[T]):
         """Coerce one incoming element exactly as construction does."""
         return cast("T", _coerce_elements(type(self).ELEMENT_TYPE, (value,))[0])
 
-    def __init_subclass__(cls, **kwargs: Any) -> None:
+    @classmethod
+    def __pydantic_init_subclass__(cls, **kwargs: Any) -> None:
         """
-        Read the element type from the generic parameter in a class declaration.
+        Read the element type from the generic parameter.
 
-        When a subclass is written as:
+        The parameter is picked up from a class declaration:
 
             class Uint16Vector2(Vector[Uint16]):
                 LENGTH = 2
 
         the Uint16 inside the brackets is copied into Uint16Vector2.ELEMENT_TYPE.
         This way, a user does not have to write ELEMENT_TYPE = Uint16 by hand.
+
+        A shape needing no further declaration is usable inline too, written the
+        way the SSZ spec writes it, as ProgressiveList[Uint16]. The bracketed type
+        then sits on the type itself instead of on a base of it.
+
+        The hook runs once the model is fully built, which is the point at which
+        the bracketed types of an inline parameterization are readable.
         """
-        super().__init_subclass__(**kwargs)
+        super().__pydantic_init_subclass__(**kwargs)
         if "ELEMENT_TYPE" in cls.__dict__:
             return
 
-        # Walk direct parents looking for a parameterized SSZ sequence base.
+        # Look at the type itself first, then at its direct parents.
         # The first concrete element type wins.
         # Layers carrying only a TypeVar are skipped.
-        for base in cls.__bases__:
+        for base in (cls, *cls.__bases__):
             # Pydantic stores the generic parameterization on every generic parent.
             # An empty default skips bases that were never made generic.
             metadata = getattr(base, "__pydantic_generic_metadata__", {})
@@ -454,7 +469,179 @@ class Vector[T: SSZType](_SSZSequence[T]):
         )
 
 
-class List[T: SSZType](_SSZSequence[T]):
+class _SSZList[T: SSZType](_SSZSequence[T]):
+    """
+    Shared behavior for the two variable-length SSZ sequence shapes.
+
+    The bounded list and the progressive list both build on this base:
+
+    - A bounded list caps its element count at a declared limit.
+    - A progressive list accepts any element count.
+
+    The base carries the element field, and each shape carries its own count rule.
+
+    The wire format is identical for both:
+
+    - Fixed-size elements pack back-to-back, and the byte budget reveals the count.
+    - Variable-size elements are prefixed by an offset table that reveals the count.
+
+    They differ in exactly two places:
+
+    - The element-count rule, applied on construction and again on decode.
+    - The Merkle tree shape, which lives in the merkleization module.
+    """
+
+    @classmethod
+    def _reject_excess_elements(cls, count: int) -> None:
+        """
+        Reject an element count the type cannot hold.
+
+        A progressive list has no capacity, so it rejects nothing.
+        The bounded list overrides this with its capacity check.
+        """
+
+    def append(self, value: T) -> None:
+        """Add one element at the end, validating it and the resulting length."""
+        self._require_mutable()
+        element = self._validate_element(value)
+        self._validate_length(len(self.data) + 1)
+        cast("list[T]", self.data).append(element)
+
+    def pop(self) -> T:
+        """Remove and return the last element, validating the resulting length."""
+        self._require_mutable()
+        self._validate_length(len(self.data) - 1)
+        return cast("list[T]", self.data).pop()
+
+    def __add__(self, other: Any) -> Self:
+        """
+        Concatenate with another sequence and return a new instance.
+
+        The left operand decides the resulting type, whatever the right one is:
+
+        - Two sequences of different capacities concatenate into the left one's type.
+        - A bounded and a progressive sequence do too, and merkleize as that type.
+
+        The result is built through the constructor, so it revalidates.
+        A bounded list therefore still rejects a concatenation that overflows it.
+        """
+        match other:
+            case _SSZList():
+                new_data = (*self.data, *other.data)
+            case list() | tuple():
+                new_data = (*self.data, *other)
+            case _:
+                return NotImplemented
+        return type(self)(data=new_data)
+
+    @classmethod
+    @override
+    def is_fixed_size(cls) -> bool:
+        """Never fixed-size: the element count varies from one instance to the next."""
+        return False
+
+    @classmethod
+    @override
+    def get_byte_length(cls) -> int:
+        """
+        Variable-size types have no fixed byte length.
+
+        Raises:
+            SSZTypeError: Always — call this only on fixed-size types.
+        """
+        raise SSZFixedSizeError(cls.__name__, "list")
+
+    @override
+    def serialize(self, stream: IO[bytes]) -> int:
+        """Write the SSZ encoding to a binary stream and return the byte count."""
+        # Fixed-size elements pack back-to-back with no length prefix.
+        # The element count is recovered on decode from the wire scope.
+        if self.ELEMENT_TYPE.is_fixed_size():
+            return sum(element.serialize(stream) for element in self.data)
+        # Variable-size elements: emit a table sized for the runtime count, then bodies.
+        return self._write_variable_payload(stream, len(self.data))
+
+    @classmethod
+    @override
+    def deserialize(cls, stream: IO[bytes], scope: int) -> Self:
+        """
+        Read one sequence from a binary stream within the given byte budget.
+
+        Three cases cover all valid inputs:
+
+        - Empty scope decodes to an empty sequence.
+        - Fixed-size elements: count equals scope divided by element width.
+        - Variable-size elements: the first offset locates bodies and reveals the count.
+
+        A declared capacity is enforced as soon as the count is known, before any
+        body is read. A shape without one is still bounded by the byte budget, so
+        it cannot be driven to allocate beyond its input.
+
+        Raises:
+            SSZSerializationError: When scope or any offset is malformed.
+            SSZValueError: When the recovered count exceeds a declared capacity.
+        """
+        # Empty case: any zero-byte payload decodes to an empty sequence.
+        if scope == 0:
+            return cls(data=())
+
+        # Fixed-size case: elements pack back-to-back at a known stride.
+        # The count is recovered by dividing the byte budget by the element width.
+        if cls.ELEMENT_TYPE.is_fixed_size():
+            element_size = cls.ELEMENT_TYPE.get_byte_length()
+            if scope % element_size != 0:
+                raise SSZSerializationError(
+                    f"{cls.__name__}: scope {scope} not divisible by element size {element_size}"
+                )
+            num_elements = scope // element_size
+            # The count is checked here rather than left to the constructor so that an
+            # over-capacity payload reports its capacity, not whatever the offsets
+            # derived from that count happen to look like.
+            cls._reject_excess_elements(num_elements)
+            elements = [
+                cls.ELEMENT_TYPE.deserialize(stream, element_size) for _ in range(num_elements)
+            ]
+            return cls(data=elements)
+
+        # Variable-size case: the first offset reveals both where bodies begin
+        # and the element count (the offset width divides the table width).
+        if scope < BYTES_PER_LENGTH_OFFSET:
+            raise SSZSerializationError(
+                f"{cls.__name__}: scope {scope} too small for variable-size list"
+            )
+        first_offset = int(Uint32.deserialize(stream, BYTES_PER_LENGTH_OFFSET))
+        # A non-empty variable-size list carries at least one offset word before any body.
+        # A zero first offset is contradictory: it means zero elements yet one full-scope element.
+        if (
+            first_offset < BYTES_PER_LENGTH_OFFSET
+            or first_offset > scope
+            or first_offset % BYTES_PER_LENGTH_OFFSET != 0
+        ):
+            raise SSZSerializationError(f"{cls.__name__}: invalid offset {first_offset}")
+        num_elements = first_offset // BYTES_PER_LENGTH_OFFSET
+        cls._reject_excess_elements(num_elements)
+
+        # Read the remaining offsets, append scope as the final boundary,
+        # then pairwise-iterate the boundary list to yield each body's byte span.
+        offsets = [
+            first_offset,
+            *(
+                int(Uint32.deserialize(stream, BYTES_PER_LENGTH_OFFSET))
+                for _ in range(num_elements - 1)
+            ),
+            scope,
+        ]
+        _validate_offsets(offsets, scope, cls.__name__)
+
+        return cls(
+            data=[
+                cls.ELEMENT_TYPE.deserialize(stream, end - start)
+                for start, end in pairwise(offsets)
+            ]
+        )
+
+
+class List[T: SSZType](_SSZList[T]):
     """
     Variable-length SSZ sequence with a maximum capacity.
 
@@ -518,132 +705,59 @@ class List[T: SSZType](_SSZSequence[T]):
 
         return _coerce_elements(cls.ELEMENT_TYPE, input_elements)
 
-    def append(self, value: T) -> None:
-        """Add one element at the end, validating it and the resulting length."""
-        self._require_mutable()
-        element = self._validate_element(value)
-        self._validate_length(len(self.data) + 1)
-        cast("list[T]", self.data).append(element)
-
-    def pop(self) -> T:
-        """Remove and return the last element, validating the resulting length."""
-        self._require_mutable()
-        self._validate_length(len(self.data) - 1)
-        return cast("list[T]", self.data).pop()
-
-    def __add__(self, other: Any) -> Self:
-        """
-        Concatenate with another sequence and return a new list.
-
-        The validator on the resulting instance enforces LIMIT.
-        Overflowing concatenations raise SSZValueError at construction.
-        """
-        match other:
-            case List():
-                new_data = (*self.data, *other.data)
-            case list() | tuple():
-                new_data = (*self.data, *other)
-            case _:
-                return NotImplemented
-        return type(self)(data=new_data)
-
     @classmethod
     @override
-    def is_fixed_size(cls) -> bool:
-        """A list is never fixed-size since the element count ranges from zero to LIMIT."""
-        return False
-
-    @classmethod
-    @override
-    def get_byte_length(cls) -> int:
+    def _reject_excess_elements(cls, count: int) -> None:
         """
-        Variable-size types have no fixed byte length.
+        Reject a count above the declared capacity.
 
         Raises:
-            SSZTypeError: Always — call this only on fixed-size types.
+            SSZValueError: When the count exceeds the declared capacity.
         """
-        raise SSZFixedSizeError(cls.__name__, "list")
+        if count > cls.LIMIT:
+            raise SSZLimitError(cls.__name__, cls.LIMIT, count)
 
-    @override
-    def serialize(self, stream: IO[bytes]) -> int:
-        """Write the SSZ encoding to a binary stream and return the byte count."""
-        # Fixed-size elements pack back-to-back with no length prefix.
-        # The element count is recovered on decode from the wire scope.
-        if self.ELEMENT_TYPE.is_fixed_size():
-            return sum(element.serialize(stream) for element in self.data)
-        # Variable-size elements: emit a table sized for the runtime count, then bodies.
-        return self._write_variable_payload(stream, len(self.data))
 
+class ProgressiveList[T: SSZType](_SSZList[T]):
+    """
+    Variable-length SSZ sequence with no capacity, per EIP-7916.
+
+    Any number of elements of one declared type, encoded like a bounded list:
+
+    - Fixed-size elements pack back-to-back with no length prefix.
+    - Variable-size elements are prefixed by an offset table.
+
+    So the two encode to the same bytes, and only their Merkle trees differ.
+    A bounded list pads its tree to the depth its limit needs.
+    One eight-byte element under a 1024-element limit spans 256 chunks, so it costs
+    8 hashes rather than 1.
+    This shape grows its tree with the data instead:
+
+    - A short list hashes through a shallow tree.
+    - An element keeps its position however many follow it, so proofs survive growth.
+    - No capacity is guessed up front, so none can be outgrown or redefined later.
+
+    The merkleization module builds that tree.
+
+    The element type is the only declaration, so the type is usable inline, written
+    the way the SSZ spec writes it:
+
+        ProgressiveList[Uint16](data=[1, 2, 3])
+
+    A named subclass is equivalent, and reads better when the type recurs:
+
+        class Uint16ProgressiveList(ProgressiveList[Uint16]):
+            pass
+    """
+
+    @field_validator("data", mode="before")
     @classmethod
-    @override
-    def deserialize(cls, stream: IO[bytes], scope: int) -> Self:
-        """
-        Read one list from a binary stream within the given byte budget.
+    def _coerce_and_validate(cls, raw_input: Any) -> list[SSZType]:
+        """Coerce every input into the declared element type, with no count rule to apply."""
+        # The element type is the one declaration this shape needs, and coercion needs it.
+        if not hasattr(cls, "ELEMENT_TYPE"):
+            raise SSZDefinitionError(cls.__name__, "ELEMENT_TYPE")
 
-        Three cases cover all valid inputs:
-
-        - Empty scope decodes to an empty list.
-        - Fixed-size elements: count equals scope divided by element width.
-        - Variable-size elements: the first offset locates bodies and reveals the count.
-
-        Raises:
-            SSZSerializationError: When scope or any offset is malformed.
-            SSZValueError: When the recovered element count exceeds LIMIT.
-        """
-        # Empty case: any zero-byte payload decodes to an empty list.
-        if scope == 0:
-            return cls(data=())
-
-        # Fixed-size case: elements pack back-to-back at a known stride.
-        # The count is recovered by dividing the byte budget by the element width.
-        if cls.ELEMENT_TYPE.is_fixed_size():
-            element_size = cls.ELEMENT_TYPE.get_byte_length()
-            if scope % element_size != 0:
-                raise SSZSerializationError(
-                    f"{cls.__name__}: scope {scope} not divisible by element size {element_size}"
-                )
-            num_elements = scope // element_size
-            if num_elements > cls.LIMIT:
-                raise SSZLimitError(cls.__name__, cls.LIMIT, num_elements)
-            elements = [
-                cls.ELEMENT_TYPE.deserialize(stream, element_size) for _ in range(num_elements)
-            ]
-            return cls(data=elements)
-
-        # Variable-size case: the first offset reveals both where bodies begin
-        # and the element count (the offset width divides the table width).
-        if scope < BYTES_PER_LENGTH_OFFSET:
-            raise SSZSerializationError(
-                f"{cls.__name__}: scope {scope} too small for variable-size list"
-            )
-        first_offset = int(Uint32.deserialize(stream, BYTES_PER_LENGTH_OFFSET))
-        # A non-empty variable-size list carries at least one offset word before any body.
-        # A zero first offset is contradictory: it means zero elements yet one full-scope element.
-        if (
-            first_offset < BYTES_PER_LENGTH_OFFSET
-            or first_offset > scope
-            or first_offset % BYTES_PER_LENGTH_OFFSET != 0
-        ):
-            raise SSZSerializationError(f"{cls.__name__}: invalid offset {first_offset}")
-        num_elements = first_offset // BYTES_PER_LENGTH_OFFSET
-        if num_elements > cls.LIMIT:
-            raise SSZLimitError(cls.__name__, cls.LIMIT, num_elements)
-
-        # Read the remaining offsets, append scope as the final boundary,
-        # then pairwise-iterate the boundary list to yield each body's byte span.
-        offsets = [
-            first_offset,
-            *(
-                int(Uint32.deserialize(stream, BYTES_PER_LENGTH_OFFSET))
-                for _ in range(num_elements - 1)
-            ),
-            scope,
-        ]
-        _validate_offsets(offsets, scope, cls.__name__)
-
-        return cls(
-            data=[
-                cls.ELEMENT_TYPE.deserialize(stream, end - start)
-                for start, end in pairwise(offsets)
-            ]
-        )
+        # Shaping rejects strings and non-iterables, then materializes a sequence.
+        # No capacity check follows, because every count this shape holds is valid.
+        return _coerce_elements(cls.ELEMENT_TYPE, cls._shape_input(raw_input))

@@ -128,6 +128,53 @@ def test_instantiation_too_large(uint_class: Type[BaseUint]) -> None:
 
 
 @pytest.mark.parametrize("uint_class", ALL_UINT_TYPES)
+def test_instantiation_from_another_uint_instance(uint_class: Type[BaseUint]) -> None:
+    """
+    An instance of any width is an acceptable input value for any other width.
+
+    - A plain integer is not the only accepted input form.
+    - The declared width of the input never leaks into the result.
+    """
+    for source_class in ALL_UINT_TYPES:
+        # Invariant: an input already typed at some width is re-typed at the target width.
+        #
+        # Every width holds 5, so one value covers every ordered pair of widths:
+        #
+        #     input : 8-bit, 16-bit, 32-bit, 64-bit, 128-bit, 256-bit
+        #     target: the parametrized width
+        uint_instance = uint_class(source_class(5))
+        # Widening and narrowing both land on the target width, never the input width.
+        assert type(uint_instance) is uint_class
+        # Equality is strict, so a matching value alone would not satisfy it.
+        assert uint_instance == uint_class(5)
+
+
+@pytest.mark.parametrize("uint_class", ALL_UINT_TYPES)
+def test_instantiation_from_a_subclass_instance(uint_class: Type[BaseUint]) -> None:
+    """A value whose class derives from the target class is accepted and re-typed."""
+    # Applications derive semantic integer types from a width, such as a 64-bit slot number.
+    subclass = type("Typed", (uint_class,), {})
+    # The derived class inherits the width, so 5 is in range on both sides.
+    uint_instance = subclass(5)
+    # Construction moves the value one step up the hierarchy, from derived to base.
+    assert type(uint_class(uint_instance)) is uint_class
+    assert uint_class(uint_instance) == uint_class(5)
+
+
+def test_instantiation_from_an_out_of_range_uint_instance() -> None:
+    """A typed input above the target bound is reported as a range error."""
+    # Fixture state: 256 sits inside a 16-bit input and above an 8-bit bound.
+    #
+    #     input : 256, valid in [0, 65535]
+    #     target: bound is 255
+    #     -> out of range, reported against the bound rather than as a type conflict
+    expected_message = f"{2**8} out of range for Uint8 [0, {2**8 - 1}]"
+    with pytest.raises(SSZValueError) as exception_info:
+        Uint8(Uint16(2**8))
+    assert str(exception_info.value) == expected_message
+
+
+@pytest.mark.parametrize("uint_class", ALL_UINT_TYPES)
 def test_max_method_returns_correct_value(uint_class: Type[BaseUint]) -> None:
     """Tests that the max_value() class method returns the correct value."""
     expected_max_int = (2**uint_class.BITS) - 1

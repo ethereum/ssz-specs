@@ -7,7 +7,7 @@ import pytest
 from hypothesis import given, strategies as st
 from pydantic import BaseModel, ValidationError
 
-from ssz.bitfields import BaseBitlist, BaseBitvector
+from ssz.bitfields import BaseBitlist, BaseBitvector, ProgressiveBitlist
 from ssz.boolean import Boolean
 from ssz.exceptions import SSZSerializationError, SSZTypeError, SSZValueError
 
@@ -37,6 +37,17 @@ class Bitlist8Model(BaseModel):
     """Model for testing Pydantic validation of Bitlist8."""
 
     value: Bitlist8
+
+
+class ProgressiveBitlistModel(BaseModel):
+    """Model for testing Pydantic validation of ProgressiveBitlist."""
+
+    value: ProgressiveBitlist
+
+
+def bits_of(*values: int) -> tuple[Boolean, ...]:
+    """Build a typed boolean tuple from 0/1 integers."""
+    return tuple(Boolean(bool(bit)) for bit in values)
 
 
 class TestBitvector:
@@ -270,6 +281,223 @@ class TestBitlist:
         assert str(exception_info.value) == "Bitlist4 exceeds limit of 4, got 5"
 
 
+class TestProgressiveBitlist:
+    """Tests for the uncapped ProgressiveBitlist type."""
+
+    def test_instantiation_success(self) -> None:
+        """Instantiation succeeds with any number of bit-like items."""
+        instance = ProgressiveBitlist(data=[Boolean(True), Boolean(False), Boolean(1), Boolean(0)])
+
+        assert len(instance) == 4
+        assert instance == ProgressiveBitlist(data=bits_of(1, 0, 1, 0))
+
+    def test_default_value_is_empty(self) -> None:
+        """The default value is the empty bitlist."""
+        assert len(ProgressiveBitlist()) == 0
+        assert ProgressiveBitlist() == ProgressiveBitlist(data=())
+
+    def test_instantiation_from_generator(self) -> None:
+        """A generator is materialized into a list before validation."""
+        bit_generator = (Boolean(bit) for bit in [True, False, True])
+        instance = ProgressiveBitlist(data=bit_generator)  # type: ignore[arg-type]
+
+        assert len(instance) == 3
+
+    def test_no_bit_count_is_ever_rejected(self) -> None:
+        """No capacity is declared, so any bit count validates."""
+        instance = ProgressiveBitlist(data=[Boolean(True)] * 4096)
+
+        assert len(instance) == 4096
+
+    def test_no_limit_is_declared(self) -> None:
+        """The shape carries no capacity attribute at all."""
+        assert not hasattr(ProgressiveBitlist, "LIMIT")
+
+    @pytest.mark.parametrize(
+        "non_iterable, type_name",
+        [
+            (42, "int"),
+            (None, "NoneType"),
+            (1.5, "float"),
+        ],
+    )
+    def test_instantiation_from_non_iterable_raises(
+        self, non_iterable: Any, type_name: str
+    ) -> None:
+        """Non-iterable input raises SSZTypeError naming the offending type."""
+        with pytest.raises((SSZTypeError, ValidationError)) as exception_info:
+            ProgressiveBitlist(data=non_iterable)
+        assert str(exception_info.value) == f"Expected iterable, got {type_name}"
+
+    @pytest.mark.parametrize("rejected", ["0101", b"\x00\x01"])
+    def test_instantiation_from_str_or_bytes_raises(self, rejected: Any) -> None:
+        """str and bytes are iterable but explicitly rejected — their elements are not booleans."""
+        type_name = type(rejected).__name__
+        with pytest.raises((SSZTypeError, ValidationError)) as exception_info:
+            ProgressiveBitlist(data=rejected)
+        assert str(exception_info.value) == f"Expected iterable, got {type_name}"
+
+    def test_pydantic_validation_accepts_any_bit_count(self) -> None:
+        """Pydantic validation accepts a bit list of any width."""
+        instance = ProgressiveBitlistModel(value={"data": [Boolean(True)] * 300})  # type: ignore[arg-type]
+
+        assert isinstance(instance.value, ProgressiveBitlist)
+        assert len(instance.value) == 300
+
+    def test_get_item_int(self) -> None:
+        """Indexing by int returns the Boolean at that position."""
+        bitlist = ProgressiveBitlist(data=bits_of(1, 0, 1))
+
+        assert bitlist[0] == Boolean(True)
+        assert bitlist[1] == Boolean(False)
+        assert bitlist[-1] == Boolean(True)
+
+    def test_get_item_slice(self) -> None:
+        """Indexing by slice returns a list of Booleans."""
+        bitlist = ProgressiveBitlist(data=bits_of(1, 0, 1, 0))
+        sliced_bits = bitlist[1:3]
+
+        assert sliced_bits == [Boolean(False), Boolean(True)]
+        assert isinstance(sliced_bits, list)
+
+    def test_add_with_list(self) -> None:
+        """Concatenating with a plain list coerces the right-hand values."""
+        concatenated = ProgressiveBitlist(data=bits_of(1, 0, 1)) + [Boolean(False), Boolean(True)]
+
+        assert concatenated == ProgressiveBitlist(data=bits_of(1, 0, 1, 0, 1))
+        assert isinstance(concatenated, ProgressiveBitlist)
+
+    def test_add_with_progressive_bitlist(self) -> None:
+        """Concatenating two progressive bitlists yields a fresh instance of the same type."""
+        concatenated = ProgressiveBitlist(data=bits_of(1, 0)) + ProgressiveBitlist(
+            data=bits_of(1, 1)
+        )
+
+        assert concatenated == ProgressiveBitlist(data=bits_of(1, 0, 1, 1))
+
+    def test_add_with_bounded_bitlist_keeps_the_left_shape(self) -> None:
+        """Both bitlist shapes share the concatenation hook; the left operand's type wins."""
+        concatenated = ProgressiveBitlist(data=bits_of(1)) + Bitlist8(data=bits_of(0, 1))
+
+        assert concatenated == ProgressiveBitlist(data=bits_of(1, 0, 1))
+        assert isinstance(concatenated, ProgressiveBitlist)
+
+    def test_add_with_unsupported_type_raises(self) -> None:
+        """Adding an unsupported type returns NotImplemented and Python raises TypeError."""
+        bitlist = ProgressiveBitlist(data=bits_of(1))
+
+        with pytest.raises(TypeError):
+            _ = bitlist + 42
+
+    def test_add_never_overflows_a_capacity(self) -> None:
+        """Concatenation has no capacity to overflow, so it always revalidates cleanly."""
+        base = ProgressiveBitlist(data=[Boolean(True)] * 500)
+
+        assert len(base + base) == 1000
+
+    def test_progressive_bitlist_item_assignment_revalidates(self) -> None:
+        """Item assignment replaces the bit through full revalidation."""
+        bitlist = ProgressiveBitlist(data=bits_of(1, 0))
+        bitlist[0] = Boolean(False)
+        assert bitlist == ProgressiveBitlist(data=bits_of(0, 0))
+
+    def test_progressive_bitlist_grows_without_a_capacity(self) -> None:
+        """Append and pop work, and no capacity bounds the growth."""
+        bitlist = ProgressiveBitlist(data=bits_of(1))
+        bitlist.append(Boolean(False))
+        assert bitlist == ProgressiveBitlist(data=bits_of(1, 0))
+        assert bitlist.pop() == Boolean(False)
+        assert bitlist == ProgressiveBitlist(data=bits_of(1))
+
+    def test_is_variable_size_with_no_fixed_byte_length(self) -> None:
+        """The shape reports variable-size and refuses to name a byte width."""
+        assert ProgressiveBitlist.is_fixed_size() is False
+        with pytest.raises(SSZTypeError) as exception_info:
+            ProgressiveBitlist.get_byte_length()
+        assert (
+            str(exception_info.value)
+            == "ProgressiveBitlist: variable-size bitlist has no fixed byte length"
+        )
+
+    @pytest.mark.parametrize(
+        "bits, expected_hex",
+        [
+            # Empty: the delimiter alone still costs one byte.
+            ((), "01"),
+            ((1,), "03"),
+            ((0, 1, 0), "0a"),
+            ((1, 1, 0, 1, 0, 1, 0, 0), "2b01"),
+            ((1, 0, 1, 0, 0, 0, 1, 1, 0, 1), "c506"),
+            # 255 data bits leave exactly one free bit for the delimiter.
+            (tuple([1] * 255), "ff" * 32),
+            # 256 data bits push the delimiter into a fresh byte.
+            (tuple([1] * 256), ("ff" * 32) + "01"),
+            # 257 data bits put one data bit and the delimiter in the final byte.
+            (tuple([1] * 257), ("ff" * 32) + "03"),
+        ],
+    )
+    def test_round_trip(self, bits: tuple[int, ...], expected_hex: str) -> None:
+        """Encoding matches the delimited layout and decoding recovers the bits."""
+        instance = ProgressiveBitlist(data=bits_of(*bits))
+
+        encoded = instance.encode_bytes()
+        assert encoded.hex() == expected_hex
+
+        assert ProgressiveBitlist.decode_bytes(encoded) == instance
+
+        stream = io.BytesIO()
+        written = instance.serialize(stream)
+        assert written == len(encoded)
+        stream.seek(0)
+        assert ProgressiveBitlist.deserialize(stream, scope=written) == instance
+
+    def test_decode_accepts_any_bit_count(self) -> None:
+        """A bit count a bounded bitlist would reject decodes without complaint."""
+        # Bytes [0xFF, 0xFF, 0x01] mean 16 data bits with the delimiter at bit 16.
+        assert ProgressiveBitlist.decode_bytes(b"\xff\xff\x01") == ProgressiveBitlist(
+            data=[Boolean(True)] * 16
+        )
+
+    def test_decode_empty_bytes(self) -> None:
+        """Decoding rejects an empty byte sequence — the empty bitlist still costs a byte."""
+        with pytest.raises(SSZSerializationError) as exception_info:
+            ProgressiveBitlist.decode_bytes(b"")
+        assert str(exception_info.value) == "ProgressiveBitlist: cannot decode empty bytes"
+
+    def test_decode_all_zero_bytes(self) -> None:
+        """Decoding rejects input with no 1 bits — there is no delimiter to locate."""
+        with pytest.raises(SSZSerializationError) as exception_info:
+            ProgressiveBitlist.decode_bytes(b"\x00")
+        assert str(exception_info.value) == "ProgressiveBitlist: no delimiter bit found"
+
+    def test_decode_rejects_non_canonical_trailing_zero_byte(self) -> None:
+        """Decoding rejects a trailing zero byte after the delimiter byte."""
+        with pytest.raises(SSZSerializationError) as exception_info:
+            ProgressiveBitlist.decode_bytes(b"\x0d\x00")
+        assert (
+            str(exception_info.value)
+            == "ProgressiveBitlist: non-canonical trailing zero bytes after delimiter"
+        )
+
+    def test_deserialize_premature_end(self) -> None:
+        """Deserializing rejects a stream that ends before the declared scope."""
+        stream = io.BytesIO(b"\xff")
+        with pytest.raises(SSZSerializationError) as exception_info:
+            ProgressiveBitlist.deserialize(stream, scope=2)
+        assert str(exception_info.value) == "ProgressiveBitlist: expected 2 bytes, got 1"
+
+    def test_bytes_match_the_bounded_bitlist_encoding(self) -> None:
+        """The wire format matches a bounded bitlist of the same bits, delimiter included."""
+        bits = bits_of(1, 0, 1)
+        progressive = ProgressiveBitlist(data=bits)
+        bounded = Bitlist8(data=bits)
+
+        assert progressive.encode_bytes() == bounded.encode_bytes()
+        # The same bytes therefore decode under either shape.
+        assert Bitlist8.decode_bytes(progressive.encode_bytes()) == bounded
+        assert ProgressiveBitlist.decode_bytes(bounded.encode_bytes()) == progressive
+
+
 class TestBitfieldSSZ:
     """SSZ interface methods and end-to-end serialization round-trips."""
 
@@ -499,3 +727,19 @@ def test_bitvector_round_trip_random_bits(bits: list[bool]) -> None:
     """Any fixed-length bit pattern round-trips unchanged."""
     instance = Bitvector4(data=tuple(Boolean(bit) for bit in bits))
     assert Bitvector4.decode_bytes(instance.encode_bytes()) == instance
+
+
+@given(bits=st.lists(st.booleans(), max_size=300))
+def test_progressive_bitlist_round_trip_random_bits(bits: list[bool]) -> None:
+    """Any bit pattern round-trips unchanged, at any width and across chunk boundaries."""
+    instance = ProgressiveBitlist(data=tuple(Boolean(bit) for bit in bits))
+    assert ProgressiveBitlist.decode_bytes(instance.encode_bytes()) == instance
+
+
+@given(bits=st.lists(st.booleans(), max_size=8))
+def test_progressive_and_bounded_bitlist_encode_identically(bits: list[bool]) -> None:
+    """The two bitlist shapes agree bit for bit on every pattern they both hold."""
+    typed_bits = tuple(Boolean(bit) for bit in bits)
+    progressive_bytes = ProgressiveBitlist(data=typed_bits).encode_bytes()
+
+    assert progressive_bytes == Bitlist8(data=typed_bits).encode_bytes()

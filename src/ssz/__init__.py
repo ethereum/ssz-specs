@@ -1,23 +1,15 @@
 """SSZ primitive types and (de)serialization for Ethereum."""
 
-from ssz.bitfields import BaseBitlist, BaseBitvector
+from ssz.bitfields import BaseBitlist, BaseBitvector, ProgressiveBitlist
 from ssz.boolean import Boolean
 from ssz.byte_arrays import (
-    ZERO_HASH,
     BaseByteList,
     BaseBytes,
-    ByteList512KiB,
-    Bytes4,
-    Bytes16,
-    Bytes20,
-    Bytes32,
-    Bytes33,
-    Bytes52,
-    Bytes64,
 )
-from ssz.collections import List, Vector
-from ssz.container import Container
+from ssz.collections import List, ProgressiveList, Vector
+from ssz.container import Container, ProgressiveContainer
 from ssz.exceptions import (
+    SSZActiveFieldsError,
     SSZDefinitionError,
     SSZError,
     SSZFixedSizeError,
@@ -28,28 +20,30 @@ from ssz.exceptions import (
     SSZSerializationError,
     SSZTypeError,
     SSZTypeMismatch,
+    SSZUnionOptionsError,
     SSZValueError,
 )
+from ssz.merkleization import ZERO_ROOT, Chunk, Root
 from ssz.ssz_base import SSZType
 from ssz.uint import Uint8, Uint16, Uint32, Uint64, Uint128, Uint256
+from ssz.union import CompatibleUnion
 
 __all__ = [
-    "ZERO_HASH",
     "BaseBitlist",
     "BaseBitvector",
     "BaseByteList",
     "BaseBytes",
+    "Chunk",
+    "CompatibleUnion",
+    "Root",
+    "ZERO_ROOT",
     "Boolean",
-    "ByteList512KiB",
-    "Bytes4",
-    "Bytes16",
-    "Bytes20",
-    "Bytes32",
-    "Bytes33",
-    "Bytes52",
-    "Bytes64",
     "Container",
     "List",
+    "ProgressiveBitlist",
+    "ProgressiveContainer",
+    "ProgressiveList",
+    "SSZActiveFieldsError",
     "SSZDefinitionError",
     "SSZError",
     "SSZFixedSizeError",
@@ -61,6 +55,7 @@ __all__ = [
     "SSZType",
     "SSZTypeError",
     "SSZTypeMismatch",
+    "SSZUnionOptionsError",
     "SSZValueError",
     "Uint8",
     "Uint16",

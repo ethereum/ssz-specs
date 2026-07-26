@@ -9,14 +9,14 @@ from hashlib import sha256
 from itertools import accumulate, batched, repeat
 from typing import Final
 
-from ssz import ZERO_HASH
-from ssz.bitfields import BaseBitlist, BaseBitvector
+from ssz.bitfields import BaseBitlist, BaseBitvector, ProgressiveBitlist
 from ssz.boolean import Boolean
-from ssz.byte_arrays import BaseByteList, BaseBytes, Bytes32
-from ssz.collections import List, Vector
-from ssz.container import Container
+from ssz.byte_arrays import BaseByteList, BaseBytes
+from ssz.collections import List, ProgressiveList, Vector
+from ssz.container import Container, ProgressiveContainer
 from ssz.exceptions import SSZTypeError, SSZValueError
 from ssz.uint import BaseUint
+from ssz.union import CompatibleUnion
 
 BYTES_PER_CHUNK: Final = 32
 """Width of a Merkle leaf chunk in bytes."""
@@ -36,11 +36,26 @@ def _next_pow2(x: int) -> int:
     return 1 << (x - 1).bit_length()
 
 
-_ZERO_HASHES: Final[tuple[Bytes32, ...]] = tuple(
+class Chunk(BaseBytes):
+    """Fixed-size 32-byte unit of Merkle tree input data."""
+
+    LENGTH = BYTES_PER_CHUNK
+
+
+class Root(Chunk):
+    """Merkle tree root, usable anywhere a chunk is expected."""
+
+    LENGTH = 32
+
+
+ZERO_ROOT: Final = Root.zero()
+"""All-zero 32-byte root, used as the merkleization padding value."""
+
+_ZERO_ROOTS: Final[tuple[Root, ...]] = tuple(
     accumulate(
         repeat(None, 64),
-        lambda previous, _: Bytes32(sha256(previous + previous).digest()),
-        initial=ZERO_HASH,
+        lambda previous, _: Root(sha256(previous + previous).digest()),
+        initial=ZERO_ROOT,
     )
 )
 """
@@ -53,7 +68,7 @@ Depth 64 covers any chunk count the protocol uses.
 """
 
 
-def _zero_tree_root(width: int) -> Bytes32:
+def _zero_tree_root(width: int) -> Root:
     """
     Root of an all-zero perfect binary tree with the given leaf count.
 
@@ -61,7 +76,7 @@ def _zero_tree_root(width: int) -> Bytes32:
     """
     # A single-leaf tree has no parent to hash; the root is the leaf itself.
     if width <= 1:
-        return ZERO_HASH
+        return ZERO_ROOT
     # A perfect binary tree with 2**d leaves has depth d.
     #
     # Subtract one before taking bit_length so a power of two maps to its own depth.
@@ -72,10 +87,10 @@ def _zero_tree_root(width: int) -> Bytes32:
     depth = (width - 1).bit_length()
     # The cache stores the all-zero subtree root at every depth.
     # Index by depth to skip materializing 2**d zero leaves and the layers above them.
-    return _ZERO_HASHES[depth]
+    return _ZERO_ROOTS[depth]
 
 
-def merkleize(chunks: Sequence[Bytes32], limit: int | None = None) -> Bytes32:
+def merkleize(chunks: Sequence[Chunk], limit: int | None = None) -> Root:
     r"""
     Compute the SSZ Merkle root over a chunk sequence.
 
@@ -103,7 +118,7 @@ def merkleize(chunks: Sequence[Bytes32], limit: int | None = None) -> Bytes32:
     """
     chunk_count = len(chunks)
     if chunk_count == 0:
-        return _zero_tree_root(_next_pow2(limit)) if limit is not None else ZERO_HASH
+        return _zero_tree_root(_next_pow2(limit)) if limit is not None else ZERO_ROOT
     if limit is None:
         width = _next_pow2(chunk_count)
     elif limit < chunk_count:
@@ -111,32 +126,108 @@ def merkleize(chunks: Sequence[Bytes32], limit: int | None = None) -> Bytes32:
     else:
         width = _next_pow2(limit)
     if width == 1:
-        return chunks[0]
+        return Root(chunks[0])
 
     # Walk one tree layer per outer iteration.
     # A missing right sibling pulls the all-zero subtree of the current size from the cache,
     # so unused zero leaves are never allocated.
-    level: list[Bytes32] = list(chunks)
+    level: list[Chunk] = list(chunks)
     subtree_size = 1
     while subtree_size < width:
-        next_level: list[Bytes32] = []
+        next_level: list[Chunk] = []
         # Each pair holds the left and right child of one parent node.
         # An odd tail yields a length-one tuple.
         # Its missing right sibling is the all-zero subtree of the current size.
         for child_pair in batched(level, 2):
             left = child_pair[0]
             right = child_pair[1] if len(child_pair) == 2 else _zero_tree_root(subtree_size)
-            next_level.append(Bytes32(sha256(left + right).digest()))
+            next_level.append(Root(sha256(left + right).digest()))
         level = next_level
         subtree_size *= 2
 
     # Invariant: width is the next power of two of the leaf count or capacity,
     # so the loop above halves the level count down to exactly one root.
     assert len(level) == 1
-    return level[0]
+    return Root(level[0])
 
 
-def mix_in_length(root: Bytes32, length: int) -> Bytes32:
+def merkleize_progressive(chunks: Sequence[Chunk], num_leaves: int = 1) -> Root:
+    r"""
+    Compute the progressive Merkle root over a chunk sequence, per EIP-7916.
+
+    The tree is a right-leaning spine of binary subtrees, terminated by a zero node.
+    The subtree at level n holds 4**(n - 1) chunks, counting levels from one.
+    Capacity therefore grows with the data instead of with a declared bound.
+
+    An 85-chunk input fills four levels exactly:
+
+                           root
+                            /\
+                           /  \
+         1: chunks[0 ..< 1]   /\
+                             /  \
+           4: chunks[1 ..< 5]   /\
+                               /  \
+           16: chunks[5 ..< 21]   /\
+                                 /  \
+            64: chunks[21 ..< 85]    0
+
+    Each level is an ordinary binary subtree, and only the spine above them is new.
+    A level short of its width pads with zero subtree roots, spending depth but no memory.
+
+    # Layout
+
+    A level opens only once every level before it is full:
+
+        level   chunks added   chunks total   bytes total
+        1       1              1              32
+        2       4              5              160
+        3       16             21             672
+        4       64             85             2_720
+        5       256            341            10_912
+
+    After n levels the total is (4**n - 1) // 3 chunks.
+    An empty input opens no level, so its root is the zero node itself.
+
+    # Why positions stay put
+
+    A chunk's generalized index follows from its own index alone.
+    The indices below count the progressive root as one, leaving out the root above it
+    that the length is mixed into:
+
+        chunk 0  ->  2       chunk 5   ->  224
+        chunk 1  ->  24      chunk 21  ->  1920
+
+    Appending extends the spine downward and moves nothing already placed.
+    A proof against one chunk therefore survives every later append.
+    A bounded tree renumbers every leaf as soon as a new capacity changes its depth.
+
+    Args:
+        chunks: Leaf chunks, each exactly 32 bytes wide.
+        num_leaves: Chunk capacity of the current level, quadrupling at each next level.
+            Callers keep the default of one, and the recursion supplies the wider levels.
+
+    Returns:
+        The progressive Merkle root.
+    """
+    # An exhausted input terminates the spine with a zero node.
+    #
+    # The terminator is a plain zero leaf, not a zero subtree of some depth:
+    # the level it stands for holds no data, so it has no width to pad out.
+    # The deepest occupied level is padded; everything past it collapses to this one node.
+    if len(chunks) == 0:
+        return ZERO_ROOT
+
+    # Left child: this level's chunks as a binary subtree, zero-padded to the level width.
+    subtree_root = merkleize(chunks[:num_leaves], limit=num_leaves)
+
+    # Right child: every chunk past this level, in a level four times as wide.
+    successor_root = merkleize_progressive(chunks[num_leaves:], num_leaves * 4)
+
+    return Root(sha256(subtree_root + successor_root).digest())
+
+
+def mix_in_length(root: Root, length: int) -> Root:
     """
     Mix a length into a Merkle root via the SSZ uint256 little-endian encoding.
 
@@ -155,10 +246,65 @@ def mix_in_length(root: Bytes32, length: int) -> Bytes32:
     """
     if length < 0:
         raise SSZValueError("length must be non-negative")
-    return Bytes32(sha256(root + length.to_bytes(32, "little")).digest())
+    return Root(sha256(root + length.to_bytes(32, "little")).digest())
 
 
-def _pack_bytes(data: bytes) -> list[Bytes32]:
+def mix_in_active_fields(root: Root, active_fields: Sequence[int]) -> Root:
+    """
+    Mix a field layout into a Merkle root, per EIP-7495.
+
+    The layout packs into a single 32-byte word, one bit per position, lowest bit first:
+
+        [1, 0, 1]  ->  05 00 00 ... 00
+
+    Mixing it in is what keeps a cleared position distinct from a field holding zero.
+    Both leave a zero leaf, so the leaf tree alone cannot separate them.
+    A version that drops a field would otherwise root exactly like one that zeroed it.
+
+    Args:
+        root: Merkle root over the field leaves.
+        active_fields: One 0 or 1 per position. The bound of 256 is enforced by the
+            type that declares the layout, not here.
+
+    Returns:
+        The layout-mixed root.
+    """
+    # At most 256 positions, so the whole layout always fits one 32-byte chunk.
+    packed_bits = sum(1 << i for i, bit in enumerate(active_fields) if bit)
+    return Root(sha256(root + packed_bits.to_bytes(BYTES_PER_CHUNK, "little")).digest())
+
+
+def mix_in_selector(root: Root, selector: int) -> Root:
+    """
+    Mix a type selector into a Merkle root, per EIP-8016.
+
+    The spec writes the selector as a one-byte integer.
+    A hash operand is one chunk, so the byte is zero-extended to 32:
+
+        selector 1  ->  01 00 00 ... 00
+
+    Mixing it in separates options that would otherwise root alike:
+
+    - Two options holding equal data would otherwise root identically.
+    - Two options differing only in a list's element type collide while that list is empty.
+
+    Args:
+        root: Merkle root of the value the union holds.
+        selector: Selector of the option it holds.
+
+    Returns:
+        The selector-mixed root.
+
+    Raises:
+        SSZValueError: If the selector does not fit one byte.
+    """
+    if not 0 <= selector <= 0xFF:
+        raise SSZValueError(f"selector {selector} does not fit one byte")
+    # A selector fits one byte, so the value always lands in the first of the 32.
+    return Root(sha256(root + selector.to_bytes(BYTES_PER_CHUNK, "little")).digest())
+
+
+def _pack_bytes(data: bytes) -> list[Chunk]:
     """
     Right-pad serialized bytes to a chunk boundary and split into chunks.
 
@@ -166,17 +312,17 @@ def _pack_bytes(data: bytes) -> list[Bytes32]:
 
         bytes    :  01 02 03 04 05
         padded   :  01 02 03 04 05 00 00 ... 00     (zero-padded to 32 bytes)
-        chunks   :  [ Bytes32(01 02 03 04 05 00 ...) ]
+        chunks   :  [ Chunk(01 02 03 04 05 00 ...) ]
 
     Inner chunks are already chunk-aligned; only the trailing chunk is padded.
     """
     return [
-        Bytes32(data[i : i + BYTES_PER_CHUNK].ljust(BYTES_PER_CHUNK, b"\x00"))
+        Chunk(data[i : i + BYTES_PER_CHUNK].ljust(BYTES_PER_CHUNK, b"\x00"))
         for i in range(0, len(data), BYTES_PER_CHUNK)
     ]
 
 
-def _pack_bits(bits: Sequence[Boolean]) -> list[Bytes32]:
+def _pack_bits(bits: Sequence[Boolean]) -> list[Chunk]:
     """
     Pack a boolean sequence into bytes, then into chunks for merkleization.
 
@@ -198,7 +344,7 @@ def _pack_bits(bits: Sequence[Boolean]) -> list[Bytes32]:
 
 
 @singledispatch
-def hash_tree_root(value: object) -> Bytes32:
+def hash_tree_root(value: object) -> Root:
     """
     Compute the SSZ Merkle root of a value.
 
@@ -211,19 +357,19 @@ def hash_tree_root(value: object) -> Bytes32:
 @hash_tree_root.register(BaseUint)
 @hash_tree_root.register(Boolean)
 @hash_tree_root.register(BaseBytes)
-def _hash_tree_root_packed_leaf(value: BaseUint | Boolean | BaseBytes) -> Bytes32:
+def _hash_tree_root_packed_leaf(value: BaseUint | Boolean | BaseBytes) -> Root:
     # Each of these encodes to a fixed-width byte string with no length prefix.
     # The root is the Merkle root of those bytes packed into 32-byte chunks.
     return merkleize(_pack_bytes(value.encode_bytes()))
 
 
 @hash_tree_root.register
-def _hash_tree_root_bytes(value: bytes) -> Bytes32:
+def _hash_tree_root_bytes(value: bytes) -> Root:
     return merkleize(_pack_bytes(value))
 
 
 @hash_tree_root.register
-def _hash_tree_root_bytelist(value: BaseByteList) -> Bytes32:
+def _hash_tree_root_bytelist(value: BaseByteList) -> Root:
     serialized_bytes = value.encode_bytes()
     limit_chunks = math.ceil(type(value).LIMIT / BYTES_PER_CHUNK)
     return mix_in_length(
@@ -232,13 +378,13 @@ def _hash_tree_root_bytelist(value: BaseByteList) -> Bytes32:
 
 
 @hash_tree_root.register
-def _hash_tree_root_bitvector_base(value: BaseBitvector) -> Bytes32:
+def _hash_tree_root_bitvector_base(value: BaseBitvector) -> Root:
     limit = math.ceil(type(value).LENGTH / BITS_PER_CHUNK)
     return merkleize(_pack_bits(value.data), limit=limit)
 
 
 @hash_tree_root.register
-def _hash_tree_root_bitlist_base(value: BaseBitlist) -> Bytes32:
+def _hash_tree_root_bitlist_base(value: BaseBitlist) -> Root:
     limit = math.ceil(type(value).LIMIT / BITS_PER_CHUNK)
     return mix_in_length(
         merkleize(_pack_bits(value.data), limit=limit),
@@ -247,7 +393,7 @@ def _hash_tree_root_bitlist_base(value: BaseBitlist) -> Bytes32:
 
 
 @hash_tree_root.register
-def _hash_tree_root_vector(value: Vector) -> Bytes32:
+def _hash_tree_root_vector(value: Vector) -> Root:
     cls = type(value)
     element_type, length = cls.ELEMENT_TYPE, cls.LENGTH
     if issubclass(element_type, (BaseUint, Boolean)):
@@ -263,7 +409,7 @@ def _hash_tree_root_vector(value: Vector) -> Bytes32:
 
 
 @hash_tree_root.register
-def _hash_tree_root_list(value: List) -> Bytes32:
+def _hash_tree_root_list(value: List) -> Root:
     cls = type(value)
     element_type, limit = cls.ELEMENT_TYPE, cls.LIMIT
     if issubclass(element_type, (BaseUint, Boolean)):
@@ -279,7 +425,50 @@ def _hash_tree_root_list(value: List) -> Bytes32:
 
 
 @hash_tree_root.register
-def _hash_tree_root_container(value: Container) -> Bytes32:
+def _hash_tree_root_progressive_list(value: ProgressiveList) -> Root:
+    element_type = type(value).ELEMENT_TYPE
+    if issubclass(element_type, (BaseUint, Boolean)):
+        # Basic elements pack their serialized bytes into a single byte stream before chunking.
+        # No capacity bounds the chunk count: the tree grows to hold whatever was packed.
+        root = merkleize_progressive(_pack_bytes(b"".join(e.encode_bytes() for e in value)))
+    else:
+        # Composite elements each contribute their own hash tree root as a leaf.
+        root = merkleize_progressive([hash_tree_root(e) for e in value])
+    # The count mixed in is the element count, not the number of packed chunks.
+    # A hundred eight-byte elements pack into 25 chunks, and 100 is the number mixed in.
+    return mix_in_length(root, len(value))
+
+
+@hash_tree_root.register
+def _hash_tree_root_progressive_bitlist(value: ProgressiveBitlist) -> Root:
+    # The count mixed in is the bit count, not the number of packed chunks.
+    return mix_in_length(merkleize_progressive(_pack_bits(value.data)), len(value.data))
+
+
+@hash_tree_root.register
+def _hash_tree_root_progressive_container(value: ProgressiveContainer) -> Root:
+    cls = type(value)
+    # One leaf per layout position, not per field, though the spec's formula reads that way.
+    # A cleared bit keeps its zero leaf, the gap that holds every other field still.
+    leaves: list[Chunk] = [ZERO_ROOT] * len(cls.ACTIVE_FIELDS)
+
+    # Fields follow the set bits: the n-th field belongs at the n-th set position.
+    # A strict pairing fails loudly rather than hashing a field at the wrong one.
+    active_positions = (i for i, bit in enumerate(cls.ACTIVE_FIELDS) if bit)
+    for position, name in zip(active_positions, cls.model_fields, strict=True):
+        leaves[position] = hash_tree_root(getattr(value, name))
+
+    return mix_in_active_fields(merkleize_progressive(leaves), cls.ACTIVE_FIELDS)
+
+
+@hash_tree_root.register
+def _hash_tree_root_compatible_union(value: CompatibleUnion) -> Root:
+    # The union adds no leaf of its own: the option's own root is the whole tree below.
+    return mix_in_selector(hash_tree_root(value.data), int(value.selector))
+
+
+@hash_tree_root.register
+def _hash_tree_root_container(value: Container) -> Root:
     # Pydantic preserves declaration order, which is the canonical SSZ field order.
     cls = type(value)
     return merkleize([hash_tree_root(getattr(value, name)) for name in cls.model_fields])

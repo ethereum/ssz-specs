@@ -1,0 +1,683 @@
+"""
+Fixed hash tree roots of the progressive shapes: the two of EIP-7916, the container of
+EIP-7495, and the compatible union of EIP-8016 built over them.
+
+Every root is written out in full, never computed from the tree it describes:
+
+- A change to any of these tree shapes fails here, whatever the rest of the suite does.
+- Another implementation can check itself against these values directly.
+"""
+
+from __future__ import annotations
+
+import pytest
+
+from ssz import (
+    Boolean,
+    CompatibleUnion,
+    Container,
+    ProgressiveBitlist,
+    ProgressiveContainer,
+    ProgressiveList,
+    Uint8,
+    Uint16,
+    Uint64,
+    Uint256,
+)
+from ssz.merkleization import hash_tree_root
+from ssz.ssz_base import SSZType
+
+
+class SingleFieldStruct(Container):
+    """Smallest composite element there is: a container holding one byte."""
+
+    a: Uint8
+
+
+class Uint64ProgressiveList(ProgressiveList[Uint64]):
+    """Progressive list of eight-byte elements, four to a chunk."""
+
+
+class InnerUint64List(ProgressiveList[Uint64]):
+    """Inner list of a nested progressive list, itself variable-size."""
+
+
+class NestedProgressiveList(ProgressiveList[InnerUint64List]):
+    """Progressive list whose elements are progressive lists, so bodies need offsets."""
+
+
+class ProgressiveHolder(Container):
+    """Container mixing a fixed field with both progressive shapes."""
+
+    x: Uint64
+    a: Uint64ProgressiveList
+    b: ProgressiveBitlist
+
+
+class Square(ProgressiveContainer):
+    """EIP-7495's own example: side at position 0, a gap, then color at position 2."""
+
+    ACTIVE_FIELDS = (1, 0, 1)
+
+    side: Uint16
+    color: Uint8
+
+
+class Circle(ProgressiveContainer):
+    """The other half of that example: a gap, then radius at 1 and color at 2."""
+
+    ACTIVE_FIELDS = (0, 1, 1)
+
+    radius: Uint16
+    color: Uint8
+
+
+class SparseShape(ProgressiveContainer):
+    """Twenty-two positions holding two fields, so the leaves open the width-64 level."""
+
+    ACTIVE_FIELDS = (1, *([0] * 20), 1)
+
+    first: Uint16
+    last: Uint8
+
+
+class ShapeHolder(ProgressiveContainer):
+    """Progressive container holding a fixed field and both EIP-7916 shapes."""
+
+    ACTIVE_FIELDS = (1, 1, 1)
+
+    head: Uint64
+    numbers: Uint64ProgressiveList
+    flags: ProgressiveBitlist
+
+
+class SquareProgressiveList(ProgressiveList[Square]):
+    """Progressive list whose elements are progressive containers."""
+
+
+class CircleProgressiveList(ProgressiveList[Circle]):
+    """The same list over the other shape, so the two differ only in the element type."""
+
+
+class Shape(CompatibleUnion):
+    """EIP-8016's own example, with Square repeated under the highest legal selector."""
+
+    OPTIONS = {1: Square, 2: Circle, 127: Square}
+
+
+class ShapeList(CompatibleUnion):
+    """Union whose two options differ only in the element type of a progressive list."""
+
+    OPTIONS = {1: SquareProgressiveList, 2: CircleProgressiveList}
+
+
+class SquareOnly(CompatibleUnion):
+    """Single-option union, the second member of the union of unions below."""
+
+    OPTIONS = {5: Square}
+
+
+class NestedShape(CompatibleUnion):
+    """Union of unions: each option is itself a compatible union."""
+
+    OPTIONS = {1: Shape, 2: SquareOnly}
+
+
+class UnionHolder(Container):
+    """Ordinary container reaching a union through an offset."""
+
+    tag: Uint8
+    body: Shape
+
+
+class ProgressiveUnionHolder(ProgressiveContainer):
+    """Progressive container reaching a union through an offset, with a gap before it."""
+
+    ACTIVE_FIELDS = (1, 0, 1)
+
+    tag: Uint8
+    body: Shape
+
+
+def root_hex(value: SSZType) -> str:
+    """Return the hash tree root of a value as a 0x-prefixed hex string."""
+    return "0x" + hash_tree_root(value).hex()
+
+
+ZERO_MIXED_WITH_ZERO = "0xf5a5fd42d16a20302798ef6ed309979b43003d2320d9f0e8ea9831a92759fb4b"
+"""Root every empty progressive value shares: the zero node with a zero length mixed in."""
+
+
+@pytest.mark.parametrize(
+    "element_count, expected_root",
+    [
+        (0, ZERO_MIXED_WITH_ZERO),
+        (1, "0x905efb51c2764c2c7a4efb0548e372569df06db82115c3b1896c186632f3fe5b"),
+        (2, "0x94f342b97f764e2548ea40cd9acfb1a1710ac0bb8b9cce202bfb99524256c53a"),
+        (5, "0x209ec0633411cff6970c26380d214e30985d43dcc50509c1b3b28f615d333939"),
+        (6, "0x997ce53709516289d7dee1a7b0bf74637cb08083648498b794c8d60fcb66e350"),
+        (21, "0xcd2db52ac452ea0695ed3a34298b8562a6749f1ba683e8ffd8af2b97dd3a5dd1"),
+        (22, "0x3d52e03c5b90a15ea15d5233f9a7068b363d5ea035751e540c925ba51f71ac05"),
+        (31, "0x3e12b2d2b507ef7ffe70761d0b0b69af7a26449621227a7a3e06438917f4aebd"),
+        (32, "0x77a8c5b3ec7b888068f0d2f0237b535b7ac6dc38c9ce75ed40a3bb6250537bc9"),
+        (33, "0xbdb0c331db145d1efad9e022c70ab1f1c0896e7fc8bd8a83c6f0cd6ca89e1009"),
+        (84, "0xce327a0dda6ad4e33af1e49c1168c5aa35dae66c8caee89d23ba7529734bdd50"),
+        (85, "0x404664c320055384127dd62f6741a767a0396d9929720c29f7c20cc3333bd64e"),
+        (86, "0xd31c2f59aad88de0a912daf3753246668f27450f1cdaf867e9f4fdbd8ee23099"),
+    ],
+)
+def test_one_byte_element_roots(element_count: int, expected_root: str) -> None:
+    """One-byte elements pack 32 to a chunk, so 32 and 33 straddle the first chunk."""
+    # 33 elements: 32 bytes fill the first level, and byte 33 opens the second.
+    values = [Uint8(i) for i in range(1, element_count + 1)]
+    assert root_hex(ProgressiveList[Uint8](data=values)) == expected_root
+
+
+@pytest.mark.parametrize(
+    "element_count, expected_root",
+    [
+        (0, ZERO_MIXED_WITH_ZERO),
+        (1, "0x905efb51c2764c2c7a4efb0548e372569df06db82115c3b1896c186632f3fe5b"),
+        (2, "0x1311c18a7c020c910b000d55063dc15d23dc66bc6c4546685085661bbcbfa1c8"),
+        (5, "0x894ec2b0088e5e82278042f8c492f3b764b6ff2e903bb0156334ba17c4805d38"),
+        (6, "0x09de936790626c7a94b05d6e90337468cbac8c606a3b5914b84404a7a5184a69"),
+        (16, "0x19f40551cc02da8ea0889141b4b6fb4063dd16893ac1c152659ed8e4c685a19e"),
+        (17, "0xb7f2c26050a276c5dfc8bf1df8866864a7a6767bc61e3fa06ef225d1ff95e377"),
+        (21, "0xeaee0b4e0f2ed266236046359d3631c32605d69973374ed651559c9393b8007e"),
+        (22, "0x0adc5a948d8dae94466e3d151de6d0f24baa3bc82438a2694c4de227aa01be5d"),
+        (84, "0x79ccccdf0b356533c85ee2ad69d4c3ded67521af5c2877cd3352c029c9806e81"),
+        (85, "0x19fb9fa5cb654acc0e884ac1ee016edd1f7f4135088a9bea9e6a51132fc0a769"),
+        (86, "0xbe135371387a9f497e53cefb8083dc8eb4042fb822943e39c898a026349e5df4"),
+    ],
+)
+def test_two_byte_element_roots(element_count: int, expected_root: str) -> None:
+    """Two-byte elements pack 16 to a chunk, so 16 and 17 straddle the first chunk."""
+    # Counts stay under 256, so each element's value fits its width unchanged.
+    values = [Uint16(i) for i in range(1, element_count + 1)]
+    assert root_hex(ProgressiveList[Uint16](data=values)) == expected_root
+
+
+@pytest.mark.parametrize(
+    "element_count, expected_root",
+    [
+        (0, ZERO_MIXED_WITH_ZERO),
+        (1, "0x905efb51c2764c2c7a4efb0548e372569df06db82115c3b1896c186632f3fe5b"),
+        (2, "0x4250789d7838bee417a2b0d7639d928b05e8b75f1fc59588a4301b6e8f70ba58"),
+        (3, "0x7e0adeccea8b17f07c3d1531a414d0b1f25543d5ddd519604ce30d5af83b1859"),
+        (4, "0x95a2f252ed2659ccf75e8821f05757c4663fce68e89d0290abf5c33d772935ae"),
+        (5, "0x29918e0447260511bc5be0f7dbb9817201e16e30c56af228b9cb931a16e8799d"),
+        (6, "0xf4bdff2ee94b926f6db14f7e7dad2cb74b75ba057767b458d2c6c051d88e7dbf"),
+        (7, "0xc1fbaac1b247e8871eb128eadd040aafbc9ef97ffaa1a7e68e75b376817b0072"),
+        (16, "0x2073fec2e55f11505ebcb2ed417ece85cd6587677cabc78f352d3964b08a7edc"),
+        (17, "0xb8ea7f9936e9093dd205cdeb70a459683bbf26c566193d70d6c7cd6ffcd76ef1"),
+        (20, "0xc8a62a1a5fc7f814fafecb1d510213b25bda25425ab31c1ad7ff63c62c78307d"),
+        (21, "0xed360c03ecbdfbb6f4b1cf5d9cbf6887038423e31121700797de968a9969aaed"),
+        (22, "0x61f3eebb593ca31c113a9dfec164edea6d13272e20a5f8d0ab641c6e3e2222a9"),
+        (31, "0x0162835d7e34f3c15ec0c77fa958da42391d4af1834c863395a0dd1164b20c03"),
+        (32, "0x795f55932ee7d09843a4ea1b15278a9be78a2e724d8c4db44fbefbbe28b65b7d"),
+        (33, "0x96f884d5f00694ee4f7a793eb76f78d1eff524e2724479ee4d34aaf8c96bf70f"),
+        (84, "0x898e372f6bbc3baca40b0b736357fb2fb4badff01dffada10c725eeecf8cf9bd"),
+        (85, "0xd6867a0b3368ebd6092807ac993865ecbc04e434ec41f8998152df59738705b5"),
+        (86, "0x3197503e039fe2acfc88f0962c651c068bf069217bcf7a7efa8b3d0bc02473e6"),
+    ],
+)
+def test_eight_byte_element_roots(element_count: int, expected_root: str) -> None:
+    """Eight-byte elements pack four to a chunk, so 21 chunks arrive at 84 elements."""
+    # 84 elements fill three levels exactly: chunks 1, 4, and 16 leave nothing over.
+    values = [Uint64(i) for i in range(1, element_count + 1)]
+    assert root_hex(Uint64ProgressiveList(data=values)) == expected_root
+
+
+@pytest.mark.parametrize(
+    "element_count, expected_root",
+    [
+        (0, ZERO_MIXED_WITH_ZERO),
+        (1, "0x905efb51c2764c2c7a4efb0548e372569df06db82115c3b1896c186632f3fe5b"),
+        (2, "0x0bf6848f5c62ed7241d5461b8b28ba0a433f49a205643b1460748b1441342f73"),
+        (3, "0x8b9e13c85c24b0073f9b226ee291c1ff181f3652f42d2bcaeb26b3c302ec6004"),
+        (4, "0xd3afed7f8ca8f9fad8990e6a57b66a024bd4b3fc9a7438ddb48d04dba43a509e"),
+        (5, "0x472844f2f18e5c727d805241ad2f8f4f1d485cf8310602d9cf5dcf21ef8254dc"),
+        (6, "0x76d03915aa777c431f6534cbd136b8f185b5df884546f52a8caa5db69ab49845"),
+        (7, "0xdd36bb36b7f8ffadd270157ca7cf9f9c0e37075d5c9a45e5e986cd3fe8936c05"),
+        (16, "0x0b1904fbab83131db4d3307087ac5d13ae98ac5e8c3787d7c4d6a8afa0e67c0f"),
+        (17, "0x02675b51c91caf1e658e7f6fac7d3324575bacc836c0fc2439d9ba528e687552"),
+        (20, "0xd0f00e7cb141fa84b50b86fcd351b41d0cfb76ec04aa1fa37d4eb094c2d2ff55"),
+        (21, "0x47e0ab688eae3c1dbbb9623fadc55045accae121d492112724965f927f5d47ab"),
+        (22, "0x4eb1861dc5959f6495a5daa997dcab85fcfeae76b0596aa32048be2cc221ded4"),
+        (84, "0x5c67583fa321f102a5c1c15f207322e35cac921a91195bbcab13b17863cd1f79"),
+        (85, "0xce4cd90414765a664070fdee5136e5dfb1eb16632f2a048b6afd5ec1e76965e1"),
+        (86, "0x6455343caa59ff27ba38e2fa12f5107f3a9ecd1849ba4028d11daadb3b01649f"),
+    ],
+)
+def test_full_chunk_element_roots(element_count: int, expected_root: str) -> None:
+    """A 32-byte element fills one chunk, so the element count is the chunk count."""
+    # The level boundaries land on the element counts 1, 5, 21, and 85 directly.
+    values = [Uint256(i) for i in range(1, element_count + 1)]
+    assert root_hex(ProgressiveList[Uint256](data=values)) == expected_root
+
+
+@pytest.mark.parametrize(
+    "element_count, expected_root",
+    [
+        (0, ZERO_MIXED_WITH_ZERO),
+        (1, "0x905efb51c2764c2c7a4efb0548e372569df06db82115c3b1896c186632f3fe5b"),
+        (5, "0x2e16bbdbce5094c911f42f217a5a44952af1f13da4a9e690cbd6a912f4cf36be"),
+        (21, "0x9f44b96e629cf37c3f7eb9d6a585285cd038188109d914b5d0664e585786b9b9"),
+        (32, "0x31527493633e0c31a7517365f827628a5f5aa6be90638093170c8283a4977b49"),
+        (33, "0x00826e48669b1ff8d9e07a1c96c6b33ec5ad9f43a28a3006464faadd5d3ac6fd"),
+    ],
+)
+def test_boolean_element_roots(element_count: int, expected_root: str) -> None:
+    """A list of booleans packs one byte per element, unlike a bitlist's one bit."""
+    # 33 booleans occupy 33 bytes and so two chunks, where 33 bits would occupy one.
+    values = [Boolean(True)] * element_count
+    assert root_hex(ProgressiveList[Boolean](data=values)) == expected_root
+
+
+@pytest.mark.parametrize(
+    "bit_count, expected_root",
+    [
+        (0, ZERO_MIXED_WITH_ZERO),
+        (1, "0x905efb51c2764c2c7a4efb0548e372569df06db82115c3b1896c186632f3fe5b"),
+        (2, "0x86cb388ccfae2de5e74bfe5634077e8bc4acb576db8ecbf8e71051b4475f8f6d"),
+        (7, "0xcbfa55f6e94b1ce1e7b0b99306c6e6eefaf73b72bad6771a649ad290c341d6b2"),
+        (8, "0x89b4e102035da473eaf22c286e07d433e11cbd721578e55111e6e3381e44a485"),
+        (9, "0x3310d92ea95acd2753e76d449bd1cdbc90ba8ce90b6e7e51435cf88a5c11436e"),
+        (15, "0xe70feb85f03f1a360637d23c19f3bd61c984c91cca2779c8aad0d5beb9de0e53"),
+        (16, "0xf179b07e7f4669b3dcfb43ade4dc1e282c93fc067335342a980ae4591effb274"),
+        (17, "0xcb7cd8596cd874d78e5277f81fc7969602781e28a9cc62f4f3abcff6c41e9b31"),
+        (31, "0x0fefda6b9225394900be8af39a36cd60ffbb5eabb67318f5657e17dfe0c97e59"),
+        (32, "0xd5ba948dcd79a17be3729ffb16e828a4454e6305cc8ac3a2f9438dc4e8fbe08a"),
+        (33, "0x5287d9780dddc42441b94f24b09277278c23255ec530ecf87dc00f0ab4717bf5"),
+        (63, "0xa5bddbc8fb0f6ebf82209ec39b91d308e38541f2d8cc9706db30f042c0582627"),
+        (64, "0x33cb4d646deff716256d55a4b3872d920ffc48f13788ba79c3458854a5481e2e"),
+        (65, "0xa1954d46261a829b0980d14fab8da8ebd5fcf619be99a892f6734d3e3d55a028"),
+        (255, "0x00cacf1c674080785f369fa130134dcafc883203b8374decb9e6b18e5b4125b1"),
+        (256, "0xb3327406854ffab96af59832dfa3f690f72c4f898e2ffd4ef3e90cc2fb876b43"),
+        (257, "0xbe707c375a49431fdb06c00f7a4dcc9200d5613ea02999dc5e081913171bb8d0"),
+        (511, "0x6030f9b956cb7cfb79784bac5205288f842b57c851609be7a266cc7889b9de06"),
+        (512, "0xfedaba4d354436ef8a8e13f141fe0d39abafb2be19ae6488eb5abd4a37a071f6"),
+        (513, "0xe1863d142701b924caf6e92f887f7f53059e9b63d08d7f02d66ca27f0ed228fc"),
+    ],
+)
+def test_all_true_bitlist_roots(bit_count: int, expected_root: str) -> None:
+    """
+    Set bits at every byte and chunk boundary.
+
+    The 256-bit case is the sharpest of them:
+
+    - It serializes to 33 bytes, because the delimiter opens a byte of its own.
+    - It packs into one chunk, because the delimiter never enters the tree.
+    """
+    # The delimiter is what makes the byte count and the chunk count disagree here.
+    assert root_hex(ProgressiveBitlist(data=[Boolean(True)] * bit_count)) == expected_root
+
+
+@pytest.mark.parametrize(
+    "bit_count, expected_root",
+    [
+        (1, "0xe832d263aaa8f9417d9f45a702834f6961ee7b15ad4d3d27f2b0f4fe79d33031"),
+        (2, "0x3ddf8417d70d875b60aa9f5123aae329c09d6768333e16529f6137c3e29586b7"),
+        (7, "0xaee3ade668fe1043101f3bff93e4bd815a12664e4e96bf541d18c2442d657b45"),
+        (8, "0xa5c83a46d8c0edb422b9b9b550fd13f925b84a8d4d10aa9e59bf08e9631ef1de"),
+        (9, "0x9732a0f5dafad5e70b0938b5977814bea2564098253184e4ea2ab8e55b4609f2"),
+        (16, "0xc4185e57368dbc5eb687ca30cbd1b1c51556e5a3a1d4c2eb5f685d2191d4685d"),
+        (17, "0x41f9d716cea4a4b5b7481656f2f6fdcec09810714e5f809afbd742bac315fb90"),
+        (32, "0xeab3687b1f782861a068080861319a42da0d702ba314a312312ca7d39e9f104f"),
+        (33, "0xb0308e796252895a73c6a0b3a1c4373104ddb61c9a629a83a9b2d6857fba29a5"),
+        (255, "0x9cec765fc332d4327b2a8cc6e8293b7d1bf63f5acdb5f012f23f4f94d4e3eaf1"),
+        (256, "0x044881ec6cd8401c76de75e9e830a92c7f831c4cd1c07b77539e53b0dfa68587"),
+        (257, "0xb458d2fffeaa2b0341cf44f4a31cf4d1754e56096ef0fb81ccc7d237f90b041c"),
+        (512, "0x7542b5135236f9e898cf93a682f731608ac59fe28bdc16a4b34502c102d4b47e"),
+        (513, "0x21c5f9d1c3705672282c1c88187ca01c95f35fb0f1898c4af25576999de4a6f7"),
+    ],
+)
+def test_alternating_bitlist_roots(bit_count: int, expected_root: str) -> None:
+    """Bits alternate starting from clear, which catches a reversed packing order."""
+    # Bit i lands at position i, so a reversed packing shifts every byte of the payload.
+    bits = [Boolean(index % 2) for index in range(bit_count)]
+    assert root_hex(ProgressiveBitlist(data=bits)) == expected_root
+
+
+@pytest.mark.parametrize(
+    "element_count, expected_root",
+    [
+        (0, ZERO_MIXED_WITH_ZERO),
+        (1, "0x905efb51c2764c2c7a4efb0548e372569df06db82115c3b1896c186632f3fe5b"),
+        (2, "0x0bf6848f5c62ed7241d5461b8b28ba0a433f49a205643b1460748b1441342f73"),
+        (5, "0x472844f2f18e5c727d805241ad2f8f4f1d485cf8310602d9cf5dcf21ef8254dc"),
+        (6, "0x76d03915aa777c431f6534cbd136b8f185b5df884546f52a8caa5db69ab49845"),
+        (21, "0x47e0ab688eae3c1dbbb9623fadc55045accae121d492112724965f927f5d47ab"),
+        (22, "0x4eb1861dc5959f6495a5daa997dcab85fcfeae76b0596aa32048be2cc221ded4"),
+    ],
+)
+def test_composite_element_roots(element_count: int, expected_root: str) -> None:
+    """
+    Composite elements contribute one leaf each, so the leaf count is the element count.
+
+    These roots match the 32-byte-element list at the same count.
+    A one-byte container roots to the same padded chunk a small integer packs into.
+    """
+    # No packing step here: each element hands its own root to the tree as a leaf.
+    elements = [SingleFieldStruct(a=Uint8(i)) for i in range(1, element_count + 1)]
+    assert root_hex(ProgressiveList[SingleFieldStruct](data=elements)) == expected_root
+
+
+def test_nested_progressive_list_vector() -> None:
+    """
+    A progressive list of progressive lists needs an offset table for its bodies.
+
+    Layout, with the empty inner list contributing no body at all:
+
+        bytes 0..3   : off_0 = 12   (first body starts at byte 12)
+        bytes 4..7   : off_1 = 28   (second body starts at byte 28)
+        bytes 8..11  : off_2 = 28   (third body starts where the second ended)
+        bytes 12..27 : body_0       (two eight-byte elements)
+        bytes 28..35 : body_2       (one eight-byte element)
+
+    The two equal offsets are legal.
+    An empty body has zero width, so offsets are non-decreasing, not strictly increasing.
+    """
+    value = NestedProgressiveList(
+        data=[
+            InnerUint64List(data=[Uint64(1), Uint64(2)]),
+            InnerUint64List(data=[]),
+            InnerUint64List(data=[Uint64(3)]),
+        ]
+    )
+    expected_bytes = "0c0000001c0000001c000000010000000000000002000000000000000300000000000000"
+    assert value.encode_bytes().hex() == expected_bytes
+    assert NestedProgressiveList.decode_bytes(value.encode_bytes()) == value
+    assert root_hex(value) == "0x5c7cf403ba442047fc83d723043514a5c0f8e9f22b048bbc8191bed49c6a6f94"
+
+
+def test_container_holding_both_progressive_shapes_vector() -> None:
+    """
+    A container reaches its progressive fields through offsets, as for any variable-size field.
+
+    Layout:
+
+        bytes 0..7   : x = 7        (fixed-size field, inline)
+        bytes 8..11  : off_a = 16   (list body starts at byte 16)
+        bytes 12..15 : off_b = 40   (bitlist body starts at byte 40)
+        bytes 16..39 : a body       (three eight-byte elements)
+        byte  40     : b body       (three bits plus the delimiter)
+    """
+    value = ProgressiveHolder(
+        x=Uint64(7),
+        a=Uint64ProgressiveList(data=[Uint64(1), Uint64(2), Uint64(3)]),
+        b=ProgressiveBitlist(data=[Boolean(True), Boolean(False), Boolean(True)]),
+    )
+    expected_bytes = (
+        "070000000000000010000000280000000100000000000000020000000000000003000000000000000d"
+    )
+    assert value.encode_bytes().hex() == expected_bytes
+    assert ProgressiveHolder.decode_bytes(value.encode_bytes()) == value
+    assert root_hex(value) == "0x4d7b2d321882a440e729af4dd579ead329397efa0e61c6e1eeb5fa848a9e8f4e"
+
+
+def test_progressive_container_square_vector() -> None:
+    """
+    EIP-7495's Square: a field at position 0, a gap, then a field at position 2.
+
+    Leaves, one per position of the layout [1, 0, 1]:
+
+        position 0 : root(side)   = 3412 00.. (padded to a chunk)
+        position 1 : zero chunk   (the gap: no field occupies it)
+        position 2 : root(color)  = 56 00..
+
+    The spine takes leaf 0 at width one and leaves 1 and 2 at width four, and the
+    layout packs into the word 0x05 that is hashed in above the result.
+
+    The three bytes carry no trace of the layout, which is exactly why it is mixed in.
+    """
+    value = Square(side=Uint16(0x1234), color=Uint8(0x56))
+    assert value.encode_bytes().hex() == "341256"
+    assert Square.decode_bytes(value.encode_bytes()) == value
+    assert root_hex(value) == "0x5ebd038215d6c6868befbe172ffb9442b2f5ade276bd96eb304c1da38deff823"
+
+
+def test_progressive_container_circle_vector() -> None:
+    """
+    EIP-7495's Circle: a leading gap, then fields at positions 1 and 2.
+
+    Leaves, one per position of the layout [0, 1, 1]:
+
+        position 0 : zero chunk    (the gap)
+        position 1 : root(radius)  = 3412 00..
+        position 2 : root(color)   = 56 00..
+
+    Its color sits at position 2, the same position Square's does, so one proof shape
+    serves both. The layout packs into the word 0x06 instead of Square's 0x05.
+    """
+    value = Circle(radius=Uint16(0x1234), color=Uint8(0x56))
+    assert value.encode_bytes().hex() == "341256"
+    assert Circle.decode_bytes(value.encode_bytes()) == value
+    assert root_hex(value) == "0x44dd01593fff4f0bea317b62a9e70d20f063e7413f331598d681d9e645fa8eae"
+
+
+def test_square_and_circle_share_their_bytes_and_not_their_roots() -> None:
+    """
+    The two shapes encode to the same three bytes and merkleize to different roots.
+
+    This pair is the whole point of the shape: the wire format says nothing about which
+    positions a value occupies, so the layout has to reach the root some other way.
+    """
+    square = Square(side=Uint16(0x1234), color=Uint8(0x56))
+    circle = Circle(radius=Uint16(0x1234), color=Uint8(0x56))
+    assert square.encode_bytes() == circle.encode_bytes()
+    assert root_hex(square) != root_hex(circle)
+
+
+def test_progressive_container_sparse_layout_vector() -> None:
+    """
+    A layout of twenty-two positions holding two fields.
+
+    Every position is a leaf, gap or not, so the leaf count is the position count:
+
+        position 0      : root(first) = 3412 00..
+        positions 1..20 : zero chunks
+        position 21     : root(last)  = 56 00..
+
+    Twenty-two leaves fill the widths 1, 4 and 16 and open the width-64 level with a
+    single occupant. The layout packs into a word with bits 0 and 21 set.
+    """
+    value = SparseShape(first=Uint16(0x1234), last=Uint8(0x56))
+    # The gaps cost no bytes, so this encodes exactly as the three-position shapes do.
+    assert value.encode_bytes().hex() == "341256"
+    assert SparseShape.decode_bytes(value.encode_bytes()) == value
+    assert root_hex(value) == "0x4ced50eb70f7547000227b026e875c87dfe4d4daa3be3f308f570268c5a55dc7"
+
+
+def test_progressive_container_with_progressive_fields_vector() -> None:
+    """
+    A progressive container reaching both EIP-7916 shapes through offsets.
+
+    Layout:
+
+        bytes 0..7   : head = 7        (fixed-size field, inline)
+        bytes 8..11  : off_numbers=16  (list body starts at byte 16)
+        bytes 12..15 : off_flags = 40  (bitlist body starts at byte 40)
+        bytes 16..39 : numbers body    (three eight-byte elements)
+        byte  40     : flags body      (three bits plus the delimiter)
+
+    Each field contributes its own length-mixed root as one leaf, and all three
+    positions are occupied, so the layout packs into the word 0x07.
+    """
+    value = ShapeHolder(
+        head=Uint64(7),
+        numbers=Uint64ProgressiveList(data=[Uint64(1), Uint64(2), Uint64(3)]),
+        flags=ProgressiveBitlist(data=[Boolean(True), Boolean(False), Boolean(True)]),
+    )
+    expected_bytes = (
+        "070000000000000010000000280000000100000000000000020000000000000003000000000000000d"
+    )
+    assert value.encode_bytes().hex() == expected_bytes
+    assert ShapeHolder.decode_bytes(value.encode_bytes()) == value
+    assert root_hex(value) == "0x0c621f05791743c263be5a717c45dec81b4c175d19572e4cca0d5933f7044f0e"
+
+
+def test_progressive_list_of_progressive_containers_vector() -> None:
+    """
+    A progressive list whose elements are progressive containers.
+
+    Each element is fixed-size at three bytes, so the bodies sit back to back with no
+    offset table. Each element hands its own layout-mixed root to the spine as one leaf,
+    and the element count is mixed in above it.
+    """
+    value = SquareProgressiveList(
+        data=[
+            Square(side=Uint16(1), color=Uint8(2)),
+            Square(side=Uint16(3), color=Uint8(4)),
+        ]
+    )
+    assert value.encode_bytes().hex() == "010002030004"
+    assert SquareProgressiveList.decode_bytes(value.encode_bytes()) == value
+    assert root_hex(value) == "0xa892d5d4f0ef9b1f4e0c3f9fd9617f06d405561d56f676dcd9de228b2fbcbe59"
+
+
+def test_compatible_union_square_option_vector() -> None:
+    """
+    EIP-8016's own value: Square under selector 1.
+
+    The selector leads and the option's own encoding follows:
+
+        byte  0     : selector = 01
+        bytes 1..2  : side  = 3412   (0x1234, little-endian)
+        byte  3     : color = 42
+
+    The root is Square's own layout-mixed root with the selector hashed in above it, the
+    selector occupying a full 32-byte chunk rather than the single byte it takes here.
+    """
+    value = Shape(selector=Uint8(1), data=Square(side=Uint16(0x1234), color=Uint8(0x42)))
+    assert value.encode_bytes().hex() == "01341242"
+    assert Shape.decode_bytes(value.encode_bytes()) == value
+    # Square's own root, unchanged by being held in a union.
+    inner = "0xbda9ced443856b5dbb151ccd648c9c29054849ddfeea8bd71686fa9ea68761c2"
+    assert root_hex(value.data) == inner
+    assert root_hex(value) == "0x18ef429c95e07846bdc4ed6fabee72897f927350cf61faa15682e776e4465478"
+
+
+def test_compatible_union_circle_option_vector() -> None:
+    """
+    The other option: Circle under selector 2, over the same three payload bytes.
+
+    Square and Circle encode identically, so the selector byte is the only thing on the
+    wire that tells the two apart, and the mixed-in selector the only thing in the tree.
+    """
+    value = Shape(selector=Uint8(2), data=Circle(radius=Uint16(0x1234), color=Uint8(0x42)))
+    assert value.encode_bytes().hex() == "02341242"
+    assert Shape.decode_bytes(value.encode_bytes()) == value
+    inner = "0xea6c8351a96d00676719fcdddae0eddcc1116773413054d64a19e058c02c8bf2"
+    assert root_hex(value.data) == inner
+    assert root_hex(value) == "0x083aefd3204f6d1f088b3c0eaa0dc967b414ab177ed0dd5a7eaa06c6729d1ad8"
+
+
+def test_compatible_union_highest_selector_vector() -> None:
+    """
+    The same Square under selector 127, the highest a union may declare.
+
+    The payload is byte for byte the one under selector 1, and the root is not, which is
+    the whole of what the mix-in provides.
+    """
+    value = Shape(selector=Uint8(127), data=Square(side=Uint16(0x1234), color=Uint8(0x42)))
+    assert value.encode_bytes().hex() == "7f341242"
+    assert Shape.decode_bytes(value.encode_bytes()) == value
+    assert root_hex(value) == "0xcf559aac715a5d80315dae88b3727252c2407242be2960403aa6b8a3197ea001"
+
+
+def test_compatible_union_empty_list_options_collide_vector() -> None:
+    """
+    EIP-8016's security consideration: two empty lists of different element types.
+
+    An empty progressive list roots to the zero terminator with a zero count mixed in,
+    whatever it would have held. So both options present the same inner root, and the two
+    union values are separated by the selector alone.
+    """
+    squares = ShapeList(selector=Uint8(1), data=SquareProgressiveList(data=[]))
+    circles = ShapeList(selector=Uint8(2), data=CircleProgressiveList(data=[]))
+    # One byte each: the selector, and no payload at all.
+    assert squares.encode_bytes().hex() == "01"
+    assert circles.encode_bytes().hex() == "02"
+    assert ShapeList.decode_bytes(squares.encode_bytes()) == squares
+    assert ShapeList.decode_bytes(circles.encode_bytes()) == circles
+    # The collision below the selector, stated as a fixed root.
+    assert root_hex(squares.data) == ZERO_MIXED_WITH_ZERO
+    assert root_hex(circles.data) == ZERO_MIXED_WITH_ZERO
+    # And the separation above it.
+    assert root_hex(squares) == "0xe832d263aaa8f9417d9f45a702834f6961ee7b15ad4d3d27f2b0f4fe79d33031"
+    assert root_hex(circles) == "0x6735630c0dd0ae42f505cf2e229851902e57048e0fe30b86144a3d97a5f0f46a"
+
+
+def test_compatible_union_populated_list_option_vector() -> None:
+    """
+    A one-element progressive list of Square, held under selector 1.
+
+    The three-byte element is fixed-size, so the body sits right after the selector with
+    no offset table, and the payload bytes coincide with the bare Square option's. The
+    roots do not: this one carries the list's element count before the selector.
+    """
+    value = ShapeList(
+        selector=Uint8(1),
+        data=SquareProgressiveList(data=[Square(side=Uint16(0x1234), color=Uint8(0x42))]),
+    )
+    assert value.encode_bytes().hex() == "01341242"
+    assert ShapeList.decode_bytes(value.encode_bytes()) == value
+    assert root_hex(value) == "0xf7385d33d993f5cf5cdfa8b73130edb953de454ccdb56a9c95eb64baff0a7c99"
+
+
+def test_compatible_union_of_unions_vector() -> None:
+    """
+    Two selectors lead, one per level, before any payload byte.
+
+    Layout:
+
+        byte  0     : outer selector = 01   (names the inner union)
+        byte  1     : inner selector = 02   (names Circle)
+        bytes 2..4  : Circle's payload
+
+    Each level mixes its own selector into the root of the level below it.
+    """
+    value = NestedShape(
+        selector=Uint8(1),
+        data=Shape(selector=Uint8(2), data=Circle(radius=Uint16(0x1234), color=Uint8(0x42))),
+    )
+    assert value.encode_bytes().hex() == "0102341242"
+    assert NestedShape.decode_bytes(value.encode_bytes()) == value
+    assert root_hex(value) == "0xb45b07fd067fcaa8d39d7a83723c8680424f5ad10c762d639a4a37a0697fbf34"
+
+
+def test_container_holding_a_compatible_union_vector() -> None:
+    """
+    A union is variable-size even where every option is fixed-size, so it needs an offset.
+
+    Layout:
+
+        byte  0     : tag = ff        (fixed-size field, inline)
+        bytes 1..4  : off_body = 5    (the union body starts at byte 5)
+        bytes 5..8  : body            (selector 01, then Square's three bytes)
+    """
+    value = UnionHolder(
+        tag=Uint8(0xFF),
+        body=Shape(selector=Uint8(1), data=Square(side=Uint16(0x1234), color=Uint8(0x42))),
+    )
+    assert UnionHolder.is_fixed_size() is False
+    assert value.encode_bytes().hex() == "ff0500000001341242"
+    assert UnionHolder.decode_bytes(value.encode_bytes()) == value
+    assert root_hex(value) == "0x0fef11407505a5adaa66a6bdab8cefa199a9faab0046820c419dfc5e9ef5b8ad"
+
+
+def test_progressive_container_holding_a_compatible_union_vector() -> None:
+    """
+    The same union behind a gap, so its root is the leaf at position 2.
+
+    The gap costs no bytes, so the encoding matches the ordinary container's exactly, and
+    the layout word mixed in above the leaves is what separates the two roots.
+    """
+    value = ProgressiveUnionHolder(
+        tag=Uint8(0xFF),
+        body=Shape(selector=Uint8(1), data=Square(side=Uint16(0x1234), color=Uint8(0x42))),
+    )
+    assert value.encode_bytes().hex() == "ff0500000001341242"
+    assert ProgressiveUnionHolder.decode_bytes(value.encode_bytes()) == value
+    assert root_hex(value) == "0x72b97c8cff2fabe137f25dc3c8bf461c25ac324f5afa536710ee2c37eff09c68"
