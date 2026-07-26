@@ -63,6 +63,16 @@ class SSZActiveFieldsError(SSZTypeError):
         super().__init__(f"{type_name}: invalid active fields, {reason}")
 
 
+class SSZUnionOptionsError(SSZTypeError):
+    """A union declares options the spec forbids, or holds one it never declared."""
+
+    def __init__(self, type_name: str, reason: str) -> None:
+        """Record the union and the rule its options break."""
+        self.type_name = type_name
+        self.reason = reason
+        super().__init__(f"{type_name}: invalid union options, {reason}")
+
+
 class SSZFixedSizeError(SSZTypeError):
     """A fixed byte length was requested from a variable-size type."""
 

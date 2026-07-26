@@ -1,6 +1,6 @@
 """
-Fixed hash tree roots of the progressive shapes: the two of EIP-7916 and the container
-of EIP-7495.
+Fixed hash tree roots of the progressive shapes: the two of EIP-7916, the container of
+EIP-7495, and the compatible union of EIP-8016 built over them.
 
 Every root is written out in full, never computed from the tree it describes:
 
@@ -14,6 +14,7 @@ import pytest
 
 from ssz import (
     Boolean,
+    CompatibleUnion,
     Container,
     ProgressiveBitlist,
     ProgressiveContainer,
@@ -92,6 +93,50 @@ class ShapeHolder(ProgressiveContainer):
 
 class SquareProgressiveList(ProgressiveList[Square]):
     """Progressive list whose elements are progressive containers."""
+
+
+class CircleProgressiveList(ProgressiveList[Circle]):
+    """The same list over the other shape, so the two differ only in the element type."""
+
+
+class Shape(CompatibleUnion):
+    """EIP-8016's own example, with Square repeated under the highest legal selector."""
+
+    OPTIONS = {1: Square, 2: Circle, 127: Square}
+
+
+class ShapeList(CompatibleUnion):
+    """Union whose two options differ only in the element type of a progressive list."""
+
+    OPTIONS = {1: SquareProgressiveList, 2: CircleProgressiveList}
+
+
+class SquareOnly(CompatibleUnion):
+    """Single-option union, the second member of the union of unions below."""
+
+    OPTIONS = {5: Square}
+
+
+class NestedShape(CompatibleUnion):
+    """Union of unions: each option is itself a compatible union."""
+
+    OPTIONS = {1: Shape, 2: SquareOnly}
+
+
+class UnionHolder(Container):
+    """Ordinary container reaching a union through an offset."""
+
+    tag: Uint8
+    body: Shape
+
+
+class ProgressiveUnionHolder(ProgressiveContainer):
+    """Progressive container reaching a union through an offset, with a gap before it."""
+
+    ACTIVE_FIELDS = (1, 0, 1)
+
+    tag: Uint8
+    body: Shape
 
 
 def root_hex(value: SSZType) -> str:
@@ -489,3 +534,150 @@ def test_progressive_list_of_progressive_containers_vector() -> None:
     assert value.encode_bytes().hex() == "010002030004"
     assert SquareProgressiveList.decode_bytes(value.encode_bytes()) == value
     assert root_hex(value) == "0xa892d5d4f0ef9b1f4e0c3f9fd9617f06d405561d56f676dcd9de228b2fbcbe59"
+
+
+def test_compatible_union_square_option_vector() -> None:
+    """
+    EIP-8016's own value: Square under selector 1.
+
+    The selector leads and the option's own encoding follows:
+
+        byte  0     : selector = 01
+        bytes 1..2  : side  = 3412   (0x1234, little-endian)
+        byte  3     : color = 42
+
+    The root is Square's own layout-mixed root with the selector hashed in above it, the
+    selector occupying a full 32-byte chunk rather than the single byte it takes here.
+    """
+    value = Shape(selector=Uint8(1), data=Square(side=Uint16(0x1234), color=Uint8(0x42)))
+    assert value.encode_bytes().hex() == "01341242"
+    assert Shape.decode_bytes(value.encode_bytes()) == value
+    # Square's own root, unchanged by being held in a union.
+    inner = "0xbda9ced443856b5dbb151ccd648c9c29054849ddfeea8bd71686fa9ea68761c2"
+    assert root_hex(value.data) == inner
+    assert root_hex(value) == "0x18ef429c95e07846bdc4ed6fabee72897f927350cf61faa15682e776e4465478"
+
+
+def test_compatible_union_circle_option_vector() -> None:
+    """
+    The other option: Circle under selector 2, over the same three payload bytes.
+
+    Square and Circle encode identically, so the selector byte is the only thing on the
+    wire that tells the two apart, and the mixed-in selector the only thing in the tree.
+    """
+    value = Shape(selector=Uint8(2), data=Circle(radius=Uint16(0x1234), color=Uint8(0x42)))
+    assert value.encode_bytes().hex() == "02341242"
+    assert Shape.decode_bytes(value.encode_bytes()) == value
+    inner = "0xea6c8351a96d00676719fcdddae0eddcc1116773413054d64a19e058c02c8bf2"
+    assert root_hex(value.data) == inner
+    assert root_hex(value) == "0x083aefd3204f6d1f088b3c0eaa0dc967b414ab177ed0dd5a7eaa06c6729d1ad8"
+
+
+def test_compatible_union_highest_selector_vector() -> None:
+    """
+    The same Square under selector 127, the highest a union may declare.
+
+    The payload is byte for byte the one under selector 1, and the root is not, which is
+    the whole of what the mix-in provides.
+    """
+    value = Shape(selector=Uint8(127), data=Square(side=Uint16(0x1234), color=Uint8(0x42)))
+    assert value.encode_bytes().hex() == "7f341242"
+    assert Shape.decode_bytes(value.encode_bytes()) == value
+    assert root_hex(value) == "0xcf559aac715a5d80315dae88b3727252c2407242be2960403aa6b8a3197ea001"
+
+
+def test_compatible_union_empty_list_options_collide_vector() -> None:
+    """
+    EIP-8016's security consideration: two empty lists of different element types.
+
+    An empty progressive list roots to the zero terminator with a zero count mixed in,
+    whatever it would have held. So both options present the same inner root, and the two
+    union values are separated by the selector alone.
+    """
+    squares = ShapeList(selector=Uint8(1), data=SquareProgressiveList(data=[]))
+    circles = ShapeList(selector=Uint8(2), data=CircleProgressiveList(data=[]))
+    # One byte each: the selector, and no payload at all.
+    assert squares.encode_bytes().hex() == "01"
+    assert circles.encode_bytes().hex() == "02"
+    assert ShapeList.decode_bytes(squares.encode_bytes()) == squares
+    assert ShapeList.decode_bytes(circles.encode_bytes()) == circles
+    # The collision below the selector, stated as a fixed root.
+    assert root_hex(squares.data) == ZERO_MIXED_WITH_ZERO
+    assert root_hex(circles.data) == ZERO_MIXED_WITH_ZERO
+    # And the separation above it.
+    assert root_hex(squares) == "0xe832d263aaa8f9417d9f45a702834f6961ee7b15ad4d3d27f2b0f4fe79d33031"
+    assert root_hex(circles) == "0x6735630c0dd0ae42f505cf2e229851902e57048e0fe30b86144a3d97a5f0f46a"
+
+
+def test_compatible_union_populated_list_option_vector() -> None:
+    """
+    A one-element progressive list of Square, held under selector 1.
+
+    The three-byte element is fixed-size, so the body sits right after the selector with
+    no offset table, and the payload bytes coincide with the bare Square option's. The
+    roots do not: this one carries the list's element count before the selector.
+    """
+    value = ShapeList(
+        selector=Uint8(1),
+        data=SquareProgressiveList(data=[Square(side=Uint16(0x1234), color=Uint8(0x42))]),
+    )
+    assert value.encode_bytes().hex() == "01341242"
+    assert ShapeList.decode_bytes(value.encode_bytes()) == value
+    assert root_hex(value) == "0xf7385d33d993f5cf5cdfa8b73130edb953de454ccdb56a9c95eb64baff0a7c99"
+
+
+def test_compatible_union_of_unions_vector() -> None:
+    """
+    Two selectors lead, one per level, before any payload byte.
+
+    Layout:
+
+        byte  0     : outer selector = 01   (names the inner union)
+        byte  1     : inner selector = 02   (names Circle)
+        bytes 2..4  : Circle's payload
+
+    Each level mixes its own selector into the root of the level below it.
+    """
+    value = NestedShape(
+        selector=Uint8(1),
+        data=Shape(selector=Uint8(2), data=Circle(radius=Uint16(0x1234), color=Uint8(0x42))),
+    )
+    assert value.encode_bytes().hex() == "0102341242"
+    assert NestedShape.decode_bytes(value.encode_bytes()) == value
+    assert root_hex(value) == "0xb45b07fd067fcaa8d39d7a83723c8680424f5ad10c762d639a4a37a0697fbf34"
+
+
+def test_container_holding_a_compatible_union_vector() -> None:
+    """
+    A union is variable-size even where every option is fixed-size, so it needs an offset.
+
+    Layout:
+
+        byte  0     : tag = ff        (fixed-size field, inline)
+        bytes 1..4  : off_body = 5    (the union body starts at byte 5)
+        bytes 5..8  : body            (selector 01, then Square's three bytes)
+    """
+    value = UnionHolder(
+        tag=Uint8(0xFF),
+        body=Shape(selector=Uint8(1), data=Square(side=Uint16(0x1234), color=Uint8(0x42))),
+    )
+    assert UnionHolder.is_fixed_size() is False
+    assert value.encode_bytes().hex() == "ff0500000001341242"
+    assert UnionHolder.decode_bytes(value.encode_bytes()) == value
+    assert root_hex(value) == "0x0fef11407505a5adaa66a6bdab8cefa199a9faab0046820c419dfc5e9ef5b8ad"
+
+
+def test_progressive_container_holding_a_compatible_union_vector() -> None:
+    """
+    The same union behind a gap, so its root is the leaf at position 2.
+
+    The gap costs no bytes, so the encoding matches the ordinary container's exactly, and
+    the layout word mixed in above the leaves is what separates the two roots.
+    """
+    value = ProgressiveUnionHolder(
+        tag=Uint8(0xFF),
+        body=Shape(selector=Uint8(1), data=Square(side=Uint16(0x1234), color=Uint8(0x42))),
+    )
+    assert value.encode_bytes().hex() == "ff0500000001341242"
+    assert ProgressiveUnionHolder.decode_bytes(value.encode_bytes()) == value
+    assert root_hex(value) == "0x72b97c8cff2fabe137f25dc3c8bf461c25ac324f5afa536710ee2c37eff09c68"

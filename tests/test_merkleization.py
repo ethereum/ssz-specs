@@ -35,7 +35,9 @@ from ssz.merkleization import (
     merkleize_progressive,
     mix_in_active_fields,
     mix_in_length,
+    mix_in_selector,
 )
+from ssz.union import CompatibleUnion
 
 
 def h(a: bytes, b: bytes) -> Root:
@@ -306,6 +308,56 @@ def test_mix_in_active_fields_separates_two_layouts_over_one_root() -> None:
     """The same tree under two layouts yields two roots, which is the point of the mix-in."""
     root = Root(sample_chunks[1])
     assert mix_in_active_fields(root, [1, 0, 1]) != mix_in_active_fields(root, [1, 1, 1])
+
+
+@pytest.mark.parametrize(
+    "selector, expected_word",
+    [
+        # The lowest selector a union may declare.
+        pytest.param(1, b"\x01", id="lowest_selector"),
+        pytest.param(2, b"\x02", id="second_selector"),
+        pytest.param(64, b"\x40", id="mid_range"),
+        # The highest selector a union may declare: the high bit stays reserved.
+        pytest.param(127, b"\x7f", id="highest_selector"),
+    ],
+)
+def test_mix_in_selector_packs_the_selector_into_one_word(
+    selector: int, expected_word: bytes
+) -> None:
+    """
+    The selector occupies a full 32-byte chunk, not the single byte it takes on the wire.
+
+    The EIP writes hash(root, selector) with the uint8 serialization of the selector, and
+    the operand is nonetheless one whole chunk: every other mix-in hashes two 32-byte
+    nodes, and a one-byte right operand would not be a node at all.
+    """
+    root = Root(sample_chunks[1])
+    # The word is the selector little-endian in the first byte, then 31 zero bytes.
+    assert mix_in_selector(root, selector) == h(root, pad(expected_word))
+
+
+def test_mix_in_selector_uses_a_full_thirty_two_byte_operand() -> None:
+    """The second operand is written out byte for byte, to pin the width down."""
+    root = Root(sample_chunks[1])
+    selector_word = Chunk(b"\x01" + b"\x00" * 31)
+    assert len(selector_word) == BYTES_PER_CHUNK
+    assert mix_in_selector(root, 1) == h(root, selector_word)
+    # A one-byte operand would give a different digest, so the width is not incidental.
+    assert mix_in_selector(root, 1) != Root(sha256(root + b"\x01").digest())
+
+
+@pytest.mark.parametrize("selector", [-1, 256, 1000])
+def test_mix_in_selector_rejects_a_value_wider_than_a_byte(selector: int) -> None:
+    """The operand holds one byte, so a wider value has nowhere to go."""
+    with pytest.raises(SSZValueError, match=r"does not fit one byte$"):
+        mix_in_selector(Root(sample_chunks[1]), selector)
+
+
+def test_mix_in_selector_separates_two_selectors_over_one_root() -> None:
+    """One root under two selectors yields two roots, which is the point of the mix-in."""
+    root = Root(sample_chunks[1])
+    assert mix_in_selector(root, 1) != mix_in_selector(root, 2)
+    assert mix_in_selector(root, 1) != mix_in_selector(root, 127)
 
 
 def test_zero_tree_root_internal() -> None:
@@ -1728,3 +1780,198 @@ def test_hash_tree_root_distinguishes_by_length() -> None:
     short_list = Uint16List1024(data=(Uint16(1), Uint16(2)))
     long_list = Uint16List1024(data=(Uint16(1), Uint16(2), Uint16(0)))
     assert hash_tree_root(short_list) != hash_tree_root(long_list)
+
+
+class UnionSquare(ProgressiveContainer):
+    """EIP-7495's Square, used as the first option of the EIP-8016 example union."""
+
+    ACTIVE_FIELDS = (1, 0, 1)
+
+    side: Uint16
+    color: Uint8
+
+
+class UnionCircle(ProgressiveContainer):
+    """EIP-7495's Circle, the second option: it shares position 2 with Square."""
+
+    ACTIVE_FIELDS = (0, 1, 1)
+
+    radius: Uint16
+    color: Uint8
+
+
+class UnionShape(CompatibleUnion):
+    """EIP-8016's own example, extended with the highest legal selector over Square."""
+
+    OPTIONS = {1: UnionSquare, 2: UnionCircle, 127: UnionSquare}
+
+
+class UnionSquareProgressiveList(ProgressiveList[UnionSquare]):
+    """Progressive list of Square, a variable-size union option."""
+
+
+class UnionCircleProgressiveList(ProgressiveList[UnionCircle]):
+    """Progressive list of Circle: compatible with the Square list, element for element."""
+
+
+class UnionShapeList(CompatibleUnion):
+    """Union whose two options differ only in the element type of a progressive list."""
+
+    OPTIONS = {1: UnionSquareProgressiveList, 2: UnionCircleProgressiveList}
+
+
+class UnionSquareOnly(CompatibleUnion):
+    """Single-option union, so a union of unions has a second member to hold."""
+
+    OPTIONS = {5: UnionSquare}
+
+
+class NestedUnionShape(CompatibleUnion):
+    """Union of unions: each option is itself a compatible union."""
+
+    OPTIONS = {1: UnionShape, 2: UnionSquareOnly}
+
+
+class UnionShapeHolder(Container):
+    """Ordinary container whose second field is a union."""
+
+    tag: Uint8
+    body: UnionShape
+
+
+class UnionShapeProgressiveHolder(ProgressiveContainer):
+    """Progressive container whose second field is a union, behind a gap."""
+
+    ACTIVE_FIELDS = (1, 0, 1)
+
+    tag: Uint8
+    body: UnionShape
+
+
+SQUARE_LEAVES = [pad(b"\x34\x12"), ZERO_ROOT, pad(b"\x42")]
+"""Square(side=0x1234, color=0x42) as one leaf per position of the layout [1, 0, 1]."""
+
+CIRCLE_LEAVES = [ZERO_ROOT, pad(b"\x34\x12"), pad(b"\x42")]
+"""Circle(radius=0x1234, color=0x42) as one leaf per position of the layout [0, 1, 1]."""
+
+
+def test_hash_tree_root_compatible_union_square_option() -> None:
+    """The root of the option alone, with the selector hashed in above it."""
+    value = UnionShape(selector=Uint8(1), data=UnionSquare(side=Uint16(0x1234), color=Uint8(0x42)))
+    square_root = expected_progressive_container_root(SQUARE_LEAVES, [1, 0, 1])
+    assert hash_tree_root(value) == h(square_root, pad(b"\x01"))
+
+
+def test_hash_tree_root_compatible_union_circle_option() -> None:
+    """The second option roots through its own layout, then through its own selector."""
+    value = UnionShape(
+        selector=Uint8(2), data=UnionCircle(radius=Uint16(0x1234), color=Uint8(0x42))
+    )
+    circle_root = expected_progressive_container_root(CIRCLE_LEAVES, [0, 1, 1])
+    assert hash_tree_root(value) == h(circle_root, pad(b"\x02"))
+
+
+def test_hash_tree_root_compatible_union_highest_selector() -> None:
+    """Selector 127 packs into the same word as any other, with bit seven of byte zero set."""
+    value = UnionShape(
+        selector=Uint8(127), data=UnionSquare(side=Uint16(0x1234), color=Uint8(0x42))
+    )
+    square_root = expected_progressive_container_root(SQUARE_LEAVES, [1, 0, 1])
+    assert hash_tree_root(value) == h(square_root, pad(b"\x7f"))
+
+
+def test_hash_tree_root_compatible_union_is_the_option_root_with_the_selector_mixed_in() -> None:
+    """The definition, stated as such: mix_in_selector over the root of the held value."""
+    square = UnionSquare(side=Uint16(0x1234), color=Uint8(0x42))
+    value = UnionShape(selector=Uint8(1), data=square)
+    assert hash_tree_root(value) == mix_in_selector(hash_tree_root(square), 1)
+    # The union contributes nothing else: no length, no option count, no layout word.
+    assert hash_tree_root(value) != hash_tree_root(square)
+
+
+def test_hash_tree_root_compatible_union_same_option_under_two_selectors() -> None:
+    """One payload under two selectors yields two roots, though the trees below are one."""
+    square = UnionSquare(side=Uint16(0x1234), color=Uint8(0x42))
+    under_one = UnionShape(selector=Uint8(1), data=square)
+    under_127 = UnionShape(selector=Uint8(127), data=square)
+    assert hash_tree_root(under_one.data) == hash_tree_root(under_127.data)
+    assert hash_tree_root(under_one) != hash_tree_root(under_127)
+
+
+def test_hash_tree_root_compatible_union_empty_list_options_collide_below_the_selector() -> None:
+    """
+    The security consideration of EIP-8016, in full.
+
+    Two options differ only in the element type of a progressive list. An empty list
+    roots the same whatever it would have held, so the two payloads present identical
+    inner roots. Only the selector separates the two union values, which is exactly what
+    the mix-in is there for.
+    """
+    empty_squares = UnionSquareProgressiveList(data=[])
+    empty_circles = UnionCircleProgressiveList(data=[])
+    # Both are the zero terminator with a zero count mixed in, reached by two paths.
+    assert hash_tree_root(empty_squares) == h(ZERO_ROOT, pad(b"\x00"))
+    assert hash_tree_root(empty_squares) == hash_tree_root(empty_circles)
+
+    under_one = UnionShapeList(selector=Uint8(1), data=empty_squares)
+    under_two = UnionShapeList(selector=Uint8(2), data=empty_circles)
+    # The wire bytes are one byte each and differ only in that byte, as the roots do.
+    assert under_one.encode_bytes().hex() == "01"
+    assert under_two.encode_bytes().hex() == "02"
+    assert hash_tree_root(under_one) == h(hash_tree_root(empty_squares), pad(b"\x01"))
+    assert hash_tree_root(under_two) == h(hash_tree_root(empty_circles), pad(b"\x02"))
+    assert hash_tree_root(under_one) != hash_tree_root(under_two)
+
+
+def test_hash_tree_root_compatible_union_populated_list_option() -> None:
+    """A populated option contributes its own length-mixed root before the selector."""
+    square_root = expected_progressive_container_root(SQUARE_LEAVES, [1, 0, 1])
+    value = UnionShapeList(
+        selector=Uint8(1),
+        data=UnionSquareProgressiveList(data=[UnionSquare(side=Uint16(0x1234), color=Uint8(0x42))]),
+    )
+    # One composite leaf on the spine, then the element count, then the selector.
+    list_root = mix_in_length(naive_merkleize_progressive([square_root]), 1)
+    assert hash_tree_root(value) == h(list_root, pad(b"\x01"))
+
+
+def test_hash_tree_root_compatible_union_of_unions() -> None:
+    """Each level mixes in its own selector, innermost first."""
+    value = NestedUnionShape(
+        selector=Uint8(1),
+        data=UnionShape(
+            selector=Uint8(2), data=UnionCircle(radius=Uint16(0x1234), color=Uint8(0x42))
+        ),
+    )
+    circle_root = expected_progressive_container_root(CIRCLE_LEAVES, [0, 1, 1])
+    assert hash_tree_root(value) == h(h(circle_root, pad(b"\x02")), pad(b"\x01"))
+
+
+def test_hash_tree_root_container_holding_a_compatible_union() -> None:
+    """A container merkleizes the union's selector-mixed root as an ordinary leaf."""
+    square = UnionSquare(side=Uint16(0x1234), color=Uint8(0x42))
+    value = UnionShapeHolder(tag=Uint8(0xFF), body=UnionShape(selector=Uint8(1), data=square))
+    union_root = h(expected_progressive_container_root(SQUARE_LEAVES, [1, 0, 1]), pad(b"\x01"))
+    assert hash_tree_root(value) == h(pad(b"\xff"), union_root)
+
+
+def test_hash_tree_root_progressive_container_holding_a_compatible_union() -> None:
+    """The union's root is the leaf at position 2, and the gap keeps its zero leaf."""
+    square = UnionSquare(side=Uint16(0x1234), color=Uint8(0x42))
+    value = UnionShapeProgressiveHolder(
+        tag=Uint8(0xFF), body=UnionShape(selector=Uint8(1), data=square)
+    )
+    union_root = h(expected_progressive_container_root(SQUARE_LEAVES, [1, 0, 1]), pad(b"\x01"))
+    assert hash_tree_root(value) == expected_progressive_container_root(
+        [pad(b"\xff"), ZERO_ROOT, union_root], [1, 0, 1]
+    )
+
+
+def test_compatible_union_options_share_their_bytes_and_not_their_roots() -> None:
+    """The two options encode to the same payload and merkleize under different selectors."""
+    square = UnionShape(selector=Uint8(1), data=UnionSquare(side=Uint16(0x1234), color=Uint8(0x42)))
+    circle = UnionShape(
+        selector=Uint8(2), data=UnionCircle(radius=Uint16(0x1234), color=Uint8(0x42))
+    )
+    assert square.encode_bytes()[1:] == circle.encode_bytes()[1:]
+    assert hash_tree_root(square) != hash_tree_root(circle)
