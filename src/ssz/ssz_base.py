@@ -2,8 +2,8 @@
 
 import io
 from abc import ABC, abstractmethod
-from collections.abc import Sequence
-from typing import IO, TYPE_CHECKING, Any, ClassVar, Final, Self, cast
+from collections.abc import Iterator, Sequence
+from typing import IO, TYPE_CHECKING, Any, ClassVar, Final, Self, cast, override
 
 from pydantic import ConfigDict
 
@@ -200,7 +200,7 @@ class SSZCollection[T](SSZModel):
 
     model_config = ConfigDict(frozen=False, validate_assignment=True)
 
-    data: Any
+    data: Sequence[T]
     """The contents, declared with its concrete type and default by each subclass."""
 
     @classmethod
@@ -227,6 +227,19 @@ class SSZCollection[T](SSZModel):
         """
         return cls(data=elements)
 
+    # The parent Pydantic model iterates field name and value pairs.
+    # Yielding the contents instead is the intended collection behavior.
+    # The narrower element type violates strict Liskov substitution, so it is suppressed.
+    @override
+    def __iter__(self) -> Iterator[T]:  # ty: ignore[invalid-method-override]
+        """
+        Iterate over the contents.
+
+        Defined here because the parent Pydantic model otherwise yields
+        name/value pairs of its fields.
+        """
+        return iter(self.data)
+
     def __setitem__(self, index: int | slice, value: T | Sequence[T]) -> None:
         """Replace the element(s) at ``index``, validating each new element."""
         self._require_mutable()
@@ -237,9 +250,9 @@ class SSZCollection[T](SSZModel):
             candidate = list(self.data)
             candidate[index] = elements
             self._validate_length(len(candidate))
-            self.data[index] = elements
+            cast("list[T]", self.data)[index] = elements
         else:
-            self.data[index] = self._validate_element(value)
+            cast("list[T]", self.data)[index] = self._validate_element(value)
 
     def _validate_element(self, value: Any) -> Any:
         """

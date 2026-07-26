@@ -409,6 +409,49 @@ class TestProgressiveBitlist:
         assert bitlist.pop() == Boolean(False)
         assert bitlist == ProgressiveBitlist(data=bits_of(1))
 
+    def test_progressive_bitlist_appends_past_a_bounded_limit(self) -> None:
+        """Growth runs past the bit count a bounded bitlist of the same shape refuses."""
+        bounded = Bitlist8(data=bits_of(1, 1, 1, 1, 1, 1, 1, 1))
+        with pytest.raises(ValueOrValidationError):
+            bounded.append(Boolean(True))
+
+        # The same shape with no capacity keeps going, well past that limit.
+        bitlist = ProgressiveBitlist(data=())
+        for _ in range(100):
+            bitlist.append(Boolean(True))
+        assert len(bitlist) == 100
+        assert bitlist == ProgressiveBitlist(data=[Boolean(True)] * 100)
+
+    def test_progressive_bitlist_slice_assignment_resizes(self) -> None:
+        """Slice assignment replaces a range, and may change the bit count either way."""
+        bitlist = ProgressiveBitlist(data=bits_of(1, 1, 1))
+        bitlist[1:] = bits_of(0)
+        assert bitlist == ProgressiveBitlist(data=bits_of(1, 0))
+        bitlist[0:1] = bits_of(0, 1, 1)
+        assert bitlist == ProgressiveBitlist(data=bits_of(0, 1, 1, 0))
+
+    def test_progressive_bitlist_mutation_coerces_raw_bits(self) -> None:
+        """Mutation wraps a raw bool in Boolean, exactly as construction does."""
+        bitlist = ProgressiveBitlist(data=bits_of(1))
+        bitlist.append(False)  # ty: ignore[invalid-argument-type]
+        bitlist[0] = False  # ty: ignore[invalid-assignment]
+        assert bitlist == ProgressiveBitlist(data=bits_of(0, 0))
+        assert all(type(bit) is Boolean for bit in bitlist.data)
+
+    def test_progressive_bitlist_mutation_rejects_a_non_bit(self) -> None:
+        """A value outside 0 and 1 is refused, leaving the stored bits untouched."""
+        bitlist = ProgressiveBitlist(data=bits_of(1))
+        with pytest.raises(SSZValueError):
+            bitlist.append(2)  # ty: ignore[invalid-argument-type]
+        assert bitlist == ProgressiveBitlist(data=bits_of(1))
+
+    def test_progressive_bitlist_mutation_moves_the_encoding(self) -> None:
+        """A mutated bitlist encodes as the bits it now holds, delimiter included."""
+        bitlist = ProgressiveBitlist(data=bits_of(1, 0, 1))
+        bitlist.append(Boolean(True))
+        assert bitlist.encode_bytes() == ProgressiveBitlist(data=bits_of(1, 0, 1, 1)).encode_bytes()
+        assert ProgressiveBitlist.decode_bytes(bitlist.encode_bytes()) == bitlist
+
     def test_is_variable_size_with_no_fixed_byte_length(self) -> None:
         """The shape reports variable-size and refuses to name a byte width."""
         assert ProgressiveBitlist.is_fixed_size() is False

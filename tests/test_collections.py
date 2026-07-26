@@ -12,7 +12,12 @@ from ssz.boolean import Boolean
 from ssz.byte_arrays import BaseBytes
 from ssz.collections import List, ProgressiveList, Vector, _validate_offsets
 from ssz.container import Container
-from ssz.exceptions import SSZSerializationError, SSZTypeError, SSZValueError
+from ssz.exceptions import (
+    SSZSerializationError,
+    SSZTypeError,
+    SSZTypeMismatch,
+    SSZValueError,
+)
 
 
 class Bytes32(BaseBytes):
@@ -1089,6 +1094,42 @@ class TestProgressiveListAccessors:
         instance.append(Uint8(2))
         assert instance == Uint8ProgressiveList(data=[Uint8(1), Uint8(2)])
         assert instance.pop() == Uint8(2)
+        assert instance == Uint8ProgressiveList(data=[Uint8(1)])
+
+    def test_progressive_list_appends_past_a_bounded_limit(self) -> None:
+        """Growth runs past the count a bounded list of the same element type refuses."""
+        bounded = Uint8List4(data=[Uint8(0)] * 4)
+        with pytest.raises(ValueOrValidationError):
+            bounded.append(Uint8(0))
+
+        # The same element type with no capacity keeps going, well past that limit.
+        instance = Uint8ProgressiveList(data=[])
+        for value in range(100):
+            instance.append(Uint8(value))
+        assert len(instance) == 100
+        assert instance == Uint8ProgressiveList(data=[Uint8(value) for value in range(100)])
+
+    def test_progressive_list_slice_assignment_resizes(self) -> None:
+        """Slice assignment replaces a range, and may change the length either way."""
+        instance = Uint8ProgressiveList(data=[Uint8(1), Uint8(2), Uint8(3)])
+        instance[1:] = [Uint8(9)]
+        assert instance == Uint8ProgressiveList(data=[Uint8(1), Uint8(9)])
+        instance[0:1] = [Uint8(7), Uint8(8), Uint8(9)]
+        assert instance == Uint8ProgressiveList(data=[Uint8(7), Uint8(8), Uint8(9), Uint8(9)])
+
+    def test_progressive_list_mutation_coerces_raw_values(self) -> None:
+        """Mutation coerces a raw value into the element type, exactly as construction does."""
+        instance = Uint8ProgressiveList(data=[Uint8(1)])
+        instance.append(2)  # ty: ignore[invalid-argument-type]
+        instance[0] = 3  # ty: ignore[invalid-assignment]
+        assert instance == Uint8ProgressiveList(data=[Uint8(3), Uint8(2)])
+        assert all(type(element) is Uint8 for element in instance)
+
+    def test_progressive_list_mutation_rejects_a_foreign_element(self) -> None:
+        """An element of another type is refused, leaving the stored elements untouched."""
+        instance = Uint8ProgressiveList(data=[Uint8(1)])
+        with pytest.raises(SSZTypeMismatch):
+            instance.append(Uint16(2))  # ty: ignore[invalid-argument-type]
         assert instance == Uint8ProgressiveList(data=[Uint8(1)])
 
     def test_of_builds_from_positional_elements(self) -> None:

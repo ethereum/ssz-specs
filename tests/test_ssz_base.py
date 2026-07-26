@@ -6,11 +6,11 @@ import pytest
 from pydantic import ValidationError
 
 from ssz import SSZLimitError, SSZTypeMismatch, Uint8, Uint16, Uint32, Uint64
-from ssz.bitfields import BaseBitlist, BaseBitvector
+from ssz.bitfields import BaseBitlist, BaseBitvector, ProgressiveBitlist
 from ssz.boolean import Boolean
 from ssz.byte_arrays import BaseByteList
-from ssz.collections import List, Vector
-from ssz.container import Container
+from ssz.collections import List, ProgressiveList, Vector
+from ssz.container import Container, ProgressiveContainer
 from ssz.exceptions import SSZTypeError, SSZValueError
 from ssz.merkleization import Root
 from ssz.ssz_base import SSZCollection
@@ -148,6 +148,44 @@ class TestSSZTypeEncodeDecode:
         """Encoding then decoding must recover the original object."""
         original = TwoFieldContainer(x=Uint8(255), y=Uint16(1000))
         assert TwoFieldContainer.decode_bytes(original.encode_bytes()) == original
+
+
+class TestSSZCollectionIteration:
+    """
+    Tests that every collection family iterates its contents.
+
+    The shared base defines the iteration, because the parent Pydantic model
+    would otherwise yield name/value pairs of its fields. The sequence family
+    covers the same behavior through its own accessor tests; the families
+    whose element type is fixed are covered here.
+    """
+
+    def test_bitvector_yields_its_bits(self) -> None:
+        """A bitvector iterates booleans, not the one field that holds them."""
+        bits = SmallBitvector(data=[Boolean(True), Boolean(False), Boolean(True)])
+        assert list(bits) == [Boolean(True), Boolean(False), Boolean(True)]
+
+    def test_bitlist_yields_its_bits(self) -> None:
+        """A bounded bitlist iterates booleans."""
+        bits = SmallBitlist(data=[Boolean(True), Boolean(False)])
+        assert list(bits) == [Boolean(True), Boolean(False)]
+
+    def test_progressive_bitlist_yields_its_bits(self) -> None:
+        """A progressive bitlist iterates booleans on the same terms."""
+        bits = ProgressiveBitlist(data=[Boolean(False), Boolean(True)])
+        assert list(bits) == [Boolean(False), Boolean(True)]
+
+    def test_byte_list_yields_its_byte_values(self) -> None:
+        """A byte list iterates integer byte values, matching what its API mutates by."""
+        payload = SmallByteList(data=b"\xde\xad")
+        assert list(payload) == [0xDE, 0xAD]
+
+    def test_membership_reads_the_contents(self) -> None:
+        """The in operator routes through iteration, so it tests contents, not field names."""
+        assert Boolean(True) in SmallBitlist(data=[Boolean(True)])
+        assert Boolean(True) not in SmallBitlist(data=[Boolean(False)])
+        assert 0xDE in SmallByteList(data=b"\xde\xad")
+        assert "data" not in SmallByteList(data=b"\xde\xad")
 
 
 class TestSSZCollectionMutation:
@@ -302,6 +340,53 @@ class TestSSZMutabilityFlag:
         with pytest.raises(SSZTypeError):
             container.x = Uint8(3)
         assert container.x == Uint8(1)
+
+    def test_immutable_progressive_list_rejects_mutation(self) -> None:
+        """The flag freezes a progressive list, which has no capacity of its own to stop it."""
+
+        class FrozenProgressiveList(ProgressiveList[Uint16]):
+            MUTABLE = False
+
+        values = FrozenProgressiveList(data=[Uint16(1), Uint16(2)])
+        with pytest.raises(SSZTypeError):
+            values[0] = Uint16(9)
+        with pytest.raises(SSZTypeError):
+            values.append(Uint16(3))
+        with pytest.raises(SSZTypeError):
+            values.pop()
+        with pytest.raises(SSZTypeError):
+            values.data = [Uint16(9)]
+        assert values == FrozenProgressiveList(data=[Uint16(1), Uint16(2)])
+
+    def test_immutable_progressive_bitlist_rejects_mutation(self) -> None:
+        """The flag freezes a progressive bitlist on the same terms."""
+
+        class FrozenProgressiveBitlist(ProgressiveBitlist):
+            MUTABLE = False
+
+        bits = FrozenProgressiveBitlist(data=[Boolean(True)])
+        with pytest.raises(SSZTypeError):
+            bits[0] = Boolean(False)
+        with pytest.raises(SSZTypeError):
+            bits.append(Boolean(False))
+        with pytest.raises(SSZTypeError):
+            bits.pop()
+        assert bits == FrozenProgressiveBitlist(data=[Boolean(True)])
+
+    def test_immutable_progressive_container_rejects_field_assignment(self) -> None:
+        """The flag freezes a progressive container while reads keep working."""
+
+        class FrozenSquare(ProgressiveContainer):
+            MUTABLE = False
+            ACTIVE_FIELDS = (1, 0, 1)
+
+            side: Uint16
+            color: Uint8
+
+        square = FrozenSquare(side=Uint16(0x1234), color=Uint8(0x42))
+        with pytest.raises(SSZTypeError):
+            square.side = Uint16(0x5678)
+        assert square.side == Uint16(0x1234)
 
     def test_mutability_flag_is_inherited(self) -> None:
         """A subclass of an immutable type stays immutable."""

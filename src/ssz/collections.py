@@ -33,7 +33,7 @@ For example, three variable-size bodies of widths 5, 3, and 7 encode to 27 bytes
 """
 
 import io
-from collections.abc import Iterator, Sequence
+from collections.abc import Sequence
 from itertools import pairwise
 from typing import (
     IO,
@@ -273,19 +273,6 @@ class _SSZSequence[T: SSZType](SSZCollection[T]):
     def __len__(self) -> int:
         """Return the number of elements in the sequence."""
         return len(self.data)
-
-    # The parent Pydantic model iterates field name and value pairs.
-    # Yielding elements instead is the intended collection behavior.
-    # The narrower element type violates strict Liskov substitution, so it is suppressed.
-    @override
-    def __iter__(self) -> Iterator[T]:  # ty: ignore[invalid-method-override]
-        """
-        Iterate over the elements.
-
-        Defined explicitly because the parent Pydantic model otherwise yields
-        name/value pairs of its fields.
-        """
-        return iter(self.data)
 
     @overload
     def __getitem__(self, index: int) -> T: ...
