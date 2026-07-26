@@ -14,7 +14,7 @@ import io
 from itertools import pairwise
 from typing import IO, Any, ClassVar, Final, Self, override
 
-from pydantic import model_validator
+from pydantic import ConfigDict, model_validator
 from pydantic.functional_validators import ModelWrapValidatorHandler
 
 from ssz.exceptions import (
@@ -42,7 +42,24 @@ class _SSZContainer(SSZModel):
     Shared wire format for the two SSZ struct shapes.
 
     Both shapes encode the same way and differ only in how their fields are merkleized.
+
+    Containers are mutable: assigning a field revalidates the value against
+    the field's declared type, exactly as construction does. Assignment is
+    typed against the declared field types, so type checkers flag raw values
+    even though runtime validation coerces them. Hashing is by Merkle tree
+    root, so containers work as dict keys and set members with value
+    semantics that match equality. Mutability itself is configurable
+    through the inherited MUTABLE flag.
     """
+
+    model_config = ConfigDict(frozen=False, validate_assignment=True)
+
+    def __hash__(self) -> int:
+        """Hash by Merkle tree root — equal containers hash equally."""
+        # Deferred import: the merkleization module imports the SSZ types.
+        from ssz.merkleization import hash_tree_root
+
+        return hash(hash_tree_root(self))
 
     @model_validator(mode="wrap")
     @classmethod

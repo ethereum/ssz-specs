@@ -33,7 +33,7 @@ For example, three variable-size bodies of widths 5, 3, and 7 encode to 27 bytes
 """
 
 import io
-from collections.abc import Iterator, Sequence
+from collections.abc import Sequence
 from itertools import pairwise
 from typing import (
     IO,
@@ -99,7 +99,7 @@ def _validate_offsets(offsets: list[int], scope: int, type_name: str) -> None:
         )
 
 
-def _coerce_elements(element_type: type[SSZType], elements: Sequence[Any]) -> tuple[SSZType, ...]:
+def _coerce_elements(element_type: type[SSZType], elements: Sequence[Any]) -> list[SSZType]:
     """
     Coerce every element of an already-shaped sequence into the declared type.
 
@@ -124,10 +124,10 @@ def _coerce_elements(element_type: type[SSZType], elements: Sequence[Any]) -> tu
             raise SSZTypeMismatch(
                 element_type.__name__, type(element), detail=str(exception)
             ) from exception
-    return tuple(coerced)
+    return coerced
 
 
-class _SSZSequence[T: SSZType](SSZCollection):
+class _SSZSequence[T: SSZType](SSZCollection[T]):
     """
     Shared scaffolding for fixed- and variable-length SSZ sequences.
 
@@ -147,13 +147,19 @@ class _SSZSequence[T: SSZType](SSZCollection):
     ELEMENT_TYPE: ClassVar[type[SSZType]]
     """SSZ type of every element, inferred from the generic parameter."""
 
-    data: Sequence[T] = Field(default_factory=tuple)
+    data: Sequence[T] = Field(default_factory=list)
     """
-    Immutable sequence of elements.
+    The sequence of elements.
 
     Accepts lists, tuples, or iterables of compatible values on input.
-    Stored as an immutable tuple after validation.
+    Stored as a list after validation. Mutate through the collection API so
+    every element is validated on entry.
     """
+
+    @override
+    def _validate_element(self, value: Any) -> T:
+        """Coerce one incoming element exactly as construction does."""
+        return cast("T", _coerce_elements(type(self).ELEMENT_TYPE, (value,))[0])
 
     @classmethod
     def __pydantic_init_subclass__(cls, **kwargs: Any) -> None:
@@ -268,26 +274,13 @@ class _SSZSequence[T: SSZType](SSZCollection):
         """Return the number of elements in the sequence."""
         return len(self.data)
 
-    # The parent Pydantic model iterates field name and value pairs.
-    # Yielding elements instead is the intended collection behavior.
-    # The narrower element type violates strict Liskov substitution, so it is suppressed.
-    @override
-    def __iter__(self) -> Iterator[T]:  # ty: ignore[invalid-method-override]
-        """
-        Iterate over the elements.
-
-        Defined explicitly because the parent Pydantic model otherwise yields
-        name/value pairs of its fields.
-        """
-        return iter(self.data)
-
     @overload
     def __getitem__(self, index: int) -> T: ...
     @overload
     def __getitem__(self, index: slice) -> Sequence[T]: ...
 
     def __getitem__(self, index: int | slice) -> T | Sequence[T]:
-        """Index by integer or slice the underlying tuple."""
+        """Index by integer or slice the underlying list."""
         return self.data[index]
 
     @property
@@ -322,7 +315,7 @@ class _SSZSequence[T: SSZType](SSZCollection):
 
 class Vector[T: SSZType](_SSZSequence[T]):
     """
-    Fixed-length, immutable SSZ sequence.
+    Fixed-length SSZ sequence.
 
     Holds exactly LENGTH elements of one declared type.
     The element count is pinned at the type level and never changes at runtime.
@@ -354,7 +347,7 @@ class Vector[T: SSZType](_SSZSequence[T]):
 
     @field_validator("data", mode="before")
     @classmethod
-    def _coerce_and_validate(cls, raw_input: Any) -> tuple[SSZType, ...]:
+    def _coerce_and_validate(cls, raw_input: Any) -> list[SSZType]:
         """
         Enforce the exact element count and coerce inputs into ELEMENT_TYPE.
 
@@ -493,6 +486,19 @@ class _SSZList[T: SSZType](_SSZSequence[T]):
         A progressive list has no capacity, so it rejects nothing.
         The bounded list overrides this with its capacity check.
         """
+
+    def append(self, value: T) -> None:
+        """Add one element at the end, validating it and the resulting length."""
+        self._require_mutable()
+        element = self._validate_element(value)
+        self._validate_length(len(self.data) + 1)
+        cast("list[T]", self.data).append(element)
+
+    def pop(self) -> T:
+        """Remove and return the last element, validating the resulting length."""
+        self._require_mutable()
+        self._validate_length(len(self.data) - 1)
+        return cast("list[T]", self.data).pop()
 
     def __add__(self, other: Any) -> Self:
         """
@@ -659,7 +665,7 @@ class List[T: SSZType](_SSZList[T]):
 
     @field_validator("data", mode="before")
     @classmethod
-    def _coerce_and_validate(cls, raw_input: Any) -> tuple[SSZType, ...]:
+    def _coerce_and_validate(cls, raw_input: Any) -> list[SSZType]:
         """
         Enforce the maximum element count and coerce inputs into ELEMENT_TYPE.
 
@@ -733,7 +739,7 @@ class ProgressiveList[T: SSZType](_SSZList[T]):
 
     @field_validator("data", mode="before")
     @classmethod
-    def _coerce_and_validate(cls, raw_input: Any) -> tuple[SSZType, ...]:
+    def _coerce_and_validate(cls, raw_input: Any) -> list[SSZType]:
         """Coerce every input into the declared element type, with no count rule to apply."""
         # The element type is the one declaration this shape needs, and coercion needs it.
         if not hasattr(cls, "ELEMENT_TYPE"):

@@ -22,6 +22,7 @@ from ssz.exceptions import (
     SSZSerializationError,
     SSZTypeError,
 )
+from ssz.merkleization import hash_tree_root
 from ssz.uint import Uint8, Uint16, Uint32, Uint64
 
 
@@ -1096,6 +1097,72 @@ class TestContainerUnaffectedByTheSharedBase:
         # Neither shape writes any layout information: the bytes are the fields alone.
         assert bounded.encode_bytes() == progressive.encode_bytes()
         assert TwoUint64.get_byte_length() == TwoUint64Progressive.get_byte_length() == 16
+
+
+class TestProgressiveContainerMutation:
+    """
+    The progressive shape mutates on the terms the shared base sets.
+
+    Field assignment, coercion, and root-based hashing live on that base, so
+    the progressive shape carries them without declaring anything itself.
+    """
+
+    def test_field_assignment_revalidates(self) -> None:
+        """Assigning a field replaces the value through full revalidation."""
+        square = Square(side=Uint16(0x1234), color=Uint8(0x42))
+        square.side = Uint16(0x5678)
+        assert square == Square(side=Uint16(0x5678), color=Uint8(0x42))
+
+    def test_field_assignment_coerces_a_raw_value(self) -> None:
+        """A raw integer coerces into the declared field type, exactly as at construction."""
+        square = Square(side=Uint16(0x1234), color=Uint8(0x42))
+        square.color = 0x99  # ty: ignore[invalid-assignment]
+        assert square == Square(side=Uint16(0x1234), color=Uint8(0x99))
+
+    def test_field_assignment_rejects_an_out_of_range_value(self) -> None:
+        """A value the field type cannot hold is rejected, leaving the field unchanged."""
+        square = Square(side=Uint16(0x1234), color=Uint8(0x42))
+        with pytest.raises((SSZTypeError, ValidationError)):
+            square.color = 256  # ty: ignore[invalid-assignment]
+        assert square.color == Uint8(0x42)
+
+    def test_mutation_moves_the_encoding_and_the_root(self) -> None:
+        """A mutated value encodes and merkleizes as the value it now holds."""
+        mutated = Square(side=Uint16(0x1234), color=Uint8(0x42))
+        mutated.color = Uint8(0x99)
+        rebuilt = Square(side=Uint16(0x1234), color=Uint8(0x99))
+        assert mutated.encode_bytes() == rebuilt.encode_bytes()
+        assert hash_tree_root(mutated) == hash_tree_root(rebuilt)
+
+    def test_hashes_by_tree_root(self) -> None:
+        """Equal progressive containers hash equally, so they work as dict keys."""
+        first = Square(side=Uint16(0x1234), color=Uint8(0x42))
+        second = Square(side=Uint16(0x1234), color=Uint8(0x42))
+        assert hash(first) == hash(second)
+        assert {first: "found"}[second] == "found"
+
+    def test_two_layouts_holding_the_same_fields_hash_apart(self) -> None:
+        """The layout is mixed into the root, so it separates two otherwise equal values."""
+        square = Square(side=Uint16(0x1234), color=Uint8(0x42))
+        circle = Circle(radius=Uint16(0x1234), color=Uint8(0x42))
+        # The same three bytes on the wire, and two different roots, so two different hashes.
+        assert square.encode_bytes() == circle.encode_bytes()
+        assert hash(square) != hash(circle)
+
+    def test_a_progressive_field_mutates_in_place(self) -> None:
+        """A progressive collection held as a field grows through the field itself."""
+        instance = ProgressiveFieldsProgressive(
+            head=Uint32(1),
+            numbers=Uint16ProgressiveList(data=[Uint16(1)]),
+            flags=ProgressiveBitlist(data=[Boolean(True)]),
+        )
+        instance.numbers.append(Uint16(2))
+        instance.flags.append(Boolean(False))
+        assert instance == ProgressiveFieldsProgressive(
+            head=Uint32(1),
+            numbers=Uint16ProgressiveList(data=[Uint16(1), Uint16(2)]),
+            flags=ProgressiveBitlist(data=[Boolean(True), Boolean(False)]),
+        )
 
 
 @given(

@@ -11,7 +11,7 @@ Two flavors are defined by the SSZ spec:
 Both flavors serialize as the raw bytes themselves — no length prefix, no delimiter.
 """
 
-from collections.abc import Iterable
+from collections.abc import Iterable, Sequence
 from typing import IO, Any, ClassVar, Self, override
 
 from pydantic import Field, field_serializer, field_validator
@@ -240,7 +240,7 @@ class BaseBytes(bytes, SSZType):
         return hash((type(self), bytes(self)))
 
 
-class BaseByteList(SSZCollection):
+class BaseByteList(SSZCollection[int]):
     r"""
     Variable-length SSZ byte array with 0 to N bytes.
 
@@ -277,6 +277,29 @@ class BaseByteList(SSZCollection):
     def _serialize_data(self, value: bytes) -> str:
         """Serialize the raw bytes to a 0x-prefixed hex string for JSON output."""
         return "0x" + value.hex()
+
+    @override
+    def __setitem__(self, index: int | slice, value: int | Sequence[int]) -> None:
+        """Replace the byte(s) at ``index``, revalidating the stored payload."""
+        self._require_mutable()
+        working = bytearray(self.data)
+        working[index] = value  # ty: ignore[invalid-assignment]
+        self.data = bytes(working)
+
+    def append(self, value: int) -> None:
+        """Add one byte at the end, revalidating the stored payload."""
+        self._require_mutable()
+        working = bytearray(self.data)
+        working.append(value)
+        self.data = bytes(working)
+
+    def pop(self) -> int:
+        """Remove and return the last byte, revalidating the stored payload."""
+        self._require_mutable()
+        working = bytearray(self.data)
+        last = working.pop()
+        self.data = bytes(working)
+        return last
 
     @classmethod
     @override

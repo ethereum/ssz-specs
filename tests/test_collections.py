@@ -12,7 +12,12 @@ from ssz.boolean import Boolean
 from ssz.byte_arrays import BaseBytes
 from ssz.collections import List, ProgressiveList, Vector, _validate_offsets
 from ssz.container import Container
-from ssz.exceptions import SSZSerializationError, SSZTypeError, SSZValueError
+from ssz.exceptions import (
+    SSZSerializationError,
+    SSZTypeError,
+    SSZTypeMismatch,
+    SSZValueError,
+)
 
 
 class Bytes32(BaseBytes):
@@ -381,10 +386,10 @@ class TestVectorAccessors:
         assert instance[-4] == Uint8(10)
 
     def test_slice_returns_sequence(self) -> None:
-        """Slicing returns the underlying tuple slice of typed elements."""
+        """Slicing returns the underlying list slice of typed elements."""
         instance = Uint8Vector4(data=[Uint8(1), Uint8(2), Uint8(3), Uint8(4)])
 
-        assert instance[1:3] == (Uint8(2), Uint8(3))
+        assert instance[1:3] == [Uint8(2), Uint8(3)]
 
     def test_elements_returns_mutable_copy(self) -> None:
         """The elements property exposes a mutable list copy of the data."""
@@ -396,12 +401,11 @@ class TestVectorAccessors:
         assert copy == [Uint8(1), Uint8(2), Uint8(3), Uint8(4), Uint8(9)]
         assert list(instance) == [Uint8(1), Uint8(2), Uint8(3), Uint8(4)]
 
-    def test_vector_is_immutable(self) -> None:
-        """Item assignment raises because the underlying model is frozen."""
+    def test_vector_item_assignment_revalidates(self) -> None:
+        """Item assignment replaces the element through full revalidation."""
         instance = Uint8Vector2(data=[Uint8(1), Uint8(2)])
-
-        with pytest.raises(TypeError):
-            instance[0] = 3  # type: ignore[index]
+        instance[0] = Uint8(3)
+        assert instance == Uint8Vector2(data=[Uint8(3), Uint8(2)])
 
     def test_pydantic_dict_input_coerces_to_vector(self) -> None:
         """Pydantic coerces a dict payload into an Vector with typed elements."""
@@ -575,10 +579,10 @@ class TestListAccessors:
         assert instance[-3] == Uint8(10)
 
     def test_slice_returns_sequence(self) -> None:
-        """Slicing returns the underlying tuple slice of typed elements."""
+        """Slicing returns the underlying list slice of typed elements."""
         instance = Uint8List4(data=[Uint8(1), Uint8(2), Uint8(3)])
 
-        assert instance[1:3] == (Uint8(2), Uint8(3))
+        assert instance[1:3] == [Uint8(2), Uint8(3)]
 
     def test_elements_returns_mutable_copy(self) -> None:
         """The elements property exposes a mutable list copy of the data."""
@@ -1063,10 +1067,10 @@ class TestProgressiveListAccessors:
         assert instance[-3] == Uint8(10)
 
     def test_slice_returns_sequence(self) -> None:
-        """Slicing returns the underlying tuple slice of typed elements."""
+        """Slicing returns the underlying list slice of typed elements."""
         instance = Uint8ProgressiveList(data=[Uint8(1), Uint8(2), Uint8(3)])
 
-        assert instance[1:3] == (Uint8(2), Uint8(3))
+        assert instance[1:3] == [Uint8(2), Uint8(3)]
 
     def test_elements_returns_mutable_copy(self) -> None:
         """The elements property exposes a mutable list copy of the data."""
@@ -1078,12 +1082,55 @@ class TestProgressiveListAccessors:
         assert copy == [Uint8(1), Uint8(2), Uint8(9)]
         assert list(instance) == [Uint8(1), Uint8(2)]
 
-    def test_progressive_list_is_immutable(self) -> None:
-        """Item assignment raises because the underlying model is frozen."""
+    def test_progressive_list_item_assignment_revalidates(self) -> None:
+        """Item assignment replaces the element through full revalidation."""
         instance = Uint8ProgressiveList(data=[Uint8(1), Uint8(2)])
+        instance[0] = Uint8(3)
+        assert instance == Uint8ProgressiveList(data=[Uint8(3), Uint8(2)])
 
-        with pytest.raises(TypeError):
-            instance[0] = 3  # type: ignore[index]
+    def test_progressive_list_grows_without_a_capacity(self) -> None:
+        """Append and pop work, and no capacity bounds the growth."""
+        instance = Uint8ProgressiveList(data=[Uint8(1)])
+        instance.append(Uint8(2))
+        assert instance == Uint8ProgressiveList(data=[Uint8(1), Uint8(2)])
+        assert instance.pop() == Uint8(2)
+        assert instance == Uint8ProgressiveList(data=[Uint8(1)])
+
+    def test_progressive_list_appends_past_a_bounded_limit(self) -> None:
+        """Growth runs past the count a bounded list of the same element type refuses."""
+        bounded = Uint8List4(data=[Uint8(0)] * 4)
+        with pytest.raises(ValueOrValidationError):
+            bounded.append(Uint8(0))
+
+        # The same element type with no capacity keeps going, well past that limit.
+        instance = Uint8ProgressiveList(data=[])
+        for value in range(100):
+            instance.append(Uint8(value))
+        assert len(instance) == 100
+        assert instance == Uint8ProgressiveList(data=[Uint8(value) for value in range(100)])
+
+    def test_progressive_list_slice_assignment_resizes(self) -> None:
+        """Slice assignment replaces a range, and may change the length either way."""
+        instance = Uint8ProgressiveList(data=[Uint8(1), Uint8(2), Uint8(3)])
+        instance[1:] = [Uint8(9)]
+        assert instance == Uint8ProgressiveList(data=[Uint8(1), Uint8(9)])
+        instance[0:1] = [Uint8(7), Uint8(8), Uint8(9)]
+        assert instance == Uint8ProgressiveList(data=[Uint8(7), Uint8(8), Uint8(9), Uint8(9)])
+
+    def test_progressive_list_mutation_coerces_raw_values(self) -> None:
+        """Mutation coerces a raw value into the element type, exactly as construction does."""
+        instance = Uint8ProgressiveList(data=[Uint8(1)])
+        instance.append(2)  # ty: ignore[invalid-argument-type]
+        instance[0] = 3  # ty: ignore[invalid-assignment]
+        assert instance == Uint8ProgressiveList(data=[Uint8(3), Uint8(2)])
+        assert all(type(element) is Uint8 for element in instance)
+
+    def test_progressive_list_mutation_rejects_a_foreign_element(self) -> None:
+        """An element of another type is refused, leaving the stored elements untouched."""
+        instance = Uint8ProgressiveList(data=[Uint8(1)])
+        with pytest.raises(SSZTypeMismatch):
+            instance.append(Uint16(2))  # ty: ignore[invalid-argument-type]
+        assert instance == Uint8ProgressiveList(data=[Uint8(1)])
 
     def test_of_builds_from_positional_elements(self) -> None:
         """The of factory takes each argument as exactly one element."""
