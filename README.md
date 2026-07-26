@@ -22,9 +22,12 @@ repository implements:
 - **Progressive containers** ([EIP-7495](https://eips.ethereum.org/EIPS/eip-7495)):
   `ProgressiveContainer` with an `ACTIVE_FIELDS` layout, whose fields keep their tree
   positions as later versions add or drop fields.
+- **Compatible unions** ([EIP-8016](https://eips.ethereum.org/EIPS/eip-8016)):
+  `CompatibleUnion` with an `OPTIONS` map, whose type options all merkleize into one tree
+  shape, so a field keeps its position across every variant.
 - **(De)serialization**: canonical encode/decode with strict, offset-based decoding.
 - **Merkleization**: `hash_tree_root`, `merkleize`, `merkleize_progressive`,
-  `mix_in_length`, and `mix_in_active_fields`.
+  `mix_in_length`, `mix_in_active_fields`, and `mix_in_selector`.
 
 ## Project Structure
 
@@ -39,6 +42,7 @@ src/ssz/
   bitfields.py         # Bitvector / Bitlist / ProgressiveBitlist
   collections.py       # Vector / List / ProgressiveList
   container.py         # Container / ProgressiveContainer
+  union.py             # CompatibleUnion and the compatible-merkleization relation
   exceptions.py        # SSZ error hierarchy
   merkleization.py     # hash_tree_root dispatch and Merkle primitives
 tests/                 # pytest unit tests mirroring the source modules

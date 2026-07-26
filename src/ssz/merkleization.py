@@ -16,6 +16,7 @@ from ssz.collections import List, ProgressiveList, Vector
 from ssz.container import Container, ProgressiveContainer
 from ssz.exceptions import SSZTypeError, SSZValueError
 from ssz.uint import BaseUint
+from ssz.union import CompatibleUnion
 
 BYTES_PER_CHUNK: Final = 32
 """Width of a Merkle leaf chunk in bytes."""
@@ -273,6 +274,36 @@ def mix_in_active_fields(root: Root, active_fields: Sequence[int]) -> Root:
     return Root(sha256(root + packed_bits.to_bytes(BYTES_PER_CHUNK, "little")).digest())
 
 
+def mix_in_selector(root: Root, selector: int) -> Root:
+    """
+    Mix a type selector into a Merkle root, per EIP-8016.
+
+    The spec writes the selector as a one-byte integer.
+    A hash operand is one chunk, so the byte is zero-extended to 32:
+
+        selector 1  ->  01 00 00 ... 00
+
+    Mixing it in separates options that would otherwise root alike:
+
+    - Two options holding equal data would otherwise root identically.
+    - Two options differing only in a list's element type collide while that list is empty.
+
+    Args:
+        root: Merkle root of the value the union holds.
+        selector: Selector of the option it holds.
+
+    Returns:
+        The selector-mixed root.
+
+    Raises:
+        SSZValueError: If the selector does not fit one byte.
+    """
+    if not 0 <= selector <= 0xFF:
+        raise SSZValueError(f"selector {selector} does not fit one byte")
+    # A selector fits one byte, so the value always lands in the first of the 32.
+    return Root(sha256(root + selector.to_bytes(BYTES_PER_CHUNK, "little")).digest())
+
+
 def _pack_bytes(data: bytes) -> list[Chunk]:
     """
     Right-pad serialized bytes to a chunk boundary and split into chunks.
@@ -428,6 +459,12 @@ def _hash_tree_root_progressive_container(value: ProgressiveContainer) -> Root:
         leaves[position] = hash_tree_root(getattr(value, name))
 
     return mix_in_active_fields(merkleize_progressive(leaves), cls.ACTIVE_FIELDS)
+
+
+@hash_tree_root.register
+def _hash_tree_root_compatible_union(value: CompatibleUnion) -> Root:
+    # The union adds no leaf of its own: the option's own root is the whole tree below.
+    return mix_in_selector(hash_tree_root(value.data), int(value.selector))
 
 
 @hash_tree_root.register

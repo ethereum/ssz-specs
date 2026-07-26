@@ -122,18 +122,18 @@ class SSZModel(StrictBaseModel, SSZType):
     """
 
     def __len__(self) -> int:
-        """Element count for collections, field count for containers."""
-        data_field = getattr(self, "data", None)
-        if data_field is not None:
-            return len(data_field)
+        """Element count for a collection, field count for every other shape."""
+        # The base class decides, not the field name.
+        # A union names its payload field the way the spec does, and is not a collection.
+        if isinstance(self, SSZCollection):
+            return len(self.data)
         return len(type(self).model_fields)
 
     def __repr__(self) -> str:
-        """Show collection contents as data=[...] or container fields as name=value pairs."""
+        """Show a collection's contents, and any other shape's fields by name."""
         cls_name = type(self).__name__
-        data_field = getattr(self, "data", None)
-        if data_field is not None:
-            return f"{cls_name}(data={list(data_field)!r})"
+        if isinstance(self, SSZCollection):
+            return f"{cls_name}(data={list(self.data)!r})"
         field_strs = [f"{name}={getattr(self, name)!r}" for name in type(self).model_fields]
         return f"{cls_name}({' '.join(field_strs)})"
 
@@ -145,12 +145,17 @@ class SSZCollection(SSZModel):
     Sequences, bitfields, and byte lists all share this base.
     Containers do not — their contents live in named fields, not a single data field.
 
+    Every subclass wraps its contents in one field named data.
+
     Construction passes the field by keyword, or the elements positionally
     through the `of` factory:
 
         Uint8List4(data=[1, 2, 3])
         Uint8List4.of(1, 2, 3)
     """
+
+    data: Any
+    """The contents, declared with its concrete type and default by each subclass."""
 
     @classmethod
     def of(cls, *elements: Any) -> Self:
@@ -174,5 +179,4 @@ class SSZCollection(SSZModel):
         Returns:
             A new instance holding exactly the given elements.
         """
-        # The data field is declared by each concrete subclass, not this base.
-        return cls(data=elements)  # ty: ignore[unknown-argument]
+        return cls(data=elements)

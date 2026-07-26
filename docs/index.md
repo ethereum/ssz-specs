@@ -46,6 +46,20 @@ dropping a field in a later version leaves every other field where it was. The l
 mixed into the root, which is what keeps a dropped field distinct from a field holding
 zero. Serialization is that of an ordinary container, and a gap costs no bytes.
 
+### Compatible Unions
+
+[EIP-8016](https://eips.ethereum.org/EIPS/eip-8016) adds a tagged union whose options all
+merkleize into one tree shape. `CompatibleUnion` in `src/ssz/union.py` carries an `OPTIONS`
+map from selector to type, and a value pairs the selector with the option it holds.
+
+A field keeps one tree position across every option, so a proof about it verifies against
+any option that declares it. The selector leads on the wire and is mixed into the root,
+which separates options that would otherwise root alike.
+
+Which types may share a union is decided by compatible merkleization, the rules the SSZ
+spec states for when two types merkleize into one shape. They live alongside the type in
+`src/ssz/union.py`, since the union is the only thing that requires them.
+
 ### Merkleization
 
 The `hash_tree_root` dispatch and the Merkleization primitives live in

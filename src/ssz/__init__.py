@@ -20,11 +20,13 @@ from ssz.exceptions import (
     SSZSerializationError,
     SSZTypeError,
     SSZTypeMismatch,
+    SSZUnionOptionsError,
     SSZValueError,
 )
 from ssz.merkleization import ZERO_ROOT, Chunk, Root
 from ssz.ssz_base import SSZType
 from ssz.uint import Uint8, Uint16, Uint32, Uint64, Uint128, Uint256
+from ssz.union import CompatibleUnion
 
 __all__ = [
     "BaseBitlist",
@@ -32,6 +34,7 @@ __all__ = [
     "BaseByteList",
     "BaseBytes",
     "Chunk",
+    "CompatibleUnion",
     "Root",
     "ZERO_ROOT",
     "Boolean",
@@ -52,6 +55,7 @@ __all__ = [
     "SSZType",
     "SSZTypeError",
     "SSZTypeMismatch",
+    "SSZUnionOptionsError",
     "SSZValueError",
     "Uint8",
     "Uint16",
