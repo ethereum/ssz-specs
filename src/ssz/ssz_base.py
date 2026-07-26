@@ -144,7 +144,7 @@ class SSZModel(StrictBaseModel, SSZType):
     # Hidden from type checkers: a visible __setattr__ typed to accept Any
     # would exempt every field assignment from static checking against the
     # declared field types.
-    if not TYPE_CHECKING:
+    if not TYPE_CHECKING:  # pragma: no cover
 
         def __setattr__(self, name: str, value: Any) -> None:
             """Gate field assignment on the MUTABLE flag, then validate as usual."""
