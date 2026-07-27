@@ -1,19 +1,32 @@
 """Tests for SSZModel and SSZType base class behavior."""
 
+from collections.abc import Callable
+from decimal import Decimal
 from typing import Any, cast
 
 import pytest
 from pydantic import ValidationError
 
-from ssz import SSZLimitError, SSZTypeMismatch, Uint8, Uint16, Uint32, Uint64
+from ssz import (
+    SSZLengthError,
+    SSZLimitError,
+    SSZTypeMismatch,
+    Uint8,
+    Uint16,
+    Uint32,
+    Uint64,
+    Uint128,
+    Uint256,
+)
 from ssz.bitfields import BaseBitlist, BaseBitvector, ProgressiveBitlist
 from ssz.boolean import Boolean
-from ssz.byte_arrays import BaseByteList
+from ssz.byte_arrays import BaseByteList, BaseBytes
 from ssz.collections import List, ProgressiveList, Vector
 from ssz.container import Container, ProgressiveContainer
 from ssz.exceptions import SSZDefaultError, SSZError, SSZTypeError, SSZValueError
-from ssz.merkleization import Root
+from ssz.merkleization import Root, hash_tree_root
 from ssz.ssz_base import SSZCollection, SSZType
+from ssz.uint import BaseUint
 from ssz.union import CompatibleUnion
 
 
@@ -92,6 +105,86 @@ class SmallUnion(CompatibleUnion):
     """A union over one option, the only shape the spec gives no default value."""
 
     OPTIONS = {1: Uint8}
+
+
+# Six families declare how many elements they hold.
+# Each one appears twice below, once with a typed count and once with a plain integer.
+# A pair declared both ways is what makes a byte-for-byte comparison possible.
+#
+# Every capacity here is 4.
+# One shared payload therefore exercises all six.
+
+
+class TypedLengthVector(Vector[Uint8]):
+    """A vector whose element count is declared with a typed value."""
+
+    LENGTH = Uint64(4)
+
+
+class PlainLengthVector(Vector[Uint8]):
+    """The same vector, declared with a plain integer."""
+
+    LENGTH = 4
+
+
+class TypedLimitList(List[Uint8]):
+    """A list whose capacity is declared with a typed value."""
+
+    LIMIT = Uint64(4)
+
+
+class PlainLimitList(List[Uint8]):
+    """The same list, declared with a plain integer."""
+
+    LIMIT = 4
+
+
+class TypedLengthBitvector(BaseBitvector):
+    """A bitvector whose bit count is declared with a typed value."""
+
+    LENGTH = Uint64(4)
+
+
+class PlainLengthBitvector(BaseBitvector):
+    """The same bitvector, declared with a plain integer."""
+
+    LENGTH = 4
+
+
+class TypedLimitBitlist(BaseBitlist):
+    """A bitlist whose capacity is declared with a typed value."""
+
+    LIMIT = Uint64(4)
+
+
+class PlainLimitBitlist(BaseBitlist):
+    """The same bitlist, declared with a plain integer."""
+
+    LIMIT = 4
+
+
+class TypedLengthBytes(BaseBytes):
+    """A fixed byte array whose byte count is declared with a typed value."""
+
+    LENGTH = Uint64(4)
+
+
+class PlainLengthBytes(BaseBytes):
+    """The same fixed byte array, declared with a plain integer."""
+
+    LENGTH = 4
+
+
+class TypedLimitByteList(BaseByteList):
+    """A byte list whose capacity is declared with a typed value."""
+
+    LIMIT = Uint64(4)
+
+
+class PlainLimitByteList(BaseByteList):
+    """The same byte list, declared with a plain integer."""
+
+    LIMIT = 4
 
 
 class TestSSZModelLength:
@@ -907,3 +1000,373 @@ class TestSSZCollectionOf:
             cast(Any, Uint16List4)([1, 2])
         with pytest.raises(TypeError):
             cast(Any, TwoFieldContainer)(Uint8(1), Uint16(2))
+
+
+class TestDeclaredCapacity:
+    """
+    Tests for declaring how many elements a shape holds with a typed value.
+
+    A consensus spec keeps its length constants as fixed-width unsigned integers.
+    Casting each one at the point it becomes a capacity would mean casting almost all of them.
+    So a typed value is accepted, then narrowed to a plain integer as the type is built:
+
+        class Attestations(List[Attestation]):
+            LIMIT = MAX_ATTESTATIONS   # already a 64-bit unsigned integer
+
+    Two facts make that narrowing necessary rather than cosmetic.
+
+    - Every element count this library computes internally is a plain integer.
+    - This library's unsigned integers refuse to compare against a plain integer at all.
+
+    So a capacity left typed reaches an internal comparison it cannot take part in.
+
+    Six families declare a capacity, in one of two kinds:
+
+        vector, bitvector, fixed byte array   an exact count
+        list, bitlist, byte list              an upper bound
+
+    All six narrow a typed count through the same step on the base they share.
+
+    A value that counts nothing is refused where it is written.
+    Accepting one would turn it into a wrong count somewhere much further away.
+    """
+
+    @pytest.mark.parametrize(
+        "declared_type, capacity_name",
+        [
+            pytest.param(TypedLengthVector, "LENGTH", id="vector"),
+            pytest.param(TypedLimitList, "LIMIT", id="list"),
+            pytest.param(TypedLengthBitvector, "LENGTH", id="bitvector"),
+            pytest.param(TypedLimitBitlist, "LIMIT", id="bitlist"),
+            pytest.param(TypedLengthBytes, "LENGTH", id="fixed_byte_array"),
+            pytest.param(TypedLimitByteList, "LIMIT", id="byte_list"),
+        ],
+    )
+    def test_every_family_stores_a_typed_capacity_as_a_plain_integer(
+        self, declared_type: type[SSZType], capacity_name: str
+    ) -> None:
+        """All six families that state a capacity narrow a typed one the same way."""
+        capacity = getattr(declared_type, capacity_name)
+        assert capacity == 4
+        # The stored type is the load-bearing half of this test.
+        #
+        # A comparison against a plain integer cannot stand in for it.
+        # This library's unsigned integers refuse such a comparison outright.
+        # So a capacity left typed fails the line above with an operand error.
+        # An operand error says nothing about which of the two shapes is stored.
+        assert type(capacity) is int
+
+    @pytest.mark.parametrize(
+        "uint_type",
+        [
+            pytest.param(Uint8, id="8_bit"),
+            pytest.param(Uint16, id="16_bit"),
+            pytest.param(Uint32, id="32_bit"),
+            pytest.param(Uint64, id="64_bit"),
+            pytest.param(Uint128, id="128_bit"),
+            pytest.param(Uint256, id="256_bit"),
+        ],
+    )
+    def test_a_capacity_of_any_width_narrows_the_same_way(self, uint_type: type[BaseUint]) -> None:
+        """The width a capacity was written at leaves no trace on the stored value."""
+
+        # A spec derives some of its length constants from others.
+        # Arithmetic there carries the width of its operands.
+        # So the width a capacity arrives at is not something a declaration site chooses.
+        class Probe(List[Uint8]):
+            LIMIT = uint_type(4)
+
+        assert Probe.LIMIT == 4
+        assert type(Probe.LIMIT) is int
+
+    @pytest.mark.parametrize(
+        "rejected, rejected_type_name",
+        [
+            pytest.param(4.0, "float", id="whole_float"),
+            pytest.param("4", "str", id="digit_string"),
+            pytest.param(Decimal(4), "Decimal", id="decimal"),
+            pytest.param(None, "NoneType", id="none"),
+            pytest.param(True, "bool", id="host_language_true"),
+            pytest.param(False, "bool", id="host_language_false"),
+        ],
+    )
+    def test_a_capacity_of_the_wrong_kind_is_refused_where_it_is_written(
+        self, rejected: Any, rejected_type_name: str
+    ) -> None:
+        """A capacity is checked as the type is built, not when the type is first used."""
+        # The message names both the type and the attribute, because at this point both
+        # are known.
+        #
+        # Nothing inside this block builds a value.
+        # So reaching the failure needs no use of the type at all.
+        with pytest.raises(SSZTypeMismatch) as exception_info:
+
+            class Bad(List[Uint8]):
+                LIMIT = rejected
+
+        assert str(exception_info.value) == (
+            f"Expected an integer count for Bad.LIMIT, got {rejected_type_name}"
+        )
+        # The class statement raised before it could bind its own name.
+        # So no value of that type was ever constructible, in this test or anywhere else.
+        assert "Bad" not in locals()
+
+    def test_a_fractional_capacity_is_refused(self) -> None:
+        """A capacity between two whole numbers has no reading that is safe to guess."""
+        with pytest.raises(SSZTypeMismatch) as exception_info:
+
+            class Fractional(List[Uint8]):
+                LIMIT = 4.7
+
+        assert str(exception_info.value) == (
+            "Expected an integer count for Fractional.LIMIT, got float"
+        )
+
+        # A capacity is not a hint.
+        # It sets how far a value is padded before it is hashed.
+        # So it is part of the Merkle root that consensus agrees on.
+        #
+        # One-byte elements pack 32 to a 32-byte chunk:
+        #
+        #     capacity 32  ->  ceil(32 / 32) = 1 chunk
+        #     capacity 33  ->  ceil(33 / 32) = 2 chunks  ->  one more level of padding
+        #
+        # Two capacities either side of that boundary give the same contents two roots.
+        # A fraction lands between two whole capacities.
+        # Rounding it picks one silently, which is how a typo becomes a root nobody shares.
+        class ChunkBelowBoundary(List[Uint8]):
+            LIMIT = 32
+
+        class ChunkAboveBoundary(List[Uint8]):
+            LIMIT = 33
+
+        payload = [Uint8(1), Uint8(2)]
+        assert hash_tree_root(ChunkBelowBoundary(data=payload)) != hash_tree_root(
+            ChunkAboveBoundary(data=payload)
+        )
+
+    def test_this_librarys_boolean_narrows_while_the_host_languages_is_refused(self) -> None:
+        """The two are treated differently, on the rule every integer type here follows."""
+
+        class LibraryBoolean(List[Uint8]):
+            LIMIT = Boolean(True)
+
+        assert LibraryBoolean.LIMIT == 1
+        assert type(LibraryBoolean.LIMIT) is int
+
+        # Refusing one of these while narrowing the other reads as an inconsistency.
+        # It is not one.
+        # Every integer type in this library already draws the line in the same place.
+        # A capacity drawing it elsewhere is what would be inconsistent:
+        assert Uint8(Boolean(True)) == Uint8(1)
+        with pytest.raises(SSZTypeMismatch, match=r"^Expected int, got bool$"):
+            Uint8(True)
+
+    @pytest.mark.parametrize(
+        "typed, plain",
+        [
+            pytest.param(
+                TypedLengthVector.of(1, 2, 3, 4),
+                PlainLengthVector.of(1, 2, 3, 4),
+                id="vector",
+            ),
+            pytest.param(
+                TypedLimitList.of(1, 2, 3),
+                PlainLimitList.of(1, 2, 3),
+                id="list",
+            ),
+            pytest.param(
+                TypedLengthBitvector.of(True, False, True, True),
+                PlainLengthBitvector.of(True, False, True, True),
+                id="bitvector",
+            ),
+            pytest.param(
+                TypedLimitBitlist.of(True, False, True),
+                PlainLimitBitlist.of(True, False, True),
+                id="bitlist",
+            ),
+            pytest.param(
+                TypedLengthBytes(b"\xde\xad\xbe\xef"),
+                PlainLengthBytes(b"\xde\xad\xbe\xef"),
+                id="fixed_byte_array",
+            ),
+            pytest.param(
+                TypedLimitByteList.of(0xDE, 0xAD, 0xBE),
+                PlainLimitByteList.of(0xDE, 0xAD, 0xBE),
+                id="byte_list",
+            ),
+        ],
+    )
+    def test_a_typed_capacity_leaves_no_trace_on_what_a_value_encodes_to(
+        self, typed: SSZType, plain: SSZType
+    ) -> None:
+        """How a capacity was written cannot move a single bit of observable output."""
+        # Wire bytes and Merkle root are the two things consensus reads.
+        # A twin declared with a plain integer is the reference for both.
+        #
+        # The two values have different types.
+        # A direct comparison between them is therefore unavailable.
+        # Their outputs are what get compared.
+        assert typed.encode_bytes() == plain.encode_bytes()
+        assert hash_tree_root(typed) == hash_tree_root(plain)
+        # Decoding is a third route the capacity is read on.
+        # A value that survives it unchanged has been read correctly on all three.
+        assert type(typed).decode_bytes(typed.encode_bytes()) == typed
+
+    @pytest.mark.parametrize(
+        "build, message",
+        [
+            pytest.param(
+                lambda: TypedLimitList.of(1, 2, 3, 4, 5),
+                "TypedLimitList exceeds limit of 4, got 5",
+                id="list_over_capacity",
+            ),
+            pytest.param(
+                lambda: TypedLimitBitlist.of(*[True] * 5),
+                "TypedLimitBitlist exceeds limit of 4, got 5",
+                id="bitlist_over_capacity",
+            ),
+            pytest.param(
+                lambda: TypedLimitByteList.of(*[0x01] * 5),
+                "TypedLimitByteList exceeds limit of 4, got 5",
+                id="byte_list_over_capacity",
+            ),
+            pytest.param(
+                lambda: TypedLengthVector.of(1, 2, 3),
+                "TypedLengthVector requires exactly 4 elements, got 3",
+                id="vector_wrong_count",
+            ),
+            pytest.param(
+                lambda: TypedLengthBitvector.of(*[True] * 3),
+                "TypedLengthBitvector requires exactly 4 elements, got 3",
+                id="bitvector_wrong_count",
+            ),
+            pytest.param(
+                lambda: TypedLengthBytes(b"\xde\xad\xbe"),
+                "TypedLengthBytes requires exactly 4 bytes, got 3",
+                id="fixed_byte_array_wrong_count",
+            ),
+        ],
+    )
+    def test_a_bound_written_as_a_typed_value_still_reports_its_own_number(
+        self, build: Callable[[], SSZType], message: str
+    ) -> None:
+        """A count rule states the narrowed capacity in the failure it raises."""
+        # Reaching a message at all is most of the claim.
+        # The rule compares a plain element count against the stored capacity.
+        # A capacity left typed refuses that comparison rather than answering it:
+        #
+        #     5 > Uint64(4)  ->  operand error, naming neither the type nor the count
+        #
+        # The number in each message is the capacity exactly as declared.
+        # So nothing was rounded or truncated on the way in.
+        with pytest.raises(SSZValueError) as exception_info:
+            build()
+        assert str(exception_info.value) == message
+
+    def test_growing_a_value_reads_the_capacity_on_its_own_route(self) -> None:
+        """Mutation checks a count against the capacity somewhere other than construction."""
+        # Construction checks the count inside the field validator of each family.
+        # Growing or reshaping a value checks it on the shared length rule instead.
+        # A capacity that only worked at construction would fail here.
+        #
+        #     held  = [1, 2, 3, 4]   under a capacity of 4
+        #     append                 ->  5 elements, one past the capacity
+        values = TypedLimitList.of(1, 2, 3, 4)
+        with pytest.raises(SSZLimitError, match=r"^TypedLimitList exceeds limit of 4, got 5$"):
+            values.append(Uint8(5))
+
+        # Replacing one element with two grows the value the same way:
+        #
+        #     [1, 2, 3, 4]  ->  [0:1] = [9, 9]  ->  5 elements
+        with pytest.raises(SSZLimitError, match=r"^TypedLimitList exceeds limit of 4, got 5$"):
+            values[0:1] = [Uint8(9)] * 2
+        assert values == TypedLimitList.of(1, 2, 3, 4)
+
+        # A fixed count is enforced on the same route, from the other side:
+        #
+        #     4 bits  ->  [1:] = [0, 0]  ->  3 bits, one short of the required 4
+        bits = TypedLengthBitvector.of(*[True] * 4)
+        with pytest.raises(
+            SSZLengthError, match=r"^TypedLengthBitvector requires exactly 4 elements, got 3$"
+        ):
+            bits[1:] = [Boolean(False)] * 2
+        assert bits == TypedLengthBitvector.of(*[True] * 4)
+
+    def test_a_redeclared_capacity_is_narrowed_again(self) -> None:
+        """Every declaration is checked, however deep in a hierarchy it sits."""
+
+        class Wider(TypedLimitList):
+            LIMIT = Uint8(8)
+
+        assert Wider.LIMIT == 8
+        assert type(Wider.LIMIT) is int
+
+    def test_a_subclass_that_declares_nothing_inherits_a_narrowed_capacity(self) -> None:
+        """Inheriting a capacity reaches the value the parent already narrowed."""
+
+        class Unchanged(TypedLimitList):
+            pass
+
+        # Nothing of its own to find, which sends the lookup up to the parent.
+        # The parent holds a plain integer.
+        # That is what every subclass of it therefore reads.
+        assert "LIMIT" not in Unchanged.__dict__
+        assert Unchanged.LIMIT == 4
+        assert type(Unchanged.LIMIT) is int
+
+    def test_an_intermediate_base_that_declares_no_capacity_gains_none(self) -> None:
+        """A layer that states no count is left without one, rather than given a default."""
+
+        class Intermediate(List[Uint8]):
+            pass
+
+        # An abstract layer binds the element type.
+        # It leaves the count for a concrete type below it to state.
+        # Inventing a count here would make such a layer instantiable by accident.
+        assert not hasattr(Intermediate, "LIMIT")
+
+        class Concrete(Intermediate):
+            LIMIT = Uint64(4)
+
+        assert Concrete.LIMIT == 4
+        assert type(Concrete.LIMIT) is int
+
+    def test_a_shape_with_no_capacity_at_all_is_still_usable_inline(self) -> None:
+        """The unbounded sequence shape states no count at all, which leaves it untouched."""
+        # Written the way the spec writes it, with the element type in brackets.
+        # There is no class body here for a capacity to sit in.
+        values = ProgressiveList[Uint8].of(1, 2, 3)
+        assert list(values) == [Uint8(1), Uint8(2), Uint8(3)]
+
+    def test_a_capacity_assigned_after_the_class_body_is_not_narrowed(self) -> None:
+        """A known limitation of where the check sits, recorded rather than relied upon."""
+
+        # Narrowing happens while a class body is being turned into a type.
+        # A value assigned onto the type afterwards never passes through that step.
+        # It stays exactly as written:
+        #
+        #     class Late(List[Uint8]):
+        #         LIMIT = 4          ->  narrowed, because the class body declared it
+        #
+        #     Late.LIMIT = Uint64(4) ->  untouched, because nothing declares it here
+        #
+        # This library never assigns a capacity this way.
+        # Closing the gap would mean hooking attribute assignment on two unrelated
+        # metaclasses, to guard a mutation the library itself never performs.
+        # So this is a limitation of where the check sits, not a behaviour to depend on.
+        class Late(List[Uint8]):
+            LIMIT = 4
+
+        Late.LIMIT = Uint64(4)
+        assert type(Late.LIMIT) is Uint64
+
+        # The failure then arrives at first use, out of an internal comparison.
+        # It names neither the type nor the attribute that was mis-set.
+        # That silence is the whole reason the check sits at the declaration instead.
+        with pytest.raises(TypeError) as exception_info:
+            Late.of(1, 2)
+        message = str(exception_info.value)
+        assert not isinstance(exception_info.value, SSZError)
+        assert "Late" not in message
+        assert "LIMIT" not in message

@@ -13,12 +13,18 @@ from ssz.exceptions import (
     SSZLimitError,
     SSZSerializationError,
     SSZTypeError,
+    SSZTypeMismatch,
 )
 
 BYTES_PER_LENGTH_OFFSET: Final = 4
 """Width of an SSZ offset prefixing each variable-size element.
 
 Encoded as a uint32 in little-endian byte order."""
+
+_CAPACITY_NAMES: Final = ("LENGTH", "LIMIT")
+"""The class attributes a shape declares its element count with.
+
+An exact count and an upper bound are spelled differently, and no shape declares both."""
 
 
 class SSZType(ABC):
@@ -41,6 +47,60 @@ class SSZType(ABC):
     Only the total absence of input asks for a default.
     An empty sequence handed to a fixed-length shape is a wrong count, and an error.
     """
+
+    def __init_subclass__(cls, **kwargs: Any) -> None:
+        """
+        Narrow a declared capacity to a plain integer, at the point it is declared.
+
+        A capacity may be written with a typed value.
+        A consensus spec already holds its length constants as uints.
+        Requiring a cast at every declaration would therefore mean casting almost all of them:
+
+            class Attestations(List[Attestation]):
+                LIMIT = MAX_ATTESTATIONS   # already a Uint64
+
+        Two facts make narrowing necessary rather than cosmetic.
+
+        - Every element count computed inside this library is a plain integer.
+        - A uint refuses a plain integer operand outright.
+
+        A capacity left typed would reach a comparison it cannot take part in.
+
+        A capacity that is not an integer at all is refused here as well.
+        Declaration is the only place that refusal can be useful:
+
+            LIMIT = 4.7   ->  refused, rather than resolving to a chunk count nobody wrote
+            LIMIT = "4"   ->  refused, rather than reporting a wrong element count later
+
+        Raises:
+            SSZTypeMismatch: When a declared capacity is not an integer.
+            SSZTypeMismatch: When a declared capacity is a boolean, which counts nothing.
+        """
+        super().__init_subclass__(**kwargs)
+
+        for name in _CAPACITY_NAMES:
+            # Only a capacity this class declares itself.
+            # An inherited one was already narrowed when its own class was created.
+            if name not in cls.__dict__:
+                continue
+
+            # A plain integer is the common case.
+            # Recognizing it costs one identity check, once per type declared.
+            declared = cls.__dict__[name]
+            if type(declared) is int:
+                continue
+
+            # A boolean is a flag rather than a count.
+            # Narrowing one would turn a nonsensical declaration into a capacity of 1,
+            # which is worse than refusing it.
+            #
+            # A boolean of this library's own is left to narrow, because every integer
+            # here already accepts one in place of 0 or 1.
+            if not isinstance(declared, int) or isinstance(declared, bool):
+                raise SSZTypeMismatch(f"an integer count for {cls.__name__}.{name}", type(declared))
+
+            # Every integer type narrows the same way, whatever width it declares.
+            setattr(cls, name, int(declared))
 
     @classmethod
     @abstractmethod
