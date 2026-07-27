@@ -43,7 +43,7 @@ class _Omitted(Enum):
     TOKEN = "omitted"
 
 
-class BaseBytes(bytes, SSZType):
+class Bytes(bytes, SSZType):
     r"""
     Fixed-length SSZ byte array with exactly N bytes.
 
@@ -247,7 +247,7 @@ class BaseBytes(bytes, SSZType):
 
     def __eq__(self, other: object) -> bool:
         """Strict equality — only another byte-array instance compares; anything else raises."""
-        if not isinstance(other, BaseBytes):
+        if not isinstance(other, Bytes):
             raise TypeError(
                 f"Unsupported operand type(s) for ==: "
                 f"'{type(self).__name__}' and '{type(other).__name__}'"
@@ -261,7 +261,7 @@ class BaseBytes(bytes, SSZType):
         Defined explicitly because the parent bytes class has its own not-equal
         that would otherwise bypass the strict type contract.
         """
-        if not isinstance(other, BaseBytes):
+        if not isinstance(other, Bytes):
             raise TypeError(
                 f"Unsupported operand type(s) for !=: "
                 f"'{type(self).__name__}' and '{type(other).__name__}'"
@@ -273,7 +273,7 @@ class BaseBytes(bytes, SSZType):
         return hash((type(self), bytes(self)))
 
 
-class BaseByteList(SSZCollection[int]):
+class ByteList(SSZCollection[int]):
     r"""
     Variable-length SSZ byte array with 0 to N bytes.
 
@@ -303,7 +303,7 @@ class BaseByteList(SSZCollection[int]):
             raise SSZDefinitionError(cls.__name__, "LIMIT")
 
         # Coerce the input first, then enforce the upper bound.
-        coerced_bytes = BaseBytes._coerce_to_bytes(value)
+        coerced_bytes = Bytes._coerce_to_bytes(value)
         if len(coerced_bytes) > cls.LIMIT:
             raise SSZLimitError(cls.__name__, cls.LIMIT, len(coerced_bytes))
         return coerced_bytes
@@ -419,7 +419,7 @@ class BaseByteList(SSZCollection[int]):
 
     def __eq__(self, other: object) -> bool:
         """Strict equality — only another byte-list instance compares; anything else raises."""
-        if not isinstance(other, BaseByteList):
+        if not isinstance(other, ByteList):
             raise TypeError(
                 f"Unsupported operand type(s) for ==: "
                 f"'{type(self).__name__}' and '{type(other).__name__}'"
@@ -432,7 +432,7 @@ class BaseByteList(SSZCollection[int]):
 
         Mirrors the strict equality contract — both operators require a matching type.
         """
-        if not isinstance(other, BaseByteList):
+        if not isinstance(other, ByteList):
             raise TypeError(
                 f"Unsupported operand type(s) for !=: "
                 f"'{type(self).__name__}' and '{type(other).__name__}'"

@@ -7,7 +7,7 @@ import pytest
 from hypothesis import given, strategies as st
 from pydantic import BaseModel, ValidationError
 
-from ssz.bitfields import BaseBitlist, BaseBitvector, ProgressiveBitlist
+from ssz.bitfields import Bitlist, Bitvector, ProgressiveBitlist
 from ssz.boolean import Boolean
 from ssz.exceptions import SSZSerializationError, SSZTypeError, SSZValueError
 
@@ -15,7 +15,7 @@ from ssz.exceptions import SSZSerializationError, SSZTypeError, SSZValueError
 ValueOrValidationError = (SSZValueError, ValidationError)
 
 
-class Bitvector4(BaseBitvector):
+class Bitvector4(Bitvector):
     """A bitvector of exactly 4 bits."""
 
     LENGTH = 4
@@ -27,7 +27,7 @@ class Bitvector4Model(BaseModel):
     value: Bitvector4
 
 
-class Bitlist8(BaseBitlist):
+class Bitlist8(Bitlist):
     """A bitlist with up to 8 bits."""
 
     LIMIT = 8
@@ -45,7 +45,7 @@ class ProgressiveBitlistModel(BaseModel):
     value: ProgressiveBitlist
 
 
-class LengthlessBitvector(BaseBitvector):
+class LengthlessBitvector(Bitvector):
     """A bitvector subclass that never declared its bit count, so it has no default."""
 
 
@@ -60,10 +60,10 @@ class TestBitvector:
     def test_class_creates_specialized_type(self) -> None:
         """Concrete Bitvector classes carry the declared length."""
 
-        class Bitvector8(BaseBitvector):
+        class Bitvector8(Bitvector):
             LENGTH = 8
 
-        class Bitvector16(BaseBitvector):
+        class Bitvector16(Bitvector):
             LENGTH = 16
 
         assert Bitvector8.LENGTH == 8
@@ -73,8 +73,8 @@ class TestBitvector:
     def test_instantiate_raw_type_raises_error(self) -> None:
         """Direct instantiation of the abstract base raises SSZTypeError."""
         with pytest.raises(SSZTypeError) as exception_info:
-            BaseBitvector(data=[])
-        assert str(exception_info.value) == "BaseBitvector must define LENGTH"
+            Bitvector(data=[])
+        assert str(exception_info.value) == "Bitvector must define LENGTH"
 
     def test_instantiation_success(self) -> None:
         """Instantiation succeeds with exactly LENGTH boolean items."""
@@ -133,7 +133,7 @@ class TestBitvector:
     def test_bitvector_item_assignment_revalidates(self) -> None:
         """Item assignment replaces the bit through full revalidation."""
 
-        class Bitvector2(BaseBitvector):
+        class Bitvector2(Bitvector):
             LENGTH = 2
 
         vec = Bitvector2(data=[Boolean(True), Boolean(False)])
@@ -166,10 +166,10 @@ class TestBitlist:
     def test_class_creates_specialized_type(self) -> None:
         """Concrete Bitlist classes carry the declared limit."""
 
-        class Bitlist8(BaseBitlist):
+        class Bitlist8(Bitlist):
             LIMIT = 8
 
-        class Bitlist16(BaseBitlist):
+        class Bitlist16(Bitlist):
             LIMIT = 16
 
         assert Bitlist8.LIMIT == 8
@@ -179,8 +179,8 @@ class TestBitlist:
     def test_instantiate_raw_type_raises_error(self) -> None:
         """Direct instantiation of the abstract base raises SSZTypeError."""
         with pytest.raises(SSZTypeError) as exception_info:
-            BaseBitlist(data=[])
-        assert str(exception_info.value) == "BaseBitlist must define LIMIT"
+            Bitlist(data=[])
+        assert str(exception_info.value) == "Bitlist must define LIMIT"
 
     def test_instantiation_success(self) -> None:
         """Instantiation succeeds with any number of items up to LIMIT."""
@@ -224,7 +224,7 @@ class TestBitlist:
     def test_instantiation_over_limit_raises_error(self) -> None:
         """Input exceeding LIMIT raises with the exact size in the message."""
 
-        class Bitlist4(BaseBitlist):
+        class Bitlist4(Bitlist):
             LIMIT = 4
 
         with pytest.raises(ValueOrValidationError) as exception_info:
@@ -316,7 +316,7 @@ class TestBitlist:
     def test_add_exceeding_limit_raises_error(self) -> None:
         """Concatenation beyond LIMIT raises with the exact size in the message."""
 
-        class Bitlist4(BaseBitlist):
+        class Bitlist4(Bitlist):
             LIMIT = 4
 
         bitlist = Bitlist4(data=[Boolean(True), Boolean(False), Boolean(True)])
@@ -591,7 +591,7 @@ class TestBitfieldSSZ:
     def test_bitvector_is_fixed_size(self) -> None:
         """Bitvector reports fixed-size and computes byte length via ceil(LENGTH / 8)."""
 
-        class Bitvector10(BaseBitvector):
+        class Bitvector10(Bitvector):
             LENGTH = 10
 
         assert Bitvector10.is_fixed_size() is True
@@ -600,7 +600,7 @@ class TestBitfieldSSZ:
     def test_bitlist_is_variable_size(self) -> None:
         """Bitlist reports variable-size and get_byte_length raises."""
 
-        class Bitlist10(BaseBitlist):
+        class Bitlist10(Bitlist):
             LIMIT = 10
 
         assert Bitlist10.is_fixed_size() is False
@@ -627,7 +627,7 @@ class TestBitfieldSSZ:
     ) -> None:
         """Bitvector round-trips through encode_bytes, decode_bytes, and stream serialization."""
 
-        class TestBitvector(BaseBitvector):
+        class TestBitvector(Bitvector):
             LENGTH = length
 
         boolean_bits = tuple(Boolean(bit) for bit in bits)
@@ -662,7 +662,7 @@ class TestBitfieldSSZ:
     def test_bitlist_round_trip(self, limit: int, bits: tuple[int, ...], expected_hex: str) -> None:
         """Bitlist round-trips through encode_bytes, decode_bytes, and stream serialization."""
 
-        class TestBitlist(BaseBitlist):
+        class TestBitlist(Bitlist):
             LIMIT = limit
 
         boolean_bits = tuple(Boolean(bit) for bit in bits)
@@ -684,7 +684,7 @@ class TestBitfieldSSZ:
     def test_bitvector_decode_invalid_length(self) -> None:
         """Bitvector.decode_bytes rejects inputs whose byte count is wrong."""
 
-        class Bitvector8(BaseBitvector):
+        class Bitvector8(Bitvector):
             LENGTH = 8
 
         with pytest.raises(SSZValueError) as exception_info:
@@ -694,7 +694,7 @@ class TestBitfieldSSZ:
     def test_bitvector_decode_rejects_non_zero_padding_bits(self) -> None:
         """Bitvector.decode_bytes rejects a final byte with set bits above the data bits."""
 
-        class Bitvector5(BaseBitvector):
+        class Bitvector5(Bitvector):
             LENGTH = 5
 
         # Bits 5, 6, 7 are padding above the 5 data bits and must be zero.
@@ -706,7 +706,7 @@ class TestBitfieldSSZ:
     def test_bitvector_decode_canonical_with_zero_padding_bits(self) -> None:
         """Bitvector.decode_bytes accepts the canonical encoding with zero padding bits."""
 
-        class Bitvector5(BaseBitvector):
+        class Bitvector5(Bitvector):
             LENGTH = 5
 
         # 0b00011111 holds 5 data bits all set with zero padding above them.
@@ -715,7 +715,7 @@ class TestBitfieldSSZ:
     def test_bitvector_deserialize_invalid_scope(self) -> None:
         """Bitvector.deserialize rejects a scope mismatching the type's byte length."""
 
-        class Bitvector8(BaseBitvector):
+        class Bitvector8(Bitvector):
             LENGTH = 8
 
         stream = io.BytesIO(b"\xff")
@@ -726,7 +726,7 @@ class TestBitfieldSSZ:
     def test_bitvector_deserialize_premature_end(self) -> None:
         """Bitvector.deserialize rejects a stream that ends before the declared scope."""
 
-        class Bitvector16(BaseBitvector):
+        class Bitvector16(Bitvector):
             LENGTH = 16
 
         stream = io.BytesIO(b"\xff")
@@ -737,7 +737,7 @@ class TestBitfieldSSZ:
     def test_bitlist_decode_empty_bytes(self) -> None:
         """Bitlist.decode_bytes rejects an empty byte sequence."""
 
-        class Bitlist8(BaseBitlist):
+        class Bitlist8(Bitlist):
             LIMIT = 8
 
         with pytest.raises(SSZSerializationError) as exception_info:
@@ -747,7 +747,7 @@ class TestBitfieldSSZ:
     def test_bitlist_decode_all_zero_bytes(self) -> None:
         """Bitlist.decode_bytes rejects non-empty input with no 1 bits — no delimiter to locate."""
 
-        class Bitlist8(BaseBitlist):
+        class Bitlist8(Bitlist):
             LIMIT = 8
 
         with pytest.raises(SSZSerializationError) as exception_info:
@@ -757,7 +757,7 @@ class TestBitfieldSSZ:
     def test_bitlist_decode_rejects_non_canonical_trailing_zero_byte(self) -> None:
         """Bitlist.decode_bytes rejects a trailing zero byte after the delimiter byte."""
 
-        class Bitlist8(BaseBitlist):
+        class Bitlist8(Bitlist):
             LIMIT = 8
 
         # Byte 0x0d encodes bits [1, 0, 1] with the delimiter at bit 3.
@@ -772,7 +772,7 @@ class TestBitfieldSSZ:
     def test_bitlist_decode_canonical_encoding_round_trips(self) -> None:
         """Bitlist.decode_bytes accepts the canonical single-byte encoding of bits [1, 0, 1]."""
 
-        class Bitlist8(BaseBitlist):
+        class Bitlist8(Bitlist):
             LIMIT = 8
 
         assert Bitlist8.decode_bytes(b"\x0d") == Bitlist8(
@@ -782,7 +782,7 @@ class TestBitfieldSSZ:
     def test_bitlist_decode_exceeds_limit(self) -> None:
         """Bitlist.decode_bytes rejects encodings whose recovered bit count exceeds LIMIT."""
 
-        class Bitlist8(BaseBitlist):
+        class Bitlist8(Bitlist):
             LIMIT = 8
 
         # Bytes [0xFF, 0xFF, 0x01] mean 16 data bits + delimiter at bit 16 — > LIMIT=8.
@@ -793,7 +793,7 @@ class TestBitfieldSSZ:
     def test_bitlist_deserialize_premature_end(self) -> None:
         """Bitlist.deserialize rejects a stream that ends before the declared scope."""
 
-        class Bitlist16(BaseBitlist):
+        class Bitlist16(Bitlist):
             LIMIT = 16
 
         stream = io.BytesIO(b"\xff")
@@ -823,14 +823,14 @@ class TestBitfieldDefaults:
     @pytest.mark.parametrize(
         "bitvector_type, expected_message",
         [
-            pytest.param(BaseBitvector, "BaseBitvector must define LENGTH", id="the_base_itself"),
+            pytest.param(Bitvector, "Bitvector must define LENGTH", id="the_base_itself"),
             pytest.param(
                 LengthlessBitvector, "LengthlessBitvector must define LENGTH", id="a_subclass"
             ),
         ],
     )
     def test_a_bitvector_without_a_length_reports_its_own_declaration_error(
-        self, bitvector_type: type[BaseBitvector], expected_message: str
+        self, bitvector_type: type[Bitvector], expected_message: str
     ) -> None:
         """No bit count means no bits to clear, so the declaration error comes first."""
         # The default is injected only once a length is declared, so a shape without one

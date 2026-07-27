@@ -46,7 +46,7 @@ from typing import (
 
 from pydantic import Field, field_serializer, field_validator
 
-from ssz.byte_arrays import BaseBytes
+from ssz.byte_arrays import Bytes
 from ssz.exceptions import (
     SSZDefinitionError,
     SSZFixedSizeError,
@@ -224,7 +224,7 @@ class _SSZSequence[T: SSZType](SSZCollection[T]):
         for element in value:
             # Byte-array leaves render as 0x-prefixed hex strings.
             # This matches how every other byte value appears in spec output.
-            if isinstance(element, BaseBytes):
+            if isinstance(element, Bytes):
                 serialized_elements.append("0x" + element.hex())
 
             # Integer leaves (uints, field elements) flatten to a plain int.

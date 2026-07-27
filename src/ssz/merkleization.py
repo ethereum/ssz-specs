@@ -9,9 +9,9 @@ from hashlib import sha256
 from itertools import accumulate, batched, repeat
 from typing import Final
 
-from ssz.bitfields import BaseBitlist, BaseBitvector, ProgressiveBitlist
+from ssz.bitfields import Bitlist, Bitvector, ProgressiveBitlist
 from ssz.boolean import Boolean
-from ssz.byte_arrays import BaseByteList, BaseBytes
+from ssz.byte_arrays import ByteList, Bytes
 from ssz.collections import List, ProgressiveList, Vector
 from ssz.container import Container, ProgressiveContainer
 from ssz.exceptions import SSZTypeError, SSZValueError
@@ -36,7 +36,7 @@ def _next_pow2(x: int) -> int:
     return 1 << (x - 1).bit_length()
 
 
-class Chunk(BaseBytes):
+class Chunk(Bytes):
     """Fixed-size 32-byte unit of Merkle tree input data."""
 
     LENGTH = BYTES_PER_CHUNK
@@ -356,8 +356,8 @@ def hash_tree_root(value: object) -> Root:
 
 @hash_tree_root.register(BaseUint)
 @hash_tree_root.register(Boolean)
-@hash_tree_root.register(BaseBytes)
-def _hash_tree_root_packed_leaf(value: BaseUint | Boolean | BaseBytes) -> Root:
+@hash_tree_root.register(Bytes)
+def _hash_tree_root_packed_leaf(value: BaseUint | Boolean | Bytes) -> Root:
     # Each of these encodes to a fixed-width byte string with no length prefix.
     # The root is the Merkle root of those bytes packed into 32-byte chunks.
     return merkleize(_pack_bytes(value.encode_bytes()))
@@ -369,7 +369,7 @@ def _hash_tree_root_bytes(value: bytes) -> Root:
 
 
 @hash_tree_root.register
-def _hash_tree_root_bytelist(value: BaseByteList) -> Root:
+def _hash_tree_root_bytelist(value: ByteList) -> Root:
     serialized_bytes = value.encode_bytes()
     limit_chunks = math.ceil(type(value).LIMIT / BYTES_PER_CHUNK)
     return mix_in_length(
@@ -378,13 +378,13 @@ def _hash_tree_root_bytelist(value: BaseByteList) -> Root:
 
 
 @hash_tree_root.register
-def _hash_tree_root_bitvector_base(value: BaseBitvector) -> Root:
+def _hash_tree_root_bitvector_base(value: Bitvector) -> Root:
     limit = math.ceil(type(value).LENGTH / BITS_PER_CHUNK)
     return merkleize(_pack_bits(value.data), limit=limit)
 
 
 @hash_tree_root.register
-def _hash_tree_root_bitlist_base(value: BaseBitlist) -> Root:
+def _hash_tree_root_bitlist_base(value: Bitlist) -> Root:
     limit = math.ceil(type(value).LIMIT / BITS_PER_CHUNK)
     return mix_in_length(
         merkleize(_pack_bits(value.data), limit=limit),

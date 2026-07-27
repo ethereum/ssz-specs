@@ -1,4 +1,4 @@
-"""Tests for the BaseBytes and BaseByteList types."""
+"""Tests for the Bytes and ByteList types."""
 
 import hashlib
 import io
@@ -10,31 +10,31 @@ from hypothesis import given, strategies as st
 from pydantic import BaseModel
 
 from ssz.byte_arrays import (
-    BaseByteList,
-    BaseBytes,
+    ByteList,
+    Bytes,
 )
 from ssz.exceptions import SSZSerializationError, SSZTypeError, SSZValueError
 
 
-class Bytes4(BaseBytes):
+class Bytes4(Bytes):
     """A 4-byte array, as applications typically define for short identifiers."""
 
     LENGTH = 4
 
 
-class Bytes32(BaseBytes):
+class Bytes32(Bytes):
     """A 32-byte array, as applications typically define for roots and hashes."""
 
     LENGTH = 32
 
 
-class ByteList5(BaseByteList):
+class ByteList5(ByteList):
     """A bytelist with limit 5 for testing."""
 
     LIMIT = 5
 
 
-class ByteList16(BaseByteList):
+class ByteList16(ByteList):
     """A bytelist with limit 16 for testing."""
 
     LIMIT = 16
@@ -57,8 +57,8 @@ class TestBaseBytesConstruction:
     """Construction and coercion of fixed-length byte arrays."""
 
     def test_inheritance(self) -> None:
-        """Concrete subclasses inherit from BaseBytes and stay bytes-compatible."""
-        assert issubclass(Bytes32, BaseBytes)
+        """Concrete subclasses inherit from Bytes and stay bytes-compatible."""
+        assert issubclass(Bytes32, Bytes)
         assert Bytes32.LENGTH == 32
         byte_array = Bytes32(b"\x00" * 32)
         assert isinstance(byte_array, Bytes32)
@@ -106,8 +106,8 @@ class TestBaseBytesConstruction:
     def test_construction_without_length_attribute_raises(self) -> None:
         """Direct instantiation of the abstract base raises SSZTypeError."""
         with pytest.raises(SSZTypeError) as exception_info:
-            BaseBytes(b"")
-        assert str(exception_info.value) == "BaseBytes must define LENGTH"
+            Bytes(b"")
+        assert str(exception_info.value) == "Bytes must define LENGTH"
 
     def test_zero_factory(self) -> None:
         """The zero classmethod returns an instance of LENGTH zero bytes."""
@@ -134,7 +134,7 @@ class TestBaseBytesEquality:
 
     @pytest.mark.parametrize("other", [b"\x00\x01\x02\x03", "string", 1.5, None, 42])
     def test_cross_type_equality_raises(self, other: Any) -> None:
-        """Comparing with any non-BaseBytes value raises TypeError."""
+        """Comparing with any non-Bytes value raises TypeError."""
         name = type(other).__name__
         with pytest.raises(TypeError) as exception_info:
             _ = Bytes4(b"\x00\x01\x02\x03") == other
@@ -145,7 +145,7 @@ class TestBaseBytesEquality:
 
     @pytest.mark.parametrize("other", [b"\x00\x01\x02\x03", "string", 1.5, None, 42])
     def test_cross_type_inequality_raises(self, other: Any) -> None:
-        """Inequality with any non-BaseBytes value raises TypeError."""
+        """Inequality with any non-Bytes value raises TypeError."""
         name = type(other).__name__
         with pytest.raises(TypeError) as exception_info:
             _ = Bytes4(b"\x00\x01\x02\x03") != other
@@ -237,7 +237,7 @@ class TestBaseBytesSSZ:
     """SSZ interface methods and serialization round-trip."""
 
     def test_is_fixed_size(self) -> None:
-        """BaseBytes subclasses are always fixed-size."""
+        """Bytes subclasses are always fixed-size."""
         assert Bytes32.is_fixed_size() is True
 
     def test_get_byte_length(self) -> None:
@@ -252,8 +252,8 @@ class TestBaseBytesSSZ:
             (Bytes32, b"\x11" * 32),
         ],
     )
-    def test_encode_decode_roundtrip(self, cls: type[BaseBytes], payload: bytes) -> None:
-        """BaseBytes round-trips through encode_bytes, decode_bytes, and stream serialization."""
+    def test_encode_decode_roundtrip(self, cls: type[Bytes], payload: bytes) -> None:
+        """Bytes round-trips through encode_bytes, decode_bytes, and stream serialization."""
         byte_array = cls(payload)
         assert byte_array.encode_bytes() == payload
         assert cls.decode_bytes(payload) == byte_array
@@ -341,8 +341,8 @@ class TestBaseByteListConstruction:
     def test_construction_without_limit_attribute_raises(self) -> None:
         """Direct instantiation of the abstract base raises SSZTypeError."""
         with pytest.raises(SSZTypeError) as exception_info:
-            BaseByteList(data=b"")
-        assert str(exception_info.value) == "BaseByteList must define LIMIT"
+            ByteList(data=b"")
+        assert str(exception_info.value) == "ByteList must define LIMIT"
 
 
 class TestBaseByteListEquality:
@@ -362,7 +362,7 @@ class TestBaseByteListEquality:
 
     @pytest.mark.parametrize("other", [b"\x00\x01\x02", "string", 1.5, None, 42])
     def test_cross_type_equality_raises(self, other: Any) -> None:
-        """Comparing with any non-BaseByteList value raises TypeError."""
+        """Comparing with any non-ByteList value raises TypeError."""
         name = type(other).__name__
         with pytest.raises(TypeError) as exception_info:
             _ = ByteList16(data=b"\x00\x01\x02") == other
@@ -373,7 +373,7 @@ class TestBaseByteListEquality:
 
     @pytest.mark.parametrize("other", [b"\x00\x01\x02", "string", 1.5, None, 42])
     def test_cross_type_inequality_raises(self, other: Any) -> None:
-        """Inequality with any non-BaseByteList value raises TypeError."""
+        """Inequality with any non-ByteList value raises TypeError."""
         name = type(other).__name__
         with pytest.raises(TypeError) as exception_info:
             _ = ByteList16(data=b"\x00\x01\x02") != other
@@ -447,7 +447,7 @@ class TestBaseByteListSSZ:
     """SSZ interface methods and serialization round-trip."""
 
     def test_is_fixed_size(self) -> None:
-        """BaseByteList subclasses are always variable-size."""
+        """ByteList subclasses are always variable-size."""
         assert ByteList16.is_fixed_size() is False
 
     def test_get_byte_length_raises(self) -> None:
@@ -471,7 +471,7 @@ class TestBaseByteListSSZ:
     def test_encode_decode_roundtrip(self, limit: int, data: bytes) -> None:
         """ByteList round-trips through encode_bytes, decode_bytes, and stream serialization."""
 
-        class TestByteList(BaseByteList):
+        class TestByteList(ByteList):
             LIMIT = limit
 
         byte_list = TestByteList(data=data)
@@ -559,8 +559,8 @@ class TestBaseBytesDefault:
     def test_a_shape_without_a_length_reports_its_own_declaration_error(self) -> None:
         """No length means no byte count to zero, so the declaration error comes first."""
         with pytest.raises(SSZTypeError) as exception_info:
-            BaseBytes()
-        assert str(exception_info.value) == "BaseBytes must define LENGTH"
+            Bytes()
+        assert str(exception_info.value) == "Bytes must define LENGTH"
 
     def test_the_default_is_zeroed_and_any_set_byte_is_not(self) -> None:
         """The zero-filled array equals a fresh default of its type; a set byte does not."""

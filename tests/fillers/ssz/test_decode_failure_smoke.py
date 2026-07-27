@@ -2,11 +2,11 @@
 
 from typing import ClassVar
 
-from ssz import BaseBitlist, Boolean
+from ssz import Bitlist, Boolean
 from ssz_testing import ExpectedRejection, RejectionReason, SSZTestFiller
 
 
-class SmokeBitlist8(BaseBitlist):
+class SmokeBitlist8(Bitlist):
     """Small bitlist with an 8-bit limit, used only by the decode-failure smoke test."""
 
     LIMIT: ClassVar[int] = 8

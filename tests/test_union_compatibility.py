@@ -5,10 +5,10 @@ from __future__ import annotations
 import pytest
 
 from ssz import (
-    BaseByteList,
-    BaseBytes,
     Boolean,
     Byte,
+    ByteList,
+    Bytes,
     Chunk,
     CompatibleUnion,
     Container,
@@ -23,7 +23,7 @@ from ssz import (
     Uint256,
     Vector,
 )
-from ssz.bitfields import BaseBitlist, BaseBitvector
+from ssz.bitfields import Bitlist, Bitvector
 from ssz.ssz_base import SSZType
 from ssz.union import is_compatible
 
@@ -49,7 +49,7 @@ class Flag(Boolean):
 # --------------------------------------------------------------------------------------
 
 
-class Bytes4(BaseBytes):
+class Bytes4(Bytes):
     """Fixed byte array of four bytes: the spec's alias for Vector[byte, 4]."""
 
     LENGTH = 4
@@ -59,13 +59,13 @@ class Bytes4Alias(Bytes4):
     """Second spelling of the same four-byte array."""
 
 
-class Bytes8(BaseBytes):
+class Bytes8(Bytes):
     """Fixed byte array of eight bytes, twice the width of Bytes4."""
 
     LENGTH = 8
 
 
-class ByteList4(BaseByteList):
+class ByteList4(ByteList):
     """Byte list of capacity four: the spec's alias for List[byte, 4]."""
 
     LIMIT = 4
@@ -75,7 +75,7 @@ class ByteList4Alias(ByteList4):
     """Second spelling of the same four-byte-capacity list."""
 
 
-class ByteList8(BaseByteList):
+class ByteList8(ByteList):
     """Byte list of capacity eight, twice the capacity of ByteList4."""
 
     LIMIT = 8
@@ -138,7 +138,7 @@ class BooleanList4(List[Boolean]):
 # --------------------------------------------------------------------------------------
 
 
-class Bitvector4(BaseBitvector):
+class Bitvector4(Bitvector):
     """Bitvector of four bits."""
 
     LENGTH = 4
@@ -148,13 +148,13 @@ class Bitvector4Alias(Bitvector4):
     """Second spelling of the same four-bit vector."""
 
 
-class Bitvector8(BaseBitvector):
+class Bitvector8(Bitvector):
     """Bitvector of eight bits."""
 
     LENGTH = 8
 
 
-class Bitlist4(BaseBitlist):
+class Bitlist4(Bitlist):
     """Bitlist of capacity four."""
 
     LIMIT = 4
@@ -164,7 +164,7 @@ class Bitlist4Alias(Bitlist4):
     """Second spelling of the same four-bit-capacity list."""
 
 
-class Bitlist8(BaseBitlist):
+class Bitlist8(Bitlist):
     """Bitlist of capacity eight."""
 
     LIMIT = 8
