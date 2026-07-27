@@ -11,7 +11,7 @@ from ssz.boolean import Boolean
 from ssz.byte_arrays import BaseByteList
 from ssz.collections import List, ProgressiveList, Vector
 from ssz.container import Container, ProgressiveContainer
-from ssz.exceptions import SSZDefaultError, SSZTypeError, SSZValueError
+from ssz.exceptions import SSZDefaultError, SSZError, SSZTypeError, SSZValueError
 from ssz.merkleization import Root
 from ssz.ssz_base import SSZCollection, SSZType
 from ssz.union import CompatibleUnion
@@ -55,6 +55,12 @@ class SmallByteList(BaseByteList):
     """A byte list with up to 10 bytes."""
 
     LIMIT = 10
+
+
+class ByteList4(BaseByteList):
+    """A byte list with up to 4 bytes, narrow enough that a 3-byte payload is one short."""
+
+    LIMIT = 4
 
 
 class TwoFieldContainer(Container):
@@ -287,6 +293,264 @@ class TestSSZCollectionMutation:
         values = Uint16List4(data=[])
         with pytest.raises(NotImplementedError):
             SSZCollection._validate_element(values, 1)
+
+
+class TestSSZCollectionNegativeIndex:
+    """
+    Tests for addressing a collection from its end rather than its start.
+
+    A position counted from the end resolves against the number of elements held.
+    It never resolves against the capacity the type declares.
+    Three elements under a capacity of four therefore address like this:
+
+        held = [10, 20, 30]  under a capacity of 4
+
+        [-1]   ->  30            the last element held
+        [-3]   ->  10            the first
+        [-4]   ->  IndexError    one before the first
+        [3]    ->  IndexError    the slot the capacity leaves free
+
+    The zeros that pad such a value out to its capacity exist only in its Merkle tree.
+    They are not part of the value.
+    So no position addresses them, from either end.
+    """
+
+    @pytest.mark.parametrize(
+        "collection, replacement, expected",
+        [
+            pytest.param(
+                Uint16Vector2(data=[Uint16(1), Uint16(2)]),
+                Uint16(9),
+                Uint16Vector2(data=[Uint16(1), Uint16(9)]),
+                id="vector",
+            ),
+            pytest.param(
+                Uint16List4(data=[Uint16(1), Uint16(2), Uint16(3)]),
+                Uint16(9),
+                Uint16List4(data=[Uint16(1), Uint16(2), Uint16(9)]),
+                id="list",
+            ),
+            pytest.param(
+                Uint16ProgressiveList(data=[Uint16(1), Uint16(2)]),
+                Uint16(9),
+                Uint16ProgressiveList(data=[Uint16(1), Uint16(9)]),
+                id="progressive_list",
+            ),
+            pytest.param(
+                SmallBitvector(data=[Boolean(True)] * 3),
+                Boolean(False),
+                SmallBitvector(data=[Boolean(True), Boolean(True), Boolean(False)]),
+                id="bitvector",
+            ),
+            pytest.param(
+                SmallBitlist(data=[Boolean(True), Boolean(True)]),
+                Boolean(False),
+                SmallBitlist(data=[Boolean(True), Boolean(False)]),
+                id="bitlist",
+            ),
+            pytest.param(
+                ProgressiveBitlist(data=[Boolean(True), Boolean(True)]),
+                Boolean(False),
+                ProgressiveBitlist(data=[Boolean(True), Boolean(False)]),
+                id="progressive_bitlist",
+            ),
+            pytest.param(
+                SmallByteList(data=b"\xde\xad\xbe"),
+                0xEF,
+                SmallByteList(data=b"\xde\xad\xef"),
+                id="byte_list",
+            ),
+        ],
+    )
+    def test_a_negative_write_replaces_only_the_final_element(
+        self, collection: SSZCollection[Any], replacement: Any, expected: SSZCollection[Any]
+    ) -> None:
+        """Position -1 writes the last element held, whichever shape holds it."""
+        collection[-1] = replacement
+        # Comparing the whole value proves both halves of the claim at once:
+        #
+        # - The final position took the new element.
+        # - No earlier position moved.
+        assert collection == expected
+
+    @pytest.mark.parametrize(
+        "collection, rejected, message",
+        [
+            pytest.param(
+                Uint16Vector2(data=[Uint16(1), Uint16(2)]),
+                "x",
+                "Expected Uint16, got str",
+                id="vector",
+            ),
+            pytest.param(
+                Uint16List4(data=[Uint16(1), Uint16(2)]),
+                "x",
+                "Expected Uint16, got str",
+                id="list",
+            ),
+            pytest.param(
+                Uint16ProgressiveList(data=[Uint16(1), Uint16(2)]),
+                "x",
+                "Expected Uint16, got str",
+                id="progressive_list",
+            ),
+            pytest.param(
+                SmallBitvector(data=[Boolean(True)] * 3),
+                2,
+                "Boolean value must be 0 or 1, not 2",
+                id="bitvector",
+            ),
+            pytest.param(
+                SmallBitlist(data=[Boolean(True), Boolean(False)]),
+                2,
+                "Boolean value must be 0 or 1, not 2",
+                id="bitlist",
+            ),
+            pytest.param(
+                ProgressiveBitlist(data=[Boolean(True), Boolean(False)]),
+                2,
+                "Boolean value must be 0 or 1, not 2",
+                id="progressive_bitlist",
+            ),
+        ],
+    )
+    def test_a_negative_write_of_a_rejected_element_leaves_the_value_alone(
+        self, collection: SSZCollection[Any], rejected: Any, message: str
+    ) -> None:
+        """A position counted from the end is validated on exactly the same terms as any other."""
+        contents_before = list(collection)
+        with pytest.raises(SSZError) as exception_info:
+            collection[-1] = rejected
+        assert str(exception_info.value) == message
+        # The incoming element is checked before it reaches storage.
+        # A rejection therefore leaves the last position holding whatever it held.
+        assert list(collection) == contents_before
+
+    def test_a_negative_write_of_a_rejected_byte_reports_the_host_language_error(self) -> None:
+        """A byte list rejects an out-of-range byte, but not with one of this library's errors."""
+        payload = SmallByteList(data=b"\xde\xad\xbe")
+        # A byte list stores a raw byte string.
+        # The range check on a single byte is therefore the one the host language already
+        # performs, and 256 fails it before any SSZ rule runs.
+        #
+        # This library's errors do not derive from the host language's value error.
+        # A caller catching only SSZ errors will therefore miss this one.
+        # Pinned as it stands.
+        with pytest.raises(ValueError, match=r"^byte must be in range\(0, 256\)$"):
+            payload[-1] = 256
+        assert payload == SmallByteList(data=b"\xde\xad\xbe")
+
+    @pytest.mark.parametrize(
+        "collection, replacement, message",
+        [
+            pytest.param(
+                Uint16Vector2(data=[Uint16(1), Uint16(2)]),
+                [Uint16(9)],
+                "Uint16Vector2 requires exactly 2 elements, got 1",
+                id="vector",
+            ),
+            pytest.param(
+                SmallBitvector(data=[Boolean(True)] * 3),
+                [Boolean(False)],
+                "SmallBitvector requires exactly 3 elements, got 2",
+                id="bitvector",
+            ),
+        ],
+    )
+    def test_a_negative_slice_write_that_resizes_a_fixed_length_shape_is_rejected(
+        self, collection: SSZCollection[Any], replacement: Any, message: str
+    ) -> None:
+        """A trailing range given fewer elements than it spans is a length error."""
+        contents_before = list(collection)
+        # The final two positions given one element leave the shape one element short:
+        #
+        #     2 elements:  [1, 2]     ->  [-2:] = [9]  ->  1 element,  needs 2
+        #     3 bits:      [1, 1, 1]  ->  [-2:] = [0]  ->  2 elements, needs 3
+        #
+        # The resulting count is measured on a copy.
+        # So the stored elements never move.
+        with pytest.raises(SSZValueError) as exception_info:
+            collection[-2:] = replacement
+        assert str(exception_info.value) == message
+        assert list(collection) == contents_before
+
+    def test_a_growing_negative_slice_write_on_a_byte_list_is_rejected_atomically(self) -> None:
+        """A trailing range given more bytes than the capacity allows changes nothing."""
+        payload = ByteList4(data=b"\xde\xad\xbe")
+        # 3 bytes held under a capacity of 4, replacing the final one with three:
+        #
+        #     stored:      de ad be
+        #     [-1:] =            aa bb cc
+        #     would give:  de ad aa bb cc   ->  5 bytes, one past the capacity of 4
+        #
+        # The capacity is enforced as the whole payload is stored back.
+        # The write therefore lands complete or not at all.
+        # A partly grown payload is never observable.
+        with pytest.raises(SSZLimitError, match=r"^ByteList4 exceeds limit of 4, got 5$"):
+            payload[-1:] = b"\xaa\xbb\xcc"
+        assert payload == ByteList4(data=b"\xde\xad\xbe")
+
+    @pytest.mark.parametrize(
+        "collection, index, replacement, message",
+        [
+            pytest.param(
+                Uint16Vector2(data=[Uint16(1), Uint16(2)]),
+                -3,
+                Uint16(9),
+                "list assignment index out of range",
+                id="one_before_a_fixed_length_shape",
+            ),
+            pytest.param(
+                Uint16List4(data=[Uint16(1), Uint16(2), Uint16(3)]),
+                -4,
+                Uint16(9),
+                "list assignment index out of range",
+                id="one_before_the_elements_held",
+            ),
+            pytest.param(
+                ByteList4(data=b"\xde\xad\xbe"),
+                -4,
+                0xFF,
+                "bytearray index out of range",
+                id="one_before_the_bytes_held",
+            ),
+        ],
+    )
+    def test_an_out_of_range_negative_write_leaves_the_value_alone(
+        self, collection: SSZCollection[Any], index: int, replacement: Any, message: str
+    ) -> None:
+        """A position before the first element held addresses nothing to write to."""
+        contents_before = list(collection)
+        # The two variable-length cases hold 3 elements under a capacity of 4.
+        # Position -4 there reaches one before the first element.
+        # It does not reach the free slot the capacity leaves.
+        with pytest.raises(IndexError) as exception_info:
+            collection[index] = replacement
+        assert str(exception_info.value) == message
+        assert list(collection) == contents_before
+
+    def test_a_frozen_shape_rejects_a_negative_write(self) -> None:
+        """Freezing a type closes the path from the end along with every other one."""
+
+        class FrozenVector(Uint16Vector2):
+            MUTABLE = False
+
+        class FrozenByteList(ByteList4):
+            MUTABLE = False
+
+        values = FrozenVector(data=[Uint16(1), Uint16(2)])
+        with pytest.raises(SSZTypeError, match=r"^FrozenVector is immutable$"):
+            values[-1] = Uint16(9)
+
+        # A byte list replaces its whole payload on any write.
+        # The refusal therefore has to come first.
+        # Reaching the payload swap would rebuild the value instead of rejecting it.
+        payload = FrozenByteList(data=b"\xde\xad")
+        with pytest.raises(SSZTypeError, match=r"^FrozenByteList is immutable$"):
+            payload[-1] = 0xFF
+
+        assert values == FrozenVector(data=[Uint16(1), Uint16(2)])
+        assert payload == FrozenByteList(data=b"\xde\xad")
 
 
 class TestSSZMutabilityFlag:

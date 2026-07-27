@@ -21,7 +21,6 @@ from typing import (
     ClassVar,
     Self,
     cast,
-    overload,
     override,
 )
 
@@ -275,18 +274,6 @@ class _SSZBitlist(SSZCollection[Boolean]):
         self._require_mutable()
         self._validate_length(len(self.data) - 1)
         return cast("list[Boolean]", self.data).pop()
-
-    @overload
-    def __getitem__(self, key: int) -> Boolean: ...
-
-    @overload
-    def __getitem__(self, key: slice) -> list[Boolean]: ...
-
-    def __getitem__(self, key: int | slice) -> Boolean | list[Boolean]:
-        """Get a bit by index or slice."""
-        if isinstance(key, slice):
-            return list(self.data[key])
-        return self.data[key]
 
     def __add__(self, other: Any) -> Self:
         """
