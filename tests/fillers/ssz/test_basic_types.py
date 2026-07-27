@@ -3,11 +3,11 @@
 from typing import ClassVar
 
 from ssz import (
-    BaseBitlist,
-    BaseBitvector,
-    BaseByteList,
-    BaseBytes,
+    Bitlist,
+    Bitvector,
     Boolean,
+    ByteList,
+    Bytes,
     List,
     Uint8,
     Uint16,
@@ -20,39 +20,39 @@ from ssz import (
 from ssz_testing import SSZTestFiller
 
 
-class Bytes4(BaseBytes):
+class Bytes4(Bytes):
     LENGTH = 4
 
 
-class Bytes32(BaseBytes):
+class Bytes32(Bytes):
     LENGTH = 32
 
 
-class Bytes52(BaseBytes):
+class Bytes52(Bytes):
     LENGTH = 52
 
 
-class Bytes64(BaseBytes):
+class Bytes64(Bytes):
     LENGTH = 64
 
 
-class ByteList512KiB(BaseByteList):
+class ByteList512KiB(ByteList):
     LIMIT = 512 * 1024
 
 
-class SampleBitvector8(BaseBitvector):
+class SampleBitvector8(Bitvector):
     """8-bit bitvector. Fits exactly in one byte of SSZ encoding."""
 
     LENGTH: ClassVar[int] = 8
 
 
-class SampleBitvector64(BaseBitvector):
+class SampleBitvector64(Bitvector):
     """64-bit bitvector. Spans multiple 32-byte Merkle chunks."""
 
     LENGTH: ClassVar[int] = 64
 
 
-class SampleBitlist16(BaseBitlist):
+class SampleBitlist16(Bitlist):
     """Bitlist allowing up to 16 bits. Exercises the length-delimiting sentinel bit."""
 
     LIMIT: ClassVar[int] = 16

@@ -40,7 +40,7 @@ from ssz.exceptions import (
 from ssz.ssz_base import SSZCollection
 
 
-class BaseBitvector(SSZCollection[Boolean]):
+class Bitvector(SSZCollection[Boolean]):
     """
     Fixed-length SSZ bitfield with exactly N bits.
 
@@ -466,7 +466,7 @@ class _SSZBitlist(SSZCollection[Boolean]):
         return cls(data=[Boolean((data[i // 8] >> (i % 8)) & 1) for i in range(num_bits)])
 
 
-class BaseBitlist(_SSZBitlist):
+class Bitlist(_SSZBitlist):
     """
     Variable-length SSZ bitfield with 0 to N bits.
 

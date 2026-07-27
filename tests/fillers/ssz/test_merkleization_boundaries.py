@@ -2,47 +2,47 @@
 
 from typing import ClassVar
 
-from ssz import BaseBitlist, BaseBitvector, Boolean, List, Uint64
+from ssz import Bitlist, Bitvector, Boolean, List, Uint64
 from ssz_testing import SSZTestFiller
 
 
-class BoundaryBitvector1(BaseBitvector):
+class BoundaryBitvector1(Bitvector):
     """Single-bit vector. Minimal case: one bit occupies one byte."""
 
     LENGTH: ClassVar[int] = 1
 
 
-class BoundaryBitvector7(BaseBitvector):
+class BoundaryBitvector7(Bitvector):
     """Seven-bit vector. One byte with the high bit left as padding."""
 
     LENGTH: ClassVar[int] = 7
 
 
-class BoundaryBitvector9(BaseBitvector):
+class BoundaryBitvector9(Bitvector):
     """Nine-bit vector. Two bytes: the second carries a single bit."""
 
     LENGTH: ClassVar[int] = 9
 
 
-class BoundaryBitvector255(BaseBitvector):
+class BoundaryBitvector255(Bitvector):
     """Just below one Merkle chunk. Final chunk holds 31 bytes of data and 1 pad byte."""
 
     LENGTH: ClassVar[int] = 255
 
 
-class BoundaryBitvector256(BaseBitvector):
+class BoundaryBitvector256(Bitvector):
     """Exact Merkle-chunk boundary. One chunk, no padding."""
 
     LENGTH: ClassVar[int] = 256
 
 
-class BoundaryBitvector257(BaseBitvector):
+class BoundaryBitvector257(Bitvector):
     """Just above one Merkle chunk. Second chunk holds one bit and mix-ins padding."""
 
     LENGTH: ClassVar[int] = 257
 
 
-class BoundaryBitlist256(BaseBitlist):
+class BoundaryBitlist256(Bitlist):
     """
     Bitlist whose limit is exactly one Merkle chunk.
 

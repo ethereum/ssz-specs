@@ -15,7 +15,7 @@ repository implements:
 - **Basic types**: `Boolean`, `Byte`, and
   `Uint8`/`Uint16`/`Uint32`/`Uint64`/`Uint128`/`Uint256`, with `Bit` as a second spelling
   of a boolean.
-- **Byte arrays**: fixed-length byte vectors and variable-length byte lists.
+- **Byte arrays**: `Bytes` and `ByteList`.
 - **Bitfields**: `Bitvector` and `Bitlist`.
 - **Composite types**: `Vector`, `List`, and `Container`.
 - **Progressive types** ([EIP-7916](https://eips.ethereum.org/EIPS/eip-7916)):
@@ -40,7 +40,7 @@ src/ssz/
   ssz_base.py          # abstract SSZType / SSZModel bases
   boolean.py           # Boolean, and Bit as a second spelling of it
   uint.py              # Uint8/16/32/64/128/256, and Byte as opaque eight bits
-  byte_arrays.py       # fixed byte vectors and byte lists
+  byte_arrays.py       # Bytes / ByteList
   bitfields.py         # Bitvector / Bitlist / ProgressiveBitlist
   collections.py       # Vector / List / ProgressiveList
   container.py         # Container / ProgressiveContainer

@@ -9,8 +9,8 @@ import pytest
 
 from ssz import (
     ZERO_ROOT,
-    BaseByteList,
-    BaseBytes,
+    ByteList,
+    Bytes,
     Chunk,
     Root,
     SSZType,
@@ -23,7 +23,7 @@ from ssz import (
     Uint128,
     Uint256,
 )
-from ssz.bitfields import BaseBitlist, BaseBitvector, ProgressiveBitlist
+from ssz.bitfields import Bitlist, Bitvector, ProgressiveBitlist
 from ssz.boolean import Boolean
 from ssz.collections import List, ProgressiveList, Vector
 from ssz.container import Container, ProgressiveContainer
@@ -531,109 +531,109 @@ def test_merkleize_progressive_positions_are_stable_as_data_grows() -> None:
     )
 
 
-class Bytes48(BaseBytes):
+class Bytes48(Bytes):
     """Test-local fixed-size byte array of 48 bytes."""
 
     LENGTH = 48
 
 
-class Bytes96(BaseBytes):
+class Bytes96(Bytes):
     """Test-local fixed-size byte array of 96 bytes spanning three chunks."""
 
     LENGTH = 96
 
 
-class ByteList7(BaseByteList):
+class ByteList7(ByteList):
     """Byte list with a single-chunk capacity of 7 bytes."""
 
     LIMIT = 7
 
 
-class ByteList10(BaseByteList):
+class ByteList10(ByteList):
     """Byte list with a single-chunk capacity of 10 bytes."""
 
     LIMIT = 10
 
 
-class ByteList32(BaseByteList):
+class ByteList32(ByteList):
     """Byte list whose capacity exactly fills one chunk."""
 
     LIMIT = 32
 
 
-class ByteList50(BaseByteList):
+class ByteList50(ByteList):
     """Byte list spanning two chunks of capacity."""
 
     LIMIT = 50
 
 
-class ByteList256(BaseByteList):
+class ByteList256(ByteList):
     """Byte list with capacity for eight chunks."""
 
     LIMIT = 256
 
 
-class ByteList2048(BaseByteList):
+class ByteList2048(ByteList):
     """Byte list with capacity for sixty-four chunks."""
 
     LIMIT = 2048
 
 
-class Bitvector1(BaseBitvector):
+class Bitvector1(Bitvector):
     """Single-bit bitvector."""
 
     LENGTH = 1
 
 
-class Bitvector3(BaseBitvector):
+class Bitvector3(Bitvector):
     """Three-bit bitvector inside one byte."""
 
     LENGTH = 3
 
 
-class Bitvector8(BaseBitvector):
+class Bitvector8(Bitvector):
     """Bitvector aligned to one byte."""
 
     LENGTH = 8
 
 
-class Bitvector9(BaseBitvector):
+class Bitvector9(Bitvector):
     """Bitvector spilling into a second byte."""
 
     LENGTH = 9
 
 
-class Bitvector256(BaseBitvector):
+class Bitvector256(Bitvector):
     """Bitvector whose data fills exactly one 32-byte chunk."""
 
     LENGTH = 256
 
 
-class Bitvector512(BaseBitvector):
+class Bitvector512(Bitvector):
     """Bitvector whose data fills exactly two chunks."""
 
     LENGTH = 512
 
 
-class Bitlist3(BaseBitlist):
+class Bitlist3(Bitlist):
     """Bitlist limit of three bits."""
 
     LIMIT = 3
 
 
-class Bitlist8(BaseBitlist):
+class Bitlist8(Bitlist):
     """Bitlist limit of eight bits."""
 
     LIMIT = 8
 
 
-class Bitlist256(BaseBitlist):
+class Bitlist256(Bitlist):
     """Bitlist whose data root fits one chunk."""
 
     LIMIT = 256
 
 
-class Bitlist512(BaseBitlist):
+class Bitlist512(Bitlist):
     """Bitlist whose data root spans two chunks."""
 
     LIMIT = 512
@@ -1061,7 +1061,7 @@ def test_hash_tree_root_bytelist_empty_large_capacity() -> None:
     ],
 )
 def test_hash_tree_root_bytelist_various(
-    list_cls: type[BaseByteList], payload: bytes, expected_root: Root
+    list_cls: type[ByteList], payload: bytes, expected_root: Root
 ) -> None:
     """Variable-length byte lists merkleize their packed data then mix in the length."""
     assert hash_tree_root(list_cls(data=payload)) == expected_root
@@ -1086,7 +1086,7 @@ def _bools(*values: int) -> list[Boolean]:
     ],
 )
 def test_hash_tree_root_bitvector_single_chunk(
-    bv_cls: type[BaseBitvector],
+    bv_cls: type[Bitvector],
     bits: list[Boolean],
     expected_payload: bytes,
 ) -> None:
@@ -1120,7 +1120,7 @@ def test_hash_tree_root_bitvector_two_chunks() -> None:
     ],
 )
 def test_hash_tree_root_bitlist_small(
-    bl_cls: type[BaseBitlist],
+    bl_cls: type[Bitlist],
     bits: list[Boolean],
     expected_data_root: Root,
     expected_length: int,
@@ -1990,7 +1990,7 @@ class Uint8List4(List[Uint8]):
     LIMIT = 4
 
 
-class ByteList8(BaseByteList):
+class ByteList8(ByteList):
     """Byte list with an eight-byte capacity, so its data tree is one chunk deep."""
 
     LIMIT = 8

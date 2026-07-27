@@ -18,9 +18,9 @@ from ssz import (
     Uint128,
     Uint256,
 )
-from ssz.bitfields import BaseBitlist, BaseBitvector, ProgressiveBitlist
+from ssz.bitfields import Bitlist, Bitvector, ProgressiveBitlist
 from ssz.boolean import Boolean
-from ssz.byte_arrays import BaseByteList, BaseBytes
+from ssz.byte_arrays import ByteList, Bytes
 from ssz.collections import List, ProgressiveList, Vector
 from ssz.container import Container, ProgressiveContainer
 from ssz.exceptions import SSZDefaultError, SSZError, SSZTypeError, SSZValueError
@@ -58,19 +58,19 @@ class RootList4(List[Root]):
     LIMIT = 4
 
 
-class SmallBitvector(BaseBitvector):
+class SmallBitvector(Bitvector):
     """A bitvector with exactly 3 bits."""
 
     LENGTH = 3
 
 
-class SmallByteList(BaseByteList):
+class SmallByteList(ByteList):
     """A byte list with up to 10 bytes."""
 
     LIMIT = 10
 
 
-class ByteList4(BaseByteList):
+class ByteList4(ByteList):
     """A byte list with up to 4 bytes, narrow enough that a 3-byte payload is one short."""
 
     LIMIT = 4
@@ -91,7 +91,7 @@ class ThreeFieldContainer(Container):
     c: Uint16List4
 
 
-class SmallBitlist(BaseBitlist):
+class SmallBitlist(Bitlist):
     """A bitlist with a small limit, used to test SSZModel.__len__ data path."""
 
     LIMIT = 8
@@ -139,49 +139,49 @@ class PlainLimitList(List[Uint8]):
     LIMIT = 4
 
 
-class TypedLengthBitvector(BaseBitvector):
+class TypedLengthBitvector(Bitvector):
     """A bitvector whose bit count is declared with a typed value."""
 
     LENGTH = Uint64(4)
 
 
-class PlainLengthBitvector(BaseBitvector):
+class PlainLengthBitvector(Bitvector):
     """The same bitvector, declared with a plain integer."""
 
     LENGTH = 4
 
 
-class TypedLimitBitlist(BaseBitlist):
+class TypedLimitBitlist(Bitlist):
     """A bitlist whose capacity is declared with a typed value."""
 
     LIMIT = Uint64(4)
 
 
-class PlainLimitBitlist(BaseBitlist):
+class PlainLimitBitlist(Bitlist):
     """The same bitlist, declared with a plain integer."""
 
     LIMIT = 4
 
 
-class TypedLengthBytes(BaseBytes):
+class TypedLengthBytes(Bytes):
     """A fixed byte array whose byte count is declared with a typed value."""
 
     LENGTH = Uint64(4)
 
 
-class PlainLengthBytes(BaseBytes):
+class PlainLengthBytes(Bytes):
     """The same fixed byte array, declared with a plain integer."""
 
     LENGTH = 4
 
 
-class TypedLimitByteList(BaseByteList):
+class TypedLimitByteList(ByteList):
     """A byte list whose capacity is declared with a typed value."""
 
     LIMIT = Uint64(4)
 
 
-class PlainLimitByteList(BaseByteList):
+class PlainLimitByteList(ByteList):
     """The same byte list, declared with a plain integer."""
 
     LIMIT = 4
@@ -191,12 +191,12 @@ class TestSSZModelLength:
     """
     Tests for SSZModel.__len__() on both collection and container models.
 
-    Uses BaseBitlist (not List) for the data-path because List overrides
-    __len__ with its own implementation. BaseBitlist inherits SSZModel's version.
+    Uses Bitlist (not List) for the data-path because List overrides
+    __len__ with its own implementation. Bitlist inherits SSZModel's version.
     """
 
     def test_length_data_path_via_bitlist(self) -> None:
-        """BaseBitlist delegates to SSZModel.__len__ which returns len(data)."""
+        """Bitlist delegates to SSZModel.__len__ which returns len(data)."""
         bl = SmallBitlist(data=(Boolean(True), Boolean(False), Boolean(True)))
         assert len(bl) == 3
 

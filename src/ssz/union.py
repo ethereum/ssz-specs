@@ -5,9 +5,9 @@ from typing import IO, Any, ClassVar, Final, Self, override
 
 from pydantic import model_validator
 
-from ssz.bitfields import BaseBitlist, BaseBitvector, ProgressiveBitlist
+from ssz.bitfields import Bitlist, Bitvector, ProgressiveBitlist
 from ssz.boolean import Boolean
-from ssz.byte_arrays import BaseByteList, BaseBytes
+from ssz.byte_arrays import ByteList, Bytes
 from ssz.collections import List, ProgressiveList, Vector
 from ssz.container import Container, ProgressiveContainer
 from ssz.exceptions import (
@@ -40,7 +40,7 @@ def _byte_vector_length(ssz_type: type[SSZType]) -> int | None:
     A fixed byte array is the spec's alias for a vector of single bytes.
     Both spellings answer alike here, which is what keeps them compatible.
     """
-    if issubclass(ssz_type, BaseBytes):
+    if issubclass(ssz_type, Bytes):
         return getattr(ssz_type, "LENGTH", None)
     element = getattr(ssz_type, "ELEMENT_TYPE", None)
     if issubclass(ssz_type, Vector) and element is not None and issubclass(element, BaseUint):
@@ -55,7 +55,7 @@ def _byte_list_limit(ssz_type: type[SSZType]) -> int | None:
     A byte list is the spec's alias for a list of single bytes.
     Both spellings answer alike here, which is what keeps them compatible.
     """
-    if issubclass(ssz_type, BaseByteList):
+    if issubclass(ssz_type, ByteList):
         return getattr(ssz_type, "LIMIT", None)
     element = getattr(ssz_type, "ELEMENT_TYPE", None)
     if issubclass(ssz_type, List) and element is not None and issubclass(element, BaseUint):
@@ -154,17 +154,15 @@ def is_compatible(left: type[SSZType], right: type[SSZType]) -> bool:
         return left_byte_list == right_byte_list
 
     # Bitfields answer for their capacity, and never across the three shapes.
-    if issubclass(left, BaseBitvector) or issubclass(right, BaseBitvector):
+    if issubclass(left, Bitvector) or issubclass(right, Bitvector):
         return (
-            issubclass(left, BaseBitvector)
-            and issubclass(right, BaseBitvector)
+            issubclass(left, Bitvector)
+            and issubclass(right, Bitvector)
             and left.LENGTH == right.LENGTH
         )
-    if issubclass(left, BaseBitlist) or issubclass(right, BaseBitlist):
+    if issubclass(left, Bitlist) or issubclass(right, Bitlist):
         return (
-            issubclass(left, BaseBitlist)
-            and issubclass(right, BaseBitlist)
-            and left.LIMIT == right.LIMIT
+            issubclass(left, Bitlist) and issubclass(right, Bitlist) and left.LIMIT == right.LIMIT
         )
     # The spec lists no rule for a progressive bitlist, which carries no parameter.
     # Two of them are one type under the first rule, whatever names they were given.

@@ -1,8 +1,8 @@
 """SSZ conformance test vectors for the EIP-7916 progressive types."""
 
 from ssz import (
-    BaseBytes,
     Boolean,
+    Bytes,
     Container,
     ProgressiveBitlist,
     ProgressiveList,
@@ -13,7 +13,7 @@ from ssz import (
 from ssz_testing import SSZTestFiller
 
 
-class Bytes32(BaseBytes):
+class Bytes32(Bytes):
     LENGTH = 32
 
 
