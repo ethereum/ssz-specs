@@ -45,6 +45,10 @@ class ProgressiveBitlistModel(BaseModel):
     value: ProgressiveBitlist
 
 
+class LengthlessBitvector(BaseBitvector):
+    """A bitvector subclass that never declared its bit count, so it has no default."""
+
+
 def bits_of(*values: int) -> tuple[Boolean, ...]:
     """Build a typed boolean tuple from 0/1 integers."""
     return tuple(Boolean(bool(bit)) for bit in values)
@@ -756,6 +760,103 @@ class TestBitfieldSSZ:
         with pytest.raises(SSZSerializationError) as exception_info:
             Bitlist16.deserialize(stream, scope=2)
         assert str(exception_info.value) == "Bitlist16: expected 2 bytes, got 1"
+
+
+class TestBitfieldDefaults:
+    """The default value of each of the three bitfield shapes, and the zeroed check over it."""
+
+    def test_bitvector_default_clears_every_bit(self) -> None:
+        """The spec gives a bitvector the default of LENGTH clear bits."""
+        assert Bitvector4() == Bitvector4(data=bits_of(0, 0, 0, 0))
+        assert len(Bitvector4()) == 4
+
+    def test_bitvector_empty_input_stays_a_length_error(self) -> None:
+        """Zero bits is a count mismatch against LENGTH, never a request for the default."""
+        with pytest.raises(ValueOrValidationError) as exception_info:
+            Bitvector4(data=[])
+        assert str(exception_info.value) == "Bitvector4 requires exactly 4 elements, got 0"
+
+    def test_bitvector_data_is_no_longer_a_required_field(self) -> None:
+        """The bits carry a default, so Pydantic itself reports them as optional."""
+        assert Bitvector4.model_fields["data"].is_required() is False
+
+    @pytest.mark.parametrize(
+        "bitvector_type, expected_message",
+        [
+            pytest.param(BaseBitvector, "BaseBitvector must define LENGTH", id="the_base_itself"),
+            pytest.param(
+                LengthlessBitvector, "LengthlessBitvector must define LENGTH", id="a_subclass"
+            ),
+        ],
+    )
+    def test_a_bitvector_without_a_length_reports_its_own_declaration_error(
+        self, bitvector_type: type[BaseBitvector], expected_message: str
+    ) -> None:
+        """No bit count means no bits to clear, so the declaration error comes first."""
+        # The default is injected only once a length is declared, so a shape without one
+        # keeps the inherited empty default and trips its own check on the way through.
+        with pytest.raises(SSZTypeError) as exception_info:
+            bitvector_type()
+        assert str(exception_info.value) == expected_message
+
+    def test_each_bitvector_default_holds_its_own_bit_sequence(self) -> None:
+        """Bitfields mutate in place, so two defaults must not share one sequence."""
+        first = Bitvector4()
+        first[0] = Boolean(True)
+        # The bits themselves are immutable, so only the sequence holding them can alias.
+        assert first == Bitvector4(data=bits_of(1, 0, 0, 0))
+        assert Bitvector4() == Bitvector4(data=bits_of(0, 0, 0, 0))
+
+    def test_bitlist_default_is_empty(self) -> None:
+        """A variable-size shape defaults to its empty value, so it holds no bit at all."""
+        assert Bitlist8() == Bitlist8(data=())
+        assert len(Bitlist8()) == 0
+
+    def test_progressive_bitlist_default_is_empty(self) -> None:
+        """The unbounded shape defaults to empty on the same terms."""
+        assert ProgressiveBitlist() == ProgressiveBitlist(data=())
+        assert len(ProgressiveBitlist()) == 0
+
+    def test_each_bitlist_default_holds_its_own_bit_sequence(self) -> None:
+        """Appending to one empty default leaves the next one empty."""
+        first = Bitlist8()
+        first.append(Boolean(True))
+        assert first == Bitlist8(data=bits_of(1))
+        assert Bitlist8() == Bitlist8(data=())
+
+    @pytest.mark.parametrize(
+        "default_value, non_default_value",
+        [
+            # A cleared bit is the default; setting bit 0 moves away from it.
+            pytest.param(Bitvector4(), Bitvector4(data=bits_of(1, 0, 0, 0)), id="bitvector"),
+            # An empty bitlist is the default; one clear bit is a different value of length 1.
+            pytest.param(Bitlist8(), Bitlist8(data=bits_of(0)), id="bitlist"),
+            pytest.param(
+                ProgressiveBitlist(), ProgressiveBitlist(data=bits_of(0)), id="progressive_bitlist"
+            ),
+        ],
+    )
+    def test_is_zero_holds_only_for_the_default(
+        self, default_value: Any, non_default_value: Any
+    ) -> None:
+        """A default reads as zeroed and any other value of the same type does not."""
+        assert default_value.is_zero() is True
+        assert non_default_value.is_zero() is False
+
+    @pytest.mark.parametrize(
+        "default_value, expected_encoding",
+        [
+            # Four clear bits pack into one byte of zeros.
+            pytest.param(Bitvector4(), b"\x00", id="bitvector"),
+            # An empty bitlist is the delimiter bit alone.
+            pytest.param(Bitlist8(), b"\x01", id="bitlist"),
+            pytest.param(ProgressiveBitlist(), b"\x01", id="progressive_bitlist"),
+        ],
+    )
+    def test_the_default_round_trips(self, default_value: Any, expected_encoding: bytes) -> None:
+        """Each default encodes to a known byte and decodes back unchanged."""
+        assert default_value.encode_bytes() == expected_encoding
+        assert type(default_value).decode_bytes(expected_encoding) == default_value
 
 
 @given(bits=st.lists(st.booleans(), max_size=8))

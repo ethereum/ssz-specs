@@ -37,6 +37,9 @@ class BaseBytes(bytes, SSZType):
     - Subclasses pin the byte count by setting the class-level length.
     - Equality is strict — only another byte-array instance compares.
 
+    The spec reads a fixed byte array as a vector of single bytes, so its default is every
+    byte zero.
+
     For example, Bytes4 wraps four raw bytes and serializes verbatim:
 
         Bytes4(b"\x01\x02\x03\x04")  ->  wire bytes 01 02 03 04
@@ -78,12 +81,13 @@ class BaseBytes(bytes, SSZType):
             case _:
                 raise TypeError(f"Cannot coerce {type(value).__name__} to bytes")
 
-    def __new__(cls, value: bytes | bytearray | str | Iterable[int] = b"") -> Self:
+    def __new__(cls, value: bytes | bytearray | str | Iterable[int] | None = None) -> Self:
         """
         Construct and validate a new byte array.
 
         Args:
             value: Any input coercible to bytes — bytes, bytearray, iterable of ints, or hex string.
+                Omitting it gives the default value, which is every byte zero.
 
         Raises:
             SSZTypeError: If the subclass has not declared a length.
@@ -92,6 +96,12 @@ class BaseBytes(bytes, SSZType):
         if not hasattr(cls, "LENGTH"):
             raise SSZDefinitionError(cls.__name__, "LENGTH")
 
+        # An omitted value is the default, which is every byte zero.
+        # An empty one is a wrong byte count: a 32-byte array wants 32, so no argument
+        # gives 32 zeros while an empty input is an error.
+        if value is None:
+            value = b"\x00" * cls.LENGTH
+
         coerced_bytes = cls._coerce_to_bytes(value)
         if len(coerced_bytes) != cls.LENGTH:
             raise SSZLengthError(cls.__name__, cls.LENGTH, len(coerced_bytes), unit="bytes")
@@ -99,7 +109,7 @@ class BaseBytes(bytes, SSZType):
 
     @classmethod
     def zero(cls) -> Self:
-        """Return a new instance filled with zero bytes."""
+        """Return a new instance filled with zero bytes, which is also the default."""
         return cls(b"\x00" * cls.LENGTH)
 
     @classmethod
@@ -256,6 +266,8 @@ class BaseByteList(SSZCollection[int]):
     LIMIT: ClassVar[int]
     """Maximum number of bytes the instance may contain."""
 
+    # The spec's default for a byte list is empty, and bytes cannot be mutated, so one
+    # shared empty value is safe here where a shared list would not be.
     data: bytes = Field(default=b"")
     """The raw bytes stored in this list."""
 

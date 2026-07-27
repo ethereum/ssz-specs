@@ -16,6 +16,7 @@ from typing import IO, Any, ClassVar, Final, Self, override
 
 from pydantic import ConfigDict, model_validator
 from pydantic.functional_validators import ModelWrapValidatorHandler
+from pydantic_core import PydanticUndefined
 
 from ssz.exceptions import (
     SSZActiveFieldsError,
@@ -42,6 +43,9 @@ class _SSZContainer(SSZModel):
     Shared wire format for the two SSZ struct shapes.
 
     Both shapes encode the same way and differ only in how their fields are merkleized.
+
+    Built from nothing, a struct holds one field default per field.
+    One field whose type has no default leaves the struct with none.
 
     Containers are mutable: assigning a field revalidates the value against
     the field's declared type, exactly as construction does. Assignment is
@@ -76,6 +80,24 @@ class _SSZContainer(SSZModel):
             except SSZError as exception:
                 raise ValueError(f"invalid {cls.__name__} hex: {exception}") from exception
         return handler(value)
+
+    @classmethod
+    def __pydantic_init_subclass__(cls, **kwargs: Any) -> None:
+        """
+        Give every field the default of its own type, so a struct needs no arguments.
+
+        Each default is built when a field is left out, never shared, since a value is
+        mutable and one instance handed to two fields would alias.
+
+        A field whose type has no default raises when that field is left out, which is how
+        a struct holding such a type inherits the absence.
+        """
+        super().__pydantic_init_subclass__(**kwargs)
+
+        for field in cls.model_fields.values():
+            if field.default_factory is None and field.default is PydanticUndefined:
+                field.default_factory = field.annotation
+        cls.model_rebuild(force=True)
 
     @classmethod
     @override

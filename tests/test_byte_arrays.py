@@ -95,7 +95,7 @@ class TestBaseBytesConstruction:
             Bytes4(wrong_input)
         assert str(exception_info.value) == f"Bytes4 requires exactly 4 bytes, got {count}"
 
-    @pytest.mark.parametrize("bad_input", [42, None, 1.5])
+    @pytest.mark.parametrize("bad_input", [42, 1.5])
     def test_construction_with_non_coercible_input_raises(self, bad_input: Any) -> None:
         """Inputs outside the accepted union raise TypeError naming the offending type."""
         name = type(bad_input).__name__
@@ -492,6 +492,60 @@ class TestBaseByteListPydantic:
         model = ModelLists(payload=ByteList16(data=raw_bytes))
         dumped = model.model_dump(mode="json")
         assert dumped["payload"]["data"] == "0x0001020304"
+
+
+class TestBaseBytesDefault:
+    """The default value of a fixed-length byte array, and the zeroed check over it."""
+
+    def test_construction_without_an_argument_is_zeroed(self) -> None:
+        """The spec gives a fixed byte array the default of LENGTH zero bytes."""
+        assert bytes(Bytes4()) == b"\x00\x00\x00\x00"
+        assert Bytes4() == Bytes4.zero()
+
+    def test_an_explicit_none_asks_for_the_default_too(self) -> None:
+        """None is the sentinel that stands for an omitted value, so it is the same request."""
+        assert Bytes4(None) == Bytes4()
+
+    def test_an_explicitly_empty_input_stays_a_length_error(self) -> None:
+        """Zero bytes is a count mismatch against LENGTH, never a request for the default."""
+        with pytest.raises(SSZValueError) as exception_info:
+            Bytes4(b"")
+        assert str(exception_info.value) == "Bytes4 requires exactly 4 bytes, got 0"
+
+    def test_a_shape_without_a_length_reports_its_own_declaration_error(self) -> None:
+        """No length means no byte count to zero, so the declaration error comes first."""
+        with pytest.raises(SSZTypeError) as exception_info:
+            BaseBytes()
+        assert str(exception_info.value) == "BaseBytes must define LENGTH"
+
+    def test_the_default_is_zeroed_and_any_set_byte_is_not(self) -> None:
+        """The zero-filled array equals a fresh default of its type; a set byte does not."""
+        assert Bytes4().is_zero() is True
+        assert Bytes4(b"\x00\x00\x00\x01").is_zero() is False
+
+    def test_the_default_round_trips(self) -> None:
+        """The default encodes to four zero bytes and decodes back unchanged."""
+        assert Bytes4().encode_bytes() == b"\x00" * 4
+        assert Bytes4.decode_bytes(Bytes4().encode_bytes()) == Bytes4()
+
+
+class TestBaseByteListDefault:
+    """The default value of a variable-length byte list, which is the empty payload."""
+
+    def test_construction_without_an_argument_is_empty(self) -> None:
+        """A variable-size shape defaults to its empty value, so it holds no byte at all."""
+        assert ByteList5() == ByteList5(data=b"")
+        assert len(ByteList5()) == 0
+
+    def test_the_default_is_zeroed_and_a_single_zero_byte_is_not(self) -> None:
+        """The empty payload is the default; one zero byte is a different value of length 1."""
+        assert ByteList5().is_zero() is True
+        assert ByteList5(data=b"\x00").is_zero() is False
+
+    def test_the_default_round_trips(self) -> None:
+        """The default encodes to no bytes at all and decodes back unchanged."""
+        assert ByteList5().encode_bytes() == b""
+        assert ByteList5.decode_bytes(b"") == ByteList5()
 
 
 def test_zero_default_value() -> None:

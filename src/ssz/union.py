@@ -11,6 +11,7 @@ from ssz.byte_arrays import BaseByteList, BaseBytes
 from ssz.collections import List, ProgressiveList, Vector
 from ssz.container import Container, ProgressiveContainer
 from ssz.exceptions import (
+    SSZDefaultError,
     SSZDefinitionError,
     SSZFixedSizeError,
     SSZSerializationError,
@@ -259,7 +260,9 @@ class CompatibleUnion(SSZModel):
     A union is always variable-size, even where every option shares one width.
     A container therefore reaches one through an offset.
 
-    A union has no default value: an uninitialized one is an error, not option zero.
+    A compatible union has no default value.
+    Selector zero is reserved, so no option could stand in as the default one.
+    A struct or a vector holding one therefore has no default either.
 
     A copy taken with a field replaced skips validation, as it does for any model here.
     On a union that yields a selector naming an option the value does not hold.
@@ -337,6 +340,24 @@ class CompatibleUnion(SSZModel):
                         name,
                         f"options {selector} and {other_selector} merkleize differently",
                     )
+
+    @model_validator(mode="before")
+    @classmethod
+    def _reject_a_default(cls, raw_input: Any) -> Any:
+        """
+        Refuse to build a compatible union from nothing, which the spec makes an error.
+
+        A struct or vector holding one has no default either.
+        Both build their default through this constructor, so the error propagates from here.
+
+        Raises:
+            SSZTypeError: When no input is given at all.
+        """
+        # An empty input is the only way to ask for a default, and this type has none.
+        # Selector zero is reserved, so no option could be named as the default one.
+        if raw_input == {}:
+            raise SSZDefaultError(cls.__name__)
+        return raw_input
 
     @model_validator(mode="after")
     def _check_selected_option(self) -> Self:

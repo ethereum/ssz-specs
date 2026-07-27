@@ -13,6 +13,7 @@ from ssz import (
     BaseBytes,
     Chunk,
     Root,
+    SSZType,
     SSZTypeError,
     SSZValueError,
     Uint8,
@@ -1975,3 +1976,143 @@ def test_compatible_union_options_share_their_bytes_and_not_their_roots() -> Non
     )
     assert square.encode_bytes()[1:] == circle.encode_bytes()[1:]
     assert hash_tree_root(square) != hash_tree_root(circle)
+
+
+class Uint8Vector4(Vector[Uint8]):
+    """Vector of four Uint8, four of the thirty-two bytes a single chunk holds."""
+
+    LENGTH = 4
+
+
+class Uint8List4(List[Uint8]):
+    """List of at most four Uint8, so its data tree is one chunk deep."""
+
+    LIMIT = 4
+
+
+class ByteList8(BaseByteList):
+    """Byte list with an eight-byte capacity, so its data tree is one chunk deep."""
+
+    LIMIT = 8
+
+
+class Bytes48Vector4(Vector[Bytes48]):
+    """Vector of four 48-byte arrays, the shape a sync committee's key list takes."""
+
+    LENGTH = 4
+
+
+class SyncCommittee(Container):
+    """The consensus-spec shape: a vector of public keys, then the aggregate of them."""
+
+    pubkeys: Bytes48Vector4
+    aggregate_pubkey: Bytes48
+
+
+ALL_ZERO_DEFAULT_ROOT = "0x" + "00" * 32
+"""Root of every default that occupies exactly one zero chunk and mixes nothing in."""
+
+ZERO_PAIR_DEFAULT_ROOT = "0xf5a5fd42d16a20302798ef6ed309979b43003d2320d9f0e8ea9831a92759fb4b"
+"""Root of two zero nodes hashed together, which two unrelated defaults both reach."""
+
+
+def default_root_hex(value: SSZType) -> str:
+    """Return the hash tree root of a value as a 0x-prefixed hex string."""
+    return "0x" + hash_tree_root(value).hex()
+
+
+@pytest.mark.parametrize(
+    "default_value",
+    [
+        # A uint of any width is zero, and its little-endian bytes pad out to one zero chunk.
+        pytest.param(Uint8(), id="uint8"),
+        pytest.param(Uint64(), id="uint64"),
+        # A uint256 fills the chunk exactly, and every byte of it is still zero.
+        pytest.param(Uint256(), id="uint256"),
+        # False packs to one zero byte, padded to the same chunk.
+        pytest.param(Boolean(), id="boolean"),
+        # Eight clear bits pack to one zero byte; no length is mixed in for a bitvector.
+        pytest.param(Bitvector8(), id="bitvector_8"),
+        # Four zero Uint8 pack to four zero bytes inside the one chunk they share.
+        pytest.param(Uint8Vector4(), id="vector_uint8_4"),
+    ],
+)
+def test_default_root_is_the_zero_chunk_for_a_single_chunk_fixed_shape(
+    default_value: SSZType,
+) -> None:
+    """A default that fits one chunk and mixes nothing in roots to that all-zero chunk."""
+    assert default_root_hex(default_value) == ALL_ZERO_DEFAULT_ROOT
+    assert hash_tree_root(default_value) == ZERO_ROOT
+
+
+def test_default_root_of_a_two_chunk_byte_array() -> None:
+    """A 48-byte default is two zero chunks, hashed together into one node."""
+    # 48 zero bytes span two chunks, the second half-padded, and both are all zero.
+    assert hash_tree_root(Bytes48()) == h(ZERO_ROOT, ZERO_ROOT)
+    assert default_root_hex(Bytes48()) == ZERO_PAIR_DEFAULT_ROOT
+
+
+@pytest.mark.parametrize(
+    "default_value",
+    [
+        # A bounded list under a one-chunk capacity: zero data chunks, then a zero count.
+        pytest.param(Uint8List4(), id="list_uint8_4"),
+        pytest.param(Bitlist8(), id="bitlist_8"),
+        pytest.param(ByteList8(), id="byte_list_8"),
+        # The unbounded shapes terminate their spine with the plain zero leaf instead.
+        pytest.param(Uint8ProgressiveList(), id="progressive_list_uint8"),
+        pytest.param(ProgressiveBitlist(), id="progressive_bitlist"),
+    ],
+)
+def test_default_root_of_an_empty_variable_size_shape(default_value: SSZType) -> None:
+    """An empty default is the zero data root with a zero length mixed in on top."""
+    assert hash_tree_root(default_value) == mix_in_length(ZERO_ROOT, 0)
+    assert default_root_hex(default_value) == ZERO_PAIR_DEFAULT_ROOT
+
+
+def test_two_unrelated_defaults_reach_one_root_by_two_different_paths() -> None:
+    """
+    The 48-byte array and the empty list share a root, and nothing links the two.
+
+    - The byte array is two zero chunks hashed together, with no mix-in at all.
+    - The empty list is the zero node with a zero length mixed into it.
+
+    Both land on h(0, 0), which is why each is pinned on its own above rather than
+    through one shared constant.
+    """
+    assert hash_tree_root(Bytes48()) == h(ZERO_ROOT, ZERO_ROOT)
+    assert hash_tree_root(Uint8List4()) == mix_in_length(ZERO_ROOT, 0)
+    assert hash_tree_root(Bytes48()) == hash_tree_root(Uint8List4()) == Z[1]
+
+
+def test_default_root_of_a_container_of_byte_arrays() -> None:
+    """A sync committee's default: four zeroed keys in a vector, then one zeroed key."""
+    # Each 48-byte default roots to h(0, 0); the vector hashes four of those into a
+    # width-four tree, and the container hashes that against the aggregate key's root.
+    key_root = h(ZERO_ROOT, ZERO_ROOT)
+    pubkeys_root = h(h(key_root, key_root), h(key_root, key_root))
+    assert hash_tree_root(SyncCommittee.default()) == h(pubkeys_root, key_root)
+    assert default_root_hex(SyncCommittee.default()) == (
+        "0xbe9a6010451d97ebf5a77af290008a2d79750bb0c4e3aa947e96438a1cfcc5b0"
+    )
+    # The default is an ordinary value, so it survives an encode and decode round trip.
+    assert (
+        SyncCommittee.decode_bytes(SyncCommittee.default().encode_bytes())
+        == SyncCommittee.default()
+    )
+
+
+def test_default_root_of_a_progressive_container_with_a_gap() -> None:
+    """A gapped layout's default: three zero leaves, and the layout word mixed in."""
+    # Every field default roots to the zero chunk whatever its width, so the leaves are
+    # indistinguishable from the gap's own zero leaf. Only the layout word separates them.
+    assert GappedProgressive.ACTIVE_FIELDS == (1, 0, 1)
+    assert hash_tree_root(GappedProgressive.default()) == expected_progressive_container_root(
+        [ZERO_ROOT, ZERO_ROOT, ZERO_ROOT], [1, 0, 1]
+    )
+    assert default_root_hex(GappedProgressive.default()) == (
+        "0x4207c70a4a3b37c984824376528c02dff67b022725f27b7ef21f461aa2baab82"
+    )
+    assert GappedProgressive.decode_bytes(GappedProgressive.default().encode_bytes()) == (
+        GappedProgressive.default()
+    )

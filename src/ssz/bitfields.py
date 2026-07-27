@@ -56,10 +56,31 @@ class BaseBitvector(SSZCollection[Boolean]):
         byte 0:        0 0 0 1 1 1 1 1   ->  0b00011111
 
     Bits 5, 6, 7 are trailing zeros — only the lowest 5 hold data.
+
+    Built from nothing, a bitvector holds every bit clear.
     """
 
     LENGTH: ClassVar[int]
     """Number of bits in the vector."""
+
+    @classmethod
+    def __pydantic_init_subclass__(cls, **kwargs: Any) -> None:
+        """
+        Give the bits their default, which is every bit clear.
+
+        A shape that never declared its bit count keeps its inherited default, and fails
+        its own declaration check instead.
+        """
+        super().__pydantic_init_subclass__(**kwargs)
+
+        if not hasattr(cls, "LENGTH"):
+            return
+
+        length = cls.LENGTH
+        # One shared boolean, repeated: a boolean cannot be mutated, so no bit can alias
+        # another. A vector of composite elements cannot take this shortcut.
+        cls.model_fields["data"].default_factory = lambda: [Boolean(False)] * length
+        cls.model_rebuild(force=True)
 
     data: Sequence[Boolean] = Field(default_factory=list)
     """

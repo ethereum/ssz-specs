@@ -73,6 +73,15 @@ class SSZUnionOptionsError(SSZTypeError):
         super().__init__(f"{type_name}: invalid union options, {reason}")
 
 
+class SSZDefaultError(SSZTypeError):
+    """A default was requested from a type the spec gives none."""
+
+    def __init__(self, type_name: str) -> None:
+        """Record the type that has no default."""
+        self.type_name = type_name
+        super().__init__(f"{type_name} has no default value")
+
+
 class SSZFixedSizeError(SSZTypeError):
     """A fixed byte length was requested from a variable-size type."""
 

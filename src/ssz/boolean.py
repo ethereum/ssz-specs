@@ -28,7 +28,7 @@ class Boolean(int, SSZType):
 
     __slots__ = ()
 
-    def __new__(cls, value: bool | int) -> Self:
+    def __new__(cls, value: bool | int = False) -> Self:
         """
         Construct and validate a new boolean.
 
@@ -36,6 +36,7 @@ class Boolean(int, SSZType):
 
         Args:
             value: The raw value to wrap.
+                Omitting it gives the default value, false.
 
         Raises:
             SSZTypeError: If value is not a bool or int.

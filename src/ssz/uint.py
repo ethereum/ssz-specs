@@ -42,9 +42,13 @@ class BaseUint(int, SSZType):
         cls.MAX_VALUE = 2**cls.BITS - 1
         cls.BYTE_LENGTH = cls.BITS // 8
 
-    def __new__(cls, value: SupportsInt) -> Self:
+    def __new__(cls, value: SupportsInt = 0) -> Self:
         """
         Create and range-check a new instance.
+
+        Args:
+            value: The integer to wrap.
+                Omitting it gives the default value, zero.
 
         Raises:
             SSZTypeError: If value is not an int. Bool, string, and float are rejected.

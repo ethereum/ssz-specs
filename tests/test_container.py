@@ -9,7 +9,7 @@ from pydantic import ValidationError
 
 from ssz.bitfields import ProgressiveBitlist
 from ssz.boolean import Boolean
-from ssz.collections import List, ProgressiveList
+from ssz.collections import List, ProgressiveList, Vector
 from ssz.container import (
     MAX_ACTIVE_FIELDS,
     Container,
@@ -18,12 +18,15 @@ from ssz.container import (
 )
 from ssz.exceptions import (
     SSZActiveFieldsError,
+    SSZDefaultError,
     SSZDefinitionError,
     SSZSerializationError,
     SSZTypeError,
 )
 from ssz.merkleization import hash_tree_root
+from ssz.ssz_base import SSZType
 from ssz.uint import Uint8, Uint16, Uint32, Uint64
+from ssz.union import CompatibleUnion
 
 
 class Uint16List4(List[Uint16]):
@@ -245,6 +248,32 @@ class ContainerWithVariableProgressive(Container):
 
     tag: Uint8
     shape: ListFieldProgressive
+
+
+class InnerFixedVector2(Vector[InnerFixed]):
+    """Vector of two fixed-size containers, held as a single container field below."""
+
+    LENGTH = 2
+
+
+class ContainerWithVectorOfContainers(Container):
+    """Container whose second field is a vector of containers, so defaults nest twice."""
+
+    tag: Uint8
+    items: InnerFixedVector2
+
+
+class TagUnion(CompatibleUnion):
+    """Union over a single option, a type the spec gives no default value."""
+
+    OPTIONS = {1: Uint8}
+
+
+class ContainerWithUnion(Container):
+    """Container whose second field is a union, so the struct inherits the missing default."""
+
+    tag: Uint8
+    body: TagUnion
 
 
 class TestFixedContainer:
@@ -1097,6 +1126,145 @@ class TestContainerUnaffectedByTheSharedBase:
         # Neither shape writes any layout information: the bytes are the fields alone.
         assert bounded.encode_bytes() == progressive.encode_bytes()
         assert TwoUint64.get_byte_length() == TwoUint64Progressive.get_byte_length() == 16
+
+
+class TestContainerDefaults:
+    """
+    One field default per field, filled whether every field was left out or only some.
+
+    Both struct shapes take their defaults from the shared base, so each case is
+    checked on the bounded shape and on the progressive one alike.
+    """
+
+    def test_a_struct_built_from_nothing_takes_every_field_default(self) -> None:
+        """The spec gives a struct the default of one field default per field."""
+        assert TwoUint64.default() == TwoUint64(a=Uint64(0), b=Uint64(0))
+
+    def test_a_partly_named_struct_fills_the_fields_left_out(self) -> None:
+        """Naming one field leaves every other at its own default rather than failing."""
+        # A type checker reads the declared field list, not the defaults this library
+        # attaches to it, so it reports the fields left out as missing arguments.
+        value = TwoUint64(a=Uint64(3))  # ty: ignore[missing-argument]
+        assert value.a == Uint64(3)
+        assert value.b == Uint64(0)
+
+    def test_a_partly_named_progressive_container_fills_the_fields_left_out(self) -> None:
+        """The progressive shape fills a missing field on exactly the same terms."""
+        assert Square(side=Uint16(1)) == Square(side=Uint16(1), color=Uint8(0))  # ty: ignore[missing-argument]
+
+    @pytest.mark.parametrize(
+        "container_type, expected_field_names",
+        [
+            pytest.param(TwoUint64, ["a", "b"], id="fixed_container"),
+            pytest.param(Mixed, ["a", "b", "c", "d"], id="mixed_container"),
+            pytest.param(Square, ["side", "color"], id="progressive_container"),
+        ],
+    )
+    def test_no_field_is_reported_as_required(
+        self, container_type: type[_SSZContainer], expected_field_names: list[str]
+    ) -> None:
+        """Every field carries a default, so Pydantic itself reports none of them required."""
+        assert list(container_type.model_fields) == expected_field_names
+        assert all(not field.is_required() for field in container_type.model_fields.values())
+
+    def test_a_variable_size_field_defaults_to_its_empty_value(self) -> None:
+        """A list field contributes the empty list, which is that shape's own default."""
+        assert Mixed.default() == Mixed(
+            a=Uint64(0), b=Uint16List4(data=[]), c=Uint32(0), d=Uint16List4(data=[])
+        )
+
+    def test_a_nested_container_field_defaults_field_by_field(self) -> None:
+        """A container field contributes its own default, built from its own field defaults."""
+        assert OuterFixedNested.default() == OuterFixedNested(
+            z=Uint64(0), inner=InnerFixed(x=Uint64(0), y=Uint64(0))
+        )
+
+    def test_a_vector_of_containers_field_defaults_position_by_position(self) -> None:
+        """Two levels of nesting: the vector fills each position with the element default."""
+        zero_inner = InnerFixed(x=Uint64(0), y=Uint64(0))
+        assert ContainerWithVectorOfContainers.default() == ContainerWithVectorOfContainers(
+            tag=Uint8(0), items=InnerFixedVector2(data=[zero_inner, zero_inner])
+        )
+
+    def test_a_progressive_container_with_gaps_defaults_its_declared_fields(self) -> None:
+        """A gap holds no field, so only the three declared fields take a default."""
+        assert MultiGapProgressive.ACTIVE_FIELDS == (1, 0, 0, 1, 0, 1)
+        assert MultiGapProgressive.default() == MultiGapProgressive(
+            a=Uint8(0), b=Uint16(0), c=Uint32(0)
+        )
+        # Six positions, three fields, and 1 + 2 + 4 = 7 bytes: a gap still costs nothing.
+        assert MultiGapProgressive.default().encode_bytes() == b"\x00" * 7
+
+    def test_each_field_default_is_built_on_its_own(self) -> None:
+        """Values are mutable, so two structs must never share one field value."""
+        first = OuterFixedNested.default()
+        assert first.inner is not OuterFixedNested.default().inner
+        first.inner.x = Uint64(9)
+        # The next default is unaffected by the mutation applied to the first one.
+        assert OuterFixedNested.default().inner.x == Uint64(0)
+
+    def test_each_default_element_of_a_vector_field_is_built_on_its_own(self) -> None:
+        """Within one struct the two vector positions hold two distinct container values."""
+        value = ContainerWithVectorOfContainers.default()
+        assert value.items.data[0] is not value.items.data[1]
+        value.items.data[0].x = Uint64(9)
+        assert value.items.data[1].x == Uint64(0)
+
+    @pytest.mark.parametrize(
+        "default_value, non_default_value",
+        [
+            pytest.param(TwoUint64.default(), TwoUint64(a=Uint64(1)), id="fixed_container"),  # ty: ignore[missing-argument]
+            # A single element in a list field is enough to move away from the default.
+            pytest.param(
+                Mixed.default(),
+                Mixed(b=Uint16List4(data=[Uint16(0)])),  # ty: ignore[missing-argument]
+                id="mixed_container",
+            ),
+            pytest.param(Square.default(), Square(color=Uint8(1)), id="progressive_container"),  # ty: ignore[missing-argument]
+        ],
+    )
+    def test_is_zero_holds_only_for_the_default(
+        self, default_value: _SSZContainer, non_default_value: _SSZContainer
+    ) -> None:
+        """A default reads as zeroed and any other value of the same type does not."""
+        assert default_value.is_zero() is True
+        assert non_default_value.is_zero() is False
+
+    def test_a_struct_with_no_field_at_all_is_zeroed(self) -> None:
+        """A zero-field struct has one value, which is therefore its default."""
+        assert EmptyContainer().is_zero() is True
+
+    @pytest.mark.parametrize(
+        "default_value, expected_hex",
+        [
+            # Two zero Uint64 give sixteen zero bytes.
+            pytest.param(TwoUint64.default(), "00" * 16, id="fixed_container"),
+            # Fixed part of 20 bytes, both offsets pointing at 20, and no tail payload.
+            pytest.param(
+                Mixed.default(),
+                "0000000000000000" + "14000000" + "00000000" + "14000000",
+                id="mixed_container",
+            ),
+            # Two bytes for side and one for color: a gap costs nothing.
+            pytest.param(Square.default(), "000000", id="progressive_container"),
+            pytest.param(OuterFixedNested.default(), "00" * 24, id="nested_container"),
+        ],
+    )
+    def test_the_default_round_trips(self, default_value: SSZType, expected_hex: str) -> None:
+        """Each default encodes to known bytes and decodes back unchanged."""
+        assert default_value.encode_bytes().hex() == expected_hex
+        assert type(default_value).decode_bytes(default_value.encode_bytes()) == default_value
+
+    def test_a_struct_holding_a_union_has_no_default(self) -> None:
+        """A union has no default, and the struct inherits that absence through the field."""
+        with pytest.raises(SSZDefaultError, match=r"^TagUnion has no default value$"):
+            ContainerWithUnion.default()
+
+    def test_a_struct_holding_a_union_still_builds_when_the_union_is_given(self) -> None:
+        """Only the absent union fails: naming it leaves every other field at its default."""
+        value = ContainerWithUnion(body=TagUnion(selector=Uint8(1), data=Uint8(7)))  # ty: ignore[missing-argument]
+        assert value.tag == Uint8(0)
+        assert value.body == TagUnion(selector=Uint8(1), data=Uint8(7))
 
 
 class TestProgressiveContainerMutation:

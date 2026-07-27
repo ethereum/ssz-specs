@@ -448,6 +448,34 @@ def test_index_operator_index(uint_class: Type[BaseUint]) -> None:
     assert isinstance(operator.index(uint_instance), int)
 
 
+class TestUintDefault:
+    """The default value of every unsigned integer width, and the zeroed check over it."""
+
+    @pytest.mark.parametrize("uint_class", ALL_UINT_TYPES)
+    def test_construction_without_an_argument_is_zero(self, uint_class: Type[BaseUint]) -> None:
+        """The spec gives a uint the default zero, whatever its width."""
+        assert uint_class() == uint_class(0)
+
+    @pytest.mark.parametrize("uint_class", ALL_UINT_TYPES)
+    def test_the_default_is_zeroed(self, uint_class: Type[BaseUint]) -> None:
+        """A default equals a freshly built default of its own type, so it reads as zeroed."""
+        assert uint_class().is_zero() is True
+
+    @pytest.mark.parametrize("uint_class", ALL_UINT_TYPES)
+    def test_a_non_default_value_is_not_zeroed(self, uint_class: Type[BaseUint]) -> None:
+        """One and the widest value the type holds are both away from the default."""
+        assert uint_class(1).is_zero() is False
+        assert uint_class.max_value().is_zero() is False
+
+    @pytest.mark.parametrize("uint_class", ALL_UINT_TYPES)
+    def test_the_default_round_trips(self, uint_class: Type[BaseUint]) -> None:
+        """The default encodes to its own width in zero bytes and decodes back unchanged."""
+        default_value = uint_class()
+        # One zero byte for a uint8, two for a uint16, and so on up to 32 for a uint256.
+        assert default_value.encode_bytes() == b"\x00" * (uint_class.BITS // 8)
+        assert uint_class.decode_bytes(default_value.encode_bytes()) == default_value
+
+
 class TestUintSSZ:
     """A collection of tests for the SSZ interface of Uint types."""
 

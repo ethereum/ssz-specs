@@ -5,6 +5,7 @@ from __future__ import annotations
 import io
 
 import pytest
+from pydantic import ValidationError
 
 from ssz import (
     CompatibleUnion,
@@ -12,6 +13,7 @@ from ssz import (
     List,
     ProgressiveContainer,
     ProgressiveList,
+    SSZDefaultError,
     SSZDefinitionError,
     SSZFixedSizeError,
     SSZLimitError,
@@ -358,6 +360,46 @@ class TestConstruction:
         value = Shape(selector=Uint8(1), data=SQUARE)
         with pytest.raises(Exception, match=r"frozen"):
             value.selector = Uint8(2)
+
+
+class TestNoDefaultValue:
+    """
+    A union has no default value, because zero is not a selector.
+
+    Every other SSZ type answers what its zeroed value is. A union cannot: a default
+    would have to name an option, and the one selector an all-zero value could carry
+    is reserved against exactly that.
+    """
+
+    def test_building_a_union_from_nothing_is_rejected(self) -> None:
+        """No selector and no payload names no option, so there is nothing to build."""
+        with pytest.raises(SSZDefaultError, match=r"^Shape has no default value$"):
+            Shape.default()
+
+    def test_the_error_is_a_type_error_carrying_the_type_name(self) -> None:
+        """The failure keeps the offending type machine-readable, as every SSZ error does."""
+        with pytest.raises(SSZDefaultError) as exception_info:
+            Shape.default()
+        assert isinstance(exception_info.value, SSZTypeError)
+        assert exception_info.value.type_name == "Shape"
+        assert exception_info.value.args[0] == "Shape has no default value"
+
+    def test_the_error_names_whichever_union_was_asked(self) -> None:
+        """Each union reports itself, so a nested absence points at the right type."""
+        with pytest.raises(SSZDefaultError, match=r"^NestedShape has no default value$"):
+            NestedShape.default()
+
+    def test_is_zero_is_undefined_on_a_union(self) -> None:
+        """The zeroed check compares against a default, and a union has none to compare to."""
+        value = Shape(selector=Uint8(1), data=SQUARE)
+        with pytest.raises(SSZDefaultError, match=r"^Shape has no default value$"):
+            value.is_zero()
+
+    def test_a_selector_without_a_payload_is_not_a_request_for_a_default(self) -> None:
+        """Only the total absence of input reaches the refusal; a named field does not."""
+        # The payload is simply missing here, which is Pydantic's own error, not this one.
+        with pytest.raises(ValidationError, match=r"(?s)^1 validation error for Shape\ndata\n"):
+            Shape(selector=Uint8(1))  # ty: ignore[missing-argument]
 
 
 class TestSizing:
