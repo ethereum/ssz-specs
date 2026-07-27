@@ -24,6 +24,8 @@ from ssz.exceptions import (
     SSZError,
     SSZFixedSizeError,
     SSZSerializationError,
+    SSZTypeMismatch,
+    SSZValueError,
 )
 from ssz.ssz_base import BYTES_PER_LENGTH_OFFSET, SSZModel, SSZType
 from ssz.uint import Uint32
@@ -36,6 +38,80 @@ That matches how a length is mixed into a list root.
 
 The value is the chunk width in bits, restated rather than imported: the merkleization
 module imports this one, so the dependency cannot run the other way."""
+
+
+def active_fields(width: int, gaps: tuple[int, ...] = ()) -> tuple[int, ...]:
+    """
+    Build a field layout from its width and the positions no field occupies.
+
+    A layout is one bit per position, and most positions hold a field.
+    Writing every bit out is unreadable past a handful of fields, and a change to one of
+    them is invisible in review:
+
+        (1, 1, 1, 0, 1, 1, 1, 1, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, ...)
+
+        active_fields(width=40, gaps=(3, 8, 9))
+
+    Both give the same layout, and the second states the whole of what makes it unusual.
+
+    # Why the width is given rather than counted
+
+    The width could be read off the field count and the number of gaps.
+    Stating it keeps the two independent, which is what lets a dropped field be caught:
+
+        a struct drops a field and records the gap  ->  width rises by 0, fields fall by 1
+        a struct drops a field and records nothing  ->  the counts disagree, and it fails
+
+    Counting the width instead would make the second case derive a narrower layout and
+    accept it, moving every later field to a new position under the same declaration.
+
+    Args:
+        width: Total positions in the layout, occupied or not.
+        gaps: Positions no field occupies, ascending.
+
+    Returns:
+        One bit per position, set where a field sits.
+
+    Raises:
+        SSZTypeMismatch: When the width or a gap is not a plain integer.
+        SSZValueError: When the width is below one.
+        SSZValueError: When the gaps are unordered, repeated, or outside the width.
+    """
+    # A boolean counts nothing.
+    # The host language admits one wherever an integer fits, so it is refused by name.
+    if not isinstance(width, int) or isinstance(width, bool):
+        raise SSZTypeMismatch("an integer width", type(width))
+
+    # Narrow before anything reads the value.
+    #
+    # A width may be written with a uint, as a consensus spec holds its constants that way.
+    # A uint refuses a plain integer operand.
+    # The comparison below would therefore raise rather than answer.
+    # A uint left among the positions would also miss the plain position it names.
+    # The two hash apart.
+    width = int(width)
+    if width < 1:
+        raise SSZValueError(f"a layout holds at least one position, got a width of {width}")
+
+    positions: list[int] = []
+    for gap in gaps:
+        if not isinstance(gap, int) or isinstance(gap, bool):
+            raise SSZTypeMismatch("an integer position", type(gap))
+        position = int(gap)
+        # A position outside the width names nothing.
+        # Left unchecked it would vanish, leaving a layout with no gap where one was written.
+        if not 0 <= position < width:
+            raise SSZValueError(f"gap {position} falls outside a layout of {width} positions")
+        positions.append(position)
+
+    # Ascending order rules out a repeat as well.
+    # A repeat would otherwise be absorbed: two gaps at one position leave one hole,
+    # which puts one more field in the layout than the width was written for.
+    if any(later <= earlier for earlier, later in pairwise(positions)):
+        raise SSZValueError(f"gaps {tuple(positions)} are not in ascending order")
+
+    gap_positions = frozenset(positions)
+    return tuple(0 if position in gap_positions else 1 for position in range(width))
 
 
 class _SSZContainer(SSZModel):
@@ -258,7 +334,12 @@ class ProgressiveContainer(_SSZContainer):
     """
 
     ACTIVE_FIELDS: ClassVar[tuple[int, ...]]
-    """Field layout, one bit per position, lowest position first, set where a field sits."""
+    """Field layout, one bit per position, lowest position first, set where a field sits.
+
+    Past a handful of positions the bits are easier to state by their width and their gaps:
+
+        ACTIVE_FIELDS = active_fields(width=40, gaps=(3, 8, 9))
+    """
 
     @classmethod
     def __pydantic_init_subclass__(cls, **kwargs: Any) -> None:

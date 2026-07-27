@@ -2,11 +2,13 @@
 
 import io
 from collections.abc import Sequence
+from typing import Any
 
 import pytest
 from hypothesis import given, strategies as st
 from pydantic import ValidationError
 
+import ssz
 from ssz.bitfields import ProgressiveBitlist
 from ssz.boolean import Boolean
 from ssz.collections import List, ProgressiveList, Vector
@@ -15,6 +17,7 @@ from ssz.container import (
     Container,
     ProgressiveContainer,
     _SSZContainer,
+    active_fields,
 )
 from ssz.exceptions import (
     SSZActiveFieldsError,
@@ -22,6 +25,8 @@ from ssz.exceptions import (
     SSZDefinitionError,
     SSZSerializationError,
     SSZTypeError,
+    SSZTypeMismatch,
+    SSZValueError,
 )
 from ssz.merkleization import hash_tree_root
 from ssz.ssz_base import SSZType
@@ -224,6 +229,109 @@ class OuterProgressive(ProgressiveContainer):
 
     head: Uint8
     inner: InnerProgressive
+
+
+class BuiltSquare(ProgressiveContainer):
+    """The interior-gap example, with its layout built from a width and one gap."""
+
+    ACTIVE_FIELDS = active_fields(width=3, gaps=(1,))
+
+    side: Uint16
+    color: Uint8
+
+
+class BuiltCircle(ProgressiveContainer):
+    """The leading-gap example, built from a gap at the lowest position."""
+
+    ACTIVE_FIELDS = active_fields(width=3, gaps=(0,))
+
+    radius: Uint16
+    color: Uint8
+
+
+class BuiltTwoLeadingGaps(ProgressiveContainer):
+    """Two adjacent gaps ahead of the only field, built from a consecutive pair."""
+
+    ACTIVE_FIELDS = active_fields(width=3, gaps=(0, 1))
+
+    c: Uint32
+
+
+class BuiltMultiGap(ProgressiveContainer):
+    """Three fields split by an adjacent pair of gaps and then a lone gap."""
+
+    ACTIVE_FIELDS = active_fields(width=6, gaps=(1, 2, 4))
+
+    a: Uint8
+    b: Uint16
+    c: Uint32
+
+
+class FourFieldOriginal(ProgressiveContainer):
+    """A four-position shape before any fork touches it, every position occupied."""
+
+    ACTIVE_FIELDS = active_fields(width=4)
+
+    a: Uint16
+    b: Uint16
+    c: Uint16
+    d: Uint16
+
+
+class FourFieldSecondDropped(ProgressiveContainer):
+    """The same shape after a fork drops the second field and records the vacancy."""
+
+    # The width stays at 4 while the field list shrinks to 3.
+    # That is what holds the last two fields at positions 2 and 3.
+    ACTIVE_FIELDS = active_fields(width=4, gaps=(1,))
+
+    a: Uint16
+    c: Uint16
+    d: Uint16
+
+
+class WideForkEvolvedState(ProgressiveContainer):
+    """
+    Thirty fields over thirty-two positions, two of them vacated by earlier forks.
+
+    Field widths are uniform at eight bytes.
+    The whole shape is therefore 240 bytes.
+    """
+
+    ACTIVE_FIELDS = active_fields(width=32, gaps=(4, 19))
+
+    genesis_time: Uint64
+    genesis_validators_root: Uint64
+    slot: Uint64
+    fork_epoch: Uint64
+    # Position 4 was vacated by a fork.
+    latest_block_header_slot: Uint64
+    latest_block_header_proposer: Uint64
+    latest_block_header_parent_root: Uint64
+    latest_block_header_state_root: Uint64
+    latest_block_header_body_root: Uint64
+    block_roots_root: Uint64
+    state_roots_root: Uint64
+    historical_roots_count: Uint64
+    eth1_deposit_count: Uint64
+    eth1_deposit_root: Uint64
+    eth1_block_hash: Uint64
+    eth1_deposit_index: Uint64
+    validator_count: Uint64
+    balances_root: Uint64
+    # Position 19 was vacated by a later fork.
+    randao_mixes_root: Uint64
+    slashings_root: Uint64
+    previous_epoch_participation_root: Uint64
+    current_epoch_participation_root: Uint64
+    justification_bits: Uint64
+    previous_justified_epoch: Uint64
+    current_justified_epoch: Uint64
+    finalized_epoch: Uint64
+    inactivity_scores_root: Uint64
+    current_sync_committee_root: Uint64
+    next_sync_committee_root: Uint64
+    execution_payload_block_number: Uint64
 
 
 class SquareList4(List[Square]):
@@ -873,6 +981,333 @@ class TestProgressiveContainerLayoutMetadata:
         with pytest.raises(SSZTypeError) as exception_info:
             container_type.get_byte_length()
         assert exception_info.value.args[0] == expected_message
+
+
+class TestLayoutBuilderShapes:
+    """The bits a width and a set of vacant positions produce."""
+
+    @pytest.mark.parametrize(
+        "width, gaps, expected_layout",
+        [
+            pytest.param(1, (), (1,), id="narrowest"),
+            pytest.param(4, (), (1, 1, 1, 1), id="no_gaps"),
+            pytest.param(3, (1,), (1, 0, 1), id="interior_gap"),
+            pytest.param(3, (0,), (0, 1, 1), id="leading_gap"),
+            pytest.param(3, (0, 1), (0, 0, 1), id="adjacent_leading_gaps"),
+            pytest.param(6, (1, 2, 4), (1, 0, 0, 1, 0, 1), id="adjacent_pair_then_lone_gap"),
+        ],
+    )
+    def test_every_position_is_occupied_unless_it_is_named_vacant(
+        self, width: int, gaps: tuple[int, ...], expected_layout: tuple[int, ...]
+    ) -> None:
+        """The result is one bit per position, cleared exactly at the positions given."""
+        # Worked example, the third case:
+        #
+        #     width 3, vacant at 1
+        #     position :   0    1    2
+        #     bit      :   1    0    1
+        assert active_fields(width=width, gaps=gaps) == expected_layout
+
+    def test_the_bits_are_plain_integers(self) -> None:
+        """The result holds integers, which is what the declaration rules accept."""
+        # Bits written by hand may be booleans instead.
+        # Both spellings sum alike, which is all the field-count check reads.
+        # Producing plain integers keeps the built form the narrower of the two.
+        assert {type(bit) for bit in active_fields(width=3, gaps=(1,))} == {int}
+
+    @pytest.mark.parametrize(
+        "width, gaps, expected_message",
+        [
+            pytest.param(
+                0, (), "a layout holds at least one position, got a width of 0", id="zero_width"
+            ),
+            pytest.param(
+                -1,
+                (),
+                "a layout holds at least one position, got a width of -1",
+                id="negative_width",
+            ),
+            pytest.param(
+                3, (3,), "gap 3 falls outside a layout of 3 positions", id="vacancy_at_the_width"
+            ),
+            pytest.param(
+                3, (5,), "gap 5 falls outside a layout of 3 positions", id="vacancy_past_the_width"
+            ),
+            pytest.param(
+                3, (-1,), "gap -1 falls outside a layout of 3 positions", id="negative_vacancy"
+            ),
+            pytest.param(3, (2, 1), "gaps (2, 1) are not in ascending order", id="descending"),
+            pytest.param(3, (1, 1), "gaps (1, 1) are not in ascending order", id="repeated"),
+        ],
+    )
+    def test_a_layout_that_cannot_exist_is_refused(
+        self, width: int, gaps: tuple[int, ...], expected_message: str
+    ) -> None:
+        """A width below one, an out-of-range vacancy, and unordered vacancies all fail."""
+        # A vacancy outside the width would simply vanish.
+        # The caller would get back a layout with one fewer hole than they wrote:
+        #
+        #     width 3, vacant at 5   ->   (1, 1, 1)   and the 5 is nowhere
+        #
+        # A repeat vanishes the same way.
+        # Two vacancies at one position leave one hole, against the two that were counted.
+        with pytest.raises(SSZValueError) as exception_info:
+            active_fields(width=width, gaps=gaps)
+        assert exception_info.value.args[0] == expected_message
+
+    @pytest.mark.parametrize(
+        "width, gaps, expected_message",
+        [
+            pytest.param(True, (), "Expected an integer width, got bool", id="boolean_width"),
+            pytest.param(3.0, (), "Expected an integer width, got float", id="fractional_width"),
+            pytest.param(
+                3, (True,), "Expected an integer position, got bool", id="boolean_vacancy"
+            ),
+            pytest.param(
+                3, (1.0,), "Expected an integer position, got float", id="fractional_vacancy"
+            ),
+        ],
+    )
+    def test_a_width_or_a_position_that_is_not_a_plain_integer_is_refused(
+        self, width: Any, gaps: tuple[Any, ...], expected_message: str
+    ) -> None:
+        """Only a plain integer counts positions: a boolean and a fraction are both out."""
+        # A boolean is an integer in this language.
+        # Nothing in the language itself stops one reaching a count:
+        #
+        #     width True   ->   would silently mean a one-position layout
+        #
+        # This library already refuses one wherever a count is wanted.
+        # The phrasing here is the same phrasing used at those two places:
+        #
+        #     a declared list capacity of True   ->   Expected an integer count ..., got bool
+        #     a uint built from True             ->   Expected int, got bool
+        #
+        # A boolean written as a bit is a different matter, and stays legal.
+        # There a boolean is the value 0 or 1, not a count of positions.
+        with pytest.raises(SSZTypeMismatch) as exception_info:
+            active_fields(width=width, gaps=gaps)
+        assert exception_info.value.args[0] == expected_message
+
+    def test_the_package_exports_the_builder(self) -> None:
+        """The export list is what a star import and the documentation tooling read."""
+        # Importing the name at the top of this module proves it is reachable.
+        # Only the export list proves it is public.
+        assert "active_fields" in ssz.__all__
+
+
+class TestABuiltLayoutMatchesASpelledOutOne:
+    """A built layout and the same bits written out are one and the same declaration."""
+
+    @pytest.mark.parametrize(
+        "spelled_out, built",
+        [
+            pytest.param(
+                Square(side=Uint16(0x1234), color=Uint8(0x56)),
+                BuiltSquare(side=Uint16(0x1234), color=Uint8(0x56)),
+                id="interior_gap",
+            ),
+            pytest.param(
+                Circle(radius=Uint16(0x1234), color=Uint8(0x56)),
+                BuiltCircle(radius=Uint16(0x1234), color=Uint8(0x56)),
+                id="leading_gap",
+            ),
+            pytest.param(
+                LeadingGapProgressive(c=Uint32(0x11223344)),
+                BuiltTwoLeadingGaps(c=Uint32(0x11223344)),
+                id="adjacent_leading_gaps",
+            ),
+            pytest.param(
+                MultiGapProgressive(a=Uint8(1), b=Uint16(0x0203), c=Uint32(0x04050607)),
+                BuiltMultiGap(a=Uint8(1), b=Uint16(0x0203), c=Uint32(0x04050607)),
+                id="adjacent_pair_then_lone_gap",
+            ),
+        ],
+    )
+    def test_the_two_spellings_place_encode_and_hash_alike(
+        self, spelled_out: ProgressiveContainer, built: ProgressiveContainer
+    ) -> None:
+        """Identical bits, identical bytes, and an identical root."""
+        # The root is the strongest of the three assertions.
+        # The layout is mixed into it.
+        # One bit out of place therefore separates two roots.
+        # The bytes alone would not: a vacancy costs no bytes at all.
+        assert type(built).ACTIVE_FIELDS == type(spelled_out).ACTIVE_FIELDS
+        assert built.encode_bytes() == spelled_out.encode_bytes()
+        assert hash_tree_root(built) == hash_tree_root(spelled_out)
+
+
+class TestTheWidthIsStatedRatherThanCounted:
+    """Why a layout names its width instead of deriving it from the fields and the gaps."""
+
+    def test_a_dropped_field_recorded_as_a_vacancy_holds_the_later_fields_in_place(self) -> None:
+        """Recording the vacancy keeps the width, holding every later field in place."""
+        # Before the fork, four fields over four positions:
+        #
+        #     position :   0    1    2    3
+        #     field    :   a    b    c    d
+        #
+        # After the fork drops the second field and records the vacancy:
+        #
+        #     position :   0    1    2    3
+        #     field    :   a    -    c    d
+        #
+        # The last two fields never move, which is the whole point of this container shape.
+        assert FourFieldOriginal.ACTIVE_FIELDS == (1, 1, 1, 1)
+        assert FourFieldSecondDropped.ACTIVE_FIELDS == (1, 0, 1, 1)
+
+        before = [index for index, bit in enumerate(FourFieldOriginal.ACTIVE_FIELDS) if bit]
+        after = [index for index, bit in enumerate(FourFieldSecondDropped.ACTIVE_FIELDS) if bit]
+        assert before == [0, 1, 2, 3]
+        assert after == [0, 2, 3]
+
+    def test_a_dropped_field_recorded_nowhere_is_refused(self) -> None:
+        """A width of four beside three fields is a disagreement the declaration refuses."""
+        # This is the case the stated width exists to catch.
+        #
+        # A derived width would be three fields plus zero vacancies, that is 3.
+        # The declaration below would then have been accepted, as:
+        #
+        #     position :   0    1    2
+        #     field    :   a    c    d
+        #
+        # Both surviving fields would have slid one position down.
+        # Nothing in the declaration would have changed to say so.
+        # Every proof and every root against the four-position shape would stop matching.
+        #
+        # A stated width keeps the two counts independent.
+        # The disagreement then has nowhere to hide.
+        with pytest.raises(
+            SSZActiveFieldsError,
+            match=(
+                r"^Forgot: invalid active fields, "
+                r"the layout sets 4 positions, and the struct declares 3$"
+            ),
+        ):
+
+            class Forgot(ProgressiveContainer):
+                ACTIVE_FIELDS = active_fields(width=4)
+
+                a: Uint16
+                c: Uint16
+                d: Uint16
+
+
+class TestRulesLeftWithTheDeclaration:
+    """Two layout rules stay where the shape is declared rather than moving to the builder."""
+
+    def test_a_trailing_vacancy_is_reported_against_the_shape(self) -> None:
+        """The builder hands back the bits; rejecting them is the declaration's job."""
+        # Split of responsibility:
+        #
+        #     builder      : sees a width and some numbers
+        #                    can name neither the shape nor its fields
+        #     declaration  : knows the type name and the field list
+        #                    its message can say which shape broke which rule
+        #
+        # A trailing vacancy is a property of the finished layout, not of the arguments.
+        # The rule earns its keep only when the message names the shape that broke it.
+        assert active_fields(width=3, gaps=(2,)) == (1, 1, 0)
+
+        with pytest.raises(
+            SSZActiveFieldsError,
+            match=r"^TrailingGap: invalid active fields, the layout ends in a gap$",
+        ):
+            type(
+                "TrailingGap",
+                (ProgressiveContainer,),
+                {"ACTIVE_FIELDS": active_fields(width=3, gaps=(2,))},
+            )
+
+    def test_the_width_ceiling_is_reported_against_the_shape(self) -> None:
+        """The builder counts to any width; capping it at 256 is the declaration's job."""
+        # The ceiling comes from the 32-byte word the layout is mixed into.
+        # That word holds 256 bits, so 256 positions is the most one can carry.
+        # It belongs to merkleization, not to the arithmetic that turns a width into bits.
+        assert len(active_fields(width=MAX_ACTIVE_FIELDS)) == 256
+        assert len(active_fields(width=MAX_ACTIVE_FIELDS + 1)) == 257
+
+        with pytest.raises(
+            SSZActiveFieldsError,
+            match=(
+                r"^TooWideBuilt: invalid active fields, "
+                r"the layout holds 257 positions, over the limit of 256$"
+            ),
+        ):
+            type(
+                "TooWideBuilt",
+                (ProgressiveContainer,),
+                {"ACTIVE_FIELDS": active_fields(width=MAX_ACTIVE_FIELDS + 1)},
+            )
+
+
+class TestAWideLayout:
+    """The width the builder exists for: too many positions to read as a row of bits."""
+
+    def test_a_wide_layout_is_the_same_layout_written_out(self) -> None:
+        """Thirty-two positions with two vacancies, spelled both ways, are equal."""
+        # This is the readability claim made concrete.
+        # The row below carries exactly two pieces of information, at index 4 and index 19.
+        # Finding them means counting thirty-two entries by eye.
+        spelled_out = (
+            # positions 0 to 4
+            1, 1, 1, 1, 0,
+            # positions 5 to 18
+            1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+            # position 19
+            0,
+            # positions 20 to 31
+            1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+        )  # fmt: skip
+        assert WideForkEvolvedState.ACTIVE_FIELDS == spelled_out
+
+    def test_the_wide_shape_places_thirty_fields_over_thirty_two_positions(self) -> None:
+        """Thirty set positions, thirty fields, and eight bytes apiece."""
+        assert len(WideForkEvolvedState.ACTIVE_FIELDS) == 32
+        assert sum(WideForkEvolvedState.ACTIVE_FIELDS) == 30
+        assert len(WideForkEvolvedState.model_fields) == 30
+        # A vacancy costs no bytes.
+        # 30 fields of 8 bytes therefore give 240.
+        assert WideForkEvolvedState.get_byte_length() == 240
+
+    def test_the_wide_shape_round_trips(self) -> None:
+        """A wide layout serializes and merkleizes like any other."""
+        value = WideForkEvolvedState.default()
+        assert value.encode_bytes() == b"\x00" * 240
+        assert WideForkEvolvedState.decode_bytes(value.encode_bytes()) == value
+        # Both values here are all zeros on the wire, over 240 bytes and 8 bytes.
+        # The layout is mixed into the root, so two widths cannot collide on it.
+        assert hash_tree_root(value) != hash_tree_root(FourFieldOriginal.default())
+
+
+class TestALayoutWrittenWithTypedNumbers:
+    """
+    A width and a position may be written with a fixed-width unsigned integer.
+
+    A consensus spec holds its constants that way, so a width taken from one arrives typed.
+    """
+
+    def test_a_typed_width_and_position_give_the_plain_layout(self) -> None:
+        """The type a position was written at leaves no trace on the layout."""
+        assert active_fields(width=Uint64(4), gaps=(Uint8(1),)) == active_fields(width=4, gaps=(1,))
+        # Every bit is a plain integer, whatever the arguments were written at.
+        assert {type(bit) for bit in active_fields(width=Uint64(4))} == {int}
+
+    def test_a_typed_position_still_opens_its_vacancy(self) -> None:
+        """A position counts as the plain number it names, not as a value of its own type."""
+        # A typed value hashes apart from the plain number it equals.
+        # A position matched by identity in a set would therefore find nothing, and the
+        # vacancy it names would quietly close:
+        #
+        #     width 3, gap Uint8(1)   ->  (1, 0, 1)   the vacancy is open
+        #     matched by hash alone   ->  (1, 1, 1)   three fields where two were declared
+        assert hash(Uint8(1)) != hash(1)
+        assert active_fields(width=3, gaps=(Uint8(1),)) == (1, 0, 1)
+
+    def test_a_typed_position_out_of_range_is_reported_as_a_plain_number(self) -> None:
+        """A refusal names the position, not the spelling it arrived in."""
+        with pytest.raises(SSZValueError, match=r"^gap 5 falls outside a layout of 3 positions$"):
+            active_fields(width=3, gaps=(Uint64(5),))
 
 
 class TestProgressiveContainerSerialization:
