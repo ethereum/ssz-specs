@@ -11,9 +11,10 @@ from ssz.boolean import Boolean
 from ssz.byte_arrays import BaseByteList
 from ssz.collections import List, ProgressiveList, Vector
 from ssz.container import Container, ProgressiveContainer
-from ssz.exceptions import SSZTypeError, SSZValueError
+from ssz.exceptions import SSZDefaultError, SSZTypeError, SSZValueError
 from ssz.merkleization import Root
-from ssz.ssz_base import SSZCollection
+from ssz.ssz_base import SSZCollection, SSZType
+from ssz.union import CompatibleUnion
 
 
 class Uint16List4(List[Uint16]):
@@ -75,6 +76,16 @@ class SmallBitlist(BaseBitlist):
     """A bitlist with a small limit, used to test SSZModel.__len__ data path."""
 
     LIMIT = 8
+
+
+class Uint16ProgressiveList(ProgressiveList[Uint16]):
+    """A progressive list of Uint16 values, the unbounded sequence shape."""
+
+
+class SmallUnion(CompatibleUnion):
+    """A union over one option, the only shape the spec gives no default value."""
+
+    OPTIONS = {1: Uint8}
 
 
 class TestSSZModelLength:
@@ -444,6 +455,78 @@ class TestSSZMutabilityFlag:
         assert lookup[second] == "found"
 
 
+class TestDefaultValue:
+    """
+    The default factory and the zeroed check, both defined once on the shared base.
+
+    Construction with no argument gives the default of a type, and `default()` is that
+    same request spelled as a call on the type. The spelling exists because a static
+    checker reads a struct's declared field list rather than the defaults this library
+    attaches to it, so the bare form reads there as missing its arguments.
+    """
+
+    @pytest.mark.parametrize(
+        "ssz_type, expected_default",
+        [
+            pytest.param(Uint16, Uint16(0), id="uint"),
+            pytest.param(Boolean, Boolean(False), id="boolean"),
+            # A fixed byte array is a vector of single bytes, so every byte is zero.
+            pytest.param(Root, Root(b"\x00" * 32), id="fixed_byte_array"),
+            pytest.param(SmallBitvector, SmallBitvector(data=[Boolean(False)] * 3), id="bitvector"),
+            pytest.param(Uint16Vector2, Uint16Vector2(data=[Uint16(0), Uint16(0)]), id="vector"),
+            # Every variable-size shape defaults to its own empty value.
+            pytest.param(Uint16List4, Uint16List4(data=[]), id="list"),
+            pytest.param(SmallBitlist, SmallBitlist(data=[]), id="bitlist"),
+            pytest.param(SmallByteList, SmallByteList(data=b""), id="byte_list"),
+            pytest.param(Uint16ProgressiveList, Uint16ProgressiveList(data=[]), id="progressive"),
+            pytest.param(ProgressiveBitlist, ProgressiveBitlist(data=[]), id="progressive_bitlist"),
+            pytest.param(
+                TwoFieldContainer, TwoFieldContainer(x=Uint8(0), y=Uint16(0)), id="container"
+            ),
+        ],
+    )
+    def test_every_shape_but_the_union_answers_with_its_own_default(
+        self, ssz_type: type[SSZType], expected_default: SSZType
+    ) -> None:
+        """Each family builds the value the spec names, and that value reads as zeroed."""
+        assert ssz_type.default() == expected_default
+        assert ssz_type.default().is_zero() is True
+
+    def test_a_no_argument_construction_and_the_factory_agree(self) -> None:
+        """The factory is a second spelling of one request, not a second kind of default."""
+        assert Uint16() == Uint16.default()
+        assert Boolean() == Boolean.default()
+        assert SmallBitvector() == SmallBitvector.default()
+        assert Uint16Vector2() == Uint16Vector2.default()
+        assert Uint16List4() == Uint16List4.default()
+        assert SmallByteList() == SmallByteList.default()
+
+    def test_each_call_builds_a_new_value(self) -> None:
+        """Values are mutable, so a default must never be cached and handed out twice."""
+        first, second = Uint16List4.default(), Uint16List4.default()
+        assert first is not second
+        first.append(Uint16(1))
+        # The mutation applied to the first default leaves the next one at empty.
+        assert Uint16List4.default() == Uint16List4(data=[])
+
+    def test_the_factory_binds_to_the_concrete_subtype(self) -> None:
+        """A named subtype builds itself, never the base it was declared from."""
+        assert type(TypedUint16.default()) is TypedUint16
+        assert TypedUint16.default() == TypedUint16(0)
+
+    def test_is_zero_compares_against_the_runtime_type(self) -> None:
+        """The comparison uses the type of the value, so a subtype meets its own default."""
+        # A TypedUint16 and a Uint16 never compare at all, so reading the declared type
+        # rather than the runtime one would raise here instead of answering.
+        assert TypedUint16(0).is_zero() is True
+        assert TypedUint16(1).is_zero() is False
+
+    def test_a_union_has_no_default_to_build(self) -> None:
+        """The one shape the spec leaves without a default refuses to invent one."""
+        with pytest.raises(SSZDefaultError, match=r"^SmallUnion has no default value$"):
+            SmallUnion.default()
+
+
 class TestSSZCollectionOf:
     """
     Tests for the `of` factory classmethod.
@@ -459,6 +542,28 @@ class TestSSZCollectionOf:
     def test_of_with_no_elements_builds_empty(self) -> None:
         """No arguments build an empty collection."""
         assert Uint16List4.of() == Uint16List4(data=[])
+
+    @pytest.mark.parametrize(
+        "collection_type, expected_length",
+        [
+            pytest.param(Uint16Vector2, 2, id="vector"),
+            pytest.param(SmallBitvector, 3, id="bitvector"),
+        ],
+    )
+    def test_of_with_no_elements_is_a_length_error_on_a_fixed_length_shape(
+        self, collection_type: type[SSZCollection[Any]], expected_length: int
+    ) -> None:
+        """No argument here means zero elements, which is a count, not a missing input."""
+        # This factory always states the elements, so stating none of them is a count of
+        # zero. Only construction with no argument at all asks for the default.
+        type_name = collection_type.__name__
+        with pytest.raises((SSZValueError, ValidationError)) as exception_info:
+            collection_type.of()
+        assert str(exception_info.value) == (
+            f"{type_name} requires exactly {expected_length} elements, got 0"
+        )
+        # The same shape asked for its default is full, not empty.
+        assert len(collection_type.default()) == expected_length
 
     def test_of_single_element_is_never_spread(self) -> None:
         """One argument is one element, never a whole data value."""

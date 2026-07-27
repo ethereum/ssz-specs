@@ -95,7 +95,7 @@ class TestBaseBytesConstruction:
             Bytes4(wrong_input)
         assert str(exception_info.value) == f"Bytes4 requires exactly 4 bytes, got {count}"
 
-    @pytest.mark.parametrize("bad_input", [42, 1.5])
+    @pytest.mark.parametrize("bad_input", [42, 1.5, None])
     def test_construction_with_non_coercible_input_raises(self, bad_input: Any) -> None:
         """Inputs outside the accepted union raise TypeError naming the offending type."""
         name = type(bad_input).__name__
@@ -502,9 +502,16 @@ class TestBaseBytesDefault:
         assert bytes(Bytes4()) == b"\x00\x00\x00\x00"
         assert Bytes4() == Bytes4.zero()
 
-    def test_an_explicit_none_asks_for_the_default_too(self) -> None:
-        """None is the sentinel that stands for an omitted value, so it is the same request."""
-        assert Bytes4(None) == Bytes4()
+    def test_an_explicitly_missing_value_is_still_rejected(self) -> None:
+        """Only an omitted argument asks for the default, never a missing value passed as one."""
+        # Passing a missing value through by mistake is the case this catches: an optional
+        # that arrived empty must fail loudly rather than read as four zero bytes.
+        #
+        # A static checker rejects the call as well, which is the same property one step
+        # earlier, so the suppression here is what lets the runtime half be pinned.
+        with pytest.raises(TypeError) as exception_info:
+            Bytes4(None)  # ty: ignore[invalid-argument-type]
+        assert str(exception_info.value) == "Cannot coerce NoneType to bytes"
 
     def test_an_explicitly_empty_input_stays_a_length_error(self) -> None:
         """Zero bytes is a count mismatch against LENGTH, never a request for the default."""

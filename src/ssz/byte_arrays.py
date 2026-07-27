@@ -12,6 +12,7 @@ Both flavors serialize as the raw bytes themselves — no length prefix, no deli
 """
 
 from collections.abc import Iterable, Sequence
+from enum import Enum
 from typing import IO, Any, ClassVar, Self, override
 
 from pydantic import Field, field_serializer, field_validator
@@ -27,6 +28,19 @@ from ssz.exceptions import (
     SSZSerializationError,
 )
 from ssz.ssz_base import SSZCollection, SSZType
+
+
+class _Omitted(Enum):
+    """
+    Marks a constructor argument that was never passed.
+
+    A byte array cannot use a plain value to mean this, since every value it accepts is a
+    legal input.
+
+    A single-member enum is the spelling that a type checker narrows.
+    """
+
+    TOKEN = "omitted"
 
 
 class BaseBytes(bytes, SSZType):
@@ -81,7 +95,9 @@ class BaseBytes(bytes, SSZType):
             case _:
                 raise TypeError(f"Cannot coerce {type(value).__name__} to bytes")
 
-    def __new__(cls, value: bytes | bytearray | str | Iterable[int] | None = None) -> Self:
+    def __new__(
+        cls, value: bytes | bytearray | str | Iterable[int] | _Omitted = _Omitted.TOKEN
+    ) -> Self:
         """
         Construct and validate a new byte array.
 
@@ -92,6 +108,7 @@ class BaseBytes(bytes, SSZType):
         Raises:
             SSZTypeError: If the subclass has not declared a length.
             SSZValueError: If the coerced byte count differs from the declared length.
+            TypeError: If a value is passed that no coercion accepts.
         """
         if not hasattr(cls, "LENGTH"):
             raise SSZDefinitionError(cls.__name__, "LENGTH")
@@ -99,7 +116,13 @@ class BaseBytes(bytes, SSZType):
         # An omitted value is the default, which is every byte zero.
         # An empty one is a wrong byte count: a 32-byte array wants 32, so no argument
         # gives 32 zeros while an empty input is an error.
-        if value is None:
+        #
+        # The sentinel is a private marker rather than a missing value, so that a caller
+        # passing a missing value explicitly still meets the coercion error below:
+        #
+        #     Bytes4()      ->  00000000
+        #     Bytes4(None)  ->  TypeError
+        if value is _Omitted.TOKEN:
             value = b"\x00" * cls.LENGTH
 
         coerced_bytes = cls._coerce_to_bytes(value)
