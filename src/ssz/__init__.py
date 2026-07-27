@@ -10,6 +10,7 @@ from ssz.collections import List, ProgressiveList, Vector
 from ssz.container import Container, ProgressiveContainer
 from ssz.exceptions import (
     SSZActiveFieldsError,
+    SSZDefaultError,
     SSZDefinitionError,
     SSZError,
     SSZFixedSizeError,
@@ -44,6 +45,7 @@ __all__ = [
     "ProgressiveContainer",
     "ProgressiveList",
     "SSZActiveFieldsError",
+    "SSZDefaultError",
     "SSZDefinitionError",
     "SSZError",
     "SSZFixedSizeError",

@@ -307,6 +307,24 @@ class TestBooleanSSZ:
         assert str(exception_info.value) == "Boolean: expected 1 byte, got 0"
 
 
+class TestBooleanDefault:
+    """The default value of a boolean, and the zeroed check over it."""
+
+    def test_construction_without_an_argument_is_false(self) -> None:
+        """The spec gives a boolean the default false."""
+        assert Boolean() == Boolean(False)
+
+    def test_the_default_is_zeroed_and_true_is_not(self) -> None:
+        """False is the default of the type, so it reads as zeroed; true does not."""
+        assert Boolean().is_zero() is True
+        assert Boolean(True).is_zero() is False
+
+    def test_the_default_round_trips(self) -> None:
+        """The default encodes to the single zero byte and decodes back unchanged."""
+        assert Boolean().encode_bytes() == b"\x00"
+        assert Boolean.decode_bytes(Boolean().encode_bytes()) == Boolean()
+
+
 @given(boolean_value=st.booleans())
 def test_encode_decode_round_trip_random_values(boolean_value: bool) -> None:
     """Either truth value survives an encode and decode round trip unchanged."""

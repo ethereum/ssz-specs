@@ -13,11 +13,13 @@ from ssz.byte_arrays import BaseBytes
 from ssz.collections import List, ProgressiveList, Vector, _validate_offsets
 from ssz.container import Container
 from ssz.exceptions import (
+    SSZDefaultError,
     SSZSerializationError,
     SSZTypeError,
     SSZTypeMismatch,
     SSZValueError,
 )
+from ssz.union import CompatibleUnion
 
 
 class Bytes32(BaseBytes):
@@ -198,6 +200,24 @@ class VariableContainerProgressiveList(ProgressiveList[VariableContainer]):
 
 class NestedProgressiveList(ProgressiveList[Uint16ProgressiveList]):
     """A progressive list whose elements are themselves progressive lists."""
+
+
+class FixedContainerUnion(CompatibleUnion):
+    """Union over a single option, a shape the spec gives no default value."""
+
+    OPTIONS = {1: FixedContainer}
+
+
+class FixedContainerUnionVector2(Vector[FixedContainerUnion]):
+    """Vector of two unions, so a default would need an element default there is none of."""
+
+    LENGTH = 2
+
+
+class FixedContainerUnionList2(List[FixedContainerUnion]):
+    """List of unions, whose default is the empty value whatever the element type is."""
+
+    LIMIT = 2
 
 
 class Uint8Vector2Model(BaseModel):
@@ -1391,6 +1411,136 @@ class TestProgressiveListSerialization:
         assert written == len(stream.getvalue())
         stream.seek(0)
         assert NestedProgressiveList.deserialize(stream, scope=written) == instance
+
+
+class TestSequenceDefaults:
+    """The default value of the three sequence shapes, and the zeroed check over it."""
+
+    def test_vector_default_is_the_element_default_at_every_position(self) -> None:
+        """The spec gives a vector the element default, LENGTH times."""
+        assert Uint8Vector4() == Uint8Vector4(data=[Uint8(0)] * 4)
+        assert len(Uint8Vector4()) == 4
+
+    def test_vector_of_composite_elements_defaults_element_by_element(self) -> None:
+        """A composite element type contributes its own default at each position."""
+        zero_element = FixedContainer(a=Uint8(0), b=Uint16(0))
+        assert FixedContainerVector2() == FixedContainerVector2(data=[zero_element, zero_element])
+
+    def test_vector_empty_input_stays_a_length_error(self) -> None:
+        """Zero elements is a count mismatch against LENGTH, never a request for the default."""
+        with pytest.raises(ValueOrValidationError) as exception_info:
+            Uint8Vector4(data=[])
+        assert str(exception_info.value) == "Uint8Vector4 requires exactly 4 elements, got 0"
+
+    def test_vector_data_is_no_longer_a_required_field(self) -> None:
+        """The elements carry a default, so Pydantic itself reports them as optional."""
+        assert Uint8Vector4.model_fields["data"].is_required() is False
+
+    def test_a_vector_missing_its_declarations_reports_its_own_error(self) -> None:
+        """A shape with no element type or length keeps the inherited empty default."""
+        # The default is injected only once both declarations are present, so such a shape
+        # falls through to its own declaration check rather than a new failure mode.
+
+        class MissingBothDeclarations(Vector):
+            pass
+
+        with pytest.raises(TypeOrValidationError) as exception_info:
+            MissingBothDeclarations()
+        expected = "MissingBothDeclarations must define ELEMENT_TYPE and LENGTH"
+        assert str(exception_info.value) == expected
+
+    def test_a_vector_missing_only_its_length_reports_its_own_error(self) -> None:
+        """An element type alone is not enough to know how many defaults to build."""
+
+        class MissingOnlyLength(Vector[Uint8]):
+            pass
+
+        with pytest.raises(TypeOrValidationError) as exception_info:
+            MissingOnlyLength()
+        assert str(exception_info.value) == "MissingOnlyLength must define ELEMENT_TYPE and LENGTH"
+
+    def test_each_default_element_is_built_on_its_own(self) -> None:
+        """One instance placed at every position would alias, and elements are mutable."""
+        # Across two instances: neither default shares an element with the other.
+        assert FixedContainerVector2().data[0] is not FixedContainerVector2().data[0]
+        # Within one instance: the two positions hold two distinct values.
+        instance = FixedContainerVector2()
+        assert instance.data[0] is not instance.data[1]
+        # So mutating position 0 moves nothing else, here or in the next default built.
+        instance.data[0].a = Uint8(9)
+        assert instance.data[1].a == Uint8(0)
+        assert FixedContainerVector2() == FixedContainerVector2(
+            data=[FixedContainer(a=Uint8(0), b=Uint16(0))] * 2
+        )
+
+    def test_list_and_progressive_list_default_to_empty(self) -> None:
+        """A variable-size shape defaults to its empty value, whatever its element type."""
+        assert Uint8List4() == Uint8List4(data=[])
+        assert Uint8ProgressiveList() == Uint8ProgressiveList(data=[])
+
+    def test_each_list_default_holds_its_own_element_sequence(self) -> None:
+        """Appending to one empty default leaves the next one empty."""
+        first = Uint8List4()
+        first.append(Uint8(1))
+        assert first == Uint8List4(data=[Uint8(1)])
+        assert Uint8List4() == Uint8List4(data=[])
+
+    @pytest.mark.parametrize(
+        "default_value, non_default_value",
+        [
+            # A vector of zeros is the default; setting element 0 moves away from it.
+            pytest.param(
+                Uint8Vector4(),
+                Uint8Vector4(data=[Uint8(1), Uint8(0), Uint8(0), Uint8(0)]),
+                id="vector",
+            ),
+            # An empty list is the default; one zero element is a different value of length 1.
+            pytest.param(Uint8List4(), Uint8List4(data=[Uint8(0)]), id="list"),
+            pytest.param(
+                Uint8ProgressiveList(),
+                Uint8ProgressiveList(data=[Uint8(0)]),
+                id="progressive_list",
+            ),
+        ],
+    )
+    def test_is_zero_holds_only_for_the_default(
+        self, default_value: Any, non_default_value: Any
+    ) -> None:
+        """A default reads as zeroed and any other value of the same type does not."""
+        assert default_value.is_zero() is True
+        assert non_default_value.is_zero() is False
+
+    @pytest.mark.parametrize(
+        "default_value, expected_encoding",
+        [
+            # Four zero Uint8 pack into four zero bytes.
+            pytest.param(Uint8Vector4(), b"\x00\x00\x00\x00", id="vector"),
+            # An empty sequence has no body at all, and no length prefix on the wire.
+            pytest.param(Uint8List4(), b"", id="list"),
+            pytest.param(Uint8ProgressiveList(), b"", id="progressive_list"),
+        ],
+    )
+    def test_the_default_round_trips(self, default_value: Any, expected_encoding: bytes) -> None:
+        """Each default encodes to known bytes and decodes back unchanged."""
+        assert default_value.encode_bytes() == expected_encoding
+        assert type(default_value).decode_bytes(expected_encoding) == default_value
+
+    def test_a_list_of_unions_defaults_to_empty(self) -> None:
+        """A list's default is empty regardless of element type, so a union element is fine."""
+        assert FixedContainerUnionList2() == FixedContainerUnionList2(data=[])
+        assert FixedContainerUnionList2().is_zero() is True
+
+    def test_a_vector_of_unions_has_no_default(self) -> None:
+        """A vector needs an element default at every position, and a union has none."""
+        with pytest.raises(SSZDefaultError, match=r"^FixedContainerUnion has no default value$"):
+            FixedContainerUnionVector2()
+
+    def test_a_vector_of_unions_still_builds_from_given_elements(self) -> None:
+        """Only the absence of elements fails: the shape itself is perfectly constructible."""
+        element = FixedContainerUnion(
+            selector=Uint8(1), data=FixedContainer(a=Uint8(1), b=Uint16(2))
+        )
+        assert len(FixedContainerUnionVector2(data=[element, element])) == 2
 
 
 class TestOffsetValidation:

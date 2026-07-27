@@ -147,6 +147,7 @@ class _SSZSequence[T: SSZType](SSZCollection[T]):
     ELEMENT_TYPE: ClassVar[type[SSZType]]
     """SSZ type of every element, inferred from the generic parameter."""
 
+    # A fresh list per instance: the spec's default is empty, and the contents mutate.
     data: Sequence[T] = Field(default_factory=list)
     """
     The sequence of elements.
@@ -340,10 +341,32 @@ class Vector[T: SSZType](_SSZSequence[T]):
         bytes 4..7   : off_1 = 13   (second body starts at byte 13)
         bytes 8..12  : body_0       (5 bytes)
         bytes 13..19 : body_1       (7 bytes)
+
+    Built from nothing, a vector holds the element default at every position.
+    An element type with no default leaves the vector with none.
     """
 
     LENGTH: ClassVar[int]
     """Exact number of elements, fixed at the type level."""
+
+    @classmethod
+    def __pydantic_init_subclass__(cls, **kwargs: Any) -> None:
+        """
+        Give the elements their default, which is the element default at every position.
+
+        Each element is built when the elements are left out, never shared: one instance
+        placed at every position would alias, and an element is mutable.
+        """
+        super().__pydantic_init_subclass__(**kwargs)
+
+        # A shape that declared neither keeps its inherited default, and fails its own
+        # declaration check instead.
+        if not (hasattr(cls, "ELEMENT_TYPE") and hasattr(cls, "LENGTH")):
+            return
+
+        element_type, length = cls.ELEMENT_TYPE, cls.LENGTH
+        cls.model_fields["data"].default_factory = lambda: [element_type() for _ in range(length)]
+        cls.model_rebuild(force=True)
 
     @field_validator("data", mode="before")
     @classmethod

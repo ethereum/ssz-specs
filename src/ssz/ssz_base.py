@@ -22,7 +22,25 @@ Encoded as a uint32 in little-endian byte order."""
 
 
 class SSZType(ABC):
-    """Abstract base for every SSZ-encodable type."""
+    """
+    Abstract base for every SSZ-encodable type.
+
+    Every type but one has a default value, and building it from nothing gives that default:
+
+        uint, boolean                      zero, false
+        fixed byte array                   every byte zero
+        bitvector                          every bit clear
+        vector                             the element default, once per position
+        container                          one field default per field
+        list, bitlist, progressive shapes  empty
+        compatible union                   none, and asking for one is an error
+
+    A composite default is built from the defaults of its parts, so it recurses.
+    A part with no default leaves the whole with none.
+
+    Only the total absence of input asks for a default.
+    An empty sequence handed to a fixed-length shape is a wrong count, and an error.
+    """
 
     @classmethod
     @abstractmethod
@@ -76,6 +94,40 @@ class SSZType(ABC):
             A new instance reconstructed from the stream.
         """
         ...
+
+    @classmethod
+    def default(cls) -> Self:
+        """
+        Build the default value of this type.
+
+        Construction with no argument gives the same value.
+        This spelling exists because a type checker reads a field list, not the defaults
+        this library attaches to it, and so reports a no-argument construction as missing
+        its arguments.
+
+        Returns:
+            A fresh default value.
+
+        Raises:
+            SSZTypeError: When the type has no default value.
+        """
+        return cls()
+
+    def is_zero(self) -> bool:
+        """
+        Whether this value equals the default of its own type.
+
+        The spec calls such a value zeroed.
+        A fresh default is built per call, and hoisting it into a constant would alias it.
+
+        Returns:
+            True when the value is the default of its type.
+
+        Raises:
+            SSZTypeError: When the type has no default, leaving nothing to compare against.
+        """
+        # The runtime type, so a named subtype compares against its own default.
+        return self == type(self).default()
 
     def encode_bytes(self) -> bytes:
         """
@@ -218,6 +270,10 @@ class SSZCollection[T](SSZModel):
             Uint8List4.of()            ==  Uint8List4(data=[])
             Uint8List4.of(*existing)   spreads an existing sequence
             ByteList10.of(0xDE, 0xAD)  ==  ByteList10(data=b"\xde\xad")
+
+        A fixed-length shape needs every element, and no argument means zero of them.
+        So this factory with no argument is a length error there, never the default.
+        Only construction with no argument at all asks for the default.
 
         Args:
             *elements: The elements of the new collection.
