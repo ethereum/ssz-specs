@@ -3,7 +3,7 @@
 import io
 from abc import ABC, abstractmethod
 from collections.abc import Iterator, Sequence
-from typing import IO, TYPE_CHECKING, Any, ClassVar, Final, Self, cast, override
+from typing import IO, TYPE_CHECKING, Any, ClassVar, Final, Self, cast, overload, override
 
 from pydantic import ConfigDict
 
@@ -239,8 +239,9 @@ class SSZCollection[T](SSZModel):
     the resulting length by the same rules construction applies. Elements
     already inside the collection were validated when they entered, so they
     are left alone and mutation cost is proportional to the change, not the
-    collection size. Element assignment lives on this shared base; only
-    variable-size collections offer append and pop. Fixed-length shapes accept
+    collection size.
+    Reading a position and assigning to one both live on this shared base.
+    Only variable-size collections offer append and pop. Fixed-length shapes accept
     element assignment but reject any length change. Mutability itself is
     configurable through the inherited MUTABLE flag.
 
@@ -295,6 +296,34 @@ class SSZCollection[T](SSZModel):
         name/value pairs of its fields.
         """
         return iter(self.data)
+
+    @overload
+    def __getitem__(self, index: int) -> T: ...
+    @overload
+    def __getitem__(self, index: slice) -> Sequence[T]: ...
+
+    def __getitem__(self, index: int | slice) -> T | Sequence[T]:
+        """
+        Read the element or elements at a position.
+
+        Reading delegates to the contents.
+        Every addressing form the host language offers therefore works, including a
+        position counted from the end.
+
+        A position counted from the end resolves against the number of elements held.
+        It never resolves against the declared capacity.
+
+            held = [10, 20, 30]   under a capacity of 4
+
+            [-1]  ->  30          the last element held
+            [-3]  ->  10
+            [-4]  ->  IndexError  no fourth element to count back to
+
+        The zeros that pad a value to its capacity belong to merkleization.
+        They are not members of the value.
+        So the unused slot is unaddressable from either end.
+        """
+        return self.data[index]
 
     def __setitem__(self, index: int | slice, value: T | Sequence[T]) -> None:
         """Replace the element(s) at ``index``, validating each new element."""

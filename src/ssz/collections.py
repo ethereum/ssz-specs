@@ -41,7 +41,6 @@ from typing import (
     ClassVar,
     Self,
     cast,
-    overload,
     override,
 )
 
@@ -138,7 +137,6 @@ class _SSZSequence[T: SSZType](SSZCollection[T]):
     - A progressive list leaves the element count unbounded.
 
     All of them store elements in a Pydantic field named data.
-    All of them expose tuple-style iteration and indexing.
     All of them share the offset-table writer used by variable-size encodings.
 
     The element type is inferred from the generic parameter, once per subclass.
@@ -274,15 +272,6 @@ class _SSZSequence[T: SSZType](SSZCollection[T]):
     def __len__(self) -> int:
         """Return the number of elements in the sequence."""
         return len(self.data)
-
-    @overload
-    def __getitem__(self, index: int) -> T: ...
-    @overload
-    def __getitem__(self, index: slice) -> Sequence[T]: ...
-
-    def __getitem__(self, index: int | slice) -> T | Sequence[T]:
-        """Index by integer or slice the underlying list."""
-        return self.data[index]
 
     @property
     def elements(self) -> list[T]:

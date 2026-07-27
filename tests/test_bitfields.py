@@ -140,6 +140,25 @@ class TestBitvector:
         vec[0] = Boolean(False)
         assert vec == Bitvector2(data=[Boolean(False), Boolean(False)])
 
+    def test_bitvector_reads_by_position_from_either_end(self) -> None:
+        """A bitvector answers by position, counted from either end."""
+        vec = Bitvector4(data=bits_of(1, 0, 1, 0))
+
+        #     position from the start:   0  1  2  3
+        #     bits:                      1  0  1  0
+        #     position from the end:    -4 -3 -2 -1
+        assert vec[0] == Boolean(True)
+        assert vec[-1] == Boolean(False)
+        assert vec[-3] == Boolean(False)
+
+        # A trailing range answers as a list of the bits it spans.
+        assert vec[-2:] == [Boolean(True), Boolean(False)]
+
+        # Answering by position and by length is all the host language needs to walk a
+        # sequence backwards.
+        # A bitvector is therefore reversible without declaring anything further.
+        assert list(reversed(vec)) == list(bits_of(0, 1, 0, 1))
+
 
 class TestBitlist:
     """Tests for the variable-length Bitlist type."""
@@ -238,6 +257,27 @@ class TestBitlist:
         sliced_bits = bitlist[1:3]
         assert sliced_bits == [Boolean(False), Boolean(True)]
         assert isinstance(sliced_bits, list)
+
+    def test_a_partial_fill_resolves_positions_against_the_bits_held(self) -> None:
+        """A position counted from the end measures the bits held, not the capacity."""
+        bitlist = Bitlist8(data=bits_of(1, 0, 1))
+
+        # 3 bits held under a capacity of 8:
+        #
+        #     position from the start:   0  1  2
+        #     bits:                      1  0  1
+        #     position from the end:    -3 -2 -1
+        assert bitlist[-1] == Boolean(True)
+        assert bitlist[-3] == Boolean(True)
+
+        # The five further bits the capacity allows for are not part of the value.
+        # They appear only as padding inside the Merkle tree.
+        # Neither the position just past the last bit nor the one just before the first
+        # therefore addresses anything.
+        with pytest.raises(IndexError):
+            _ = bitlist[3]
+        with pytest.raises(IndexError):
+            _ = bitlist[-4]
 
     def test_add_with_list(self) -> None:
         """Concatenating a Bitlist with a list returns a new instance."""

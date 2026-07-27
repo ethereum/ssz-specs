@@ -185,6 +185,25 @@ class TestBaseBytesOperations:
         assert list(iter(byte_array)) == [0, 1, 2, 3]
         assert byte_array[2] == 2
 
+    def test_reads_return_plain_types_and_offer_no_writer(self) -> None:
+        """A fixed byte array reads exactly as plain bytes do, offering no way to write."""
+        byte_array = Bytes4(b"\x01\x02\x03\x04")
+
+        # One position gives a plain integer.
+        # A trailing range gives plain bytes.
+        # Neither is wrapped back into a byte-array type, because a 2-byte result would no
+        # longer satisfy the 4-byte count the type declares.
+        assert byte_array[-1] == 4
+        assert type(byte_array[-1]) is int
+        assert byte_array[-2:] == b"\x03\x04"
+        assert type(byte_array[-2:]) is bytes
+
+        # The variable-length shape reads back those same plain types.
+        # It differs in accepting writes, which a fixed count leaves no room for.
+        assert ByteList16(data=b"\x01\x02\x03\x04")[-2:] == b"\x03\x04"
+        assert not hasattr(Bytes4, "__setitem__")
+        assert hasattr(ByteList16, "__setitem__")
+
     def test_concatenation_returns_plain_bytes(self) -> None:
         """Concatenation of two instances returns plain bytes."""
         left_array = Bytes4(b"\x00\x00\x00\x01")
@@ -390,6 +409,24 @@ class TestBaseByteListOperations:
     def test_bytes_dunder(self) -> None:
         """Calling bytes() on an instance returns the underlying bytes."""
         assert bytes(ByteList16(data=b"\x00\x01\x02")) == b"\x00\x01\x02"
+
+    def test_reads_by_position_from_either_end(self) -> None:
+        """A byte list answers integer byte values by position, counted from either end."""
+        byte_list = ByteList16(data=b"\xde\xad\xbe")
+
+        #     position from the start:    0     1     2
+        #     bytes:                    0xde  0xad  0xbe
+        #     position from the end:     -3    -2    -1
+        assert byte_list[0] == 0xDE
+        assert byte_list[-1] == 0xBE
+
+        # A trailing range answers as raw bytes, which is how the payload is stored.
+        assert byte_list[-2:] == b"\xad\xbe"
+
+        # Answering by position and by length is all the host language needs to walk a
+        # sequence backwards.
+        # A byte list is therefore reversible without declaring anything further.
+        assert list(reversed(byte_list)) == [0xBE, 0xAD, 0xDE]
 
     def test_concatenation_returns_plain_bytes(self) -> None:
         """Concatenation with a bytes-like value returns plain bytes."""
