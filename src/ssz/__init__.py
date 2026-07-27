@@ -7,7 +7,7 @@ from ssz.byte_arrays import (
     Bytes,
 )
 from ssz.collections import List, ProgressiveList, Vector
-from ssz.container import Container, ProgressiveContainer
+from ssz.container import Container, ProgressiveContainer, active_fields
 from ssz.exceptions import (
     SSZActiveFieldsError,
     SSZDefaultError,
@@ -68,4 +68,5 @@ __all__ = [
     "Uint128",
     "Uint256",
     "Vector",
+    "active_fields",
 ]
