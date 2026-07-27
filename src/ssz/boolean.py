@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import IO, Any, NoReturn, Self, override
+from typing import IO, Any, NoReturn, Self, TypeAlias, override
 
 from pydantic.annotated_handlers import GetCoreSchemaHandler
 from pydantic_core import CoreSchema, core_schema
@@ -244,3 +244,7 @@ class Boolean(int, SSZType):
     def __hash__(self) -> int:
         """Return a hash distinct from the equivalent raw bool, matching strict equality."""
         return hash((type(self), int(self)))
+
+
+Bit: TypeAlias = Boolean
+"""One bit, a spelling for bitfield elements that the spec itself does not define."""

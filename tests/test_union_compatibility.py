@@ -8,6 +8,7 @@ from ssz import (
     BaseByteList,
     BaseBytes,
     Boolean,
+    Byte,
     Chunk,
     CompatibleUnion,
     Container,
@@ -102,6 +103,22 @@ class Uint8List8(List[Uint8]):
     """List of uint8 with capacity eight."""
 
     LIMIT = 8
+
+
+class OpaqueByteVector4(Vector[Byte]):
+    """Vector of four of the spec's opaque eight-bit type: the same four-byte array."""
+
+    LENGTH = 4
+
+
+class OpaqueByteList4(List[Byte]):
+    """List of the opaque eight-bit type with capacity four."""
+
+    LIMIT = 4
+
+
+class OpaqueByteProgressiveList(ProgressiveList[Byte]):
+    """Progressive list of the opaque eight-bit type: the spec's unbounded byte list."""
 
 
 class BooleanVector4(Vector[Boolean]):
@@ -497,6 +514,9 @@ BASIC_PAIRS = [
     pytest.param(Boolean, Flag, True, id="boolean_and_a_named_boolean"),
     # There is one boolean width and one uint8 width, and they are still two types.
     pytest.param(Uint8, Boolean, False, id="uint8_and_boolean"),
+    # The spec states this pair as a compatibility rule of its own, in both directions.
+    # One type under two names satisfies it through the identity rule above.
+    pytest.param(Byte, Uint8, True, id="opaque_eight_bit_data_and_uint8"),
 ]
 
 # Rules 3 and 4: a byte array is the alias of a vector or list of single bytes.
@@ -519,6 +539,18 @@ BYTE_ARRAY_PAIRS = [
     pytest.param(ByteList4, Uint8, False, id="byte_list_and_a_bare_uint8"),
     # Two 32-byte arrays declared for different purposes are still one SSZ type.
     pytest.param(Chunk, Root, True, id="chunk_and_root"),
+    # The spec writes its byte-array aliases over the opaque eight-bit type.
+    # Each shape below is declared once each way.
+    # The relation therefore compares two distinct classes, not one with itself.
+    pytest.param(OpaqueByteVector4, Uint8Vector4, True, id="opaque_byte_vector_and_uint8_vector"),
+    pytest.param(OpaqueByteVector4, Bytes4, True, id="opaque_byte_vector_and_a_byte_array"),
+    pytest.param(OpaqueByteList4, Uint8List4, True, id="opaque_byte_list_and_uint8_list"),
+    pytest.param(
+        OpaqueByteProgressiveList,
+        ProgressiveList[Uint8],
+        True,
+        id="unbounded_opaque_byte_list_and_its_uint8_spelling",
+    ),
 ]
 
 # Rule 5: a bitfield answers for its capacity, and never across the three shapes.

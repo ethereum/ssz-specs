@@ -9,8 +9,23 @@ import pytest
 from hypothesis import given, strategies as st
 from pydantic import BaseModel, ValidationError
 
-from ssz import Uint8, Uint16, Uint32, Uint64, Uint128, Uint256
+import ssz
+from ssz import (
+    Byte,
+    Chunk,
+    Container,
+    List,
+    ProgressiveList,
+    Uint8,
+    Uint16,
+    Uint32,
+    Uint64,
+    Uint128,
+    Uint256,
+    Vector,
+)
 from ssz.exceptions import SSZSerializationError, SSZTypeError, SSZValueError
+from ssz.merkleization import hash_tree_root
 from ssz.uint import BaseUint
 
 ALL_UINT_TYPES = (Uint8, Uint16, Uint32, Uint64, Uint128, Uint256)
@@ -927,3 +942,226 @@ def test_encode_decode_round_trip_random_values(uint_class: Type[BaseUint], data
     raw_value = data.draw(st.integers(min_value=0, max_value=2**uint_class.BITS - 1))
     instance = uint_class(raw_value)
     assert uint_class.decode_bytes(instance.encode_bytes()) == instance
+
+
+# The spec's eight bits of opaque data, and the shapes it aliases.
+#
+# Each shape below is declared twice, once with each spelling.
+# The two declarations are separate classes.
+# No comparison between them is therefore vacuous.
+
+
+class OpaqueByteVector4(Vector[Byte]):
+    """The spec's four-byte array: a vector of four of the opaque spelling."""
+
+    LENGTH = 4
+
+
+class Uint8Vector4(Vector[Uint8]):
+    """The same four-element shape, declared with the numeric spelling."""
+
+    LENGTH = 4
+
+
+class OpaqueByteList4(List[Byte]):
+    """The spec's byte list of capacity four: a list of the opaque spelling."""
+
+    LIMIT = 4
+
+
+class Uint8List4(List[Uint8]):
+    """The same four-capacity shape, declared with the numeric spelling."""
+
+    LIMIT = 4
+
+
+class OpaqueByteProgressiveList(ProgressiveList[Byte]):
+    """The spec's unbounded byte list: a progressive list of the opaque spelling."""
+
+
+class OpaqueByteHolder(Container):
+    """One field of opaque data, beside one field the spec reads as a number."""
+
+    payload: Byte
+    count: Uint16
+
+
+class TestOpaqueByteSpelling:
+    """
+    The spec's eight bits of opaque data, against the eight-bit number beside it.
+
+    Two things the spec says of the pair:
+
+    - They are equivalent in serialization and in hashing.
+    - Each is compatible with the other.
+
+    One type under two names satisfies both for free.
+    What follows pins that equivalence, and the alias shapes built on it.
+    The arithmetic and comparison surface belongs to the eight-bit number.
+    It is covered above rather than repeated here.
+    """
+
+    def test_the_two_spellings_name_one_type(self) -> None:
+        """One class stands behind both names, rather than one subclassing the other."""
+        # Why not a real subclass, measured with one declared over the eight-bit number:
+        #
+        #     Sub(5) == Uint8(5)      TypeError: Unsupported operand type(s) for ==
+        #     Uint8List4.of(Sub(5))   SSZTypeMismatch: Expected Uint8, got Sub
+        #
+        # Integers here compare by exact class.
+        # Collections coerce their elements by exact class too.
+        # A subclass would be a type the spec calls interchangeable.
+        # This library would refuse to interchange it.
+        assert Byte is Uint8
+        # The visible cost of one class under two names.
+        # A value built through the opaque name shows the numeric name back.
+        assert repr(Byte(7)) == "Uint8(7)"
+
+    @pytest.mark.parametrize(
+        "value, expected_wire",
+        [
+            pytest.param(0x00, b"\x00", id="zero"),
+            pytest.param(0x01, b"\x01", id="one"),
+            pytest.param(0xFF, b"\xff", id="widest_value_eight_bits_hold"),
+        ],
+    )
+    def test_the_two_spellings_agree_on_equality_bytes_and_root(
+        self, value: int, expected_wire: bytes
+    ) -> None:
+        """Equality, the encoded byte, and the root all answer alike across the two names."""
+        opaque, number = Byte(value), Uint8(value)
+
+        # Equality is the property a real subclass would lose first.
+        assert opaque == number
+
+        # Eight bits occupy one byte.
+        # The encoding is therefore the value itself.
+        assert opaque.encode_bytes() == expected_wire
+        assert number.encode_bytes() == expected_wire
+
+        # A basic type roots as its encoding right-padded to a full 32-byte chunk:
+        #
+        #     value 0xff  ->  ff 00 00 ... 00     1 byte of value, 31 of padding
+        assert hash_tree_root(opaque) == Chunk(expected_wire + b"\x00" * 31)
+        assert hash_tree_root(number) == hash_tree_root(opaque)
+
+    @pytest.mark.parametrize(
+        "declared_shape, element",
+        [
+            pytest.param(Uint8List4, Byte(5), id="numeric_shape_given_an_opaque_value"),
+            pytest.param(OpaqueByteList4, Uint8(5), id="opaque_shape_given_a_numeric_value"),
+        ],
+    )
+    def test_a_value_of_either_spelling_fits_a_shape_declared_with_the_other(
+        self, declared_shape: type[List[Uint8]], element: Uint8
+    ) -> None:
+        """A collection declared with one name accepts a value built with the other."""
+        # Element coercion admits the declared class and its ancestors, nothing else.
+        # Two names for one class therefore pass straight through, in either direction.
+        held = declared_shape.of(element)
+        assert held[0] == Uint8(5)
+        assert held.encode_bytes() == b"\x05"
+
+    def test_the_fixed_byte_array_shape(self) -> None:
+        """A four-byte array declared over the opaque spelling encodes and roots alike."""
+        # Two declarations, two classes.
+        # Nothing below therefore compares an object with itself.
+        assert OpaqueByteVector4 is not Uint8Vector4
+
+        opaque = OpaqueByteVector4.of(0x01, 0x02, 0x03, 0x04)
+        numeric = Uint8Vector4.of(0x01, 0x02, 0x03, 0x04)
+
+        # Fixed-size elements pack back to back.
+        # There is no length prefix and no separator.
+        assert opaque.encode_bytes() == bytes.fromhex("01020304")
+        assert numeric.encode_bytes() == opaque.encode_bytes()
+
+        # Four bytes fit one chunk, padded out to 32:
+        #
+        #     01 02 03 04 00 00 ... 00
+        assert hash_tree_root(opaque) == Chunk(bytes.fromhex("01020304") + b"\x00" * 28)
+        assert hash_tree_root(numeric) == hash_tree_root(opaque)
+
+    def test_the_byte_list_shape(self) -> None:
+        """A byte list declared over the opaque spelling encodes and roots alike."""
+        assert OpaqueByteList4 is not Uint8List4
+
+        opaque = OpaqueByteList4.of(0x11, 0x22)
+        numeric = Uint8List4.of(0x11, 0x22)
+
+        # A list writes its elements bare.
+        # The count is recovered from the byte budget on the way back in.
+        assert opaque.encode_bytes() == bytes.fromhex("1122")
+        assert numeric.encode_bytes() == opaque.encode_bytes()
+
+        # The root mixes the element count into the padded chunks.
+        # Capacity fixes the tree depth.
+        # Both declarations were given capacity four.
+        assert hash_tree_root(numeric) == hash_tree_root(opaque)
+
+    def test_the_unbounded_byte_list_shape(self) -> None:
+        """The spec's unbounded byte list is a progressive list of the opaque spelling."""
+        # An inline parameterization over one name resolves to the class the other name
+        # parameterizes too.
+        # The named subclass is what gives two classes to compare.
+        assert OpaqueByteProgressiveList is not ProgressiveList[Uint8]
+
+        opaque = OpaqueByteProgressiveList.of(0x11, 0x22)
+        numeric = ProgressiveList[Uint8].of(0x11, 0x22)
+
+        # The wire format is the bounded shape's, byte for byte.
+        assert opaque.encode_bytes() == bytes.fromhex("1122")
+        assert numeric.encode_bytes() == opaque.encode_bytes()
+
+        # Only the tree differs from a bounded list.
+        # That tree grows with the data rather than with a capacity.
+        # Neither declaration therefore has a capacity to pad differently to.
+        assert hash_tree_root(numeric) == hash_tree_root(opaque)
+
+    def test_a_container_field_declared_with_it_round_trips(self) -> None:
+        """A field declared with the opaque spelling survives an encode and decode."""
+        holder = OpaqueByteHolder(payload=Byte(0xAB), count=Uint16(0x0102))
+
+        # One byte of opaque data, then two little-endian bytes of the number:
+        #
+        #     ab      02 01
+        #     payload count
+        assert holder.encode_bytes() == bytes.fromhex("ab0201")
+        assert OpaqueByteHolder.decode_bytes(holder.encode_bytes()) == holder
+
+    def test_json_output_does_not_follow_the_spec_mapping(self) -> None:
+        """
+        Pin what JSON output looks like today, which records a gap rather than a decision.
+
+        The spec's mapping asks for three things, none of which appears below:
+
+        - A decimal string from an eight-bit number.
+        - A hex byte string from eight bits of opaque data.
+        - A bare hex byte string from any collection of them.
+
+        The mapping is unimplemented across this library.
+        No string asserted below is spec-correct.
+        Each is expected to change when the mapping lands.
+        """
+        # The spec asks for "1" from both of these fields.
+        assert (
+            OpaqueByteHolder(payload=Byte(1), count=Uint16(1)).model_dump_json()
+            == '{"payload":1,"count":1}'
+        )
+
+        # The spec asks for the bare string "0x11223344" from a byte collection.
+        # Each collection instead comes out as an object, keyed by the field holding its
+        # elements.
+        # Those elements are decimal numbers rather than hex.
+        assert (
+            OpaqueByteVector4.of(0x11, 0x22, 0x33, 0x44).model_dump_json()
+            == '{"data":[17,34,51,68]}'
+        )
+        assert OpaqueByteList4.of(0x11, 0x22).model_dump_json() == '{"data":[17,34]}'
+        assert OpaqueByteProgressiveList.of(0x11, 0x22).model_dump_json() == '{"data":[17,34]}'
+
+    def test_the_package_exports_the_spelling(self) -> None:
+        """The export list is what a star import and the documentation tooling read."""
+        # Importing the name at the top of this module proves it is reachable.
+        # Only the export list proves it is public.
+        assert "Byte" in ssz.__all__

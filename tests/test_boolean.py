@@ -7,6 +7,8 @@ import pytest
 from hypothesis import given, strategies as st
 from pydantic import BaseModel, ValidationError
 
+import ssz
+from ssz import Bit, Container
 from ssz.boolean import Boolean
 from ssz.exceptions import SSZSerializationError, SSZTypeError, SSZValueError
 
@@ -330,3 +332,49 @@ def test_encode_decode_round_trip_random_values(boolean_value: bool) -> None:
     """Either truth value survives an encode and decode round trip unchanged."""
     instance = Boolean(boolean_value)
     assert Boolean.decode_bytes(instance.encode_bytes()) == instance
+
+
+class ShortSpellingHolder(Container):
+    """One field written with the short spelling, beside one written the long way."""
+
+    flag: Bit
+    other: Boolean
+
+
+class TestShortBooleanSpelling:
+    """
+    The short spelling of the boolean type, a reading aid for a bitfield's element type.
+
+    The spec has no name of its own for this.
+    Nothing normative rests on it.
+    No equivalence rule applies to it either.
+
+    Two properties are left worth stating:
+
+    - It is the boolean type itself, not a subtype of it.
+    - A declaration written with it behaves.
+    """
+
+    def test_the_two_spellings_name_one_type(self) -> None:
+        """One class stands behind both names, rather than one subclassing the other."""
+        assert Bit is Boolean
+        # The visible cost of one class under two names.
+        # A value built through the short name shows the long name back.
+        assert repr(Bit(True)) == "Boolean(True)"
+
+    def test_a_container_field_declared_with_it_round_trips(self) -> None:
+        """A field declared with the short spelling survives an encode and decode."""
+        holder = ShortSpellingHolder(flag=Bit(True), other=Boolean(False))
+
+        # One byte per boolean, true first:
+        #
+        #     01   00
+        #     flag other
+        assert holder.encode_bytes() == bytes.fromhex("0100")
+        assert ShortSpellingHolder.decode_bytes(holder.encode_bytes()) == holder
+
+    def test_the_package_exports_the_spelling(self) -> None:
+        """The export list is what a star import and the documentation tooling read."""
+        # Importing the name at the top of this module proves it is reachable.
+        # Only the export list proves it is public.
+        assert "Bit" in ssz.__all__
