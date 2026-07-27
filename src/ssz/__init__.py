@@ -1,7 +1,7 @@
 """SSZ primitive types and (de)serialization for Ethereum."""
 
 from ssz.bitfields import BaseBitlist, BaseBitvector, ProgressiveBitlist
-from ssz.boolean import Boolean
+from ssz.boolean import Bit, Boolean
 from ssz.byte_arrays import (
     BaseByteList,
     BaseBytes,
@@ -26,7 +26,7 @@ from ssz.exceptions import (
 )
 from ssz.merkleization import ZERO_ROOT, Chunk, Root
 from ssz.ssz_base import SSZType
-from ssz.uint import Uint8, Uint16, Uint32, Uint64, Uint128, Uint256
+from ssz.uint import Byte, Uint8, Uint16, Uint32, Uint64, Uint128, Uint256
 from ssz.union import CompatibleUnion
 
 __all__ = [
@@ -34,11 +34,13 @@ __all__ = [
     "BaseBitvector",
     "BaseByteList",
     "BaseBytes",
+    "Bit",
     "Chunk",
     "CompatibleUnion",
     "Root",
     "ZERO_ROOT",
     "Boolean",
+    "Byte",
     "Container",
     "List",
     "ProgressiveBitlist",

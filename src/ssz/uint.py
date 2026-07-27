@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import IO, Any, ClassVar, NoReturn, Self, SupportsInt, overload, override
+from typing import IO, Any, ClassVar, NoReturn, Self, SupportsInt, TypeAlias, overload, override
 
 from pydantic.annotated_handlers import GetCoreSchemaHandler
 from pydantic_core import core_schema
@@ -451,3 +451,7 @@ class Uint256(BaseUint):
     """A type representing a 256-bit unsigned integer (uint256)."""
 
     BITS = 256
+
+
+Byte: TypeAlias = Uint8
+"""Eight bits of opaque data, which the spec encodes and hashes as an eight-bit number."""
