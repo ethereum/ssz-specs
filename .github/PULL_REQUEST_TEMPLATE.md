@@ -12,4 +12,3 @@
     just check
     ```
 - [ ] Considered adding appropriate tests for the changes.
-- [ ] Considered updating the online docs in the [./docs/](/ethereum/ssz-specs/tree/main/docs/) directory.

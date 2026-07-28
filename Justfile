@@ -6,9 +6,9 @@ alias help := default
 default:
     @just --list
 
-# Run all quality checks (lint, format, typecheck, spellcheck, mdformat, lock)
+# Run all quality checks (lint, format, typecheck, spellcheck, lock)
 [group('quality')]
-check: lint format-check typecheck spellcheck mdformat lock-check
+check: lint format-check typecheck spellcheck lock-check
 
 # Lint with ruff (no auto-fix)
 [group('quality')]
@@ -25,27 +25,21 @@ format *args:
 format-check *args:
     uv run --group lint ruff format --check "$@"
 
-# Auto-fix lint, formatting, and markdown issues
+# Auto-fix lint and formatting issues
 [group('quality')]
 fix:
     uv run --group lint ruff check --fix
     uv run --group lint ruff format
-    uv run --group docs mdformat docs/
 
 # Type check with ty
 [group('quality')]
 typecheck *args:
     uv run --group lint ty check "$@"
 
-# Spell check source, tests, and docs
+# Spell check source, tests, and packages
 [group('quality')]
 spellcheck *args:
-    uv run --group lint codespell src tests packages docs README.md --skip="*.lock,*.svg,.git,__pycache__,.pytest_cache" --ignore-words=.codespell-ignore-words.txt "$@"
-
-# Verify markdown formatting in docs/
-[group('quality')]
-mdformat *args:
-    uv run --group docs mdformat --check docs/ "$@"
+    uv run --group lint codespell src tests packages README.md --skip="*.lock,*.svg,.git,__pycache__,.pytest_cache" --ignore-words=.codespell-ignore-words.txt "$@"
 
 # Verify uv.lock is up to date
 [group('quality')]
@@ -79,16 +73,6 @@ test-cov *args:
 [group('tests')]
 test-cov-gate *args:
     uv run --group test pytest --cov --cov-report=term-missing --cov-fail-under=100 "$@"
-
-# Build documentation site with mkdocs
-[group('docs')]
-docs *args:
-    uv run --group docs mkdocs build "$@"
-
-# Serve documentation locally with mkdocs (live reload)
-[group('docs')]
-docs-serve *args:
-    uv run --group docs mkdocs serve "$@"
 
 # Print the command to install shell completions for just recipes
 [group('housekeeping')]
