@@ -8,12 +8,12 @@ from ssz import (
     Boolean,
     Byte,
     ByteList,
-    Bytes,
+    ByteVector,
     Chunk,
     CompatibleUnion,
     Container,
     List,
-    ProgressiveBitlist,
+    ProgressiveBitList,
     ProgressiveContainer,
     ProgressiveList,
     Root,
@@ -23,7 +23,7 @@ from ssz import (
     Uint256,
     Vector,
 )
-from ssz.bitfields import Bitlist, Bitvector
+from ssz.bitfields import BitList, BitVector
 from ssz.ssz_base import SSZType
 from ssz.union import is_compatible
 
@@ -49,7 +49,7 @@ class Flag(Boolean):
 # --------------------------------------------------------------------------------------
 
 
-class Bytes4(Bytes):
+class Bytes4(ByteVector):
     """Fixed byte array of four bytes: the spec's alias for Vector[byte, 4]."""
 
     LENGTH = 4
@@ -59,7 +59,7 @@ class Bytes4Alias(Bytes4):
     """Second spelling of the same four-byte array."""
 
 
-class Bytes8(Bytes):
+class Bytes8(ByteVector):
     """Fixed byte array of eight bytes, twice the width of Bytes4."""
 
     LENGTH = 8
@@ -138,39 +138,39 @@ class BooleanList4(List[Boolean]):
 # --------------------------------------------------------------------------------------
 
 
-class Bitvector4(Bitvector):
-    """Bitvector of four bits."""
+class BitVector4(BitVector):
+    """BitVector of four bits."""
 
     LENGTH = 4
 
 
-class Bitvector4Alias(Bitvector4):
+class BitVector4Alias(BitVector4):
     """Second spelling of the same four-bit vector."""
 
 
-class Bitvector8(Bitvector):
-    """Bitvector of eight bits."""
+class BitVector8(BitVector):
+    """BitVector of eight bits."""
 
     LENGTH = 8
 
 
-class Bitlist4(Bitlist):
-    """Bitlist of capacity four."""
+class BitList4(BitList):
+    """BitList of capacity four."""
 
     LIMIT = 4
 
 
-class Bitlist4Alias(Bitlist4):
+class BitList4Alias(BitList4):
     """Second spelling of the same four-bit-capacity list."""
 
 
-class Bitlist8(Bitlist):
-    """Bitlist of capacity eight."""
+class BitList8(BitList):
+    """BitList of capacity eight."""
 
     LIMIT = 8
 
 
-class Flags(ProgressiveBitlist):
+class Flags(ProgressiveBitList):
     """Named spelling of a progressive bitlist, of which there is only one shape."""
 
 
@@ -496,12 +496,12 @@ def assert_relation(left: type[SSZType], right: type[SSZType], expected: bool) -
 IDENTITY_PAIRS = [
     pytest.param(Uint8, Uint8, True, id="uint8_with_itself"),
     pytest.param(Bytes4, Bytes4, True, id="byte_vector_with_itself"),
-    pytest.param(Bitvector4, Bitvector4, True, id="bitvector_with_itself"),
+    pytest.param(BitVector4, BitVector4, True, id="bitvector_with_itself"),
     pytest.param(Square, Square, True, id="progressive_container_with_itself"),
     pytest.param(Pair, Pair, True, id="container_with_itself"),
     pytest.param(Shape, Shape, True, id="union_with_itself"),
     pytest.param(
-        ProgressiveBitlist, ProgressiveBitlist, True, id="progressive_bitlist_with_itself"
+        ProgressiveBitList, ProgressiveBitList, True, id="progressive_bitlist_with_itself"
     ),
 ]
 
@@ -555,16 +555,16 @@ BYTE_ARRAY_PAIRS = [
 
 # Rule 5: a bitfield answers for its capacity, and never across the three shapes.
 BITFIELD_PAIRS = [
-    pytest.param(Bitvector4, Bitvector4Alias, True, id="two_spellings_of_one_bitvector"),
-    pytest.param(Bitvector4, Bitvector8, False, id="bitvectors_of_two_capacities"),
-    pytest.param(Bitvector4, Bitlist4, False, id="bitvector_and_bitlist_of_one_size"),
-    pytest.param(Bitvector4, Uint16Vector4, False, id="bitvector_and_a_uint16_vector"),
-    pytest.param(Bitlist4, Bitlist4Alias, True, id="two_spellings_of_one_bitlist"),
-    pytest.param(Bitlist4, Bitlist8, False, id="bitlists_of_two_capacities"),
-    pytest.param(Bitlist4, ProgressiveBitlist, False, id="bitlist_and_progressive_bitlist"),
-    pytest.param(Bitlist4, Uint16List4, False, id="bitlist_and_a_uint16_list"),
-    pytest.param(ProgressiveBitlist, Flags, True, id="two_spellings_of_one_progressive_bitlist"),
-    pytest.param(ProgressiveBitlist, Uint16List4, False, id="progressive_bitlist_and_a_list"),
+    pytest.param(BitVector4, BitVector4Alias, True, id="two_spellings_of_one_bitvector"),
+    pytest.param(BitVector4, BitVector8, False, id="bitvectors_of_two_capacities"),
+    pytest.param(BitVector4, BitList4, False, id="bitvector_and_bitlist_of_one_size"),
+    pytest.param(BitVector4, Uint16Vector4, False, id="bitvector_and_a_uint16_vector"),
+    pytest.param(BitList4, BitList4Alias, True, id="two_spellings_of_one_bitlist"),
+    pytest.param(BitList4, BitList8, False, id="bitlists_of_two_capacities"),
+    pytest.param(BitList4, ProgressiveBitList, False, id="bitlist_and_progressive_bitlist"),
+    pytest.param(BitList4, Uint16List4, False, id="bitlist_and_a_uint16_list"),
+    pytest.param(ProgressiveBitList, Flags, True, id="two_spellings_of_one_progressive_bitlist"),
+    pytest.param(ProgressiveBitList, Uint16List4, False, id="progressive_bitlist_and_a_list"),
 ]
 
 # Rule 6: a sequence answers for its capacity and its element type.

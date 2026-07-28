@@ -16,7 +16,7 @@ from ssz import (
     Boolean,
     CompatibleUnion,
     Container,
-    ProgressiveBitlist,
+    ProgressiveBitList,
     ProgressiveContainer,
     ProgressiveList,
     Uint8,
@@ -51,7 +51,7 @@ class ProgressiveHolder(Container):
 
     x: Uint64
     a: Uint64ProgressiveList
-    b: ProgressiveBitlist
+    b: ProgressiveBitList
 
 
 class Square(ProgressiveContainer):
@@ -88,7 +88,7 @@ class ShapeHolder(ProgressiveContainer):
 
     head: Uint64
     numbers: Uint64ProgressiveList
-    flags: ProgressiveBitlist
+    flags: ProgressiveBitList
 
 
 class SquareProgressiveList(ProgressiveList[Square]):
@@ -310,7 +310,7 @@ def test_all_true_bitlist_roots(bit_count: int, expected_root: str) -> None:
     - It packs into one chunk, because the delimiter never enters the tree.
     """
     # The delimiter is what makes the byte count and the chunk count disagree here.
-    assert root_hex(ProgressiveBitlist(data=[Boolean(True)] * bit_count)) == expected_root
+    assert root_hex(ProgressiveBitList(data=[Boolean(True)] * bit_count)) == expected_root
 
 
 @pytest.mark.parametrize(
@@ -336,7 +336,7 @@ def test_alternating_bitlist_roots(bit_count: int, expected_root: str) -> None:
     """Bits alternate starting from clear, which catches a reversed packing order."""
     # Bit i lands at position i, so a reversed packing shifts every byte of the payload.
     bits = [Boolean(index % 2) for index in range(bit_count)]
-    assert root_hex(ProgressiveBitlist(data=bits)) == expected_root
+    assert root_hex(ProgressiveBitList(data=bits)) == expected_root
 
 
 @pytest.mark.parametrize(
@@ -406,7 +406,7 @@ def test_container_holding_both_progressive_shapes_vector() -> None:
     value = ProgressiveHolder(
         x=Uint64(7),
         a=Uint64ProgressiveList(data=[Uint64(1), Uint64(2), Uint64(3)]),
-        b=ProgressiveBitlist(data=[Boolean(True), Boolean(False), Boolean(True)]),
+        b=ProgressiveBitList(data=[Boolean(True), Boolean(False), Boolean(True)]),
     )
     expected_bytes = (
         "070000000000000010000000280000000100000000000000020000000000000003000000000000000d"
@@ -507,7 +507,7 @@ def test_progressive_container_with_progressive_fields_vector() -> None:
     value = ShapeHolder(
         head=Uint64(7),
         numbers=Uint64ProgressiveList(data=[Uint64(1), Uint64(2), Uint64(3)]),
-        flags=ProgressiveBitlist(data=[Boolean(True), Boolean(False), Boolean(True)]),
+        flags=ProgressiveBitList(data=[Boolean(True), Boolean(False), Boolean(True)]),
     )
     expected_bytes = (
         "070000000000000010000000280000000100000000000000020000000000000003000000000000000d"

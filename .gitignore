@@ -148,26 +148,14 @@ cython_debug/
 # Test fixtures output
 fixtures/
 
-# Documentation build
-site/
-
 # UV
 .uv/
 
 # Ruff
 .ruff_cache/
 
-# PQ test keys
-packages/testing/src/consensus_testing/test_keys/prod_scheme/
-
-# Local scripts
-scripts/
-
 # Claude Code
 .claude/settings.local.json
-
-# Client codebase used by Claude skill for running reference tests
-clients/
 
 # Local agent worktrees
 .claude/worktrees/

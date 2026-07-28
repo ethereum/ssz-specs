@@ -9,7 +9,7 @@ from pydantic import BaseModel, ValidationError
 
 from ssz import Uint8, Uint16, Uint32
 from ssz.boolean import Boolean
-from ssz.byte_arrays import Bytes
+from ssz.byte_arrays import ByteVector
 from ssz.collections import List, ProgressiveList, Vector, _validate_offsets
 from ssz.container import Container
 from ssz.exceptions import (
@@ -22,7 +22,7 @@ from ssz.exceptions import (
 from ssz.union import CompatibleUnion
 
 
-class Bytes32(Bytes):
+class Bytes32(ByteVector):
     """A 32-byte array, as applications typically define for roots and hashes."""
 
     LENGTH = 32

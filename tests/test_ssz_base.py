@@ -18,9 +18,9 @@ from ssz import (
     Uint128,
     Uint256,
 )
-from ssz.bitfields import Bitlist, Bitvector, ProgressiveBitlist
+from ssz.bitfields import BitList, BitVector, ProgressiveBitList
 from ssz.boolean import Boolean
-from ssz.byte_arrays import ByteList, Bytes
+from ssz.byte_arrays import ByteList, ByteVector
 from ssz.collections import List, ProgressiveList, Vector
 from ssz.container import Container, ProgressiveContainer
 from ssz.exceptions import SSZDefaultError, SSZError, SSZTypeError, SSZValueError
@@ -58,7 +58,7 @@ class RootList4(List[Root]):
     LIMIT = 4
 
 
-class SmallBitvector(Bitvector):
+class SmallBitVector(BitVector):
     """A bitvector with exactly 3 bits."""
 
     LENGTH = 3
@@ -91,7 +91,7 @@ class ThreeFieldContainer(Container):
     c: Uint16List4
 
 
-class SmallBitlist(Bitlist):
+class SmallBitList(BitList):
     """A bitlist with a small limit, used to test SSZModel.__len__ data path."""
 
     LIMIT = 8
@@ -139,37 +139,37 @@ class PlainLimitList(List[Uint8]):
     LIMIT = 4
 
 
-class TypedLengthBitvector(Bitvector):
+class TypedLengthBitVector(BitVector):
     """A bitvector whose bit count is declared with a typed value."""
 
     LENGTH = Uint64(4)
 
 
-class PlainLengthBitvector(Bitvector):
+class PlainLengthBitVector(BitVector):
     """The same bitvector, declared with a plain integer."""
 
     LENGTH = 4
 
 
-class TypedLimitBitlist(Bitlist):
+class TypedLimitBitList(BitList):
     """A bitlist whose capacity is declared with a typed value."""
 
     LIMIT = Uint64(4)
 
 
-class PlainLimitBitlist(Bitlist):
+class PlainLimitBitList(BitList):
     """The same bitlist, declared with a plain integer."""
 
     LIMIT = 4
 
 
-class TypedLengthBytes(Bytes):
+class TypedLengthBytes(ByteVector):
     """A fixed byte array whose byte count is declared with a typed value."""
 
     LENGTH = Uint64(4)
 
 
-class PlainLengthBytes(Bytes):
+class PlainLengthBytes(ByteVector):
     """The same fixed byte array, declared with a plain integer."""
 
     LENGTH = 4
@@ -191,17 +191,17 @@ class TestSSZModelLength:
     """
     Tests for SSZModel.__len__() on both collection and container models.
 
-    Uses Bitlist (not List) for the data-path because List overrides
-    __len__ with its own implementation. Bitlist inherits SSZModel's version.
+    Uses BitList (not List) for the data-path because List overrides
+    __len__ with its own implementation. BitList inherits SSZModel's version.
     """
 
     def test_length_data_path_via_bitlist(self) -> None:
-        """Bitlist delegates to SSZModel.__len__ which returns len(data)."""
-        bl = SmallBitlist(data=(Boolean(True), Boolean(False), Boolean(True)))
+        """BitList delegates to SSZModel.__len__ which returns len(data)."""
+        bl = SmallBitList(data=(Boolean(True), Boolean(False), Boolean(True)))
         assert len(bl) == 3
 
     def test_length_empty_data_path_via_bitlist(self) -> None:
-        bl = SmallBitlist(data=())
+        bl = SmallBitList(data=())
         assert len(bl) == 0
 
     def test_length_container_returns_field_count(self) -> None:
@@ -272,17 +272,17 @@ class TestSSZCollectionIteration:
 
     def test_bitvector_yields_its_bits(self) -> None:
         """A bitvector iterates booleans, not the one field that holds them."""
-        bits = SmallBitvector(data=[Boolean(True), Boolean(False), Boolean(True)])
+        bits = SmallBitVector(data=[Boolean(True), Boolean(False), Boolean(True)])
         assert list(bits) == [Boolean(True), Boolean(False), Boolean(True)]
 
     def test_bitlist_yields_its_bits(self) -> None:
         """A bounded bitlist iterates booleans."""
-        bits = SmallBitlist(data=[Boolean(True), Boolean(False)])
+        bits = SmallBitList(data=[Boolean(True), Boolean(False)])
         assert list(bits) == [Boolean(True), Boolean(False)]
 
     def test_progressive_bitlist_yields_its_bits(self) -> None:
         """A progressive bitlist iterates booleans on the same terms."""
-        bits = ProgressiveBitlist(data=[Boolean(False), Boolean(True)])
+        bits = ProgressiveBitList(data=[Boolean(False), Boolean(True)])
         assert list(bits) == [Boolean(False), Boolean(True)]
 
     def test_byte_list_yields_its_byte_values(self) -> None:
@@ -292,8 +292,8 @@ class TestSSZCollectionIteration:
 
     def test_membership_reads_the_contents(self) -> None:
         """The in operator routes through iteration, so it tests contents, not field names."""
-        assert Boolean(True) in SmallBitlist(data=[Boolean(True)])
-        assert Boolean(True) not in SmallBitlist(data=[Boolean(False)])
+        assert Boolean(True) in SmallBitList(data=[Boolean(True)])
+        assert Boolean(True) not in SmallBitList(data=[Boolean(False)])
         assert 0xDE in SmallByteList(data=b"\xde\xad")
         assert "data" not in SmallByteList(data=b"\xde\xad")
 
@@ -317,9 +317,9 @@ class TestSSZCollectionMutation:
 
     def test_setitem_slice_revalidates(self) -> None:
         """Slice assignment replaces a range of elements."""
-        bits = SmallBitvector(data=[Boolean(True), Boolean(True), Boolean(True)])
+        bits = SmallBitVector(data=[Boolean(True), Boolean(True), Boolean(True)])
         bits[1:] = [Boolean(False), Boolean(False)]
-        assert bits == SmallBitvector(data=[Boolean(True), Boolean(False), Boolean(False)])
+        assert bits == SmallBitVector(data=[Boolean(True), Boolean(False), Boolean(False)])
 
     def test_append_grows_within_limit(self) -> None:
         """Append adds one element while under the limit."""
@@ -337,15 +337,15 @@ class TestSSZCollectionMutation:
         """Fixed-length shapes do not offer length-changing methods at all."""
         assert not hasattr(Uint16Vector2, "append")
         assert not hasattr(Uint16Vector2, "pop")
-        assert not hasattr(SmallBitvector, "append")
-        assert not hasattr(SmallBitvector, "pop")
+        assert not hasattr(SmallBitVector, "append")
+        assert not hasattr(SmallBitVector, "pop")
 
     def test_setitem_slice_resize_on_fixed_length_rejected(self) -> None:
         """A slice assignment that would resize a fixed-length shape is rejected."""
-        bits = SmallBitvector(data=[Boolean(True)] * 3)
+        bits = SmallBitVector(data=[Boolean(True)] * 3)
         with pytest.raises(SSZValueError):
             bits[1:] = [Boolean(False)]
-        assert bits == SmallBitvector(data=[Boolean(True)] * 3)
+        assert bits == SmallBitVector(data=[Boolean(True)] * 3)
 
     def test_pop_returns_last_and_shrinks(self) -> None:
         """Pop removes and returns the final element."""
@@ -368,10 +368,10 @@ class TestSSZCollectionMutation:
         assert payload == SmallByteList(data=b"\xde")
 
     def test_bitlist_append_and_pop(self) -> None:
-        """Bitlists append validated bits and pop them back."""
-        bits = SmallBitlist(data=[Boolean(True)])
+        """BitLists append validated bits and pop them back."""
+        bits = SmallBitList(data=[Boolean(True)])
         bits.append(Boolean(False))
-        assert bits == SmallBitlist(data=[Boolean(True), Boolean(False)])
+        assert bits == SmallBitList(data=[Boolean(True), Boolean(False)])
         assert bits.pop() == Boolean(False)
 
     def test_setitem_slice_beyond_limit_rejected(self) -> None:
@@ -430,21 +430,21 @@ class TestSSZCollectionNegativeIndex:
                 id="progressive_list",
             ),
             pytest.param(
-                SmallBitvector(data=[Boolean(True)] * 3),
+                SmallBitVector(data=[Boolean(True)] * 3),
                 Boolean(False),
-                SmallBitvector(data=[Boolean(True), Boolean(True), Boolean(False)]),
+                SmallBitVector(data=[Boolean(True), Boolean(True), Boolean(False)]),
                 id="bitvector",
             ),
             pytest.param(
-                SmallBitlist(data=[Boolean(True), Boolean(True)]),
+                SmallBitList(data=[Boolean(True), Boolean(True)]),
                 Boolean(False),
-                SmallBitlist(data=[Boolean(True), Boolean(False)]),
+                SmallBitList(data=[Boolean(True), Boolean(False)]),
                 id="bitlist",
             ),
             pytest.param(
-                ProgressiveBitlist(data=[Boolean(True), Boolean(True)]),
+                ProgressiveBitList(data=[Boolean(True), Boolean(True)]),
                 Boolean(False),
-                ProgressiveBitlist(data=[Boolean(True), Boolean(False)]),
+                ProgressiveBitList(data=[Boolean(True), Boolean(False)]),
                 id="progressive_bitlist",
             ),
             pytest.param(
@@ -488,19 +488,19 @@ class TestSSZCollectionNegativeIndex:
                 id="progressive_list",
             ),
             pytest.param(
-                SmallBitvector(data=[Boolean(True)] * 3),
+                SmallBitVector(data=[Boolean(True)] * 3),
                 2,
                 "Boolean value must be 0 or 1, not 2",
                 id="bitvector",
             ),
             pytest.param(
-                SmallBitlist(data=[Boolean(True), Boolean(False)]),
+                SmallBitList(data=[Boolean(True), Boolean(False)]),
                 2,
                 "Boolean value must be 0 or 1, not 2",
                 id="bitlist",
             ),
             pytest.param(
-                ProgressiveBitlist(data=[Boolean(True), Boolean(False)]),
+                ProgressiveBitList(data=[Boolean(True), Boolean(False)]),
                 2,
                 "Boolean value must be 0 or 1, not 2",
                 id="progressive_bitlist",
@@ -543,9 +543,9 @@ class TestSSZCollectionNegativeIndex:
                 id="vector",
             ),
             pytest.param(
-                SmallBitvector(data=[Boolean(True)] * 3),
+                SmallBitVector(data=[Boolean(True)] * 3),
                 [Boolean(False)],
-                "SmallBitvector requires exactly 3 elements, got 2",
+                "SmallBitVector requires exactly 3 elements, got 2",
                 id="bitvector",
             ),
         ],
@@ -689,10 +689,10 @@ class TestSSZMutabilityFlag:
     def test_immutable_bitlist_rejects_mutation(self) -> None:
         """An immutable bitlist rejects append and pop."""
 
-        class FrozenBitlist(SmallBitlist):
+        class FrozenBitList(SmallBitList):
             MUTABLE = False
 
-        bits = FrozenBitlist(data=[Boolean(True)])
+        bits = FrozenBitList(data=[Boolean(True)])
         with pytest.raises(SSZTypeError):
             bits.append(Boolean(False))
         with pytest.raises(SSZTypeError):
@@ -729,17 +729,17 @@ class TestSSZMutabilityFlag:
     def test_immutable_progressive_bitlist_rejects_mutation(self) -> None:
         """The flag freezes a progressive bitlist on the same terms."""
 
-        class FrozenProgressiveBitlist(ProgressiveBitlist):
+        class FrozenProgressiveBitList(ProgressiveBitList):
             MUTABLE = False
 
-        bits = FrozenProgressiveBitlist(data=[Boolean(True)])
+        bits = FrozenProgressiveBitList(data=[Boolean(True)])
         with pytest.raises(SSZTypeError):
             bits[0] = Boolean(False)
         with pytest.raises(SSZTypeError):
             bits.append(Boolean(False))
         with pytest.raises(SSZTypeError):
             bits.pop()
-        assert bits == FrozenProgressiveBitlist(data=[Boolean(True)])
+        assert bits == FrozenProgressiveBitList(data=[Boolean(True)])
 
     def test_immutable_progressive_container_rejects_field_assignment(self) -> None:
         """The flag freezes a progressive container while reads keep working."""
@@ -829,14 +829,14 @@ class TestDefaultValue:
             pytest.param(Boolean, Boolean(False), id="boolean"),
             # A fixed byte array is a vector of single bytes, so every byte is zero.
             pytest.param(Root, Root(b"\x00" * 32), id="fixed_byte_array"),
-            pytest.param(SmallBitvector, SmallBitvector(data=[Boolean(False)] * 3), id="bitvector"),
+            pytest.param(SmallBitVector, SmallBitVector(data=[Boolean(False)] * 3), id="bitvector"),
             pytest.param(Uint16Vector2, Uint16Vector2(data=[Uint16(0), Uint16(0)]), id="vector"),
             # Every variable-size shape defaults to its own empty value.
             pytest.param(Uint16List4, Uint16List4(data=[]), id="list"),
-            pytest.param(SmallBitlist, SmallBitlist(data=[]), id="bitlist"),
+            pytest.param(SmallBitList, SmallBitList(data=[]), id="bitlist"),
             pytest.param(SmallByteList, SmallByteList(data=b""), id="byte_list"),
             pytest.param(Uint16ProgressiveList, Uint16ProgressiveList(data=[]), id="progressive"),
-            pytest.param(ProgressiveBitlist, ProgressiveBitlist(data=[]), id="progressive_bitlist"),
+            pytest.param(ProgressiveBitList, ProgressiveBitList(data=[]), id="progressive_bitlist"),
             pytest.param(
                 TwoFieldContainer, TwoFieldContainer(x=Uint8(0), y=Uint16(0)), id="container"
             ),
@@ -853,7 +853,7 @@ class TestDefaultValue:
         """The factory is a second spelling of one request, not a second kind of default."""
         assert Uint16() == Uint16.default()
         assert Boolean() == Boolean.default()
-        assert SmallBitvector() == SmallBitvector.default()
+        assert SmallBitVector() == SmallBitVector.default()
         assert Uint16Vector2() == Uint16Vector2.default()
         assert Uint16List4() == Uint16List4.default()
         assert SmallByteList() == SmallByteList.default()
@@ -904,7 +904,7 @@ class TestSSZCollectionOf:
         "collection_type, expected_length",
         [
             pytest.param(Uint16Vector2, 2, id="vector"),
-            pytest.param(SmallBitvector, 3, id="bitvector"),
+            pytest.param(SmallBitVector, 3, id="bitvector"),
         ],
     )
     def test_of_with_no_elements_is_a_length_error_on_a_fixed_length_shape(
@@ -932,13 +932,13 @@ class TestSSZCollectionOf:
 
     def test_of_bitvector(self) -> None:
         """Bitfields build from one bool argument per bit."""
-        expected = SmallBitvector(data=[Boolean(True), Boolean(False), Boolean(True)])
-        assert SmallBitvector.of(True, False, True) == expected
+        expected = SmallBitVector(data=[Boolean(True), Boolean(False), Boolean(True)])
+        assert SmallBitVector.of(True, False, True) == expected
 
     def test_of_bitlist_accepts_splatted_bits(self) -> None:
         """An existing bit sequence splats into element arguments."""
         bits = [True, False]
-        assert SmallBitlist.of(*bits) == SmallBitlist(data=[Boolean(True), Boolean(False)])
+        assert SmallBitList.of(*bits) == SmallBitList(data=[Boolean(True), Boolean(False)])
 
     def test_of_byte_list_elements_are_ints(self) -> None:
         """A byte list's elements are individual byte values."""
@@ -1006,7 +1006,7 @@ class TestDeclaredCapacity:
     """
     Tests for declaring how many elements a shape holds with a typed value.
 
-    A consensus spec keeps its length constants as fixed-width unsigned integers.
+    A specification may keep its length constants as fixed-width unsigned integers.
     Casting each one at the point it becomes a capacity would mean casting almost all of them.
     So a typed value is accepted, then narrowed to a plain integer as the type is built:
 
@@ -1036,8 +1036,8 @@ class TestDeclaredCapacity:
         [
             pytest.param(TypedLengthVector, "LENGTH", id="vector"),
             pytest.param(TypedLimitList, "LIMIT", id="list"),
-            pytest.param(TypedLengthBitvector, "LENGTH", id="bitvector"),
-            pytest.param(TypedLimitBitlist, "LIMIT", id="bitlist"),
+            pytest.param(TypedLengthBitVector, "LENGTH", id="bitvector"),
+            pytest.param(TypedLimitBitList, "LIMIT", id="bitlist"),
             pytest.param(TypedLengthBytes, "LENGTH", id="fixed_byte_array"),
             pytest.param(TypedLimitByteList, "LIMIT", id="byte_list"),
         ],
@@ -1124,7 +1124,7 @@ class TestDeclaredCapacity:
 
         # A capacity is not a hint.
         # It sets how far a value is padded before it is hashed.
-        # So it is part of the Merkle root that consensus agrees on.
+        # So it is part of the Merkle root that implementations must agree on.
         #
         # One-byte elements pack 32 to a 32-byte chunk:
         #
@@ -1176,13 +1176,13 @@ class TestDeclaredCapacity:
                 id="list",
             ),
             pytest.param(
-                TypedLengthBitvector.of(True, False, True, True),
-                PlainLengthBitvector.of(True, False, True, True),
+                TypedLengthBitVector.of(True, False, True, True),
+                PlainLengthBitVector.of(True, False, True, True),
                 id="bitvector",
             ),
             pytest.param(
-                TypedLimitBitlist.of(True, False, True),
-                PlainLimitBitlist.of(True, False, True),
+                TypedLimitBitList.of(True, False, True),
+                PlainLimitBitList.of(True, False, True),
                 id="bitlist",
             ),
             pytest.param(
@@ -1201,7 +1201,7 @@ class TestDeclaredCapacity:
         self, typed: SSZType, plain: SSZType
     ) -> None:
         """How a capacity was written cannot move a single bit of observable output."""
-        # Wire bytes and Merkle root are the two things consensus reads.
+        # Wire bytes and Merkle root are the two things an observer reads.
         # A twin declared with a plain integer is the reference for both.
         #
         # The two values have different types.
@@ -1222,8 +1222,8 @@ class TestDeclaredCapacity:
                 id="list_over_capacity",
             ),
             pytest.param(
-                lambda: TypedLimitBitlist.of(*[True] * 5),
-                "TypedLimitBitlist exceeds limit of 4, got 5",
+                lambda: TypedLimitBitList.of(*[True] * 5),
+                "TypedLimitBitList exceeds limit of 4, got 5",
                 id="bitlist_over_capacity",
             ),
             pytest.param(
@@ -1237,8 +1237,8 @@ class TestDeclaredCapacity:
                 id="vector_wrong_count",
             ),
             pytest.param(
-                lambda: TypedLengthBitvector.of(*[True] * 3),
-                "TypedLengthBitvector requires exactly 4 elements, got 3",
+                lambda: TypedLengthBitVector.of(*[True] * 3),
+                "TypedLengthBitVector requires exactly 4 elements, got 3",
                 id="bitvector_wrong_count",
             ),
             pytest.param(
@@ -1286,12 +1286,12 @@ class TestDeclaredCapacity:
         # A fixed count is enforced on the same route, from the other side:
         #
         #     4 bits  ->  [1:] = [0, 0]  ->  3 bits, one short of the required 4
-        bits = TypedLengthBitvector.of(*[True] * 4)
+        bits = TypedLengthBitVector.of(*[True] * 4)
         with pytest.raises(
-            SSZLengthError, match=r"^TypedLengthBitvector requires exactly 4 elements, got 3$"
+            SSZLengthError, match=r"^TypedLengthBitVector requires exactly 4 elements, got 3$"
         ):
             bits[1:] = [Boolean(False)] * 2
-        assert bits == TypedLengthBitvector.of(*[True] * 4)
+        assert bits == TypedLengthBitVector.of(*[True] * 4)
 
     def test_a_redeclared_capacity_is_narrowed_again(self) -> None:
         """Every declaration is checked, however deep in a hierarchy it sits."""

@@ -4,7 +4,7 @@ from ssz import (
     Boolean,
     Container,
     List,
-    ProgressiveBitlist,
+    ProgressiveBitList,
     ProgressiveContainer,
     ProgressiveList,
     Uint8,
@@ -124,7 +124,7 @@ class SampleProgressiveFields(ProgressiveContainer):
 
     head: Uint64
     numbers: SampleUint64ProgressiveList
-    flags: ProgressiveBitlist
+    flags: ProgressiveBitList
 
 
 class SampleInnerShape(ProgressiveContainer):
@@ -403,7 +403,7 @@ def test_progressive_container_with_progressive_fields(ssz_test: SSZTestFiller) 
         value=SampleProgressiveFields(
             head=Uint64(7),
             numbers=SampleUint64ProgressiveList(data=[Uint64(1), Uint64(2), Uint64(3)]),
-            flags=ProgressiveBitlist(data=[Boolean(True), Boolean(False), Boolean(True)]),
+            flags=ProgressiveBitList(data=[Boolean(True), Boolean(False), Boolean(True)]),
         ),
     )
 

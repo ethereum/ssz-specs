@@ -16,7 +16,6 @@ keywords = [
     "merkleization",
     "ethereum",
     "specifications",
-    "consensus",
 ]
 classifiers = [
     "License :: OSI Approved :: MIT License",

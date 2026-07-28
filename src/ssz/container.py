@@ -84,7 +84,7 @@ def active_fields(width: int, gaps: tuple[int, ...] = ()) -> tuple[int, ...]:
 
     # Narrow before anything reads the value.
     #
-    # A width may be written with a uint, as a consensus spec holds its constants that way.
+    # A width may be written with a uint.
     # A uint refuses a plain integer operand.
     # The comparison below would therefore raise rather than answer.
     # A uint left among the positions would also miss the plain position it names.
