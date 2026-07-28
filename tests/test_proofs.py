@@ -50,12 +50,15 @@ from ssz.proofs import (
     SELECTOR_KEY,
     PathStep,
     _progressive_chunk_gindex,
+    build_multiproof,
+    build_proof,
     gindex_bit,
     gindex_child,
     gindex_concat,
     gindex_length,
     gindex_parent,
     gindex_sibling,
+    node_root,
 )
 
 
@@ -181,6 +184,12 @@ class PairVector4(Vector[Pair]):
     LENGTH = 4
 
 
+class PairList8(List[Pair]):
+    """Bounded list of composite elements, each taking a leaf of its own."""
+
+    LIMIT = 8
+
+
 class Quad(Container):
     """Four-field struct with a composite last field, filling four leaves with no padding."""
 
@@ -239,6 +248,87 @@ class Shape(CompatibleUnion):
     """Two options that merkleize alike, differing only in their private field."""
 
     OPTIONS = {1: Square, 2: Circle}
+
+
+def state_value(state_type: type[SSZType], width: int) -> Any:
+    """One value per position of a beacon state stand-in, matching the declared types."""
+    values: dict[str, Any] = {}
+    for position in range(width):
+        if position == 20:
+            values[f"f{position}"] = Checkpoint(
+                epoch=Uint64(position), root=Bytes32(bytes([position]) * 32)
+            )
+        elif position in (22, 23):
+            values[f"f{position}"] = SyncCommittee(pubkey=Bytes32(bytes([position]) * 32))
+        else:
+            values[f"f{position}"] = Uint64(position)
+    return state_type(**values)
+
+
+def round_trip(value: object, index: int) -> bool:
+    """Whether the node at an index, the branch built for it, and the value's root agree."""
+    return verify_merkle_proof(
+        node_root(value, index), build_proof(value, index), index, hash_tree_root(value)
+    )
+
+
+def resolvable_indices(value: object, limit: int = 256) -> set[int]:
+    """Every index below the limit that names a node of this value's own tree."""
+    found: set[int] = set()
+    for index in range(2, limit):
+        try:
+            node_root(value, index)
+        except SSZValueError:
+            continue
+        found.add(index)
+    return found
+
+
+# One composite value, reused as a field, an element and a nested target.
+PAIR = Pair(a=Uint64(4), b=Uint64(5))
+
+# Four fields fill four leaves exactly.
+# No padding sits in the way.
+QUAD = Quad(p=Uint64(1), q=Uint64(2), r=Uint64(3), z=PAIR)
+
+# Three fields pad to four leaves, leaving the fourth as the pad.
+TRIPLE = Triple(x=Uint64(1), y=Uint64(2), z=PAIR)
+
+# Two of eight eight-byte elements.
+# Chunk 0 holds them both, leaving chunk 1 all zero.
+SPARSE_LIST = Uint64List8(data=(Uint64(7), Uint64(8)))
+
+# Two of eight composite elements, each taking a leaf, leaving six zero leaves.
+SPARSE_PAIR_LIST = PairList8(data=(PAIR, PAIR))
+
+VECTOR_OF_BASICS = Uint64Vector8(data=tuple(Uint64(position) for position in range(8)))
+VECTOR_OF_COMPOSITES = PairVector4(data=(PAIR, PAIR, PAIR, PAIR))
+
+# 300 bits spill into the second of two capacity chunks.
+BITLIST = Bitlist512(data=(Boolean(True),) * 300)
+BITVECTOR = Bitvector512(data=(Boolean(True), Boolean(False)) * 256)
+BYTE_LIST = ByteList64(data=b"abc")
+
+# One chunk of data opens level 1 alone.
+# The spine closes immediately after it.
+SHORT_PROGRESSIVE = Uint64ProgressiveList(data=(Uint64(1), Uint64(2)))
+
+# Six eight-byte elements pack into two chunks.
+# That opens level 2 and no more.
+TWO_LEVEL_PROGRESSIVE = Uint64ProgressiveList(data=tuple(Uint64(i) for i in range(6)))
+
+# A hundred eight-byte elements pack into 25 chunks.
+# That reaches level 4.
+WIDE_PROGRESSIVE = Uint64ProgressiveList(data=tuple(Uint64(i) for i in range(100)))
+
+PROGRESSIVE_BITS = ProgressiveBitList(data=(Boolean(True),) * 300)
+
+SPINE_VALUE = Spine(f0=Uint64(11), f1=Uint64(22), f2=Uint64(33))
+GAPPED_VALUE = GappedSpine(first=Uint64(1), third=Uint64(3))
+SHAPE_VALUE = Shape(selector=Uint8(1), data=Square(side=Uint16(0x1234), color=Uint8(0x42)))
+
+ALTAIR_VALUE = state_value(AltairState, 24)
+GLOAS_VALUE = state_value(GloasState, 46)
 
 
 class TestGindexArithmetic:
@@ -916,3 +1006,413 @@ class TestMultiproofVerification:
         # root that was never built.
         with pytest.raises(SSZValueError, match=r"^a request holds at least one index$"):
             calculate_multi_merkle_root([], [], [])
+
+
+class TestNodeRoot:
+    """What an index resolves to when it is read against real data rather than a type."""
+
+    def test_index_one_names_the_whole_value(self) -> None:
+        """Index 1 is the root, the one node with nothing above it to prove against."""
+        assert node_root(QUAD, 1) == hash_tree_root(QUAD)
+        with pytest.raises(SSZValueError, match=r"^the root has no proof branch of its own$"):
+            build_proof(QUAD, 1)
+
+    def test_a_basic_value_has_no_node_below_its_root(self) -> None:
+        """A basic value is a single leaf, whose root is the whole tree."""
+        assert resolvable_indices(Uint64(9)) == set()
+
+    @pytest.mark.parametrize(
+        "value, path, expected",
+        [
+            pytest.param(QUAD, ("p",), QUAD.p, id="basic_field"),
+            pytest.param(QUAD, ("z",), QUAD.z, id="composite_field"),
+            pytest.param(QUAD, ("z", "b"), QUAD.z.b, id="nested_field"),
+            pytest.param(SPARSE_PAIR_LIST, (1,), PAIR, id="list_element"),
+            pytest.param(VECTOR_OF_COMPOSITES, (2,), PAIR, id="vector_element"),
+            pytest.param(VECTOR_OF_COMPOSITES, (2, "b"), PAIR.b, id="vector_element_field"),
+            pytest.param(SPINE_VALUE, ("f1",), SPINE_VALUE.f1, id="progressive_field"),
+            pytest.param(GAPPED_VALUE, ("third",), GAPPED_VALUE.third, id="field_past_a_gap"),
+            pytest.param(SHAPE_VALUE, (1,), SHAPE_VALUE.data, id="union_contents"),
+            pytest.param(SHAPE_VALUE, (1, "color"), Uint8(0x42), id="union_shared_field"),
+            pytest.param(ALTAIR_VALUE, ("f20",), ALTAIR_VALUE.f20, id="bounded_state_field"),
+            pytest.param(
+                ALTAIR_VALUE, ("f20", "root"), ALTAIR_VALUE.f20.root, id="bounded_finalized_root"
+            ),
+            pytest.param(GLOAS_VALUE, ("f22",), GLOAS_VALUE.f22, id="wide_state_field"),
+            pytest.param(
+                GLOAS_VALUE, ("f20", "root"), GLOAS_VALUE.f20.root, id="wide_finalized_root"
+            ),
+        ],
+    )
+    def test_a_resolved_node_carries_the_selected_value_root(
+        self, value: Any, path: tuple[PathStep, ...], expected: SSZType
+    ) -> None:
+        """
+        A descent landing one position off would still yield a leaf that verifies.
+
+        Only the value reached by ordinary attribute and element access separates the two.
+        """
+        index = get_generalized_index(type(value), *path)
+        assert node_root(value, index) == hash_tree_root(expected)
+
+    @pytest.mark.parametrize(
+        "value, step, expected",
+        [
+            pytest.param(SPARSE_LIST, LENGTH_KEY, word(2), id="list_count"),
+            pytest.param(BYTE_LIST, LENGTH_KEY, word(3), id="byte_list_count"),
+            pytest.param(BITLIST, LENGTH_KEY, word(300), id="bitlist_count"),
+            pytest.param(WIDE_PROGRESSIVE, LENGTH_KEY, word(100), id="progressive_list_count"),
+            pytest.param(PROGRESSIVE_BITS, LENGTH_KEY, word(300), id="progressive_bit_count"),
+            pytest.param(SPINE_VALUE, ACTIVE_FIELDS_KEY, word(0b111), id="gapless_layout"),
+            pytest.param(GAPPED_VALUE, ACTIVE_FIELDS_KEY, word(0b101), id="gapped_layout"),
+            pytest.param(SHAPE_VALUE, SELECTOR_KEY, word(1), id="type_selector"),
+        ],
+    )
+    def test_a_mixed_in_word_resolves_to_that_word(
+        self, value: Any, step: PathStep, expected: Chunk
+    ) -> None:
+        """A reserved step lands on the right child.
+        That child holds the word itself and nothing else.
+        """
+        index = get_generalized_index(type(value), step)
+        assert index == 3
+        assert node_root(value, index) == expected
+
+
+class TestNodeRootRefusals:
+    """Indices that name no node of a given value, each refused rather than guessed at."""
+
+    @pytest.mark.parametrize(
+        "value, index, message",
+        [
+            pytest.param(QUAD, 0, "0 is not a generalized index", id="zero"),
+            pytest.param(QUAD, -1, "-1 is not a generalized index", id="negative"),
+            # A packed chunk is a leaf.
+            # The elements sharing it have no nodes of their own.
+            pytest.param(
+                SPARSE_LIST,
+                8,
+                "the path descends into the packed data of Uint64List8",
+                id="below_a_packed_chunk",
+            ),
+            # A basic field fills its leaf.
+            # The descent therefore stops inside the field's own type.
+            pytest.param(
+                QUAD,
+                8,
+                "the path descends into the packed data of Uint64",
+                id="below_a_basic_field",
+            ),
+            pytest.param(
+                SPARSE_LIST,
+                6,
+                "the path descends into Uint64List8's mixed-in word",
+                id="below_an_element_count",
+            ),
+            pytest.param(
+                SPINE_VALUE,
+                6,
+                "the path descends into Spine's mixed-in word",
+                id="below_a_field_layout",
+            ),
+            pytest.param(
+                SHAPE_VALUE,
+                6,
+                "the path descends into Shape's mixed-in word",
+                id="below_a_type_selector",
+            ),
+            pytest.param(
+                SPARSE_PAIR_LIST,
+                36,
+                "the path descends into an empty position of PairList8",
+                id="below_an_element_past_the_length",
+            ),
+            pytest.param(
+                TRIPLE,
+                14,
+                "the path descends into an empty position of Triple",
+                id="below_a_leaf_past_the_field_count",
+            ),
+            pytest.param(
+                GAPPED_VALUE,
+                80,
+                "the path descends into an empty position of GappedSpine",
+                id="below_a_cleared_position",
+            ),
+            # One chunk opens level 1 alone.
+            # Level 3 was never opened at all.
+            pytest.param(
+                SHORT_PROGRESSIVE,
+                352,
+                "the path lies past the end of Uint64ProgressiveList's progressive spine",
+                id="slot_in_an_unopened_level",
+            ),
+            # The spine closes with a zero leaf.
+            # A leaf has nothing under it.
+            pytest.param(
+                SHORT_PROGRESSIVE,
+                10,
+                "the path lies past the end of Uint64ProgressiveList's progressive spine",
+                id="below_the_spine_terminator",
+            ),
+        ],
+    )
+    def test_an_index_naming_no_node_is_refused(self, value: Any, index: int, message: str) -> None:
+        """A refusal names the index and the shape, letting a caller see which step failed."""
+        with pytest.raises(SSZValueError, match=rf"^{message}$"):
+            node_root(value, index)
+
+    def test_a_value_with_no_layout_is_refused(self) -> None:
+        """A value outside SSZ merkleizes into nothing.
+        No index of it names a node.
+        """
+        with pytest.raises(SSZTypeError, match=r"^hash_tree_root: unsupported value type float$"):
+            node_root(3.14, 2)
+
+    def test_a_branch_for_an_unusable_index_is_refused(self) -> None:
+        """The builders refuse what the index arithmetic already refuses."""
+        with pytest.raises(SSZValueError, match=r"^0 is not a generalized index$"):
+            build_proof(QUAD, 0)
+        with pytest.raises(SSZValueError, match=r"^a generalized index is repeated$"):
+            build_multiproof(QUAD, [4, 4])
+        with pytest.raises(
+            SSZValueError, match=r"^14 lies below another index in the same request$"
+        ):
+            build_multiproof(QUAD, [7, 14])
+
+
+class TestZeroPaddingIsAProvableNode:
+    """Padding fills a tree with real nodes that a proof can still address."""
+
+    @pytest.mark.parametrize(
+        "value, index",
+        [
+            pytest.param(SPARSE_LIST, 5, id="capacity_chunk_past_the_length"),
+            pytest.param(SPARSE_PAIR_LIST, 18, id="element_past_the_length"),
+            pytest.param(TRIPLE, 7, id="leaf_past_the_field_count"),
+            pytest.param(TWO_LEVEL_PROGRESSIVE, 41, id="slot_inside_an_open_level"),
+            pytest.param(SHORT_PROGRESSIVE, 5, id="spine_terminator"),
+            pytest.param(GAPPED_VALUE, 40, id="cleared_progressive_position"),
+        ],
+    )
+    def test_a_zero_node_resolves_and_verifies(self, value: Any, index: int) -> None:
+        """A position a value never filled is a node with a branch of its own."""
+        assert node_root(value, index) == ZERO_ROOT
+        assert round_trip(value, index)
+
+
+class TestProofRoundTrip:
+    """A branch built against a value, read back by the verifier, one row per shape."""
+
+    @pytest.mark.parametrize(
+        "value, index",
+        [
+            pytest.param(QUAD, 6, id="container_field"),
+            pytest.param(QUAD, 15, id="nested_container_field"),
+            pytest.param(TRIPLE, 5, id="container_needing_padding"),
+            pytest.param(SPARSE_LIST, 4, id="bounded_list_chunk"),
+            pytest.param(VECTOR_OF_BASICS, 3, id="fixed_sequence_chunk"),
+            pytest.param(VECTOR_OF_COMPOSITES, 13, id="composite_element_field"),
+            pytest.param(SPARSE_PAIR_LIST, 33, id="list_element_field"),
+            pytest.param(BITLIST, 5, id="bitlist_chunk"),
+            pytest.param(BITVECTOR, 3, id="bitvector_chunk"),
+            pytest.param(BYTE_LIST, 4, id="byte_list_chunk"),
+            pytest.param(PROGRESSIVE_BITS, 40, id="progressive_bitlist_chunk"),
+            # Levels 1, 2 and 3 of a spine that reaches level 4.
+            pytest.param(WIDE_PROGRESSIVE, 4, id="progressive_level_1"),
+            pytest.param(WIDE_PROGRESSIVE, 40, id="progressive_level_2"),
+            pytest.param(WIDE_PROGRESSIVE, 352, id="progressive_level_3"),
+            pytest.param(SPINE_VALUE, 40, id="progressive_container_field"),
+            pytest.param(SHAPE_VALUE, 2, id="union_contents"),
+            pytest.param(SHAPE_VALUE, 73, id="union_shared_field"),
+            # The frozen light-client indices, on the shape each fork uses.
+            pytest.param(ALTAIR_VALUE, 105, id="published_finalized_root"),
+            pytest.param(GLOAS_VALUE, 735, id="published_finalized_root_progressive"),
+            pytest.param(GLOAS_VALUE, 2945, id="published_sync_committee_progressive"),
+            # Each of the three words a root mixes in.
+            pytest.param(SPARSE_LIST, 3, id="element_count_word"),
+            pytest.param(SPINE_VALUE, 3, id="field_layout_word"),
+            pytest.param(SHAPE_VALUE, 3, id="type_selector_word"),
+        ],
+    )
+    def test_a_built_branch_rebuilds_the_root(self, value: Any, index: int) -> None:
+        """The node, the branch built for it, and the value's own root all agree."""
+        assert round_trip(value, index)
+
+    def test_a_branch_holds_one_node_per_level(self) -> None:
+        """A branch is as long as the index is deep, whatever the shape below it."""
+        assert len(build_proof(GLOAS_VALUE, 735)) == gindex_length(735) == 9
+
+
+class TestBranchOrdering:
+    """The order a branch is built in, fixed by the spec only indirectly."""
+
+    def test_a_branch_matches_the_order_a_shared_node_request_reports(self) -> None:
+        """
+        A single-index request descends.
+        That is the order a plain branch already uses.
+
+        The spec pins bottom-up ordering through the equivalence rather than stating it.
+        """
+        # Index 2856 sits eleven levels down, the depth a progressive spine reaches.
+        assert gindex_length(2856) == 11
+        assert get_branch_indices(2856) == get_helper_indices([2856])
+
+    def test_a_reversed_branch_fails(self) -> None:
+        """Bottom-up is load-bearing, not one of two orders that would both verify."""
+        # The branch at index 15 is asymmetric.
+        # Reversing it therefore cannot coincide with itself.
+        branch = build_proof(QUAD, 15)
+        leaf, root = node_root(QUAD, 15), hash_tree_root(QUAD)
+        assert verify_merkle_proof(leaf, branch, 15, root)
+        assert not verify_merkle_proof(leaf, list(reversed(branch)), 15, root)
+
+
+class TestSparsePositions:
+    """Empty positions a light client still needs to prove."""
+
+    def test_every_position_of_a_two_of_eight_list_verifies(self) -> None:
+        """
+        A list holding two of eight elements proves all eight positions.
+
+        An implementation that folds the six zero leaves into one node cannot address them.
+        The sparse light-client case needs exactly that.
+        """
+        assert len(SPARSE_PAIR_LIST) == 2
+        for position in range(8):
+            index = get_generalized_index(PairList8, position)
+            assert index == 16 + position
+            assert round_trip(SPARSE_PAIR_LIST, index)
+        # Each empty position is its own node, not a shared one.
+        # The branches at two of them therefore differ.
+        assert build_proof(SPARSE_PAIR_LIST, 18) != build_proof(SPARSE_PAIR_LIST, 22)
+
+
+class TestResolvableSetMatchesTheTree:
+    """Which indices name a node, checked against the tree each value actually builds."""
+
+    def test_a_two_of_eight_packed_list_has_exactly_four_nodes(self) -> None:
+        """
+        One whole tree, hand-checked index by index.
+
+        Eight eight-byte elements pack four to a chunk, giving two chunks of capacity:
+
+            1: root
+            2: data root      3: element count
+            4: chunk 0        5: chunk 1, all zero
+
+        Nothing sits below a packed chunk.
+        Nothing sits below the count.
+        """
+        assert resolvable_indices(SPARSE_LIST) == {2, 3, 4, 5}
+
+    @pytest.mark.parametrize(
+        "value, expected",
+        [
+            pytest.param(PAIR, {2, 3}, id="two_field_container"),
+            pytest.param(TRIPLE, {2, 3, 4, 5, 6, 7, 12, 13}, id="container_with_a_pad"),
+            pytest.param(QUAD, {2, 3, 4, 5, 6, 7, 14, 15}, id="container_of_four_fields"),
+            pytest.param(VECTOR_OF_BASICS, {2, 3}, id="fixed_sequence_of_basics"),
+            pytest.param(BITVECTOR, {2, 3}, id="fixed_bitfield"),
+            pytest.param(SPARSE_LIST, {2, 3, 4, 5}, id="bounded_list_of_basics"),
+            # Four composite elements fill four leaves, each with two fields under it.
+            pytest.param(VECTOR_OF_COMPOSITES, set(range(2, 16)), id="fixed_sequence_of_structs"),
+            # Eight leaves of capacity, the first two carrying a struct each.
+            pytest.param(
+                SPARSE_PAIR_LIST,
+                {2, 3, 4, 5, 8, 9, 10, 11, 16, 17, 18, 19, 20, 21, 22, 23, 32, 33, 34, 35},
+                id="bounded_list_of_structs",
+            ),
+            # Three positions open two spine levels.
+            # Index 4 holds leaf 0.
+            # Index 10 covers leaves 1 to 4.
+            pytest.param(
+                SPINE_VALUE,
+                {2, 3, 4, 5, 10, 11, 20, 21, 40, 41, 42, 43},
+                id="progressive_container",
+            ),
+            # A cleared position changes which leaves hold a value, never which nodes exist.
+            pytest.param(
+                GAPPED_VALUE,
+                {2, 3, 4, 5, 10, 11, 20, 21, 40, 41, 42, 43},
+                id="progressive_container_with_a_gap",
+            ),
+            # Two packed chunks open the same two levels a three-position layout does.
+            pytest.param(
+                TWO_LEVEL_PROGRESSIVE,
+                {2, 3, 4, 5, 10, 11, 20, 21, 40, 41, 42, 43},
+                id="progressive_list",
+            ),
+            # A union adds no leaf.
+            # The option's own tree therefore sits directly under the root.
+            pytest.param(
+                SHAPE_VALUE,
+                {2, 3, 4, 5, 8, 9, 18, 19, 36, 37, 72, 73, 74, 75},
+                id="compatible_union",
+            ),
+        ],
+    )
+    def test_the_resolvable_set_is_the_tree(self, value: Any, expected: set[int]) -> None:
+        """The resolvable set is exactly the tree, with no phantom node and none missing."""
+        assert resolvable_indices(value) == expected
+
+    def test_a_resolved_node_never_stands_alone(self) -> None:
+        """
+        The resolvable set is a tree, not an arbitrary set of indices.
+
+        - A node that resolves has a parent that resolves.
+        - It has a sibling that resolves, so a branch is never short a node.
+        - Its parent is the hash of the two of them.
+        """
+        for value in (QUAD, SPARSE_PAIR_LIST, SPINE_VALUE, SHAPE_VALUE, TWO_LEVEL_PROGRESSIVE):
+            resolved = {index: node_root(value, index) for index in resolvable_indices(value)}
+            resolved[1] = hash_tree_root(value)
+            for index in resolved:
+                if index == 1:
+                    continue
+                assert index // 2 in resolved
+                assert index ^ 1 in resolved
+                assert resolved[index // 2] == h(resolved[index & ~1], resolved[index | 1])
+
+
+class TestProofConstructionForSeveralIndices:
+    """Nodes several claims share, built against one value instead of a materialized tree."""
+
+    def test_three_claims_over_one_container(self) -> None:
+        """
+        Three claims need two shared nodes where three separate branches need seven.
+
+            4:p   5:q   6:r   7:z
+                                |
+                          14:z.a  15:z.b
+
+        Claiming 4, 6 and 14 leaves only 15 and 5 for the proof to carry.
+        """
+        indices = [4, 6, 14]
+        leaves = [node_root(QUAD, index) for index in indices]
+        proof = build_multiproof(QUAD, indices)
+        assert get_helper_indices(indices) == [15, 5]
+        assert verify_merkle_multiproof(leaves, proof, indices, hash_tree_root(QUAD))
+        assert len(proof) == 2
+        assert sum(len(build_proof(QUAD, index)) for index in indices) == 7
+
+    def test_two_claims_on_a_progressive_spine(self) -> None:
+        """Two fields on different spine levels share four nodes where two branches hold seven."""
+        indices = [4, 41]
+        leaves = [node_root(SPINE_VALUE, index) for index in indices]
+        proof = build_multiproof(SPINE_VALUE, indices)
+        assert get_helper_indices(indices) == [40, 21, 11, 3]
+        assert verify_merkle_multiproof(leaves, proof, indices, hash_tree_root(SPINE_VALUE))
+        assert len(proof) == 4
+        assert sum(len(build_proof(SPINE_VALUE, index)) for index in indices) == 7
+
+    def test_one_claim_reduces_to_a_plain_branch(self) -> None:
+        """A request for a single index carries exactly the branch a plain proof does."""
+        assert build_multiproof(QUAD, [15]) == build_proof(QUAD, 15)
+
+    def test_a_tampered_claim_fails(self) -> None:
+        """One wrong node among several still changes the root."""
+        indices = [4, 6, 14]
+        leaves = [node_root(QUAD, 4), hash_tree_root(Uint64(99)), node_root(QUAD, 14)]
+        proof = build_multiproof(QUAD, indices)
+        assert not verify_merkle_multiproof(leaves, proof, indices, hash_tree_root(QUAD))

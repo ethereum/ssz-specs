@@ -32,6 +32,7 @@ from ssz.merkleization import (
     _next_pow2,
     _zero_tree_root,
     hash_tree_root,
+    merkle_layout,
     merkleize,
     merkleize_progressive,
     mix_in_active_fields,
@@ -2115,3 +2116,55 @@ def test_default_root_of_a_progressive_container_with_a_gap() -> None:
     assert GappedProgressive.decode_bytes(GappedProgressive.default().encode_bytes()) == (
         GappedProgressive.default()
     )
+
+
+def test_layout_of_a_container_takes_one_leaf_per_field() -> None:
+    """A struct takes one leaf per field, bounded by the field count, with no word mixed in."""
+    value = Small(A=Uint16(1), B=Uint16(2))
+    layout = merkle_layout(value)
+    assert layout.nested == (value.A, value.B)
+    assert layout.packed == ()
+    assert layout.limit == 2
+    assert layout.mixin is None
+    assert layout.leaf_count == 2
+    assert layout.chunks() == [pad(b"\x01\x00"), pad(b"\x02\x00")]
+
+
+def test_layout_of_a_bounded_list_packs_its_elements_and_mixes_the_count_in() -> None:
+    """Basic elements share a chunk.
+    The declared capacity bounds the tree over them.
+    """
+    value = Uint16List32(data=(Uint16(1), Uint16(2)))
+    layout = merkle_layout(value)
+    assert layout.packed == (pad(b"\x01\x00\x02\x00"),)
+    assert layout.nested is None
+    # Two elements fill four bytes of one chunk.
+    # That chunk is the only leaf there is.
+    assert layout.leaf_count == 1
+    # A capacity of 32 two-byte elements packs 16 per chunk.
+    # The tree therefore holds two chunks of capacity.
+    assert layout.limit == 2
+    assert layout.mixin == pad(b"\x02")
+
+
+def test_layout_of_a_progressive_container_keeps_a_leaf_for_every_position() -> None:
+    """A cleared position keeps a leaf of its own, holding the all-zero chunk."""
+    value = GappedProgressive(A=Uint16(0x1234), B=Uint8(0x56))
+    layout = merkle_layout(value)
+    assert layout.nested == (value.A, None, value.B)
+    assert layout.leaf_count == 3
+    # A spine grows with the data.
+    # No declared capacity bounds it.
+    assert layout.limit is None
+    assert layout.mixin == active_fields_word((1, 0, 1))
+    assert layout.chunks() == [pad(b"\x34\x12"), ZERO_ROOT, pad(b"\x56")]
+
+
+def test_a_layout_roots_only_the_leaves_a_range_asks_for() -> None:
+    """A range keeps a proof from hashing the whole tree to reach one part of it."""
+    value = ChunkVector3(data=(sample_chunks[0], sample_chunks[1], sample_chunks[2]))
+    layout = merkle_layout(value)
+    assert layout.leaf_count == 3
+    assert layout.chunks(1, 3) == [sample_chunks[1], sample_chunks[2]]
+    # A range starting past the last leaf is empty rather than an error.
+    assert layout.chunks(3) == []
