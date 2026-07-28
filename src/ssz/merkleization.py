@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 import math
-from collections.abc import Sequence
+from collections.abc import Iterable, Sequence
+from dataclasses import dataclass
 from functools import singledispatch
 from hashlib import sha256
 from itertools import accumulate, batched, repeat
@@ -15,6 +16,7 @@ from ssz.byte_arrays import ByteList, ByteVector
 from ssz.collections import List, ProgressiveList, Vector
 from ssz.container import Container, ProgressiveContainer
 from ssz.exceptions import SSZTypeError, SSZValueError
+from ssz.ssz_base import SSZType
 from ssz.uint import BaseUint
 from ssz.union import CompatibleUnion
 
@@ -227,6 +229,54 @@ def merkleize_progressive(chunks: Sequence[Chunk], num_leaves: int = 1) -> Root:
     return Root(sha256(subtree_root + successor_root).digest())
 
 
+def _mix_in(root: Root, word: Chunk) -> Root:
+    """Hash a subtree root against the word its shape mixes in, as the right child."""
+    return Root(sha256(root + word).digest())
+
+
+def length_word(length: int) -> Chunk:
+    """
+    The element count a variable-size shape mixes in, as one 32-byte little-endian word.
+
+    Raises:
+        SSZValueError: If the length is negative.
+    """
+    if length < 0:
+        raise SSZValueError("length must be non-negative")
+    return Chunk(length.to_bytes(BYTES_PER_CHUNK, "little"))
+
+
+def active_fields_word(active_fields: Sequence[int]) -> Chunk:
+    """
+    The field layout a progressive container mixes in, as one 32-byte word.
+
+    One bit per position, lowest bit first, so at most 256 positions fit the word:
+
+        [1, 0, 1]  ->  05 00 00 ... 00
+
+    The bound of 256 is enforced by the type that declares the layout, not here.
+    """
+    packed_bits = sum(1 << i for i, bit in enumerate(active_fields) if bit)
+    return Chunk(packed_bits.to_bytes(BYTES_PER_CHUNK, "little"))
+
+
+def selector_word(selector: int) -> Chunk:
+    """
+    The option selector a compatible union mixes in, as one 32-byte word.
+
+    The spec writes the selector as a one-byte integer.
+    A hash operand is one chunk, so the byte is zero-extended to 32:
+
+        selector 1  ->  01 00 00 ... 00
+
+    Raises:
+        SSZValueError: If the selector does not fit one byte.
+    """
+    if not 0 <= selector <= 0xFF:
+        raise SSZValueError(f"selector {selector} does not fit one byte")
+    return Chunk(selector.to_bytes(BYTES_PER_CHUNK, "little"))
+
+
 def mix_in_length(root: Root, length: int) -> Root:
     """
     Mix a length into a Merkle root via the SSZ uint256 little-endian encoding.
@@ -244,9 +294,7 @@ def mix_in_length(root: Root, length: int) -> Root:
     Raises:
         SSZValueError: If the length is negative.
     """
-    if length < 0:
-        raise SSZValueError("length must be non-negative")
-    return Root(sha256(root + length.to_bytes(32, "little")).digest())
+    return _mix_in(root, length_word(length))
 
 
 def mix_in_active_fields(root: Root, active_fields: Sequence[int]) -> Root:
@@ -269,9 +317,7 @@ def mix_in_active_fields(root: Root, active_fields: Sequence[int]) -> Root:
     Returns:
         The layout-mixed root.
     """
-    # At most 256 positions, so the whole layout always fits one 32-byte chunk.
-    packed_bits = sum(1 << i for i, bit in enumerate(active_fields) if bit)
-    return Root(sha256(root + packed_bits.to_bytes(BYTES_PER_CHUNK, "little")).digest())
+    return _mix_in(root, active_fields_word(active_fields))
 
 
 def mix_in_selector(root: Root, selector: int) -> Root:
@@ -298,10 +344,7 @@ def mix_in_selector(root: Root, selector: int) -> Root:
     Raises:
         SSZValueError: If the selector does not fit one byte.
     """
-    if not 0 <= selector <= 0xFF:
-        raise SSZValueError(f"selector {selector} does not fit one byte")
-    # A selector fits one byte, so the value always lands in the first of the 32.
-    return Root(sha256(root + selector.to_bytes(BYTES_PER_CHUNK, "little")).digest())
+    return _mix_in(root, selector_word(selector))
 
 
 def _pack_bytes(data: bytes) -> list[Chunk]:
@@ -343,10 +386,83 @@ def _pack_bits(bits: Sequence[Boolean]) -> list[Chunk]:
     return _pack_bytes(packed_bits.to_bytes(math.ceil(len(bits) / 8), "little"))
 
 
-@singledispatch
-def hash_tree_root(value: object) -> Root:
+@dataclass(frozen=True, slots=True)
+class MerkleLayout:
     """
-    Compute the SSZ Merkle root of a value.
+    The subtree one value merkleizes into, before any of it is hashed.
+
+    Every shape reaches its root the same way, in the three steps below.
+
+        shape                 leaves               tree                        mixed in
+        Container             fields               bounded by the field count  -
+        List                  elements or packing  bounded by the limit        count
+        ProgressiveList       elements or packing  progressive spine           count
+        ProgressiveContainer  layout positions     progressive spine           layout
+        CompatibleUnion       the option it holds  bounded by one              selector
+
+    Stating those steps rather than taking them is what lets a root and a proof share a rule.
+    Leaves past the last one are the zero padding the tree shape supplies.
+    """
+
+    packed: tuple[Chunk, ...]
+    """Leaves as data, for a shape whose elements pack into chunks.
+
+    An element of such a shape shares its chunk with its neighbours.
+    The chunk is therefore the leaf, and nothing below it can be addressed.
+    Empty when the shape nests values instead.
+    """
+
+    nested: tuple[SSZType | None, ...] | None
+    """Leaves as values, one root each, or None for a shape that packs instead.
+
+    A position carrying no value holds nothing, which merkleizes as a zero leaf.
+    """
+
+    limit: int | None
+    """Chunk capacity of the bounded tree over the leaves, or None for a progressive spine."""
+
+    mixin: Chunk | None
+    """Word the subtree root is hashed against, or None when the shape mixes nothing in."""
+
+    @classmethod
+    def packing(
+        cls, chunks: Sequence[Chunk], *, limit: int | None, mixin: Chunk | None = None
+    ) -> MerkleLayout:
+        """A layout whose leaves are packed data."""
+        return cls(packed=tuple(chunks), nested=None, limit=limit, mixin=mixin)
+
+    @classmethod
+    def nesting(
+        cls, values: Iterable[SSZType | None], *, limit: int | None, mixin: Chunk | None = None
+    ) -> MerkleLayout:
+        """A layout whose leaves are the roots of nested values."""
+        return cls(packed=(), nested=tuple(values), limit=limit, mixin=mixin)
+
+    @property
+    def leaf_count(self) -> int:
+        """Leaves the shape produced, before any zero padding."""
+        return len(self.packed) if self.nested is None else len(self.nested)
+
+    def chunks(self, start: int = 0, stop: int | None = None) -> list[Chunk]:
+        """
+        The leaves in a half-open range, as chunks.
+
+        A nested value is rooted here rather than when the layout is built.
+        A proof therefore hashes only the part of the tree it walks into.
+        A root asks for every leaf, and hashes all of it.
+        """
+        if self.nested is None:
+            return list(self.packed[start:stop])
+        return [
+            ZERO_ROOT if value is None else hash_tree_root(value)
+            for value in self.nested[start:stop]
+        ]
+
+
+@singledispatch
+def merkle_layout(value: object) -> MerkleLayout:
+    """
+    How one value merkleizes: its leaves, their tree shape, and the word mixed in.
 
     Raises:
         SSZTypeError: If the value's type has no registered handler.
@@ -354,121 +470,153 @@ def hash_tree_root(value: object) -> Root:
     raise SSZTypeError(f"hash_tree_root: unsupported value type {type(value).__name__}")
 
 
-@hash_tree_root.register(BaseUint)
-@hash_tree_root.register(Boolean)
-@hash_tree_root.register(ByteVector)
-def _hash_tree_root_packed_leaf(value: BaseUint | Boolean | ByteVector) -> Root:
+@merkle_layout.register(BaseUint)
+@merkle_layout.register(Boolean)
+@merkle_layout.register(ByteVector)
+def _layout_packed_leaf(value: BaseUint | Boolean | ByteVector) -> MerkleLayout:
     # Each of these encodes to a fixed-width byte string with no length prefix.
-    # The root is the Merkle root of those bytes packed into 32-byte chunks.
-    return merkleize(_pack_bytes(value.encode_bytes()))
+    # The width is fixed.
+    # The chunks it packs into are therefore the whole capacity.
+    chunks = _pack_bytes(value.encode_bytes())
+    return MerkleLayout.packing(chunks, limit=len(chunks))
 
 
-@hash_tree_root.register
-def _hash_tree_root_bytes(value: bytes) -> Root:
-    return merkleize(_pack_bytes(value))
+@merkle_layout.register
+def _layout_bytes(value: bytes) -> MerkleLayout:
+    # Plain bytes are not an SSZ type.
+    # They carry no capacity beyond the data itself.
+    chunks = _pack_bytes(value)
+    return MerkleLayout.packing(chunks, limit=len(chunks))
 
 
-@hash_tree_root.register
-def _hash_tree_root_bytelist(value: ByteList) -> Root:
+@merkle_layout.register
+def _layout_bytelist(value: ByteList) -> MerkleLayout:
     serialized_bytes = value.encode_bytes()
-    limit_chunks = math.ceil(type(value).LIMIT / BYTES_PER_CHUNK)
-    return mix_in_length(
-        merkleize(_pack_bytes(serialized_bytes), limit=limit_chunks), len(serialized_bytes)
+    # The count mixed in is the byte count.
+    # That is also the element count here.
+    return MerkleLayout.packing(
+        _pack_bytes(serialized_bytes),
+        limit=math.ceil(type(value).LIMIT / BYTES_PER_CHUNK),
+        mixin=length_word(len(serialized_bytes)),
     )
 
 
-@hash_tree_root.register
-def _hash_tree_root_bitvector_base(value: BitVector) -> Root:
-    limit = math.ceil(type(value).LENGTH / BITS_PER_CHUNK)
-    return merkleize(_pack_bits(value.data), limit=limit)
-
-
-@hash_tree_root.register
-def _hash_tree_root_bitlist_base(value: BitList) -> Root:
-    limit = math.ceil(type(value).LIMIT / BITS_PER_CHUNK)
-    return mix_in_length(
-        merkleize(_pack_bits(value.data), limit=limit),
-        len(value.data),
+@merkle_layout.register
+def _layout_bitvector(value: BitVector) -> MerkleLayout:
+    return MerkleLayout.packing(
+        _pack_bits(value.data), limit=math.ceil(type(value).LENGTH / BITS_PER_CHUNK)
     )
 
 
-@hash_tree_root.register
-def _hash_tree_root_vector(value: Vector) -> Root:
+@merkle_layout.register
+def _layout_bitlist(value: BitList) -> MerkleLayout:
+    return MerkleLayout.packing(
+        _pack_bits(value.data),
+        limit=math.ceil(type(value).LIMIT / BITS_PER_CHUNK),
+        mixin=length_word(len(value.data)),
+    )
+
+
+@merkle_layout.register
+def _layout_progressive_bitlist(value: ProgressiveBitList) -> MerkleLayout:
+    # The count mixed in is the bit count, not the number of packed chunks.
+    return MerkleLayout.packing(
+        _pack_bits(value.data), limit=None, mixin=length_word(len(value.data))
+    )
+
+
+@merkle_layout.register
+def _layout_vector(value: Vector) -> MerkleLayout:
     cls = type(value)
     element_type, length = cls.ELEMENT_TYPE, cls.LENGTH
     if issubclass(element_type, (BaseUint, Boolean)):
         # Basic elements pack their serialized bytes into a single byte stream before chunking.
         element_size = element_type.get_byte_length()
-        limit_chunks = math.ceil(length * element_size / BYTES_PER_CHUNK)
-        return merkleize(
+        return MerkleLayout.packing(
             _pack_bytes(b"".join(e.encode_bytes() for e in value)),
-            limit=limit_chunks,
+            limit=math.ceil(length * element_size / BYTES_PER_CHUNK),
         )
     # Composite elements each contribute their own hash tree root as a leaf.
-    return merkleize([hash_tree_root(e) for e in value], limit=length)
+    return MerkleLayout.nesting(value, limit=length)
 
 
-@hash_tree_root.register
-def _hash_tree_root_list(value: List) -> Root:
+@merkle_layout.register
+def _layout_list(value: List) -> MerkleLayout:
     cls = type(value)
     element_type, limit = cls.ELEMENT_TYPE, cls.LIMIT
+    mixin = length_word(len(value))
     if issubclass(element_type, (BaseUint, Boolean)):
         element_size = element_type.get_byte_length()
-        limit_chunks = math.ceil(limit * element_size / BYTES_PER_CHUNK)
-        root = merkleize(
+        return MerkleLayout.packing(
             _pack_bytes(b"".join(e.encode_bytes() for e in value)),
-            limit=limit_chunks,
+            limit=math.ceil(limit * element_size / BYTES_PER_CHUNK),
+            mixin=mixin,
         )
-    else:
-        root = merkleize([hash_tree_root(e) for e in value], limit=limit)
-    return mix_in_length(root, len(value))
+    return MerkleLayout.nesting(value, limit=limit, mixin=mixin)
 
 
-@hash_tree_root.register
-def _hash_tree_root_progressive_list(value: ProgressiveList) -> Root:
+@merkle_layout.register
+def _layout_progressive_list(value: ProgressiveList) -> MerkleLayout:
     element_type = type(value).ELEMENT_TYPE
-    if issubclass(element_type, (BaseUint, Boolean)):
-        # Basic elements pack their serialized bytes into a single byte stream before chunking.
-        # No capacity bounds the chunk count: the tree grows to hold whatever was packed.
-        root = merkleize_progressive(_pack_bytes(b"".join(e.encode_bytes() for e in value)))
-    else:
-        # Composite elements each contribute their own hash tree root as a leaf.
-        root = merkleize_progressive([hash_tree_root(e) for e in value])
+    # No capacity bounds the chunk count: the tree grows to hold whatever was packed.
+    #
     # The count mixed in is the element count, not the number of packed chunks.
     # A hundred eight-byte elements pack into 25 chunks, and 100 is the number mixed in.
-    return mix_in_length(root, len(value))
+    mixin = length_word(len(value))
+    if issubclass(element_type, (BaseUint, Boolean)):
+        return MerkleLayout.packing(
+            _pack_bytes(b"".join(e.encode_bytes() for e in value)), limit=None, mixin=mixin
+        )
+    return MerkleLayout.nesting(value, limit=None, mixin=mixin)
 
 
-@hash_tree_root.register
-def _hash_tree_root_progressive_bitlist(value: ProgressiveBitList) -> Root:
-    # The count mixed in is the bit count, not the number of packed chunks.
-    return mix_in_length(merkleize_progressive(_pack_bits(value.data)), len(value.data))
-
-
-@hash_tree_root.register
-def _hash_tree_root_progressive_container(value: ProgressiveContainer) -> Root:
+@merkle_layout.register
+def _layout_progressive_container(value: ProgressiveContainer) -> MerkleLayout:
     cls = type(value)
     # One leaf per layout position, not per field, though the spec's formula reads that way.
     # A cleared bit keeps its zero leaf, the gap that holds every other field still.
-    leaves: list[Chunk] = [ZERO_ROOT] * len(cls.ACTIVE_FIELDS)
+    positions: list[SSZType | None] = [None] * len(cls.ACTIVE_FIELDS)
 
     # Fields follow the set bits: the n-th field belongs at the n-th set position.
-    # A strict pairing fails loudly rather than hashing a field at the wrong one.
+    # A strict pairing fails loudly rather than placing a field at the wrong one.
     active_positions = (i for i, bit in enumerate(cls.ACTIVE_FIELDS) if bit)
     for position, name in zip(active_positions, cls.model_fields, strict=True):
-        leaves[position] = hash_tree_root(getattr(value, name))
+        positions[position] = getattr(value, name)
 
-    return mix_in_active_fields(merkleize_progressive(leaves), cls.ACTIVE_FIELDS)
+    return MerkleLayout.nesting(positions, limit=None, mixin=active_fields_word(cls.ACTIVE_FIELDS))
 
 
-@hash_tree_root.register
-def _hash_tree_root_compatible_union(value: CompatibleUnion) -> Root:
+@merkle_layout.register
+def _layout_compatible_union(value: CompatibleUnion) -> MerkleLayout:
     # The union adds no leaf of its own: the option's own root is the whole tree below.
-    return mix_in_selector(hash_tree_root(value.data), int(value.selector))
+    # One leaf of capacity is a tree of no depth.
+    # The contained root is therefore the left child itself.
+    return MerkleLayout.nesting((value.data,), limit=1, mixin=selector_word(int(value.selector)))
 
 
-@hash_tree_root.register
-def _hash_tree_root_container(value: Container) -> Root:
+@merkle_layout.register
+def _layout_container(value: Container) -> MerkleLayout:
     # Pydantic preserves declaration order, which is the canonical SSZ field order.
     cls = type(value)
-    return merkleize([hash_tree_root(getattr(value, name)) for name in cls.model_fields])
+    return MerkleLayout.nesting(
+        (getattr(value, name) for name in cls.model_fields), limit=len(cls.model_fields)
+    )
+
+
+def hash_tree_root(value: object) -> Root:
+    """
+    Compute the SSZ Merkle root of a value.
+
+    Raises:
+        SSZTypeError: If the value's type has no registered handler.
+    """
+    layout = merkle_layout(value)
+    chunks = layout.chunks()
+    # The two tree shapes are the only ones SSZ defines.
+    # A layout names one of them.
+    if layout.limit is None:
+        root = merkleize_progressive(chunks)
+    else:
+        root = merkleize(chunks, layout.limit)
+    # A shape that mixes a word in puts its contents on the left and the word on the right.
+    return root if layout.mixin is None else _mix_in(root, layout.mixin)

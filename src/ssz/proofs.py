@@ -11,7 +11,17 @@ from ssz.byte_arrays import ByteList, ByteVector
 from ssz.collections import List, ProgressiveList, Vector
 from ssz.container import Container, ProgressiveContainer
 from ssz.exceptions import SSZTypeError, SSZValueError
-from ssz.merkleization import BITS_PER_CHUNK, BYTES_PER_CHUNK, Chunk, Root
+from ssz.merkleization import (
+    BITS_PER_CHUNK,
+    BYTES_PER_CHUNK,
+    Chunk,
+    Root,
+    _next_pow2,
+    hash_tree_root,
+    merkle_layout,
+    merkleize,
+    merkleize_progressive,
+)
 from ssz.ssz_base import SSZType
 from ssz.uint import BaseUint, Uint8
 from ssz.union import CompatibleUnion
@@ -27,11 +37,6 @@ SELECTOR_KEY: Final = "__selector__"
 
 type PathStep = int | str
 """One step of a path: a field name, an element position, or a mixed-in word."""
-
-
-def _next_pow2(value: int) -> int:
-    """Round up to a power of two, with zero mapping to one."""
-    return 1 << max(0, value - 1).bit_length()
 
 
 def _hash_pair(left: bytes, right: bytes) -> Root:
@@ -113,7 +118,7 @@ def _progressive_chunk_gindex(chunk: int) -> int:
         width = 1 << depth
         if chunk < width:
             # The subtree root is the spine node's left child.
-            # The chunk sits `depth` levels below that root.
+            # The chunk sits that many levels below the subtree root.
             return ((spine << 1) << depth) + chunk
         chunk -= width
         depth += 2
@@ -395,6 +400,118 @@ def _reject_related(indices: Sequence[int]) -> None:
         ancestors = set(get_path_indices(index)) - {index}
         if ancestors & seen:
             raise SSZValueError(f"{index} lies below another index in the same request")
+
+
+def node_root(value: object, index: int) -> Root:
+    """
+    Root of the subtree at one generalized index of a value's own Merkle tree.
+
+    This is the one function that reads a generalized index against real data.
+    It follows the index down through the layouts the value merkleizes into.
+    What it lands on may be a leaf, an internal node, or a mixed-in word.
+
+    Index 1 is the root itself, whose subtree is the whole value.
+
+    Args:
+        value: The value whose tree the index is measured in.
+        index: Generalized index of the wanted node.
+
+    Returns:
+        The root of the subtree at that index.
+
+    Raises:
+        SSZValueError:
+            - When the index is not a generalized index.
+            - When the index descends into a mixed-in word, which has no parts.
+            - When the index descends into packed data, which has no parts.
+            - When the index descends into a position this value leaves empty.
+            - When the index lies past the end of a progressive spine.
+    """
+    if index < 1:
+        raise SSZValueError(f"{index} is not a generalized index")
+    if index == 1:
+        return hash_tree_root(value)
+
+    layout, name = merkle_layout(value), type(value).__name__
+    # Every bit below the leading one is a turn, so the bit width is the depth to walk.
+    depth = gindex_length(index)
+
+    # A mixed-in word is the right child, which puts the leaves one level down on the left.
+    if layout.mixin is not None:
+        depth -= 1
+        if gindex_bit(index, depth):
+            if depth:
+                raise SSZValueError(f"the path descends into {name}'s mixed-in word")
+            return Root(layout.mixin)
+
+    # First leaf of the bounded subtree the walk ends in, and that subtree's capacity.
+    leaves_from, capacity = 0, layout.limit
+    if capacity is None:
+        # A progressive spine holds its levels on the left and the rest of itself on the right.
+        # Walking right skips one level's leaves and quadruples the width of the next.
+        #
+        # A spine is only as long as its data, closing with a zero node holding nothing.
+        # Both turns below therefore refuse once no leaf is left:
+        #
+        #     ProgressiveList[Uint64] holding two elements  ->  chunk 0 is a node, chunk 5 is not
+        #
+        # The exit between them is exempt, because a closed spine's terminator is a node.
+        spine_closed = f"the path lies past the end of {name}'s progressive spine"
+        capacity = 1
+        while depth and gindex_bit(index, depth - 1):
+            if leaves_from >= layout.leaf_count:
+                raise SSZValueError(spine_closed)
+            leaves_from, capacity, depth = leaves_from + capacity, capacity * 4, depth - 1
+        if depth == 0:
+            # The index names a spine node, whose root covers every leaf still to come.
+            return merkleize_progressive(layout.chunks(leaves_from), capacity)
+        # The index turns left instead, into the bounded subtree holding this level.
+        if leaves_from >= layout.leaf_count:
+            raise SSZValueError(spine_closed)
+        depth -= 1
+
+    width = _next_pow2(capacity)
+    tree_depth = width.bit_length() - 1
+
+    if depth <= tree_depth:
+        # The index names a node of the bounded subtree, which spans a run of leaves.
+        # Merkleizing that run alone gives its root, padding included.
+        span = width >> depth
+        start = leaves_from + (index & ((1 << depth) - 1)) * span
+        return merkleize(layout.chunks(start, start + span), limit=span)
+
+    # Deeper than the subtree: the rest of the index is measured inside one leaf's own tree.
+    depth -= tree_depth
+    leaf = leaves_from + ((index >> depth) & ((1 << tree_depth) - 1))
+    if layout.nested is None:
+        raise SSZValueError(f"the path descends into the packed data of {name}")
+    if leaf >= layout.leaf_count or layout.nested[leaf] is None:
+        raise SSZValueError(f"the path descends into an empty position of {name}")
+    return node_root(layout.nested[leaf], (1 << depth) | (index & ((1 << depth) - 1)))
+
+
+def build_proof(value: object, index: int) -> list[Root]:
+    """
+    Branch that authenticates one generalized index of a value against its root.
+
+    Every node on the path from the index to the root contributes its sibling.
+    The order runs bottom-up, the leaf's sibling first, as a verifier reads it.
+    """
+    return [node_root(value, sibling) for sibling in get_branch_indices(index)]
+
+
+def build_multiproof(value: object, indices: Sequence[int]) -> list[Root]:
+    """
+    Nodes that authenticate several generalized indices of a value at once.
+
+    Only the nodes a verifier cannot rebuild for itself are carried.
+    The claimed nodes are the caller's to supply:
+
+        leaves = [node_root(state, index) for index in indices]
+        proof = build_multiproof(state, indices)
+        assert verify_merkle_multiproof(leaves, proof, indices, hash_tree_root(state))
+    """
+    return [node_root(value, helper) for helper in get_helper_indices(indices)]
 
 
 def calculate_merkle_root(leaf: Chunk, proof: Sequence[Chunk], index: int) -> Root:
