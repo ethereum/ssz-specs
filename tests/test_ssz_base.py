@@ -1006,7 +1006,7 @@ class TestDeclaredCapacity:
     """
     Tests for declaring how many elements a shape holds with a typed value.
 
-    A consensus spec keeps its length constants as fixed-width unsigned integers.
+    A specification may keep its length constants as fixed-width unsigned integers.
     Casting each one at the point it becomes a capacity would mean casting almost all of them.
     So a typed value is accepted, then narrowed to a plain integer as the type is built:
 
@@ -1124,7 +1124,7 @@ class TestDeclaredCapacity:
 
         # A capacity is not a hint.
         # It sets how far a value is padded before it is hashed.
-        # So it is part of the Merkle root that consensus agrees on.
+        # So it is part of the Merkle root that implementations must agree on.
         #
         # One-byte elements pack 32 to a 32-byte chunk:
         #
@@ -1201,7 +1201,7 @@ class TestDeclaredCapacity:
         self, typed: SSZType, plain: SSZType
     ) -> None:
         """How a capacity was written cannot move a single bit of observable output."""
-        # Wire bytes and Merkle root are the two things consensus reads.
+        # Wire bytes and Merkle root are the two things an observer reads.
         # A twin declared with a plain integer is the reference for both.
         #
         # The two values have different types.

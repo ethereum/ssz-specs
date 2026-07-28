@@ -53,7 +53,6 @@ class SSZType(ABC):
         Narrow a declared capacity to a plain integer, at the point it is declared.
 
         A capacity may be written with a typed value.
-        A consensus spec already holds its length constants as uints.
         Requiring a cast at every declaration would therefore mean casting almost all of them:
 
             class Attestations(List[Attestation]):
