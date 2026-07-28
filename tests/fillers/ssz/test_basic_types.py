@@ -3,11 +3,11 @@
 from typing import ClassVar
 
 from ssz import (
-    Bitlist,
-    Bitvector,
+    BitList,
+    BitVector,
     Boolean,
     ByteList,
-    Bytes,
+    ByteVector,
     List,
     Uint8,
     Uint16,
@@ -20,19 +20,19 @@ from ssz import (
 from ssz_testing import SSZTestFiller
 
 
-class Bytes4(Bytes):
+class Bytes4(ByteVector):
     LENGTH = 4
 
 
-class Bytes32(Bytes):
+class Bytes32(ByteVector):
     LENGTH = 32
 
 
-class Bytes52(Bytes):
+class Bytes52(ByteVector):
     LENGTH = 52
 
 
-class Bytes64(Bytes):
+class Bytes64(ByteVector):
     LENGTH = 64
 
 
@@ -40,20 +40,20 @@ class ByteList512KiB(ByteList):
     LIMIT = 512 * 1024
 
 
-class SampleBitvector8(Bitvector):
+class SampleBitVector8(BitVector):
     """8-bit bitvector. Fits exactly in one byte of SSZ encoding."""
 
     LENGTH: ClassVar[int] = 8
 
 
-class SampleBitvector64(Bitvector):
+class SampleBitVector64(BitVector):
     """64-bit bitvector. Spans multiple 32-byte Merkle chunks."""
 
     LENGTH: ClassVar[int] = 64
 
 
-class SampleBitlist16(Bitlist):
-    """Bitlist allowing up to 16 bits. Exercises the length-delimiting sentinel bit."""
+class SampleBitList16(BitList):
+    """BitList allowing up to 16 bits. Exercises the length-delimiting sentinel bit."""
 
     LIMIT: ClassVar[int] = 16
 
@@ -835,8 +835,8 @@ def test_bitvector8_all_zero(ssz_test: SSZTestFiller) -> None:
     - the encoding is the byte 0x00.
     """
     ssz_test(
-        type_name="SampleBitvector8",
-        value=SampleBitvector8(data=[Boolean(False)] * 8),
+        type_name="SampleBitVector8",
+        value=SampleBitVector8(data=[Boolean(False)] * 8),
     )
 
 
@@ -858,8 +858,8 @@ def test_bitvector8_all_one(ssz_test: SSZTestFiller) -> None:
     - the encoding is the byte 0xff.
     """
     ssz_test(
-        type_name="SampleBitvector8",
-        value=SampleBitvector8(data=[Boolean(True)] * 8),
+        type_name="SampleBitVector8",
+        value=SampleBitVector8(data=[Boolean(True)] * 8),
     )
 
 
@@ -881,8 +881,8 @@ def test_bitvector8_mixed(ssz_test: SSZTestFiller) -> None:
     - the encoding is the byte 0x55.
     """
     ssz_test(
-        type_name="SampleBitvector8",
-        value=SampleBitvector8(
+        type_name="SampleBitVector8",
+        value=SampleBitVector8(
             data=[
                 Boolean(True),
                 Boolean(False),
@@ -915,8 +915,8 @@ def test_bitvector64_all_zero(ssz_test: SSZTestFiller) -> None:
     - the encoding is eight zero bytes.
     """
     ssz_test(
-        type_name="SampleBitvector64",
-        value=SampleBitvector64(data=[Boolean(False)] * 64),
+        type_name="SampleBitVector64",
+        value=SampleBitVector64(data=[Boolean(False)] * 64),
     )
 
 
@@ -938,8 +938,8 @@ def test_bitvector64_all_one(ssz_test: SSZTestFiller) -> None:
     - the encoding is eight bytes of 0xff.
     """
     ssz_test(
-        type_name="SampleBitvector64",
-        value=SampleBitvector64(data=[Boolean(True)] * 64),
+        type_name="SampleBitVector64",
+        value=SampleBitVector64(data=[Boolean(True)] * 64),
     )
 
 
@@ -961,8 +961,8 @@ def test_bitvector64_mixed(ssz_test: SSZTestFiller) -> None:
     - bit ordering is preserved across byte boundaries.
     """
     ssz_test(
-        type_name="SampleBitvector64",
-        value=SampleBitvector64(data=[Boolean(i % 2 == 0) for i in range(64)]),
+        type_name="SampleBitVector64",
+        value=SampleBitVector64(data=[Boolean(i % 2 == 0) for i in range(64)]),
     )
 
 
@@ -984,8 +984,8 @@ def test_bitlist_empty(ssz_test: SSZTestFiller) -> None:
     - the encoding is the sentinel-only byte 0x01.
     """
     ssz_test(
-        type_name="SampleBitlist16",
-        value=SampleBitlist16(data=[]),
+        type_name="SampleBitList16",
+        value=SampleBitList16(data=[]),
     )
 
 
@@ -1007,8 +1007,8 @@ def test_bitlist_single_true(ssz_test: SSZTestFiller) -> None:
     - the sentinel immediately follows the data bit.
     """
     ssz_test(
-        type_name="SampleBitlist16",
-        value=SampleBitlist16(data=[Boolean(True)]),
+        type_name="SampleBitList16",
+        value=SampleBitList16(data=[Boolean(True)]),
     )
 
 
@@ -1030,8 +1030,8 @@ def test_bitlist_single_false(ssz_test: SSZTestFiller) -> None:
     - the sentinel is the only set bit in the byte.
     """
     ssz_test(
-        type_name="SampleBitlist16",
-        value=SampleBitlist16(data=[Boolean(False)]),
+        type_name="SampleBitList16",
+        value=SampleBitList16(data=[Boolean(False)]),
     )
 
 
@@ -1053,8 +1053,8 @@ def test_bitlist_at_limit(ssz_test: SSZTestFiller) -> None:
     - the sentinel lands in a new byte.
     """
     ssz_test(
-        type_name="SampleBitlist16",
-        value=SampleBitlist16(data=[Boolean(True)] * 16),
+        type_name="SampleBitList16",
+        value=SampleBitList16(data=[Boolean(True)] * 16),
     )
 
 
@@ -1075,8 +1075,8 @@ def test_bitlist_mixed(ssz_test: SSZTestFiller) -> None:
     - the decoded value equals the original.
     """
     ssz_test(
-        type_name="SampleBitlist16",
-        value=SampleBitlist16(
+        type_name="SampleBitList16",
+        value=SampleBitList16(
             data=[
                 Boolean(True),
                 Boolean(False),

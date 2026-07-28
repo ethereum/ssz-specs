@@ -10,7 +10,7 @@ import pytest
 from ssz import (
     ZERO_ROOT,
     ByteList,
-    Bytes,
+    ByteVector,
     Chunk,
     Root,
     SSZType,
@@ -23,7 +23,7 @@ from ssz import (
     Uint128,
     Uint256,
 )
-from ssz.bitfields import Bitlist, Bitvector, ProgressiveBitlist
+from ssz.bitfields import BitList, BitVector, ProgressiveBitList
 from ssz.boolean import Boolean
 from ssz.collections import List, ProgressiveList, Vector
 from ssz.container import Container, ProgressiveContainer
@@ -531,13 +531,13 @@ def test_merkleize_progressive_positions_are_stable_as_data_grows() -> None:
     )
 
 
-class Bytes48(Bytes):
+class Bytes48(ByteVector):
     """Test-local fixed-size byte array of 48 bytes."""
 
     LENGTH = 48
 
 
-class Bytes96(Bytes):
+class Bytes96(ByteVector):
     """Test-local fixed-size byte array of 96 bytes spanning three chunks."""
 
     LENGTH = 96
@@ -579,62 +579,62 @@ class ByteList2048(ByteList):
     LIMIT = 2048
 
 
-class Bitvector1(Bitvector):
+class BitVector1(BitVector):
     """Single-bit bitvector."""
 
     LENGTH = 1
 
 
-class Bitvector3(Bitvector):
+class BitVector3(BitVector):
     """Three-bit bitvector inside one byte."""
 
     LENGTH = 3
 
 
-class Bitvector8(Bitvector):
-    """Bitvector aligned to one byte."""
+class BitVector8(BitVector):
+    """BitVector aligned to one byte."""
 
     LENGTH = 8
 
 
-class Bitvector9(Bitvector):
-    """Bitvector spilling into a second byte."""
+class BitVector9(BitVector):
+    """BitVector spilling into a second byte."""
 
     LENGTH = 9
 
 
-class Bitvector256(Bitvector):
-    """Bitvector whose data fills exactly one 32-byte chunk."""
+class BitVector256(BitVector):
+    """BitVector whose data fills exactly one 32-byte chunk."""
 
     LENGTH = 256
 
 
-class Bitvector512(Bitvector):
-    """Bitvector whose data fills exactly two chunks."""
+class BitVector512(BitVector):
+    """BitVector whose data fills exactly two chunks."""
 
     LENGTH = 512
 
 
-class Bitlist3(Bitlist):
-    """Bitlist limit of three bits."""
+class BitList3(BitList):
+    """BitList limit of three bits."""
 
     LIMIT = 3
 
 
-class Bitlist8(Bitlist):
-    """Bitlist limit of eight bits."""
+class BitList8(BitList):
+    """BitList limit of eight bits."""
 
     LIMIT = 8
 
 
-class Bitlist256(Bitlist):
-    """Bitlist whose data root fits one chunk."""
+class BitList256(BitList):
+    """BitList whose data root fits one chunk."""
 
     LIMIT = 256
 
 
-class Bitlist512(Bitlist):
-    """Bitlist whose data root spans two chunks."""
+class BitList512(BitList):
+    """BitList whose data root spans two chunks."""
 
     LIMIT = 512
 
@@ -861,13 +861,13 @@ class ProgressiveListFieldProgressive(ProgressiveContainer):
     B: Uint16ProgressiveList
 
 
-class ProgressiveBitlistFieldProgressive(ProgressiveContainer):
+class ProgressiveBitListFieldProgressive(ProgressiveContainer):
     """Progressive container whose second field is a progressive bitlist."""
 
     ACTIVE_FIELDS = (1, 0, 1)
 
     A: Uint8
-    B: ProgressiveBitlist
+    B: ProgressiveBitList
 
 
 class NestedProgressive(ProgressiveContainer):
@@ -1076,17 +1076,17 @@ def _bools(*values: int) -> list[Boolean]:
     "bv_cls, bits, expected_payload",
     [
         # Single bit set produces 0x01 padded.
-        (Bitvector1, _bools(1), b"\x01"),
+        (BitVector1, _bools(1), b"\x01"),
         # Three bits 0,1,0 produce 0b010 = 0x02 padded.
-        (Bitvector3, _bools(0, 1, 0), b"\x02"),
+        (BitVector3, _bools(0, 1, 0), b"\x02"),
         # Eight ones fill one byte at 0xff.
-        (Bitvector8, _bools(*([1] * 8)), b"\xff"),
+        (BitVector8, _bools(*([1] * 8)), b"\xff"),
         # Nine ones spill into a second byte at 0x01.
-        (Bitvector9, _bools(*([1] * 9)), b"\xff\x01"),
+        (BitVector9, _bools(*([1] * 9)), b"\xff\x01"),
     ],
 )
 def test_hash_tree_root_bitvector_single_chunk(
-    bv_cls: type[Bitvector],
+    bv_cls: type[BitVector],
     bits: list[Boolean],
     expected_payload: bytes,
 ) -> None:
@@ -1098,29 +1098,29 @@ def test_hash_tree_root_bitvector_single_chunk(
 
 def test_hash_tree_root_bitvector_one_chunk_boundary() -> None:
     """A 256-bit vector of ones packs into exactly one all-ones chunk."""
-    bv = Bitvector256(data=_bools(*([1] * 256)))
+    bv = BitVector256(data=_bools(*([1] * 256)))
     assert hash_tree_root(bv) == Chunk(b"\xff" * 32)
 
 
 def test_hash_tree_root_bitvector_two_chunks() -> None:
     """A 512-bit vector of ones hashes two all-ones chunks together."""
-    bv = Bitvector512(data=_bools(*([1] * 512)))
+    bv = BitVector512(data=_bools(*([1] * 512)))
     assert hash_tree_root(bv) == h(b"\xff" * 32, b"\xff" * 32)
 
 
 @pytest.mark.parametrize(
     "bl_cls, bits, expected_data_root, expected_length",
     [
-        # Bitlist[3] with 0,1,0 has data byte 0x02 and length 3.
-        (Bitlist3, _bools(0, 1, 0), pad(b"\x02"), 3),
-        # Bitlist[8] with all ones has data byte 0xff and length 8.
-        (Bitlist8, _bools(*([1] * 8)), pad(b"\xff"), 8),
-        # Bitlist[8] empty: data root is the zero chunk and length is 0.
-        (Bitlist8, _bools(), Z[0], 0),
+        # BitList[3] with 0,1,0 has data byte 0x02 and length 3.
+        (BitList3, _bools(0, 1, 0), pad(b"\x02"), 3),
+        # BitList[8] with all ones has data byte 0xff and length 8.
+        (BitList8, _bools(*([1] * 8)), pad(b"\xff"), 8),
+        # BitList[8] empty: data root is the zero chunk and length is 0.
+        (BitList8, _bools(), Z[0], 0),
     ],
 )
 def test_hash_tree_root_bitlist_small(
-    bl_cls: type[Bitlist],
+    bl_cls: type[BitList],
     bits: list[Boolean],
     expected_data_root: Root,
     expected_length: int,
@@ -1133,14 +1133,14 @@ def test_hash_tree_root_bitlist_small(
 
 def test_hash_tree_root_bitlist_chunk_boundary() -> None:
     """A bitlist whose data fills exactly one chunk mixes its 256-bit length in."""
-    bl = Bitlist256(data=_bools(*([1] * 256)))
+    bl = BitList256(data=_bools(*([1] * 256)))
     expected_root = h(b"\xff" * 32, pad((256).to_bytes(32, "little")))
     assert hash_tree_root(bl) == expected_root
 
 
 def test_hash_tree_root_bitlist_two_chunks() -> None:
     """A bitlist whose data spans two chunks merkleizes them and mixes in 512."""
-    bl = Bitlist512(data=_bools(*([1] * 512)))
+    bl = BitList512(data=_bools(*([1] * 512)))
     base = h(b"\xff" * 32, b"\xff" * 32)
     expected_root = h(base, pad((512).to_bytes(32, "little")))
     assert hash_tree_root(bl) == expected_root
@@ -1318,13 +1318,13 @@ def test_hash_tree_root_container_with_empty_progressive_list_field() -> None:
 
 def test_hash_tree_root_progressive_bitlist_empty() -> None:
     """An empty progressive bitlist mixes a zero count into the plain zero terminator."""
-    assert hash_tree_root(ProgressiveBitlist(data=())) == h(ZERO_ROOT, pad(b"\x00"))
-    assert hash_tree_root(ProgressiveBitlist(data=())) == Z[1]
+    assert hash_tree_root(ProgressiveBitList(data=())) == h(ZERO_ROOT, pad(b"\x00"))
+    assert hash_tree_root(ProgressiveBitList(data=())) == Z[1]
 
 
 def test_hash_tree_root_progressive_bitlist_small() -> None:
     """Three bits pack into one chunk hashed with the terminator, then the bit count."""
-    bitlist = ProgressiveBitlist(data=_bools(0, 1, 0))
+    bitlist = ProgressiveBitList(data=_bools(0, 1, 0))
     assert hash_tree_root(bitlist) == h(h(pad(b"\x02"), Z[0]), pad(b"\x03"))
 
 
@@ -1343,14 +1343,14 @@ def test_hash_tree_root_progressive_bitlist_chunk_boundary(
     bit_count: int, expected_data_root: Root
 ) -> None:
     """Bit packing crosses a chunk boundary at 257 bits and opens the next level."""
-    bitlist = ProgressiveBitlist(data=_bools(*([1] * bit_count)))
+    bitlist = ProgressiveBitList(data=_bools(*([1] * bit_count)))
     expected_root = h(expected_data_root, pad(bit_count.to_bytes(32, "little")))
     assert hash_tree_root(bitlist) == expected_root
 
 
 def test_hash_tree_root_progressive_bitlist_mixes_in_the_bit_count() -> None:
     """The mixed-in count is the bit count, not the number of packed chunks."""
-    bitlist = ProgressiveBitlist(data=_bools(*([1] * 256)))
+    bitlist = ProgressiveBitList(data=_bools(*([1] * 256)))
     data_root = h(Chunk(b"\xff" * 32), Z[0])
     assert hash_tree_root(bitlist) == mix_in_length(data_root, 256)
     assert hash_tree_root(bitlist) != mix_in_length(data_root, 1)
@@ -1370,8 +1370,8 @@ def test_progressive_and_bounded_list_share_bytes_but_not_roots() -> None:
 def test_progressive_and_bounded_bitlist_share_bytes_but_not_roots() -> None:
     """The two bitlist shapes encode identically and merkleize differently."""
     bits = _bools(0, 1, 0)
-    progressive = ProgressiveBitlist(data=bits)
-    bounded = Bitlist256(data=bits)
+    progressive = ProgressiveBitList(data=bits)
+    bounded = BitList256(data=bits)
     assert progressive.encode_bytes() == bounded.encode_bytes()
     assert hash_tree_root(progressive) != hash_tree_root(bounded)
 
@@ -1638,8 +1638,8 @@ def test_hash_tree_root_progressive_container_with_empty_progressive_list_field(
 
 def test_hash_tree_root_progressive_container_with_progressive_bitlist_field() -> None:
     """A progressive bitlist field contributes its data root with the bit count mixed in."""
-    value = ProgressiveBitlistFieldProgressive(
-        A=Uint8(0xFF), B=ProgressiveBitlist(data=_bools(0, 1, 0))
+    value = ProgressiveBitListFieldProgressive(
+        A=Uint8(0xFF), B=ProgressiveBitList(data=_bools(0, 1, 0))
     )
     field_b = h(h(pad(b"\x02"), Z[0]), pad(b"\x03"))
     assert hash_tree_root(value) == expected_progressive_container_root(
@@ -2032,7 +2032,7 @@ def default_root_hex(value: SSZType) -> str:
         # False packs to one zero byte, padded to the same chunk.
         pytest.param(Boolean(), id="boolean"),
         # Eight clear bits pack to one zero byte; no length is mixed in for a bitvector.
-        pytest.param(Bitvector8(), id="bitvector_8"),
+        pytest.param(BitVector8(), id="bitvector_8"),
         # Four zero Uint8 pack to four zero bytes inside the one chunk they share.
         pytest.param(Uint8Vector4(), id="vector_uint8_4"),
     ],
@@ -2057,11 +2057,11 @@ def test_default_root_of_a_two_chunk_byte_array() -> None:
     [
         # A bounded list under a one-chunk capacity: zero data chunks, then a zero count.
         pytest.param(Uint8List4(), id="list_uint8_4"),
-        pytest.param(Bitlist8(), id="bitlist_8"),
+        pytest.param(BitList8(), id="bitlist_8"),
         pytest.param(ByteList8(), id="byte_list_8"),
         # The unbounded shapes terminate their spine with the plain zero leaf instead.
         pytest.param(Uint8ProgressiveList(), id="progressive_list_uint8"),
-        pytest.param(ProgressiveBitlist(), id="progressive_bitlist"),
+        pytest.param(ProgressiveBitList(), id="progressive_bitlist"),
     ],
 )
 def test_default_root_of_an_empty_variable_size_shape(default_value: SSZType) -> None:

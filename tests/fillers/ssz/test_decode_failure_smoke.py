@@ -2,11 +2,11 @@
 
 from typing import ClassVar
 
-from ssz import Bitlist, Boolean
+from ssz import BitList, Boolean
 from ssz_testing import ExpectedRejection, RejectionReason, SSZTestFiller
 
 
-class SmokeBitlist8(Bitlist):
+class SmokeBitList8(BitList):
     """Small bitlist with an 8-bit limit, used only by the decode-failure smoke test."""
 
     LIMIT: ClassVar[int] = 8
@@ -31,8 +31,8 @@ def test_ssz_decode_failure_bitlist_exceeds_limit(ssz_test: SSZTestFiller) -> No
     - the reason is that the implied bit-length exceeds the limit.
     """
     ssz_test(
-        type_name="SmokeBitlist8",
-        value=SmokeBitlist8(data=[Boolean(False)]),
+        type_name="SmokeBitList8",
+        value=SmokeBitList8(data=[Boolean(False)]),
         raw_bytes="0x0010",
         expected_rejection=ExpectedRejection(reason=RejectionReason.DECODE_ERROR),
     )

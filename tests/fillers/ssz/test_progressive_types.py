@@ -2,9 +2,9 @@
 
 from ssz import (
     Boolean,
-    Bytes,
+    ByteVector,
     Container,
-    ProgressiveBitlist,
+    ProgressiveBitList,
     ProgressiveList,
     Uint8,
     Uint16,
@@ -13,7 +13,7 @@ from ssz import (
 from ssz_testing import SSZTestFiller
 
 
-class Bytes32(Bytes):
+class Bytes32(ByteVector):
     LENGTH = 32
 
 
@@ -369,8 +369,8 @@ def test_progressive_bitlist_empty(ssz_test: SSZTestFiller) -> None:
     - the decoded value equals the original.
     """
     ssz_test(
-        type_name="ProgressiveBitlist",
-        value=ProgressiveBitlist(data=[]),
+        type_name="ProgressiveBitList",
+        value=ProgressiveBitList(data=[]),
     )
 
 
@@ -393,8 +393,8 @@ def test_progressive_bitlist_small(ssz_test: SSZTestFiller) -> None:
     - the decoded value equals the original.
     """
     ssz_test(
-        type_name="ProgressiveBitlist",
-        value=ProgressiveBitlist(data=[Boolean(True), Boolean(False), Boolean(True)]),
+        type_name="ProgressiveBitList",
+        value=ProgressiveBitList(data=[Boolean(True), Boolean(False), Boolean(True)]),
     )
 
 
@@ -417,8 +417,8 @@ def test_progressive_bitlist_fills_one_chunk(ssz_test: SSZTestFiller) -> None:
     - the decoded value equals the original.
     """
     ssz_test(
-        type_name="ProgressiveBitlist",
-        value=ProgressiveBitlist(data=[Boolean(True)] * 256),
+        type_name="ProgressiveBitList",
+        value=ProgressiveBitList(data=[Boolean(True)] * 256),
     )
 
 
@@ -441,8 +441,8 @@ def test_progressive_bitlist_opens_second_level(ssz_test: SSZTestFiller) -> None
     - the decoded value equals the original.
     """
     ssz_test(
-        type_name="ProgressiveBitlist",
-        value=ProgressiveBitlist(data=[Boolean(True)] * PROGRESSIVE_BITLIST_LEVEL_BITS),
+        type_name="ProgressiveBitList",
+        value=ProgressiveBitList(data=[Boolean(True)] * PROGRESSIVE_BITLIST_LEVEL_BITS),
     )
 
 

@@ -9,7 +9,7 @@ from hypothesis import given, strategies as st
 from pydantic import ValidationError
 
 import ssz
-from ssz.bitfields import ProgressiveBitlist
+from ssz.bitfields import ProgressiveBitList
 from ssz.boolean import Boolean
 from ssz.collections import List, ProgressiveList, Vector
 from ssz.container import (
@@ -210,7 +210,7 @@ class ProgressiveFieldsProgressive(ProgressiveContainer):
 
     head: Uint32
     numbers: Uint16ProgressiveList
-    flags: ProgressiveBitlist
+    flags: ProgressiveBitList
 
 
 class InnerProgressive(ProgressiveContainer):
@@ -1385,7 +1385,7 @@ class TestProgressiveContainerSerialization:
         value = ProgressiveFieldsProgressive(
             head=Uint32(0x11223344),
             numbers=Uint16ProgressiveList(data=[Uint16(1), Uint16(2)]),
-            flags=ProgressiveBitlist(data=[Boolean(True), Boolean(False), Boolean(True)]),
+            flags=ProgressiveBitList(data=[Boolean(True), Boolean(False), Boolean(True)]),
         )
         expected_encoding = bytes.fromhex("443322110c00000010000000010002000d")
         assert value.encode_bytes() == expected_encoding
@@ -1406,7 +1406,7 @@ class TestProgressiveContainerSerialization:
         value = ProgressiveFieldsProgressive(
             head=Uint32(1),
             numbers=Uint16ProgressiveList(data=[Uint16(2)]),
-            flags=ProgressiveBitlist(data=[Boolean(True)]),
+            flags=ProgressiveBitList(data=[Boolean(True)]),
         )
         encoded = value.encode_bytes()
         stream = io.BytesIO(encoded)
@@ -1757,14 +1757,14 @@ class TestProgressiveContainerMutation:
         instance = ProgressiveFieldsProgressive(
             head=Uint32(1),
             numbers=Uint16ProgressiveList(data=[Uint16(1)]),
-            flags=ProgressiveBitlist(data=[Boolean(True)]),
+            flags=ProgressiveBitList(data=[Boolean(True)]),
         )
         instance.numbers.append(Uint16(2))
         instance.flags.append(Boolean(False))
         assert instance == ProgressiveFieldsProgressive(
             head=Uint32(1),
             numbers=Uint16ProgressiveList(data=[Uint16(1), Uint16(2)]),
-            flags=ProgressiveBitlist(data=[Boolean(True), Boolean(False)]),
+            flags=ProgressiveBitList(data=[Boolean(True), Boolean(False)]),
         )
 
 
@@ -1799,6 +1799,6 @@ def test_progressive_container_round_trip_random_values(
     instance = ProgressiveFieldsProgressive(
         head=Uint32(head),
         numbers=Uint16ProgressiveList(data=[Uint16(value) for value in numbers]),
-        flags=ProgressiveBitlist(data=[Boolean(bit) for bit in flags]),
+        flags=ProgressiveBitList(data=[Boolean(bit) for bit in flags]),
     )
     assert ProgressiveFieldsProgressive.decode_bytes(instance.encode_bytes()) == instance
