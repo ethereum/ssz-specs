@@ -23,20 +23,20 @@ implementations can run to ensure compliance with the specifications.
 
 ## Types
 
-### `Bit`
-
-A zero or one value.
-
-```python
-Bit(1)
-```
-
 ### `Boolean`
 
 A true or false value.
 
 ```python
 Boolean(True)
+```
+
+### `Bit`
+
+A zero or one value.
+
+```python
+Bit(1)
 ```
 
 ### `Byte`
