@@ -136,7 +136,7 @@ wheels = [
 
 [[package]]
 name = "eth-ssz-specs"
-version = "0.0.1"
+version = "0.0.1.dev1"
 source = { editable = "." }
 dependencies = [
     { name = "pydantic" },
@@ -562,7 +562,7 @@ wheels = [
 
 [[package]]
 name = "ssz-testing"
-version = "0.0.1"
+version = "0.0.1.dev1"
 source = { editable = "packages/testing" }
 dependencies = [
     { name = "click" },
