@@ -33,49 +33,24 @@
 
 ## Cutting a Release
 
-Releases are cut from `main` by maintainers, via the `Release` GitHub Actions workflow
-(`.github/workflows/release.yaml`):
+1. Open a PR bumping `version` in both `pyproject.toml` and
+   `packages/testing/pyproject.toml` (they must match).
+2. Merge it, then run Actions → Release → Run workflow on `main`.
 
-1. **Bump the version** in a PR: update `version` in both `pyproject.toml` and
-   `packages/testing/pyproject.toml` (they must match; the workflow fails on skew)
-2. **Merge the PR** and wait for green CI on `main`
-3. **Dispatch the workflow**: Actions → Release → Run workflow, on `main` (no inputs;
-   the version is read from `pyproject.toml`)
-4. **The workflow then runs automatically**: quality gate (`just check` plus the
-   coverage gate), generate and package the conformance vectors as a deterministic
-   `ssz-test-vectors-vX.Y.Z.tar.gz` with a `.sha256` checksum, build the sdist and
-   wheel, create the `vX.Y.Z` git tag and GitHub release with the tarball attached in
-   one atomic step, and publish `eth-ssz-specs` to PyPI via trusted publishing
-5. **Approve the PyPI publish** if the `pypi` GitHub environment has required reviewers
-   configured (the tag and GitHub release already exist at this point)
-6. **On failure**: if anything fails before the release job, no tag was created — fix
-   the problem on `main` and re-dispatch. The workflow also refuses to reuse an
-   existing tag, so a re-dispatch after a successful tag requires a version bump. If
-   only the PyPI publish fails after the tag and GitHub release exist, do not
-   re-dispatch — use "Re-run failed jobs" on the same workflow run instead
+The workflow runs the quality gate, packages the vectors, builds the package, tags
+`v<version>` with a GitHub release, and publishes `eth-ssz-specs` to PyPI. Versions
+other than plain `X.Y.Z` (e.g. `0.2.0rc1`) become GitHub prereleases. `ssz-testing`
+is internal and never published.
 
-**Version scheme**: plain `X.Y.Z` for final releases. Anything else (e.g. `0.2.0rc1`)
-is marked as a prerelease on GitHub. The tag is always `v<version>`.
+If anything fails before the release job, no tag was created: fix and re-dispatch. If
+only the PyPI publish fails, re-run the failed job on the same run instead.
 
-**What gets published**: only the workspace root package `eth-ssz-specs`. The
-`ssz-testing` package under `packages/testing/` is internal tooling and is deliberately
-never published to PyPI.
+Before the first release: add a PyPI trusted publisher (project `eth-ssz-specs`, owner
+`leanEthereum`, repository `ssz-specs`, workflow `release.yaml`, environment `pypi`)
+and create the `pypi` environment in the GitHub repository settings.
 
-**One-time setup** (before the first release): on PyPI, add a pending trusted publisher
-for project `eth-ssz-specs` with owner `leanEthereum`, repository `ssz-specs`, workflow
-`release.yaml`, and environment `pypi`; on GitHub, create the `pypi` environment
-(Settings → Environments) and optionally add required reviewers. Publishing uses OIDC,
-so no tokens or secrets are stored.
-
-**Local debugging**: the release artifacts can be reproduced with two recipes:
-
-```bash
-just build                 # Build the sdist and wheel into dist/
-just pack-fixtures v0.1.0  # Fill vectors and package the release tarball + checksum
-```
-
-`pack-fixtures` needs GNU tar and `sha256sum` for byte-identical tarballs; on macOS,
-install them with `brew install gnu-tar coreutils`.
+Reproduce the artifacts locally with `just build` and `just pack-fixtures <tag>`
+(macOS: `brew install gnu-tar coreutils`).
 
 ## Questions?
 

@@ -2,10 +2,8 @@ name: Release
 
 run-name: Release from ${{ github.sha }} by @${{ github.actor }}
 
-# Dispatch-driven releases: the version is read from pyproject.toml (the single
-# source of truth) and the tag is created by the workflow itself, only after
-# every gate has passed. Cutting a release is: merge a version-bump PR, then
-# press "Run workflow" on main.
+# The version is read from pyproject.toml and the tag is created here, only
+# after every gate has passed.
 on:
   workflow_dispatch:
 
