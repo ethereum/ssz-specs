@@ -9,9 +9,9 @@ from hashlib import sha256
 from itertools import accumulate, batched, repeat
 from typing import Final
 
-from ssz.bitfields import Bitlist, Bitvector, ProgressiveBitlist
+from ssz.bitfields import BitList, BitVector, ProgressiveBitList
 from ssz.boolean import Boolean
-from ssz.byte_arrays import ByteList, Bytes
+from ssz.byte_arrays import ByteList, ByteVector
 from ssz.collections import List, ProgressiveList, Vector
 from ssz.container import Container, ProgressiveContainer
 from ssz.exceptions import SSZTypeError, SSZValueError
@@ -36,7 +36,7 @@ def _next_pow2(x: int) -> int:
     return 1 << (x - 1).bit_length()
 
 
-class Chunk(Bytes):
+class Chunk(ByteVector):
     """Fixed-size 32-byte unit of Merkle tree input data."""
 
     LENGTH = BYTES_PER_CHUNK
@@ -356,8 +356,8 @@ def hash_tree_root(value: object) -> Root:
 
 @hash_tree_root.register(BaseUint)
 @hash_tree_root.register(Boolean)
-@hash_tree_root.register(Bytes)
-def _hash_tree_root_packed_leaf(value: BaseUint | Boolean | Bytes) -> Root:
+@hash_tree_root.register(ByteVector)
+def _hash_tree_root_packed_leaf(value: BaseUint | Boolean | ByteVector) -> Root:
     # Each of these encodes to a fixed-width byte string with no length prefix.
     # The root is the Merkle root of those bytes packed into 32-byte chunks.
     return merkleize(_pack_bytes(value.encode_bytes()))
@@ -378,13 +378,13 @@ def _hash_tree_root_bytelist(value: ByteList) -> Root:
 
 
 @hash_tree_root.register
-def _hash_tree_root_bitvector_base(value: Bitvector) -> Root:
+def _hash_tree_root_bitvector_base(value: BitVector) -> Root:
     limit = math.ceil(type(value).LENGTH / BITS_PER_CHUNK)
     return merkleize(_pack_bits(value.data), limit=limit)
 
 
 @hash_tree_root.register
-def _hash_tree_root_bitlist_base(value: Bitlist) -> Root:
+def _hash_tree_root_bitlist_base(value: BitList) -> Root:
     limit = math.ceil(type(value).LIMIT / BITS_PER_CHUNK)
     return mix_in_length(
         merkleize(_pack_bits(value.data), limit=limit),
@@ -440,7 +440,7 @@ def _hash_tree_root_progressive_list(value: ProgressiveList) -> Root:
 
 
 @hash_tree_root.register
-def _hash_tree_root_progressive_bitlist(value: ProgressiveBitlist) -> Root:
+def _hash_tree_root_progressive_bitlist(value: ProgressiveBitList) -> Root:
     # The count mixed in is the bit count, not the number of packed chunks.
     return mix_in_length(merkleize_progressive(_pack_bits(value.data)), len(value.data))
 

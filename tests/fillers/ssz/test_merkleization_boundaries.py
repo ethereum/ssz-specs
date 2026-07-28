@@ -2,49 +2,49 @@
 
 from typing import ClassVar
 
-from ssz import Bitlist, Bitvector, Boolean, List, Uint64
+from ssz import BitList, BitVector, Boolean, List, Uint64
 from ssz_testing import SSZTestFiller
 
 
-class BoundaryBitvector1(Bitvector):
+class BoundaryBitVector1(BitVector):
     """Single-bit vector. Minimal case: one bit occupies one byte."""
 
     LENGTH: ClassVar[int] = 1
 
 
-class BoundaryBitvector7(Bitvector):
+class BoundaryBitVector7(BitVector):
     """Seven-bit vector. One byte with the high bit left as padding."""
 
     LENGTH: ClassVar[int] = 7
 
 
-class BoundaryBitvector9(Bitvector):
+class BoundaryBitVector9(BitVector):
     """Nine-bit vector. Two bytes: the second carries a single bit."""
 
     LENGTH: ClassVar[int] = 9
 
 
-class BoundaryBitvector255(Bitvector):
+class BoundaryBitVector255(BitVector):
     """Just below one Merkle chunk. Final chunk holds 31 bytes of data and 1 pad byte."""
 
     LENGTH: ClassVar[int] = 255
 
 
-class BoundaryBitvector256(Bitvector):
+class BoundaryBitVector256(BitVector):
     """Exact Merkle-chunk boundary. One chunk, no padding."""
 
     LENGTH: ClassVar[int] = 256
 
 
-class BoundaryBitvector257(Bitvector):
+class BoundaryBitVector257(BitVector):
     """Just above one Merkle chunk. Second chunk holds one bit and mix-ins padding."""
 
     LENGTH: ClassVar[int] = 257
 
 
-class BoundaryBitlist256(Bitlist):
+class BoundaryBitList256(BitList):
     """
-    Bitlist whose limit is exactly one Merkle chunk.
+    BitList whose limit is exactly one Merkle chunk.
 
     When filled to the limit, the sentinel bit lands in a fresh byte.
     """
@@ -76,8 +76,8 @@ def test_bitvector_length_one_all_set(ssz_test: SSZTestFiller) -> None:
     - the root matches the minimal single-chunk layout.
     """
     ssz_test(
-        type_name="BoundaryBitvector1",
-        value=BoundaryBitvector1(data=[Boolean(True)]),
+        type_name="BoundaryBitVector1",
+        value=BoundaryBitVector1(data=[Boolean(True)]),
     )
 
 
@@ -99,8 +99,8 @@ def test_bitvector_length_seven_all_set(ssz_test: SSZTestFiller) -> None:
     - the root matches the expected single-chunk layout.
     """
     ssz_test(
-        type_name="BoundaryBitvector7",
-        value=BoundaryBitvector7(data=[Boolean(True)] * 7),
+        type_name="BoundaryBitVector7",
+        value=BoundaryBitVector7(data=[Boolean(True)] * 7),
     )
 
 
@@ -122,8 +122,8 @@ def test_bitvector_length_nine_all_set(ssz_test: SSZTestFiller) -> None:
     - the root matches the expected two-byte layout.
     """
     ssz_test(
-        type_name="BoundaryBitvector9",
-        value=BoundaryBitvector9(data=[Boolean(True)] * 9),
+        type_name="BoundaryBitVector9",
+        value=BoundaryBitVector9(data=[Boolean(True)] * 9),
     )
 
 
@@ -145,8 +145,8 @@ def test_bitvector_length_255_all_set(ssz_test: SSZTestFiller) -> None:
     - the root matches the expected single-chunk layout.
     """
     ssz_test(
-        type_name="BoundaryBitvector255",
-        value=BoundaryBitvector255(data=[Boolean(True)] * 255),
+        type_name="BoundaryBitVector255",
+        value=BoundaryBitVector255(data=[Boolean(True)] * 255),
     )
 
 
@@ -168,8 +168,8 @@ def test_bitvector_length_256_all_set(ssz_test: SSZTestFiller) -> None:
     - the root matches the exact single-chunk layout.
     """
     ssz_test(
-        type_name="BoundaryBitvector256",
-        value=BoundaryBitvector256(data=[Boolean(True)] * 256),
+        type_name="BoundaryBitVector256",
+        value=BoundaryBitVector256(data=[Boolean(True)] * 256),
     )
 
 
@@ -191,8 +191,8 @@ def test_bitvector_length_257_all_set(ssz_test: SSZTestFiller) -> None:
     - the root matches the expected two-chunk layout.
     """
     ssz_test(
-        type_name="BoundaryBitvector257",
-        value=BoundaryBitvector257(data=[Boolean(True)] * 257),
+        type_name="BoundaryBitVector257",
+        value=BoundaryBitVector257(data=[Boolean(True)] * 257),
     )
 
 
@@ -214,8 +214,8 @@ def test_bitlist_filled_to_chunk_boundary_limit(ssz_test: SSZTestFiller) -> None
     - the root matches the expected length-mixin ordering.
     """
     ssz_test(
-        type_name="BoundaryBitlist256",
-        value=BoundaryBitlist256(data=[Boolean(True)] * 256),
+        type_name="BoundaryBitList256",
+        value=BoundaryBitList256(data=[Boolean(True)] * 256),
     )
 
 

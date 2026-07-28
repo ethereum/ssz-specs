@@ -43,7 +43,7 @@ class _Omitted(Enum):
     TOKEN = "omitted"
 
 
-class Bytes(bytes, SSZType):
+class ByteVector(bytes, SSZType):
     r"""
     Fixed-length SSZ byte array with exactly N bytes.
 
@@ -247,7 +247,7 @@ class Bytes(bytes, SSZType):
 
     def __eq__(self, other: object) -> bool:
         """Strict equality — only another byte-array instance compares; anything else raises."""
-        if not isinstance(other, Bytes):
+        if not isinstance(other, ByteVector):
             raise TypeError(
                 f"Unsupported operand type(s) for ==: "
                 f"'{type(self).__name__}' and '{type(other).__name__}'"
@@ -261,7 +261,7 @@ class Bytes(bytes, SSZType):
         Defined explicitly because the parent bytes class has its own not-equal
         that would otherwise bypass the strict type contract.
         """
-        if not isinstance(other, Bytes):
+        if not isinstance(other, ByteVector):
             raise TypeError(
                 f"Unsupported operand type(s) for !=: "
                 f"'{type(self).__name__}' and '{type(other).__name__}'"
@@ -303,7 +303,7 @@ class ByteList(SSZCollection[int]):
             raise SSZDefinitionError(cls.__name__, "LIMIT")
 
         # Coerce the input first, then enforce the upper bound.
-        coerced_bytes = Bytes._coerce_to_bytes(value)
+        coerced_bytes = ByteVector._coerce_to_bytes(value)
         if len(coerced_bytes) > cls.LIMIT:
             raise SSZLimitError(cls.__name__, cls.LIMIT, len(coerced_bytes))
         return coerced_bytes

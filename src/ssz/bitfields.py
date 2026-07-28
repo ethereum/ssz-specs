@@ -40,7 +40,7 @@ from ssz.exceptions import (
 from ssz.ssz_base import SSZCollection
 
 
-class Bitvector(SSZCollection[Boolean]):
+class BitVector(SSZCollection[Boolean]):
     """
     Fixed-length SSZ bitfield with exactly N bits.
 
@@ -219,7 +219,7 @@ class Bitvector(SSZCollection[Boolean]):
         return cls(data=[Boolean((data[i // 8] >> (i % 8)) & 1) for i in range(cls.LENGTH)])
 
 
-class _SSZBitlist(SSZCollection[Boolean]):
+class _SSZBitList(SSZCollection[Boolean]):
     """
     Shared behavior for the two delimited SSZ bitfield shapes.
 
@@ -284,7 +284,7 @@ class _SSZBitlist(SSZCollection[Boolean]):
         - Two bitlists of different capacities concatenate into the left one's type.
         - A bounded and a progressive bitlist do too, and merkleize as that type.
         """
-        if isinstance(other, _SSZBitlist):
+        if isinstance(other, _SSZBitList):
             new_data = (*self.data, *other.data)
         elif isinstance(other, (list, tuple)):
             new_data = (*self.data, *(Boolean(b) for b in other))
@@ -466,7 +466,7 @@ class _SSZBitlist(SSZCollection[Boolean]):
         return cls(data=[Boolean((data[i // 8] >> (i % 8)) & 1) for i in range(num_bits)])
 
 
-class Bitlist(_SSZBitlist):
+class BitList(_SSZBitList):
     """
     Variable-length SSZ bitfield with 0 to N bits.
 
@@ -530,7 +530,7 @@ class Bitlist(_SSZBitlist):
             raise SSZLimitError(cls.__name__, cls.LIMIT, count)
 
 
-class ProgressiveBitlist(_SSZBitlist):
+class ProgressiveBitList(_SSZBitList):
     """
     Variable-length SSZ bitfield with no capacity, per EIP-7916.
 
@@ -550,7 +550,7 @@ class ProgressiveBitlist(_SSZBitlist):
 
     Nothing is declared to use the type, so it is instantiated directly:
 
-        ProgressiveBitlist(data=[1, 0, 1])
+        ProgressiveBitList(data=[1, 0, 1])
     """
 
     @field_validator("data", mode="before")
