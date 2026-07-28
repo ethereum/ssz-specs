@@ -43,7 +43,7 @@ Issues = "https://github.com/ethereum/ssz-specs/issues"
 allow-direct-references = true
 
 [tool.hatch.build]
-exclude = [".*", "tests/"]
+exclude = [".*", "tests/", "packages/"]
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/ssz"]
@@ -157,6 +157,4 @@ dev = [
     "ipython>=8.31.0,<9",
     "ipdb>=0.13",
     "tomli-w>=1.0.0",
-    "build>=1.2.0,<2",
-    "twine>=5.1.0,<6",
 ]

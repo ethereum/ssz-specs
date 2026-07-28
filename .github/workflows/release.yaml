@@ -1,0 +1,235 @@
+name: Release
+
+run-name: Release from ${{ github.sha }} by @${{ github.actor }}
+
+# Dispatch-driven releases: the version is read from pyproject.toml (the single
+# source of truth) and the tag is created by the workflow itself, only after
+# every gate has passed. Cutting a release is: merge a version-bump PR, then
+# press "Run workflow" on main.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Releases serialize and never cancel mid-flight: a cancelled run could leave
+# a tag without its release assets.
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  setup:
+    name: Resolve and validate release version
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      tag: ${{ steps.version.outputs.tag }}
+      prerelease: ${{ steps.version.outputs.prerelease }}
+      target_sha: ${{ steps.sha.outputs.sha }}
+    steps:
+      - name: Checkout ssz-specs
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Require main
+        if: github.ref != 'refs/heads/main'
+        run: |
+          echo "Releases must be dispatched from main (got ${{ github.ref }})." >&2
+          exit 1
+
+      # Pin one SHA for every subsequent job so a push to main mid-run cannot
+      # split the release across two commits.
+      - name: Resolve target SHA
+        id: sha
+        run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Read and validate version
+        id: version
+        run: |
+          python3 - <<'EOF' >> "$GITHUB_OUTPUT"
+          import re
+          import tomllib
+
+          with open("pyproject.toml", "rb") as f:
+              root = tomllib.load(f)["project"]["version"]
+          with open("packages/testing/pyproject.toml", "rb") as f:
+              testing = tomllib.load(f)["project"]["version"]
+          assert root == testing, f"version skew: root={root} testing={testing}"
+          assert re.fullmatch(r"\d+\.\d+\.\d+((a|b|rc)\d+|\.dev\d+)?", root), (
+              f"unexpected version shape: {root}"
+          )
+          final = re.fullmatch(r"\d+\.\d+\.\d+", root) is not None
+          print(f"version={root}")
+          print(f"tag=v{root}")
+          print(f"prerelease={str(not final).lower()}")
+          EOF
+
+      - name: Refuse to reuse an existing tag
+        env:
+          TAG: ${{ steps.version.outputs.tag }}
+        run: |
+          git fetch --tags --quiet
+          if git rev-parse "refs/tags/$TAG" >/dev/null 2>&1; then
+            echo "Tag $TAG already exists. Bump pyproject.toml first." >&2
+            exit 1
+          fi
+
+  verify:
+    name: Quality gate
+    needs: setup
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout ssz-specs
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.setup.outputs.target_sha }}
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+        with:
+          enable-cache: true
+          cache-dependency-glob: "pyproject.toml"
+
+      - name: Install just
+        uses: taiki-e/install-action@18b1216eba7f8039b0f8d131d5473787f0edce68 # v2.85.3
+        with:
+          tool: just
+
+      - name: Run all quality checks
+        run: just check
+
+      - name: Run tests with coverage gate
+        run: just test-cov-gate
+
+  fill:
+    name: Fill and package SSZ test vectors
+    needs: [setup, verify]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout ssz-specs
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.setup.outputs.target_sha }}
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+        with:
+          enable-cache: true
+          cache-dependency-glob: "pyproject.toml"
+
+      - name: Install just
+        uses: taiki-e/install-action@18b1216eba7f8039b0f8d131d5473787f0edce68 # v2.85.3
+        with:
+          tool: just
+
+      - name: Generate and package vectors
+        run: just pack-fixtures ${{ needs.setup.outputs.tag }}
+
+      - name: Upload vectors artifact
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: release-vectors
+          path: |
+            ssz-test-vectors-${{ needs.setup.outputs.tag }}.tar.gz
+            ssz-test-vectors-${{ needs.setup.outputs.tag }}.tar.gz.sha256
+          if-no-files-found: error
+
+  build:
+    name: Build eth-ssz-specs distribution
+    needs: [setup, verify]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout ssz-specs
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.setup.outputs.target_sha }}
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+        with:
+          enable-cache: true
+          cache-dependency-glob: "pyproject.toml"
+
+      # Builds only the workspace root: the ssz-testing member is internal
+      # tooling and is deliberately never published.
+      - name: Build sdist and wheel
+        run: uv build
+
+      - name: Check built version matches release version
+        run: |
+          ls dist/eth_ssz_specs-${{ needs.setup.outputs.version }}.tar.gz \
+             dist/eth_ssz_specs-${{ needs.setup.outputs.version }}-py3-none-any.whl
+
+      - name: Validate metadata renders on PyPI
+        run: uvx twine check --strict dist/*
+
+      - name: Upload distribution artifact
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: release-dist
+          path: dist/
+          if-no-files-found: error
+
+  release:
+    name: Tag and create GitHub release
+    needs: [setup, fill, build]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout ssz-specs
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.setup.outputs.target_sha }}
+          # Release notes need the previous tag as their baseline.
+          fetch-depth: 0
+
+      - name: Download vectors artifact
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: release-vectors
+          path: assets/
+
+      # One gh call creates the tag, the release, and attaches the assets, so
+      # nothing observable exists until everything is ready.
+      - name: Create release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.setup.outputs.tag }}
+          TARGET: ${{ needs.setup.outputs.target_sha }}
+          PRERELEASE: ${{ needs.setup.outputs.prerelease }}
+        run: |
+          ARGS=(--target "$TARGET" --title "$TAG" --generate-notes)
+          if [ "$PRERELEASE" = "true" ]; then
+            ARGS+=(--prerelease)
+          fi
+          PREV_TAG=$(git tag --list 'v*' --sort=-v:refname | head -n 1 || true)
+          if [ -n "$PREV_TAG" ]; then
+            ARGS+=(--notes-start-tag "$PREV_TAG")
+          fi
+          gh release create "$TAG" "${ARGS[@]}" assets/*
+
+  publish-pypi:
+    name: Publish eth-ssz-specs to PyPI
+    needs: [setup, release]
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi
+      url: https://pypi.org/p/eth-ssz-specs
+    permissions:
+      # OIDC trusted publishing; no tokens or secrets involved.
+      id-token: write
+    steps:
+      - name: Download distribution artifact
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: release-dist
+          path: dist/
+
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@ba38be9e461d3875417946c167d0b5f3d385a247 # v1.14.1

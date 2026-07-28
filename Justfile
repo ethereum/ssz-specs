@@ -74,6 +74,30 @@ test-cov *args:
 test-cov-gate *args:
     uv run --group test pytest --cov --cov-report=term-missing --cov-fail-under=100 "$@"
 
+# Build the eth-ssz-specs sdist and wheel into dist/
+[group('release')]
+build:
+    uv build
+
+# Fill vectors and package them as a versioned, deterministic release tarball
+# (requires GNU tar and sha256sum; on macOS: brew install gnu-tar coreutils)
+[group('release')]
+pack-fixtures tag: fill
+    #!/usr/bin/env bash
+    set -euo pipefail
+    TAR=tar
+    SHA256=sha256sum
+    if [ "$(uname)" = "Darwin" ]; then
+        command -v gtar >/dev/null || { echo "GNU tar required: brew install gnu-tar" >&2; exit 1; }
+        TAR=gtar
+        command -v sha256sum >/dev/null || SHA256="shasum -a 256"
+    fi
+    "$TAR" --sort=name --owner=0 --group=0 --numeric-owner \
+        --mtime='@0' --format=gnu \
+        --use-compress-program='gzip --no-name' \
+        --create --file="ssz-test-vectors-{{tag}}.tar.gz" fixtures
+    $SHA256 "ssz-test-vectors-{{tag}}.tar.gz" > "ssz-test-vectors-{{tag}}.tar.gz.sha256"
+
 # Print the command to install shell completions for just recipes
 [group('housekeeping')]
 shell-completions:
