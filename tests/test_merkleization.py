@@ -1997,16 +1997,16 @@ class ByteList8(ByteList):
 
 
 class Bytes48Vector4(Vector[Bytes48]):
-    """Vector of four 48-byte arrays, the shape a sync committee's key list takes."""
+    """Vector of four 48-byte arrays, so the vector's tree is four two-chunk leaves."""
 
     LENGTH = 4
 
 
-class SyncCommittee(Container):
-    """The consensus-spec shape: a vector of public keys, then the aggregate of them."""
+class Roster(Container):
+    """A fixed set of fingerprints, then the one that stands in for all of them."""
 
-    pubkeys: Bytes48Vector4
-    aggregate_pubkey: Bytes48
+    fingerprints: Bytes48Vector4
+    combined: Bytes48
 
 
 ALL_ZERO_DEFAULT_ROOT = "0x" + "00" * 32
@@ -2086,20 +2086,19 @@ def test_two_unrelated_defaults_reach_one_root_by_two_different_paths() -> None:
 
 
 def test_default_root_of_a_container_of_byte_arrays() -> None:
-    """A sync committee's default: four zeroed keys in a vector, then one zeroed key."""
+    """A roster's default: four zeroed fingerprints in a vector, then one zeroed one."""
     # Each 48-byte default roots to h(0, 0); the vector hashes four of those into a
-    # width-four tree, and the container hashes that against the aggregate key's root.
-    key_root = h(ZERO_ROOT, ZERO_ROOT)
-    pubkeys_root = h(h(key_root, key_root), h(key_root, key_root))
-    assert hash_tree_root(SyncCommittee.default()) == h(pubkeys_root, key_root)
-    assert default_root_hex(SyncCommittee.default()) == (
+    # width-four tree, and the container hashes that against the combined one's root.
+    fingerprint_root = h(ZERO_ROOT, ZERO_ROOT)
+    fingerprints_root = h(
+        h(fingerprint_root, fingerprint_root), h(fingerprint_root, fingerprint_root)
+    )
+    assert hash_tree_root(Roster.default()) == h(fingerprints_root, fingerprint_root)
+    assert default_root_hex(Roster.default()) == (
         "0xbe9a6010451d97ebf5a77af290008a2d79750bb0c4e3aa947e96438a1cfcc5b0"
     )
     # The default is an ordinary value, so it survives an encode and decode round trip.
-    assert (
-        SyncCommittee.decode_bytes(SyncCommittee.default().encode_bytes())
-        == SyncCommittee.default()
-    )
+    assert Roster.decode_bytes(Roster.default().encode_bytes()) == Roster.default()
 
 
 def test_default_root_of_a_progressive_container_with_a_gap() -> None:

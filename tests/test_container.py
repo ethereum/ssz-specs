@@ -1283,8 +1283,6 @@ class TestAWideLayout:
 class TestALayoutWrittenWithTypedNumbers:
     """
     A width and a position may be written with a fixed-width unsigned integer.
-
-    A consensus spec holds its constants that way, so a width taken from one arrives typed.
     """
 
     def test_a_typed_width_and_position_give_the_plain_layout(self) -> None:
