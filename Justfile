@@ -39,7 +39,7 @@ typecheck *args:
 # Spell check source, tests, and packages
 [group('quality')]
 spellcheck *args:
-    uv run --group lint codespell src tests packages README.md --skip="*.lock,*.svg,.git,__pycache__,.pytest_cache" --ignore-words=.codespell-ignore-words.txt "$@"
+    uv run --group lint codespell src tests packages README.md --skip="*.lock,*.svg,.git,__pycache__,.pytest_cache" "$@"
 
 # Verify uv.lock is up to date
 [group('quality')]
