@@ -21,6 +21,24 @@ just fill   # Generate reference tests
 This project generates JSON reference tests, included in each release, that SSZ
 implementations can run to ensure compliance with the specifications.
 
+## Releases
+
+Each release ships the `eth-ssz-specs` package on PyPI and the reference tests on the
+[releases page](https://github.com/leanEthereum/ssz-specs/releases), both built from
+the tagged commit.
+
+```bash
+pip install eth-ssz-specs
+```
+
+```bash
+TAG=v0.1.0
+curl -sSLO "https://github.com/leanEthereum/ssz-specs/releases/download/$TAG/ssz-test-vectors-$TAG.tar.gz"
+curl -sSLO "https://github.com/leanEthereum/ssz-specs/releases/download/$TAG/ssz-test-vectors-$TAG.tar.gz.sha256"
+sha256sum --check "ssz-test-vectors-$TAG.tar.gz.sha256"
+tar -xzf "ssz-test-vectors-$TAG.tar.gz"   # extracts fixtures/
+```
+
 ## Types
 
 ### `Boolean`

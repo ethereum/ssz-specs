@@ -31,6 +31,27 @@
 - Use `pytest.mark.parametrize` for multiple test cases
 - Mark slow tests with `@pytest.mark.slow`
 
+## Cutting a Release
+
+1. Open a PR bumping `version` in both `pyproject.toml` and
+   `packages/testing/pyproject.toml` (they must match).
+2. Merge it, then run Actions → Release → Run workflow on `main`.
+
+The workflow runs the quality gate, packages the vectors, builds the package, tags
+`v<version>` with a GitHub release, and publishes `eth-ssz-specs` to PyPI. Versions
+other than plain `X.Y.Z` (e.g. `0.2.0rc1`) become GitHub prereleases. `ssz-testing`
+is internal and never published.
+
+If anything fails before the release job, no tag was created: fix and re-dispatch. If
+only the PyPI publish fails, re-run the failed job on the same run instead.
+
+Before the first release: add a PyPI trusted publisher (project `eth-ssz-specs`, owner
+`leanEthereum`, repository `ssz-specs`, workflow `release.yaml`, environment `pypi`)
+and create the `pypi` environment in the GitHub repository settings.
+
+Reproduce the artifacts locally with `just build` and `just pack-fixtures <tag>`
+(macOS: `brew install gnu-tar coreutils`).
+
 ## Questions?
 
 - Check existing [issues](https://github.com/ethereum/ssz-specs/issues)
