@@ -1,56 +1,8 @@
 # SSZ Specs
 
-Reference implementation of Ethereum's **SSZ** (Simple Serialize) type system,
-serialization, and **Merkleization**, written in Python.
-
-The specification is a faithful port of the SSZ and Merkleization logic used across the
-Ethereum consensus specifications
-([`ethereum/consensus-specs/ssz`](https://github.com/ethereum/consensus-specs/tree/master/ssz)).
-
-## Overview
-
-SSZ is the serialization and hashing scheme used throughout Ethereum consensus. This
-repository implements:
-
-- **Basic types**: `Boolean`, `Byte`, and
-  `Uint8`/`Uint16`/`Uint32`/`Uint64`/`Uint128`/`Uint256`, with `Bit` as a second spelling
-  of a boolean.
-- **Byte arrays**: `Bytes` and `ByteList`.
-- **Bitfields**: `Bitvector` and `Bitlist`.
-- **Composite types**: `Vector`, `List`, and `Container`.
-- **Progressive types** ([EIP-7916](https://eips.ethereum.org/EIPS/eip-7916)):
-  `ProgressiveList` and `ProgressiveBitlist`, which carry no capacity and hash into a
-  tree that grows with the data.
-- **Progressive containers** ([EIP-7495](https://eips.ethereum.org/EIPS/eip-7495)):
-  `ProgressiveContainer` with an `ACTIVE_FIELDS` layout, whose fields keep their tree
-  positions as later versions add or drop fields.
-- **Compatible unions** ([EIP-8016](https://eips.ethereum.org/EIPS/eip-8016)):
-  `CompatibleUnion` with an `OPTIONS` map, whose type options all merkleize into one tree
-  shape, so a field keeps its position across every variant.
-- **(De)serialization**: canonical encode/decode with strict, offset-based decoding.
-- **Merkleization**: `hash_tree_root`, `merkleize`, `merkleize_progressive`,
-  `mix_in_length`, `mix_in_active_fields`, and `mix_in_selector`.
-
-## Project Structure
-
-```
-src/ssz/
-  __init__.py          # public re-exports of the SSZ types
-  base.py              # strict, immutable Pydantic base models
-  ssz_base.py          # abstract SSZType / SSZModel bases
-  boolean.py           # Boolean, and Bit as a second spelling of it
-  uint.py              # Uint8/16/32/64/128/256, and Byte as opaque eight bits
-  byte_arrays.py       # Bytes / ByteList
-  bitfields.py         # Bitvector / Bitlist / ProgressiveBitlist
-  collections.py       # Vector / List / ProgressiveList
-  container.py         # Container / ProgressiveContainer
-  union.py             # CompatibleUnion and the compatible-merkleization relation
-  exceptions.py        # SSZ error hierarchy
-  merkleization.py     # hash_tree_root dispatch and Merkle primitives
-tests/                 # pytest unit tests mirroring the source modules
-tests/fillers/         # test-vector fillers (generate JSON conformance vectors)
-packages/testing/      # ssz-testing package: the vector generation infrastructure
-```
+Simple Serialize (SSZ) is a serialization and hashing scheme used by Ethereum.
+This project is a reference implementation written in Python which serves as the
+official specifications.
 
 ## Development
 
@@ -58,33 +10,209 @@ This project uses [`uv`](https://docs.astral.sh/uv/) and
 [`just`](https://just.systems/).
 
 ```bash
-uv sync                 # Install dependencies
-uv tool install just-bin  # Install the just command runner
-
-just            # List all available recipes
-just test       # Run the unit tests
-just check      # Lint, format, typecheck, spellcheck, mdformat, lock-check
-just fix        # Auto-fix lint, formatting, and markdown
+just check  # Run code quality checks
+just fix    # Run code quality fixers
+just test   # Run unit tests
+just fill   # Generate reference tests
 ```
 
-- Python 3.12+ is required.
-- All types are modeled with [Pydantic](https://docs.pydantic.dev/) for strict validation.
+## Tests
 
-## Test vectors
+This project generates JSON reference tests, included in each release, that SSZ
+implementations can run to ensure compliance with the specifications.
 
-Alongside the unit tests, the repository generates language-neutral JSON conformance
-vectors that other SSZ implementations can replay. The fillers live under
-`tests/fillers/` and the generation infrastructure is the `ssz-testing` workspace
-package under `packages/testing/`.
+## Types
 
-```bash
-just fill       # Generate all SSZ conformance vectors into fixtures/
+### `Boolean`
+
+A true or false value.
+
+```python
+Boolean(True)
 ```
 
-Each vector records the type name, the SSZ `serialized` bytes, the `hash_tree_root`, and
-an `_info` block with a content hash. Decode-failure vectors carry an empty root and a
-`rejectionReason`. The generated tree lands under `fixtures/` (git-ignored).
+### `Bit`
 
-## License
+A zero or one value.
 
-[MIT](LICENSE)
+```python
+Bit(1)
+```
+
+### `Byte`
+
+Eight bits of opaque data.
+
+```python
+Byte(0xFF)
+```
+
+### `Uint8`
+
+An 8-bit unsigned integer.
+
+```python
+Uint8(0xFF)
+```
+
+### `Uint16`
+
+A 16-bit unsigned integer.
+
+```python
+Uint16(0xFFFF)
+```
+
+### `Uint32`
+
+A 32-bit unsigned integer.
+
+```python
+Uint32(0xFFFFFFFF)
+```
+
+### `Uint64`
+
+A 64-bit unsigned integer.
+
+```python
+Uint64(0xFFFFFFFFFFFFFFFF)
+```
+
+### `Uint128`
+
+A 128-bit unsigned integer.
+
+```python
+Uint128(0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF)
+```
+
+### `Uint256`
+
+A 256-bit unsigned integer.
+
+```python
+Uint256(0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF)
+```
+
+### `Vector`
+
+A fixed number of elements.
+
+```python
+class Color(Vector[Uint8]):
+    LENGTH = 3
+
+Color(data=[255, 128, 0])
+```
+
+### `List`
+
+A variable number of elements up to a limit.
+
+```python
+class Scores(List[Uint64]):
+    LIMIT = 8
+
+Scores(data=[10, 20, 30])
+```
+
+### `ByteVector`
+
+A fixed number of bytes.
+
+```python
+class Serial(ByteVector):
+    LENGTH = 4
+
+Serial(b"\x01\x02\x03\x04")
+```
+
+### `ByteList`
+
+A variable number of bytes up to a limit.
+
+```python
+class Message(ByteList):
+    LIMIT = 32
+
+Message(data=b"hello")
+```
+
+### `BitVector`
+
+A fixed number of bits.
+
+```python
+class Weekdays(BitVector):
+    LENGTH = 7
+
+Weekdays(data=[1, 0, 0, 1, 0, 1, 0])
+```
+
+### `BitList`
+
+A variable number of bits up to a limit.
+
+```python
+class Answers(BitList):
+    LIMIT = 20
+
+Answers(data=[1, 0, 1])
+```
+
+### `ProgressiveList`
+
+A variable number of elements with no limit.
+
+```python
+class Temperatures(ProgressiveList[Uint16]):
+    pass
+
+Temperatures(data=[20, 21, 19])
+```
+
+### `ProgressiveBitList`
+
+A variable number of bits with no limit.
+
+```python
+ProgressiveBitList(data=[1, 0, 1])
+```
+
+### `Container`
+
+A fixed set of named fields.
+
+```python
+class Point(Container):
+    x: Uint64
+    y: Uint64
+
+Point(x=1, y=2)
+```
+
+### `ProgressiveContainer`
+
+Named fields that keep their positions as the set changes.
+
+```python
+class Square(ProgressiveContainer):
+    ACTIVE_FIELDS = active_fields(width=3, gaps=(1,))
+
+    side: Uint16   # position 0
+    color: Uint8   # position 2
+
+Square(side=0x1234, color=0x42)
+```
+
+### `CompatibleUnion`
+
+A choice between options that share one tree shape.
+
+```python
+class Shape(CompatibleUnion):
+    OPTIONS = {1: Square, 2: Circle}
+
+Shape(selector=1, data=Square(side=0x1234, color=0x42))
+```
