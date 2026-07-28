@@ -8,7 +8,7 @@ version = "0.0.1"
 description = "Ethereum SSZ (Simple Serialize) specification and Merkleization"
 readme = "README.md"
 authors = [
-    { name = "Ethereum Foundation", email = "thomas.coratger@ethereum.org" },
+    { name = "Ethereum Foundation", email = "security@ethereum.org" },
 ]
 keywords = [
     "ssz",

@@ -8,7 +8,7 @@ version = "0.0.1"
 description = "SSZ conformance test-vector generation for the Ethereum SSZ spec"
 readme = "README.md"
 authors = [
-    { name = "Ethereum Foundation", email = "thomas.coratger@ethereum.org" },
+    { name = "Ethereum Foundation", email = "security@ethereum.org" },
 ]
 keywords = ["ssz", "simple-serialize", "ethereum", "testing", "conformance"]
 classifiers = [
