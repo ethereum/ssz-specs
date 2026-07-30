@@ -136,10 +136,7 @@ class _SSZContainer(SSZModel):
 
     def __hash__(self) -> int:
         """Hash by Merkle tree root — equal containers hash equally."""
-        # Deferred import: the merkleization module imports the SSZ types.
-        from ssz.merkleization import hash_tree_root
-
-        return hash(hash_tree_root(self))
+        return hash(self.hash_tree_root())
 
     @model_validator(mode="wrap")
     @classmethod

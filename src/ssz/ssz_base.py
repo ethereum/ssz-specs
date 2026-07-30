@@ -3,18 +3,24 @@
 import io
 from abc import ABC, abstractmethod
 from collections.abc import Iterator, Sequence
-from typing import IO, TYPE_CHECKING, Any, ClassVar, Final, Self, cast, overload, override
+from typing import IO, TYPE_CHECKING, Any, ClassVar, Final, Self, cast, final, overload, override
 
 from pydantic import ConfigDict
 
 from ssz.base import StrictBaseModel
 from ssz.exceptions import (
+    SSZDefinitionError,
     SSZLengthError,
     SSZLimitError,
     SSZSerializationError,
     SSZTypeError,
     SSZTypeMismatch,
 )
+
+if TYPE_CHECKING:
+    # The name is wanted for one annotation, which is never evaluated.
+    # The method that carries it explains why the import cannot happen at runtime.
+    from ssz.merkleization import Root
 
 BYTES_PER_LENGTH_OFFSET: Final = 4
 """Width of an SSZ offset prefixing each variable-size element.
@@ -50,7 +56,7 @@ class SSZType(ABC):
 
     def __init_subclass__(cls, **kwargs: Any) -> None:
         """
-        Narrow a declared capacity to a plain integer, at the point it is declared.
+        Narrow a declared capacity, and refuse a root of the type's own, where each is declared.
 
         A capacity may be written with a typed value.
         Requiring a cast at every declaration would therefore mean casting almost all of them:
@@ -71,11 +77,51 @@ class SSZType(ABC):
             LIMIT = 4.7   ->  refused, rather than resolving to a chunk count nobody wrote
             LIMIT = "4"   ->  refused, rather than reporting a wrong element count later
 
+        # Refusing a root of its own
+
+        One value has one root, and a type does not get to state a second one.
+
+        Two callers reach a nested root through the module-level function, not through a method.
+
+        - A layout roots each of its leaves with it.
+        - A proof roots one addressed node with it.
+
+        A type declaring a root of its own would answer only the callers that spell it
+        as a method.
+
+        - The tree above it would go on answering with the spec's own root.
+        - So one value would carry two roots, and neither would report the other.
+        - A proof built against one would fail against the other, with no diagnostic.
+
+        Only this one name is refused, so subclassing itself stays untouched:
+
+            class Root(Chunk)                               ->  fine, declares nothing of its own
+            class Fingerprint(Root): def is_all_ones(...)   ->  fine, declares another method
+            class Fast(Root): def hash_tree_root(...)       ->  refused, a method of its own
+            class Fast(Mixin, Root)                         ->  refused, a method from outside
+            class Odd(Container): hash_tree_root: Uint16    ->  refused, a field of that name
+
+        The last two matter because neither one appears in the class body being created.
+        A field shadows the method on every instance, and a mixin wins the lookup ahead of it.
+
         Raises:
             SSZTypeMismatch: When a declared capacity is not an integer.
             SSZTypeMismatch: When a declared capacity is a boolean, which counts nothing.
+            SSZDefinitionError: When a type declares a hash_tree_root of its own.
         """
         super().__init_subclass__(**kwargs)
+
+        # Reading the resolved attribute covers every way a type can answer for itself:
+        # a method of its own, a property, or one inherited from outside this type system.
+        #
+        # A field of that name shadows the method on each instance rather than on the class,
+        # which leaves the resolved attribute looking untouched.
+        # So the annotations this class declares are read as well.
+        if (
+            cls.hash_tree_root is not SSZType.hash_tree_root
+            or "hash_tree_root" in cls.__annotations__
+        ):
+            raise SSZDefinitionError(cls.__name__, "no hash_tree_root of its own")
 
         for name in _CAPACITY_NAMES:
             # Only a capacity this class declares itself.
@@ -198,6 +244,48 @@ class SSZType(ABC):
         stream = io.BytesIO()
         self.serialize(stream)
         return stream.getvalue()
+
+    @final
+    def hash_tree_root(self) -> "Root":
+        """
+        Merkle root of this value.
+
+        The root is the top node of the binary tree a value merkleizes into.
+        It stands in for the whole value, so a proof is checked against it.
+
+        The declared shape lays that tree out, so contents alone do not decide the root.
+        The same three numbers reach four roots, each row below changing one thing:
+
+            shape                    value      root
+            Vector[Uint8], LENGTH 3  [1, 2, 3]  01 02 03 00 ... 00
+            List[Uint8], LIMIT 3     [1, 2, 3]  14 9f 1a fc ... b9
+            List[Uint64], LIMIT 3    [1, 2, 3]  8d fc c0 c6 ... 93
+            List[Uint64], LIMIT 8    [1, 2, 3]  7e 0a de cc ... 59
+
+        - A vector fixes its count, so row one is the packed bytes themselves.
+        - A list does not, so row two hashes those same bytes against a 3.
+        - Row three packs into 24 bytes instead of 3, so its leaf differs.
+        - Row four bounds a wider tree, so every leaf sits one level deeper.
+        - A capacity reaches that tree only through the width it rounds up to.
+
+        Nothing is cached.
+        A mutated value reports its new root, and an unchanged one is hashed again.
+
+        The tree rules live with the merkleization primitives, not here.
+        The module-level function is the form the spec defines.
+        It is also the only form reaching plain bytes, which merkleize and carry no method.
+
+        Returns:
+            The root of this value's Merkle tree.
+
+        Raises:
+            SSZTypeError: When the type has no registered merkleization rule.
+        """
+        # Merkleization dispatches on every SSZ type, so its module imports this one.
+        # A root is an SSZ type too, so the name is bound per call rather than at import.
+        from ssz.merkleization import hash_tree_root
+
+        return hash_tree_root(self)
 
     @classmethod
     def decode_bytes(cls, data: bytes) -> Self:

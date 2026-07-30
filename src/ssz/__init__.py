@@ -24,7 +24,7 @@ from ssz.exceptions import (
     SSZUnionOptionsError,
     SSZValueError,
 )
-from ssz.merkleization import ZERO_ROOT, Chunk, Root
+from ssz.merkleization import ZERO_ROOT, Chunk, Root, hash_tree_root
 from ssz.proofs import (
     ACTIVE_FIELDS_KEY,
     LENGTH_KEY,
@@ -110,6 +110,7 @@ __all__ = [
     "gindex_length",
     "gindex_parent",
     "gindex_sibling",
+    "hash_tree_root",
     "item_length",
     "verify_merkle_multiproof",
     "verify_merkle_proof",

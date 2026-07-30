@@ -23,8 +23,14 @@ from ssz.boolean import Boolean
 from ssz.byte_arrays import ByteList, ByteVector
 from ssz.collections import List, ProgressiveList, Vector
 from ssz.container import Container, ProgressiveContainer
-from ssz.exceptions import SSZDefaultError, SSZError, SSZTypeError, SSZValueError
-from ssz.merkleization import Root, hash_tree_root
+from ssz.exceptions import (
+    SSZDefaultError,
+    SSZDefinitionError,
+    SSZError,
+    SSZTypeError,
+    SSZValueError,
+)
+from ssz.merkleization import ZERO_ROOT, Root, hash_tree_root
 from ssz.ssz_base import SSZCollection, SSZType
 from ssz.uint import BaseUint
 from ssz.union import CompatibleUnion
@@ -1370,3 +1376,178 @@ class TestDeclaredCapacity:
         assert not isinstance(exception_info.value, SSZError)
         assert "Late" not in message
         assert "LIMIT" not in message
+
+
+class TestFinalHashTreeRoot:
+    """
+    Tests that no type may declare a hash_tree_root of its own.
+
+    Every value here reaches its root by one route.
+    Two callers inside this library take the free function to get there.
+
+    - A layout roots each of its nested leaves with it.
+    - A proof roots a single addressed node with it.
+
+    A subclass declaring a root of its own would therefore give one value two roots.
+
+    - The method spelling would answer with the declaration.
+    - Every recursion through the free function would answer with the spec's own tree.
+    - Neither reports the other, so a wrong root leaves the library looking self-consistent.
+
+    Both halves of the guard are checked here.
+
+    - The declaration is refused as the class is created, so no such value is constructible.
+    - The method is marked final, so a type checker refuses the same declaration statically.
+    """
+
+    def test_the_method_is_marked_final(self) -> None:
+        """The static half of the guard, stated where the runtime half is."""
+        # typing.final records itself on the function it decorates.
+        # The runtime check below cannot stand in for it: a type checker reads the
+        # decorator, and reads nothing at all from __init_subclass__.
+        assert getattr(SSZType.hash_tree_root, "__final__", False) is True
+
+    def test_a_uint_subclass_declaring_its_own_root_method_is_refused(self) -> None:
+        """A basic type's subclass is refused at the class statement."""
+        with pytest.raises(SSZDefinitionError) as exception_info:
+
+            class BadUint(Uint16):
+                def hash_tree_root(self) -> Root:  # ty: ignore[override-of-final-method]
+                    return ZERO_ROOT
+
+        assert str(exception_info.value) == "BadUint must define no hash_tree_root of its own"
+
+    def test_a_byte_array_subclass_declaring_its_own_root_method_is_refused(self) -> None:
+        """The bytes-backed families reach the guard through the same hook."""
+        with pytest.raises(SSZDefinitionError) as exception_info:
+
+            class BadRoot(Root):
+                def hash_tree_root(self) -> Root:  # ty: ignore[override-of-final-method]
+                    return ZERO_ROOT
+
+        assert str(exception_info.value) == "BadRoot must define no hash_tree_root of its own"
+
+    @pytest.mark.parametrize(
+        "base",
+        [
+            pytest.param(Uint16List4, id="list"),
+            pytest.param(Uint16Vector2, id="vector"),
+            pytest.param(Uint16ProgressiveList, id="progressive_list"),
+            pytest.param(SmallBitList, id="bitlist"),
+            pytest.param(SmallByteList, id="byte_list"),
+            pytest.param(TwoFieldContainer, id="container"),
+            pytest.param(SmallUnion, id="compatible_union"),
+        ],
+    )
+    def test_a_model_backed_subclass_declaring_its_own_root_method_is_refused(
+        self, base: type[SSZType]
+    ) -> None:
+        """
+        Every Pydantic-backed family is refused too, and by the same hook.
+
+        Pydantic builds these types through a metaclass of its own. The guard sits on
+        __init_subclass__, which that metaclass still runs, so one check covers both
+        construction paths rather than one per family.
+        """
+        # Built through the family's own metaclass, so Pydantic's class machinery runs
+        # exactly as a class statement would run it.
+        with pytest.raises(SSZDefinitionError) as exception_info:
+            type(base)("Bad", (base,), {"hash_tree_root": lambda self: ZERO_ROOT})
+
+        assert str(exception_info.value) == "Bad must define no hash_tree_root of its own"
+
+    def test_a_subclass_that_declares_no_root_method_is_accepted(self) -> None:
+        """
+        The guard fires on that one name and on nothing else, so subclassing still works.
+
+        This library subclasses its own byte arrays twice over: a root is a chunk, and a
+        chunk is a fixed byte array. A guard keyed on anything wider than the name would
+        have made those two declarations impossible.
+        """
+        assert issubclass(Root, ByteVector)
+
+        class Fingerprint(Root):
+            """A named root, as an application declares one."""
+
+            def is_all_ones(self) -> bool:
+                """A method of its own, which the guard has no business refusing."""
+                return all(byte == 0xFF for byte in self)
+
+        payload = b"\xab" * 32
+        assert Fingerprint(payload).is_all_ones() is False
+        # The inherited method is the one that answers, and it answers as the free
+        # function does for the base type: a 32-byte array is one chunk, so it roots
+        # to its own bytes.
+        assert Fingerprint(payload).hash_tree_root() == hash_tree_root(Root(payload))
+        assert Fingerprint(payload).hash_tree_root() == Root(payload)
+
+    def test_a_root_method_assigned_after_the_class_body_is_not_refused(self) -> None:
+        """A known limitation of where the check sits, recorded rather than relied upon."""
+
+        # The guard runs while a class body is being turned into a type.
+        # A method assigned onto the type afterwards never passes through that step:
+        #
+        #     class Late(Boolean):
+        #         def hash_tree_root(self): ...   ->  refused, the class body declared it
+        #
+        #     Late.hash_tree_root = something     ->  untouched, nothing declares it here
+        #
+        # This library never assigns a method this way, and a type checker already
+        # refuses the assignment because the method it replaces is final.
+        # Closing the gap at runtime would mean hooking attribute assignment on two
+        # unrelated metaclasses. So this is a limitation of where the check sits,
+        # not a behaviour to depend on.
+        class Late(Boolean):
+            """A subclass that declares nothing, and so passes the guard."""
+
+        assert Late(True).hash_tree_root() == hash_tree_root(Boolean(True))
+
+        cast(Any, Late).hash_tree_root = lambda self: ZERO_ROOT
+        # Two roots for one value, which is exactly what the guard exists to prevent.
+        assert Late(True).hash_tree_root() == ZERO_ROOT
+        assert hash_tree_root(Late(True)) != ZERO_ROOT
+
+    def test_a_root_method_reached_through_a_plain_mixin_is_refused(self) -> None:
+        """A root inherited from outside this type system is refused as well."""
+
+        # A base outside this type system never appears in the class body being created,
+        # and it wins the lookup because it precedes the SSZ base in attribute order:
+        #
+        #     class Fast(Mixin, Pair)   ->  Fast.hash_tree_root is Mixin's, not the base's
+        #
+        # A type checker does not flag it either, because nothing is declared here.
+        # So the resolved attribute is what gets compared, rather than the class body.
+        class CachedRoot:
+            """A plain class outside this type system, carrying a root of its own."""
+
+            def hash_tree_root(self) -> Root:
+                """Answer with a fixed root, standing in for a cache that went stale."""
+                return ZERO_ROOT
+
+        with pytest.raises(SSZDefinitionError) as exception_info:
+
+            class Fast(CachedRoot, TwoFieldContainer):
+                """A container that would let the mixin answer for its root."""
+
+        assert str(exception_info.value) == "Fast must define no hash_tree_root of its own"
+
+    def test_a_field_named_for_the_root_method_is_refused(self) -> None:
+        """A field of that name is refused, because it shadows the method on every instance."""
+
+        # A field is declared as an annotation, and leaves nothing on the class itself.
+        # The resolved attribute therefore still looks untouched, while every instance
+        # answers with the field:
+        #
+        #     Odd(hash_tree_root=7).hash_tree_root    ->  the field, 7
+        #     Odd(hash_tree_root=7).hash_tree_root()  ->  not callable
+        #
+        # A container also hashes itself by its own root, so the shadowed name would
+        # break hashing rather than merely occupy it.
+        with pytest.raises(SSZDefinitionError) as exception_info:
+
+            class Odd(Container):
+                """A container claiming the one field name the root method needs."""
+
+                hash_tree_root: Uint16  # ty: ignore[override-of-final-method]
+
+        assert str(exception_info.value) == "Odd must define no hash_tree_root of its own"
