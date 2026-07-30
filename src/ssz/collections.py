@@ -653,7 +653,14 @@ class List[T: SSZType](_SSZList[T]):
     - Variable-size elements use an offset table that also reveals the count.
 
     The hash tree root mixes in the element count alongside the chunked data.
-    Two lists with identical contents but different LIMITs hash differently.
+
+    A declared capacity reaches the root only through the width of the tree it bounds.
+
+    - That width is the next power of two at or above the capacity counted in chunks.
+    - Two capacities that round to the same width bound the same tree.
+    - The same contents then root identically under both.
+    - Eight-byte elements pack four to a chunk, so a capacity of three roots as four does.
+    - So do twelve and sixteen, whose three chunks and four fill one four-leaf tree.
 
     Subclasses declare LIMIT directly in the class body.
     The element type is inferred from the generic parameter.

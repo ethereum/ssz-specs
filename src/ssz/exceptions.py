@@ -43,10 +43,10 @@ class SSZTypeMismatch(SSZTypeError):  # noqa: N818
 
 
 class SSZDefinitionError(SSZTypeError):
-    """An SSZ subclass omits an attribute its base needs to operate."""
+    """An SSZ subclass declares its attributes in a way its base cannot operate on."""
 
     def __init__(self, type_name: str, requirement: str) -> None:
-        """Record the type and the attribute it failed to declare."""
+        """Record the type and what its declaration failed to satisfy."""
         self.type_name = type_name
         self.requirement = requirement
         super().__init__(f"{type_name} must define {requirement}")
