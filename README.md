@@ -234,39 +234,3 @@ class Shape(CompatibleUnion):
 
 Shape(selector=1, data=Square(side=0x1234, color=0x42))
 ```
-
-## Hash Tree Roots
-
-Every value has a Merkle root, and every type is asked for it the same way.
-
-```python
-class Color(Vector[Uint8]):
-    LENGTH = 3
-
-Color(data=[255, 128, 0]).hash_tree_root().hex()
-# 'ff80000000000000000000000000000000000000000000000000000000000000'
-```
-
-The declared type lays the tree out, so the contents alone do not decide the
-root. The same three bytes under a list root differently:
-
-```python
-class Palette(List[Uint8]):
-    LIMIT = 3
-
-Palette(data=[255, 128, 0]).hash_tree_root().hex()
-# 'c7a1aaa6ad4292efbdccad6812fe72ebaa738f214749415854ff473ac349bbae'
-```
-
-A list mixes its element count into its root, because that count varies from one
-value to the next. A vector fixes its count in its type, so no two of its values
-differ in it and there is nothing to tell apart.
-
-The same root is available as a function, which also accepts plain bytes:
-
-```python
-from ssz import hash_tree_root
-
-hash_tree_root(Color(data=[255, 128, 0]))
-hash_tree_root(b"\xde\xad\xbe\xef")
-```
