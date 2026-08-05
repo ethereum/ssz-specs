@@ -61,6 +61,14 @@ class SSZType(ABC):
     An empty sequence handed to a fixed-length shape is a wrong count, and an error.
     """
 
+    LENGTH: ClassVar[int | None] = None
+    """Exact element count, or None where the shape declares none.
+
+    A shape that pins its count overrides this with an integer and narrows the annotation."""
+
+    LIMIT: ClassVar[int | None] = None
+    """Maximum element count, read the same way: None means no count, never a count of zero."""
+
     def __init_subclass__(cls, **kwargs: Any) -> None:
         """
         Narrow a declared capacity, and refuse a root of the type's own, where each is declared.
@@ -525,15 +533,17 @@ class SSZCollection[T](SSZModel):
         return self.data[index]
 
     def __setitem__(self, index: int | slice, value: T | Sequence[T]) -> None:
-        """Replace the element(s) at ``index``, validating each new element."""
+        """Replace the element(s) at the index, validating each new element."""
         self._begin_mutation()
         if isinstance(index, slice):
             elements = [self._validate_element(v) for v in cast("Sequence[T]", value)]
-            # Dry run on a copy: the resulting length must pass the declared
-            # bound before the stored payload changes.
-            candidate = list(self.data)
-            candidate[index] = elements
-            self._validate_length(len(candidate))
+            # The resulting count is arithmetic, so no copy is made to observe it.
+            # A step of anything but one resizes nothing.
+            # The store below refuses a mismatched count with the error a plain list raises.
+            held = len(self.data)
+            start, stop, step = index.indices(held)
+            selected = len(range(start, stop, step))
+            self._validate_length(held - selected + len(elements) if step == 1 else held)
             cast("list[T]", self.data)[index] = elements
         else:
             cast("list[T]", self.data)[index] = self._validate_element(value)
@@ -550,9 +560,7 @@ class SSZCollection[T](SSZModel):
     def _validate_length(self, length: int) -> None:
         """Check a prospective element count against the declared size bound."""
         cls = type(self)
-        declared_length = getattr(cls, "LENGTH", None)
-        if declared_length is not None and length != declared_length:
-            raise SSZLengthError(cls.__name__, declared_length, length)
-        declared_limit = getattr(cls, "LIMIT", None)
-        if declared_limit is not None and length > declared_limit:
-            raise SSZLimitError(cls.__name__, declared_limit, length)
+        if cls.LENGTH is not None and length != cls.LENGTH:
+            raise SSZLengthError(cls.__name__, cls.LENGTH, length)
+        if cls.LIMIT is not None and length > cls.LIMIT:
+            raise SSZLimitError(cls.__name__, cls.LIMIT, length)

@@ -72,7 +72,7 @@ class BitVector(SSZCollection[Boolean]):
         """
         super().__pydantic_init_subclass__(**kwargs)
 
-        if not hasattr(cls, "LENGTH"):
+        if cls.LENGTH is None:
             return
 
         length = cls.LENGTH
@@ -100,7 +100,7 @@ class BitVector(SSZCollection[Boolean]):
     def _coerce_and_validate(cls, bits_input: Any) -> list[Boolean]:
         """Enforce the exact bit count and coerce inputs into booleans."""
         # Subclasses must declare LENGTH before any instances can be validated.
-        if not hasattr(cls, "LENGTH"):
+        if cls.LENGTH is None:
             raise SSZDefinitionError(cls.__name__, "LENGTH")
 
         # Materialize generic iterables into a tuple so the length check works.
@@ -495,7 +495,7 @@ class BitList(_SSZBitList):
     def _coerce_and_validate(cls, bits_input: Any) -> list[Boolean]:
         """Enforce the maximum bit count and coerce inputs into booleans."""
         # Subclasses must declare LIMIT before any instances can be validated.
-        if not hasattr(cls, "LIMIT"):
+        if cls.LIMIT is None:
             raise SSZDefinitionError(cls.__name__, "LIMIT")
 
         # Accept the natural input shapes:
