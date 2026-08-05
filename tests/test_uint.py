@@ -244,34 +244,16 @@ def test_arithmetic_operators(uint_class: Type[BaseUint]) -> None:
 
 
 @pytest.mark.parametrize("uint_class", ALL_UINT_TYPES)
-def test_reverse_arithmetic_operators_raise_error(uint_class: Type[BaseUint]) -> None:
-    """Tests that reverse arithmetic operators raise a TypeError."""
-    name = uint_class.__name__
-
-    expected_message = f"Unsupported operand type(s) for +: '{name}' and 'int'"
-    with pytest.raises(TypeError) as exception_info:
-        _ = 100 + uint_class(3)
-    assert str(exception_info.value) == expected_message
-
-    expected_message = f"Unsupported operand type(s) for -: '{name}' and 'int'"
-    with pytest.raises(TypeError) as exception_info:
-        _ = 100 - uint_class(3)
-    assert str(exception_info.value) == expected_message
-
-    expected_message = f"Unsupported operand type(s) for *: '{name}' and 'int'"
-    with pytest.raises(TypeError) as exception_info:
-        _ = 100 * uint_class(3)
-    assert str(exception_info.value) == expected_message
-
-    expected_message = f"Unsupported operand type(s) for //: '{name}' and 'int'"
-    with pytest.raises(TypeError) as exception_info:
-        _ = 100 // uint_class(3)
-    assert str(exception_info.value) == expected_message
-
-    expected_message = f"Unsupported operand type(s) for %: '{name}' and 'int'"
-    with pytest.raises(TypeError) as exception_info:
-        _ = 100 % uint_class(3)
-    assert str(exception_info.value) == expected_message
+def test_reverse_arithmetic_operators_with_a_bare_literal(uint_class: Type[BaseUint]) -> None:
+    """A literal on the left keeps the typed operand's type, since it carries no unit."""
+    # 20 and 3 so that every result below fits in eight bits as well as in 256.
+    assert 20 + uint_class(3) == uint_class(23)
+    assert 20 - uint_class(3) == uint_class(17)
+    assert 20 * uint_class(3) == uint_class(60)
+    assert 20 // uint_class(3) == uint_class(6)
+    assert 20 % uint_class(3) == uint_class(2)
+    # The result is typed, not a plain int, so the unit survives the reflected call.
+    assert type(20 + uint_class(3)) is uint_class
 
 
 @pytest.mark.parametrize("uint_class", ALL_UINT_TYPES)
@@ -283,9 +265,16 @@ def test_divmod(uint_class: Type[BaseUint]) -> None:
     assert isinstance(quotient, uint_class)
     assert isinstance(remainder, uint_class)
 
-    expected_message = f"Unsupported operand type(s) for divmod: '{uint_class.__name__}' and 'int'"
+    # A literal divided by a typed value keeps the type on both halves of the pair.
+    quotient, remainder = divmod(100, uint_class(3))
+    assert (quotient, remainder) == (uint_class(33), uint_class(1))
+    assert type(quotient) is uint_class
+    assert type(remainder) is uint_class
+
+    # A bool is not a bare literal: it counts nothing, so it is still refused.
+    expected_message = f"Unsupported operand type(s) for divmod: '{uint_class.__name__}' and 'bool'"
     with pytest.raises(TypeError) as exception_info:
-        _ = divmod(100, uint_class(3))
+        _ = divmod(uint_class(10), True)
     assert str(exception_info.value) == expected_message
 
 
@@ -315,30 +304,26 @@ def test_bitwise_operators(uint_class: Type[BaseUint]) -> None:
     assert left << uint_class(2) == uint_class(0b110000)
     assert left >> uint_class(2) == uint_class(0b11)
 
-    expected_message = f"Unsupported operand type(s) for &: '{name}' and 'int'"
-    with pytest.raises(TypeError) as exception_info:
-        _ = left & 1
-    assert str(exception_info.value) == expected_message
+    # A bare literal is admitted as a mask or a shift count, and keeps the type.
+    assert left & 1 == uint_class(0)
+    assert left | 1 == uint_class(0b1101)
+    assert left ^ 1 == uint_class(0b1101)
+    assert left << 1 == uint_class(0b11000)
+    assert left >> 1 == uint_class(0b110)
+    assert type(left & 1) is uint_class
 
-    expected_message = f"Unsupported operand type(s) for |: '{name}' and 'int'"
-    with pytest.raises(TypeError) as exception_info:
-        _ = left | 1
-    assert str(exception_info.value) == expected_message
-
-    expected_message = f"Unsupported operand type(s) for ^: '{name}' and 'int'"
-    with pytest.raises(TypeError) as exception_info:
-        _ = left ^ 1
-    assert str(exception_info.value) == expected_message
-
-    expected_message = f"Unsupported operand type(s) for <<: '{name}' and 'int'"
-    with pytest.raises(TypeError) as exception_info:
-        _ = left << 1
-    assert str(exception_info.value) == expected_message
-
-    expected_message = f"Unsupported operand type(s) for >>: '{name}' and 'int'"
-    with pytest.raises(TypeError) as exception_info:
-        _ = left >> 1
-    assert str(exception_info.value) == expected_message
+    # A bool is not a literal count, so every one of the five still refuses it.
+    for operator_symbol, apply in (
+        ("&", lambda: left & True),
+        ("|", lambda: left | True),
+        ("^", lambda: left ^ True),
+        ("<<", lambda: left << True),
+        (">>", lambda: left >> True),
+    ):
+        expected_message = f"Unsupported operand type(s) for {operator_symbol}: '{name}' and 'bool'"
+        with pytest.raises(TypeError) as exception_info:
+            apply()
+        assert str(exception_info.value) == expected_message
 
 
 @pytest.mark.parametrize("uint_class", ALL_UINT_TYPES)
@@ -353,42 +338,45 @@ def test_comparison_with_same_type(uint_class: Type[BaseUint]) -> None:
 
 
 @pytest.mark.parametrize("uint_class", ALL_UINT_TYPES)
+def test_all_comparisons_with_a_bare_literal(uint_class: Type[BaseUint]) -> None:
+    """A bare literal compares in either position, because it carries no unit."""
+    assert uint_class(10) == 10
+    assert not (10 != uint_class(10))
+    assert uint_class(10) > 5
+    # 5 < uint(10) routes to uint(10).__gt__(5) because uint is a strict int subclass.
+    assert 5 < uint_class(10)
+    assert uint_class(10) >= 10
+    # 10 <= uint(10) routes to uint(10).__ge__(10) by subclass priority.
+    assert 10 <= uint_class(10)
+    assert uint_class(10) <= 10
+    assert uint_class(5) < 10
+
+
+@pytest.mark.parametrize("uint_class", ALL_UINT_TYPES)
 def test_all_comparisons_with_other_types_raise_error(
     uint_class: Type[BaseUint],
 ) -> None:
-    """Tests that all comparisons with incompatible types raise TypeError."""
+    """Tests that all comparisons with unrelated types raise TypeError."""
     name = uint_class.__name__
 
-    expected_message = f"Unsupported operand type(s) for ==: '{name}' and 'int'"
-    with pytest.raises(TypeError) as exception_info:
-        _ = uint_class(10) == 10
-    assert str(exception_info.value) == expected_message
+    # A bool is an int subclass but not an int, so it is not a bare literal.
+    for operator_symbol, apply in (
+        ("==", lambda: uint_class(1) == True),  # noqa: E712
+        ("!=", lambda: uint_class(1) != True),  # noqa: E712
+        ("<", lambda: uint_class(1) < True),
+        ("<=", lambda: uint_class(1) <= True),
+        (">", lambda: uint_class(1) > True),
+        (">=", lambda: uint_class(1) >= True),
+    ):
+        expected_message = f"Unsupported operand type(s) for {operator_symbol}: '{name}' and 'bool'"
+        with pytest.raises(TypeError) as exception_info:
+            apply()
+        assert str(exception_info.value) == expected_message
 
-    expected_message = f"Unsupported operand type(s) for !=: '{name}' and 'int'"
+    # A string is not an int at all.
+    expected_message = f"Unsupported operand type(s) for ==: '{name}' and 'str'"
     with pytest.raises(TypeError) as exception_info:
-        _ = 10 != uint_class(10)
-    assert str(exception_info.value) == expected_message
-
-    expected_message = f"Unsupported operand type(s) for >: '{name}' and 'int'"
-    with pytest.raises(TypeError) as exception_info:
-        _ = uint_class(10) > 5
-    assert str(exception_info.value) == expected_message
-
-    # 5 < uint(10) routes to uint(10).__gt__(5) because uint is a strict int subclass.
-    expected_message = f"Unsupported operand type(s) for >: '{name}' and 'int'"
-    with pytest.raises(TypeError) as exception_info:
-        _ = 5 < uint_class(10)
-    assert str(exception_info.value) == expected_message
-
-    expected_message = f"Unsupported operand type(s) for >=: '{name}' and 'int'"
-    with pytest.raises(TypeError) as exception_info:
-        _ = uint_class(10) >= 10
-    assert str(exception_info.value) == expected_message
-
-    # 10 <= uint(10) routes to uint(10).__ge__(10) by subclass priority.
-    expected_message = f"Unsupported operand type(s) for >=: '{name}' and 'int'"
-    with pytest.raises(TypeError) as exception_info:
-        _ = 10 <= uint_class(10)
+        _ = uint_class(10) == "10"
     assert str(exception_info.value) == expected_message
 
 
@@ -595,29 +583,41 @@ class TestUintSSZ:
 
 
 class TestForwardArithmeticTypeErrors:
-    """Tests that forward arithmetic operators reject plain int operands."""
+    """Tests which operand types a forward arithmetic operator admits."""
+
+    ARITHMETIC_DUNDERS = [
+        ("__add__", "+"),
+        ("__sub__", "-"),
+        ("__mul__", "*"),
+        ("__floordiv__", "//"),
+        ("__mod__", "%"),
+    ]
+    """Every forward arithmetic dunder, paired with the symbol its error message names."""
 
     @pytest.mark.parametrize("uint_class", ALL_UINT_TYPES)
-    @pytest.mark.parametrize(
-        "method, op_symbol",
-        [
-            ("__add__", "+"),
-            ("__sub__", "-"),
-            ("__mul__", "*"),
-            ("__floordiv__", "//"),
-            ("__mod__", "%"),
-        ],
-    )
-    def test_forward_operator_rejects_plain_int(
+    @pytest.mark.parametrize("method, op_symbol", ARITHMETIC_DUNDERS)
+    def test_forward_operator_accepts_plain_int(
         self, uint_class: Type[BaseUint], method: str, op_symbol: str
     ) -> None:
-        """Forward arithmetic operator raises TypeError when given a plain int."""
-        # Call the dunder method directly with a plain int operand.
+        """Forward arithmetic operator takes a plain int and keeps its own type."""
+        # 5 and 3 so that no result of the five leaves the eight-bit range.
+        result = getattr(uint_class(5), method)(3)
+        assert type(result) is uint_class
+
+    @pytest.mark.parametrize("uint_class", ALL_UINT_TYPES)
+    @pytest.mark.parametrize("method, op_symbol", ARITHMETIC_DUNDERS)
+    @pytest.mark.parametrize("bad", [True, "3", 1.5, None])
+    def test_forward_operator_rejects_an_unrelated_operand(
+        self, uint_class: Type[BaseUint], method: str, op_symbol: str, bad: Any
+    ) -> None:
+        """Forward arithmetic operator raises TypeError for anything but a uint or an int."""
+        # Call the dunder method directly so no reflected fallback can intervene.
         expected_message = (
-            f"Unsupported operand type(s) for {op_symbol}: '{uint_class.__name__}' and 'int'"
+            f"Unsupported operand type(s) for {op_symbol}: "
+            f"'{uint_class.__name__}' and '{type(bad).__name__}'"
         )
         with pytest.raises(TypeError) as exception_info:
-            getattr(uint_class(5), method)(3)
+            getattr(uint_class(5), method)(bad)
         assert str(exception_info.value) == expected_message
 
 
@@ -694,10 +694,23 @@ class TestPowAndRpow:
 
 
 class TestPowShiftStrictOperands:
-    """Pow and shift operators require same-type operands like every other binary op."""
+    """Pow and shift apply the same operand rule as every other binary op."""
 
     @pytest.mark.parametrize("uint_class", ALL_UINT_TYPES)
-    @pytest.mark.parametrize("bad", [3, True, "3", 1.5])
+    def test_pow_and_shift_accept_a_plain_int(self, uint_class: Type[BaseUint]) -> None:
+        """A bare literal serves as an exponent, a modulus, or a shift count."""
+        assert uint_class(2) ** 3 == uint_class(8)
+        assert pow(uint_class(2), 10, 100) == uint_class(24)
+        assert uint_class(1) << 3 == uint_class(8)
+        assert uint_class(8) >> 3 == uint_class(1)
+        # The type is kept in every one of the four.
+        assert type(uint_class(2) ** 3) is uint_class
+        assert type(pow(uint_class(2), 10, 100)) is uint_class
+        assert type(uint_class(1) << 3) is uint_class
+        assert type(uint_class(8) >> 3) is uint_class
+
+    @pytest.mark.parametrize("uint_class", ALL_UINT_TYPES)
+    @pytest.mark.parametrize("bad", [True, "3", 1.5])
     def test_pow_rejects_non_uint_exponent(self, uint_class: Type[BaseUint], bad: Any) -> None:
         """Exponentiation rejects any exponent of a different type."""
         expected_message = (
@@ -709,7 +722,7 @@ class TestPowShiftStrictOperands:
         assert str(exception_info.value) == expected_message
 
     @pytest.mark.parametrize("uint_class", ALL_UINT_TYPES)
-    @pytest.mark.parametrize("bad", [100, True])
+    @pytest.mark.parametrize("bad", [True, "100"])
     def test_pow_rejects_non_uint_modulo(self, uint_class: Type[BaseUint], bad: Any) -> None:
         """Three-argument pow rejects any modulo of a different type."""
         expected_message = (
@@ -721,7 +734,7 @@ class TestPowShiftStrictOperands:
         assert str(exception_info.value) == expected_message
 
     @pytest.mark.parametrize("uint_class", ALL_UINT_TYPES)
-    @pytest.mark.parametrize("bad", [2, True])
+    @pytest.mark.parametrize("bad", [True, "2"])
     def test_rpow_rejects_non_uint_base(self, uint_class: Type[BaseUint], bad: Any) -> None:
         """Reverse pow rejects any base of a different type."""
         expected_message = (
@@ -733,7 +746,7 @@ class TestPowShiftStrictOperands:
         assert str(exception_info.value) == expected_message
 
     @pytest.mark.parametrize("uint_class", ALL_UINT_TYPES)
-    @pytest.mark.parametrize("bad", [100, True])
+    @pytest.mark.parametrize("bad", [True, "100"])
     def test_rpow_rejects_non_uint_modulo(self, uint_class: Type[BaseUint], bad: Any) -> None:
         """Three-argument reverse pow rejects any modulo of a different type."""
         expected_message = (
@@ -745,7 +758,7 @@ class TestPowShiftStrictOperands:
         assert str(exception_info.value) == expected_message
 
     @pytest.mark.parametrize("uint_class", ALL_UINT_TYPES)
-    @pytest.mark.parametrize("bad", [3, True])
+    @pytest.mark.parametrize("bad", [True, "3"])
     def test_lshift_rejects_non_uint(self, uint_class: Type[BaseUint], bad: Any) -> None:
         """Left shift rejects any shift amount of a different type."""
         expected_message = (
@@ -757,7 +770,7 @@ class TestPowShiftStrictOperands:
         assert str(exception_info.value) == expected_message
 
     @pytest.mark.parametrize("uint_class", ALL_UINT_TYPES)
-    @pytest.mark.parametrize("bad", [2, True])
+    @pytest.mark.parametrize("bad", [True, "2"])
     def test_rshift_rejects_non_uint(self, uint_class: Type[BaseUint], bad: Any) -> None:
         """Right shift rejects any shift amount of a different type."""
         expected_message = (
@@ -773,13 +786,25 @@ class TestDivmodEdgeCases:
     """Tests for divmod type error and reverse divmod paths."""
 
     @pytest.mark.parametrize("uint_class", ALL_UINT_TYPES)
-    def test_divmod_rejects_plain_int(self, uint_class: Type[BaseUint]) -> None:
-        """Forward divmod raises TypeError when the divisor is a plain int."""
+    def test_divmod_accepts_plain_int(self, uint_class: Type[BaseUint]) -> None:
+        """Forward divmod takes a plain int divisor and types both halves of the pair."""
+        quotient, remainder = divmod(uint_class(10), 3)
+        assert (quotient, remainder) == (uint_class(3), uint_class(1))
+        assert type(quotient) is uint_class
+        assert type(remainder) is uint_class
+
+    @pytest.mark.parametrize("uint_class", ALL_UINT_TYPES)
+    @pytest.mark.parametrize("bad", [True, "3"])
+    def test_divmod_rejects_an_unrelated_divisor(
+        self, uint_class: Type[BaseUint], bad: Any
+    ) -> None:
+        """Forward divmod raises TypeError when the divisor is neither a uint nor an int."""
         expected_message = (
-            f"Unsupported operand type(s) for divmod: '{uint_class.__name__}' and 'int'"
+            f"Unsupported operand type(s) for divmod: "
+            f"'{uint_class.__name__}' and '{type(bad).__name__}'"
         )
         with pytest.raises(TypeError) as exception_info:
-            divmod(uint_class(10), 3)
+            divmod(uint_class(10), bad)
         assert str(exception_info.value) == expected_message
 
     @pytest.mark.parametrize("uint_class", ALL_UINT_TYPES)
@@ -833,7 +858,7 @@ class TestReverseShiftOperators:
         assert isinstance(reverse_left_shift, uint_class)
 
     @pytest.mark.parametrize("uint_class", ALL_UINT_TYPES)
-    @pytest.mark.parametrize("bad", [1, True])
+    @pytest.mark.parametrize("bad", [True, "1"])
     def test_rlshift_rejects_non_uint(self, uint_class: Type[BaseUint], bad: Any) -> None:
         """Reverse left shift rejects any operand of a different type."""
         expected_message = (
@@ -853,7 +878,7 @@ class TestReverseShiftOperators:
         assert isinstance(reverse_right_shift, uint_class)
 
     @pytest.mark.parametrize("uint_class", ALL_UINT_TYPES)
-    @pytest.mark.parametrize("bad", [8, True])
+    @pytest.mark.parametrize("bad", [True, "8"])
     def test_rrshift_rejects_non_uint(self, uint_class: Type[BaseUint], bad: Any) -> None:
         """Reverse right shift rejects any operand of a different type."""
         expected_message = (
@@ -866,22 +891,36 @@ class TestReverseShiftOperators:
 
 
 class TestComparisonTypeErrors:
-    """Tests that comparison operators raise TypeError when given plain int operands."""
+    """Tests which operand types the ordering comparisons admit."""
 
     @pytest.mark.parametrize("uint_class", ALL_UINT_TYPES)
-    def test_lt_rejects_plain_int(self, uint_class: Type[BaseUint]) -> None:
-        """Less-than raises TypeError when compared to a plain int directly."""
-        expected_message = f"Unsupported operand type(s) for <: '{uint_class.__name__}' and 'int'"
+    def test_lt_and_le_accept_plain_int(self, uint_class: Type[BaseUint]) -> None:
+        """The two dunders that no reflected route reaches still take a plain int."""
+        # Called directly, because 5 < 10 with the uint on the right routes to __gt__.
+        assert uint_class(5).__lt__(10) is True
+        assert uint_class(5).__le__(10) is True
+
+    @pytest.mark.parametrize("uint_class", ALL_UINT_TYPES)
+    @pytest.mark.parametrize("bad", [True, "10", 1.5])
+    def test_lt_rejects_an_unrelated_operand(self, uint_class: Type[BaseUint], bad: Any) -> None:
+        """Less-than raises TypeError for anything but a uint or an int."""
+        expected_message = (
+            f"Unsupported operand type(s) for <: '{uint_class.__name__}' and '{type(bad).__name__}'"
+        )
         with pytest.raises(TypeError) as exception_info:
-            uint_class(5).__lt__(10)
+            uint_class(5).__lt__(bad)
         assert str(exception_info.value) == expected_message
 
     @pytest.mark.parametrize("uint_class", ALL_UINT_TYPES)
-    def test_le_rejects_plain_int(self, uint_class: Type[BaseUint]) -> None:
-        """Less-than-or-equal raises TypeError when compared to a plain int directly."""
-        expected_message = f"Unsupported operand type(s) for <=: '{uint_class.__name__}' and 'int'"
+    @pytest.mark.parametrize("bad", [True, "10", 1.5])
+    def test_le_rejects_an_unrelated_operand(self, uint_class: Type[BaseUint], bad: Any) -> None:
+        """Less-than-or-equal raises TypeError for anything but a uint or an int."""
+        expected_message = (
+            f"Unsupported operand type(s) for <=: "
+            f"'{uint_class.__name__}' and '{type(bad).__name__}'"
+        )
         with pytest.raises(TypeError) as exception_info:
-            uint_class(5).__le__(10)
+            uint_class(5).__le__(bad)
         assert str(exception_info.value) == expected_message
 
 
@@ -933,6 +972,153 @@ class TestCrossWidthEqualityIsStrict:
     ) -> None:
         """Equal-by-value instances of different widths hash differently."""
         assert hash(type_a(5)) != hash(type_b(5))
+
+
+class Slot(Uint64):
+    """A 64-bit slot number, declared the way the consensus specification declares it."""
+
+
+class Epoch(Uint64):
+    """A 64-bit epoch number, a sibling of Slot and not interchangeable with it."""
+
+
+class Gwei(Uint64):
+    """A 64-bit amount of currency, a sibling of both."""
+
+
+class Wei(Gwei):
+    """A second step down the chain, to show the rule is about depth, not one level."""
+
+
+class TestRelatedTypesMeet:
+    """Two uints may meet in an operation only when inheritance relates them."""
+
+    def test_a_domain_type_meets_its_own_base(self) -> None:
+        """The idiom that blocks the port: state.slot % SLOTS_PER_EPOCH."""
+        # SLOTS_PER_EPOCH is declared uint64(2**5), not Slot, in the specification.
+        assert Slot(37) % Uint64(8) == Slot(5)
+        assert type(Slot(37) % Uint64(8)) is Slot
+
+    def test_the_base_meets_a_domain_type_and_the_derived_type_wins(self) -> None:
+        """Order does not decide the result type; depth in the hierarchy does."""
+        assert type(Uint64(1) + Slot(2)) is Slot
+        assert type(Slot(1) + Uint64(2)) is Slot
+        # Two steps of derivation is no different from one.
+        assert type(Uint64(1) + Wei(2)) is Wei
+        assert type(Gwei(1) + Wei(2)) is Wei
+
+    def test_a_bare_literal_meets_a_domain_type(self) -> None:
+        """The 17 specification sites that write epoch + 1 rather than epoch + Epoch(1)."""
+        assert type(Epoch(5) + 1) is Epoch
+        assert type(1 + Epoch(5)) is Epoch
+        assert type(Slot(5) + 1) is Slot
+        # Both spellings of the same increment agree, which is why the literal is admitted.
+        assert Epoch(5) + 1 == Epoch(5) + Epoch(1)
+
+    def test_sum_of_domain_values_keeps_the_domain_type(self) -> None:
+        """sum seeds the accumulator with a plain 0, so the first addition is uint + int."""
+        total = sum([Gwei(1), Gwei(2), Gwei(3)])
+        assert total == Gwei(6)
+        assert type(total) is Gwei
+
+    def test_min_and_max_span_a_domain_type_and_its_base(self) -> None:
+        """min compares with <, which needs the same relation the arithmetic needs."""
+        assert min(Epoch(3), Uint64(4)) == Epoch(3)
+        assert max(Epoch(3), Uint64(4)) == Uint64(4)
+
+    def test_a_unit_carried_by_the_exponent_survives_a_bare_base_and_modulus(self) -> None:
+        """
+        Three-argument pow resolves its modulus against the type the exponent settled on.
+
+        The base and the modulus here are the plain width, which carries no unit.
+        Resolving the modulus against the receiver instead would discard the unit the
+        exponent contributed and hand back that width.
+        """
+        assert type(pow(Uint64(2), Slot(10), Uint64(100))) is Slot
+        assert type(Slot(10).__rpow__(Uint64(2), Uint64(100))) is Slot
+
+    @pytest.mark.parametrize(
+        "apply, op_symbol, left_name, right_name",
+        [
+            (lambda: Slot(1) + Epoch(2), "+", "Slot", "Epoch"),
+            (lambda: Gwei(1) + Slot(2), "+", "Gwei", "Slot"),
+            (lambda: Slot(8) // Epoch(2), "//", "Slot", "Epoch"),
+            (lambda: Slot(8) % Epoch(2), "%", "Slot", "Epoch"),
+            (lambda: Slot(8) & Epoch(2), "&", "Slot", "Epoch"),
+            (lambda: Slot(8) << Epoch(1), "<<", "Slot", "Epoch"),
+            (lambda: divmod(Slot(8), Epoch(2)), "divmod", "Slot", "Epoch"),
+            (lambda: Slot(2) ** Epoch(3), "**", "Slot", "Epoch"),
+            (lambda: Slot(1) == Epoch(1), "==", "Slot", "Epoch"),
+            (lambda: Slot(1) != Epoch(1), "!=", "Slot", "Epoch"),
+            (lambda: Slot(1) < Epoch(2), "<", "Slot", "Epoch"),
+            (lambda: Slot(1) >= Epoch(2), ">=", "Slot", "Epoch"),
+            # Two branches of the same tree that never touch, three levels apart.
+            (lambda: Wei(1) + Slot(2), "+", "Wei", "Slot"),
+            # Width confusion, which is the same refusal for a different reason.
+            (lambda: Uint64(1) + Uint32(2), "+", "Uint64", "Uint32"),
+            (lambda: Slot(1) + Uint32(2), "+", "Slot", "Uint32"),
+        ],
+    )
+    def test_siblings_never_meet(
+        self, apply: Any, op_symbol: str, left_name: str, right_name: str
+    ) -> None:
+        """Neither unit confusion nor width confusion is admitted anywhere."""
+        expected_message = (
+            f"Unsupported operand type(s) for {op_symbol}: '{left_name}' and '{right_name}'"
+        )
+        with pytest.raises(TypeError) as exception_info:
+            apply()
+        assert str(exception_info.value) == expected_message
+
+    def test_a_bool_counts_nothing(self) -> None:
+        """bool is an int subclass, but a flag is not a quantity, so it stays out."""
+        expected_message = "Unsupported operand type(s) for +: 'Slot' and 'bool'"
+        with pytest.raises(TypeError) as exception_info:
+            _ = Slot(1) + True
+        assert str(exception_info.value) == expected_message
+
+    def test_a_non_int_stays_out_even_when_it_answers_to_int(self) -> None:
+        """The rule tests the operand's type, not whether a number could be extracted."""
+        expected_message = "Unsupported operand type(s) for +: 'Slot' and 'float'"
+        with pytest.raises(TypeError) as exception_info:
+            _ = Slot(1) + 1.0
+        assert str(exception_info.value) == expected_message
+
+    @pytest.mark.parametrize(
+        "apply, expected_type",
+        [
+            (lambda: Uint8(255) + 1, Uint8),
+            (lambda: 1 + Uint8(255), Uint8),
+            (lambda: Uint8(255) + Uint8(1), Uint8),
+            (lambda: Gwei(0) - 1, Gwei),
+            (lambda: Uint64(0) - Slot(1), Slot),
+            (lambda: Uint64(2**64 - 1) + Slot(1), Slot),
+        ],
+    )
+    def test_the_range_check_survives_on_the_resolved_type(
+        self, apply: Any, expected_type: Type[BaseUint]
+    ) -> None:
+        """
+        Admitting a wider set of operands does not widen the range of a result.
+
+        The bound is read off whichever type won the resolution, so a Gwei underflow
+        and an epoch overflow are caught exactly as before:
+
+            Uint8(255) + 1     ->  256 out of range for Uint8  [0, 255]
+            Gwei(0) - 1        ->   -1 out of range for Gwei   [0, 2**64 - 1]
+        """
+        with pytest.raises(SSZValueError) as exception_info:
+            apply()
+        # The error names the type the result would have had, so the diagnosis is exact.
+        assert f"out of range for {expected_type.__name__} " in str(exception_info.value)
+
+    def test_equality_holds_between_a_domain_type_and_its_base(self) -> None:
+        """A related comparison answers by value, since neither type can win a bool."""
+        assert Slot(5) == Uint64(5)
+        assert Uint64(5) == Slot(5)
+        assert Slot(5) != Uint64(6)
+        assert Slot(4) < Uint64(5)
+        assert Uint64(5) >= Slot(5)
 
 
 @pytest.mark.parametrize("uint_class", ALL_UINT_TYPES)

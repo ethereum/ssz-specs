@@ -1367,15 +1367,17 @@ class TestDeclaredCapacity:
         Late.LIMIT = Uint64(4)
         assert type(Late.LIMIT) is Uint64
 
-        # The failure then arrives at first use, out of an internal comparison.
-        # It names neither the type nor the attribute that was mis-set.
-        # That silence is the whole reason the check sits at the declaration instead.
-        with pytest.raises(TypeError) as exception_info:
-            Late.of(1, 2)
-        message = str(exception_info.value)
-        assert not isinstance(exception_info.value, SSZError)
-        assert "Late" not in message
-        assert "LIMIT" not in message
+        # The mis-set capacity then goes unremarked, because the internal comparison it
+        # feeds is a uint against the plain int returned by len, and those two types are
+        # related by inheritance. The comparison answers correctly:
+        #
+        #     len(data) > Uint64(4)  ->  2 > 4  ->  False
+        #
+        # So the value behaves as the capacity it names, and the limit is still enforced.
+        assert list(Late.of(1, 2)) == [Uint8(1), Uint8(2)]
+        with pytest.raises(SSZError) as exception_info:
+            Late.of(1, 2, 3, 4, 5)
+        assert str(exception_info.value) == "Late exceeds limit of 4, got 5"
 
 
 class TestFinalHashTreeRoot:
