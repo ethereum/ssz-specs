@@ -131,6 +131,25 @@ class ByteVector(bytes, SSZType):
         return super().__new__(cls, coerced_bytes)
 
     @classmethod
+    def _trusted(cls, data: bytes) -> Self:
+        """
+        Wrap bytes of an already-established length, skipping every check.
+
+        # Safety
+
+        The byte count must follow from how the value was built, never from a caller.
+        A wrong width yields an instance.
+        It merkleizes to a wrong root rather than failing.
+
+        Args:
+            data: Exactly the declared number of bytes.
+
+        Returns:
+            An instance wrapping those bytes, unvalidated.
+        """
+        return bytes.__new__(cls, data)
+
+    @classmethod
     def zero(cls) -> Self:
         """Return a new instance filled with zero bytes, which is also the default."""
         return cls(b"\x00" * cls.LENGTH)
@@ -176,8 +195,8 @@ class ByteVector(bytes, SSZType):
         serialized_bytes = stream.read(scope)
         if len(serialized_bytes) != scope:
             raise SSZScopeError(cls.__name__, scope, len(serialized_bytes))
-        # Length already verified — bypass __new__'s coerce + revalidation.
-        return bytes.__new__(cls, serialized_bytes)
+        # The read delivered exactly the checked count, which the guard above pinned.
+        return cls._trusted(serialized_bytes)
 
     @override
     def encode_bytes(self) -> bytes:

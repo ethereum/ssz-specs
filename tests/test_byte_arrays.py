@@ -115,6 +115,19 @@ class TestBaseBytesConstruction:
         assert isinstance(zero_array, Bytes4)
         assert bytes(zero_array) == b"\x00\x00\x00\x00"
 
+    def test_trusted_wrapping_agrees_with_the_constructor(self) -> None:
+        """A trusted wrap of a correct length is the same value the constructor builds."""
+        payload = b"\x00\x01\x02\x03"
+        assert Bytes4._trusted(payload) == Bytes4(payload)
+        assert type(Bytes4._trusted(payload)) is Bytes4
+
+    def test_trusted_wrapping_does_not_check_the_length(self) -> None:
+        """A wrong width produces an instance rather than an error."""
+        short = Bytes4._trusted(b"\x01")
+        assert len(short) == 1
+        with pytest.raises(SSZValueError):
+            Bytes4(b"\x01")
+
 
 class TestBaseBytesEquality:
     """Strict equality, inequality, and hashing of fixed-length byte arrays."""
