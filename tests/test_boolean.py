@@ -220,11 +220,23 @@ def test_repr_and_str() -> None:
 
 
 def test_hash() -> None:
-    """Tests that the hash is distinct from a raw bool."""
-    assert hash(Boolean(True)) != hash(True)
-    assert hash(Boolean(False)) != hash(False)
+    """Tests that a boolean hashes exactly as the bit it holds."""
+    assert hash(Boolean(True)) == hash(True)
+    assert hash(Boolean(False)) == hash(False)
     assert hash(Boolean(True)) == hash(Boolean(1))
     assert hash(Boolean(True)) != hash(Boolean(False))
+
+
+def test_a_raw_bool_probe_of_a_set_raises_rather_than_missing() -> None:
+    """Sharing a bucket with the raw bool is what lets strict equality be reached."""
+    with pytest.raises(TypeError) as exception_info:
+        _ = True in {Boolean(True)}
+    assert str(exception_info.value) == ("Unsupported operand type(s) for ==: 'Boolean' and 'bool'")
+
+
+def test_a_raw_bool_probe_of_the_other_bit_is_simply_absent() -> None:
+    """The two bits hash apart, so the comparison is never reached and absent is right."""
+    assert False not in {Boolean(True)}
 
 
 class TestBooleanSSZ:

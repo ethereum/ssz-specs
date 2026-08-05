@@ -28,6 +28,16 @@ class Bytes32(ByteVector):
     LENGTH = 32
 
 
+class Bytes32Sub(Bytes32):
+    """A 32-byte array derived from another, the shape Root takes over Chunk."""
+
+
+class Bytes32Sibling(ByteVector):
+    """A second 32-byte array that shares only ByteVector with Bytes32."""
+
+    LENGTH = 32
+
+
 class ByteList5(ByteList):
     """A bytelist with limit 5 for testing."""
 
@@ -38,6 +48,10 @@ class ByteList16(ByteList):
     """A bytelist with limit 16 for testing."""
 
     LIMIT = 16
+
+
+class ByteList16Sub(ByteList16):
+    """A bytelist derived from another, inheriting its limit."""
 
 
 class ModelVectors(BaseModel):
@@ -167,10 +181,22 @@ class TestBaseBytesEquality:
             == f"Unsupported operand type(s) for !=: 'Bytes4' and '{name}'"
         )
 
-    def test_hash_distinct_from_raw_bytes(self) -> None:
-        """The hash binds the value to its concrete type, so equal raw bytes hash differently."""
+    def test_hash_matches_the_raw_bytes(self) -> None:
+        """The hash is the hash of the bytes, so a wrong type reaches the comparison."""
         byte_array = Bytes4(b"\x00\x01\x02\x03")
-        assert hash(byte_array) != hash(b"\x00\x01\x02\x03")
+        assert hash(byte_array) == hash(b"\x00\x01\x02\x03")
+
+    def test_a_raw_bytes_probe_of_a_set_raises_rather_than_missing(self) -> None:
+        """Sharing a bucket with the raw bytes is what lets strict equality be reached."""
+        with pytest.raises(TypeError) as exception_info:
+            _ = b"\x00\x01\x02\x03" in {Bytes4(b"\x00\x01\x02\x03")}
+        assert (
+            str(exception_info.value) == "Unsupported operand type(s) for ==: 'Bytes4' and 'bytes'"
+        )
+
+    def test_a_raw_bytes_probe_of_a_different_value_is_simply_absent(self) -> None:
+        """Different bytes hash apart, so the comparison is never reached and absent is right."""
+        assert b"\x09\x09\x09\x09" not in {Bytes4(b"\x00\x01\x02\x03")}
 
     def test_hash_same_for_equal_instances(self) -> None:
         """Equal instances of the same type produce the same hash."""
@@ -178,6 +204,75 @@ class TestBaseBytesEquality:
         v2 = Bytes4([0, 1, 2, 3])
         v3 = Bytes4("00010203")
         assert hash(v1) == hash(v2) == hash(v3)
+
+
+class TestBaseBytesEqualityFollowsInheritance:
+    """A byte-array type meets its own ancestors and descendants, and nothing else."""
+
+    def test_a_subclass_and_its_base_compare_by_value(self) -> None:
+        """Bytes32Sub derives from Bytes32, so one 32-byte string is one value under both."""
+        payload = b"\x11" * 32
+        assert Bytes32Sub(payload) == Bytes32(payload)
+        assert Bytes32(payload) == Bytes32Sub(payload)
+        assert not (Bytes32Sub(payload) != Bytes32(payload))
+
+    def test_a_subclass_and_its_base_hash_alike(self) -> None:
+        """The pair above compares equal, so Python requires one hash for both."""
+        payload = b"\x11" * 32
+        assert hash(Bytes32Sub(payload)) == hash(Bytes32(payload))
+        assert len({Bytes32Sub(payload), Bytes32(payload)}) == 1
+        assert {Bytes32(payload): "value"}[Bytes32Sub(payload)] == "value"
+
+    def test_a_subclass_and_its_base_still_differ_by_value(self) -> None:
+        """The relation admits the comparison; it does not make every pair equal."""
+        assert Bytes32Sub(b"\x11" * 32) != Bytes32(b"\x22" * 32)
+
+    def test_two_sibling_types_are_refused(self) -> None:
+        """Neither sibling derives from the other, so the comparison has no answer to give."""
+        payload = b"\x11" * 32
+        with pytest.raises(TypeError) as exception_info:
+            _ = Bytes32(payload) == Bytes32Sibling(payload)
+        assert (
+            str(exception_info.value)
+            == "Unsupported operand type(s) for ==: 'Bytes32' and 'Bytes32Sibling'"
+        )
+
+    def test_two_sibling_types_are_refused_by_inequality_too(self) -> None:
+        """Both operators apply the one relation."""
+        payload = b"\x11" * 32
+        with pytest.raises(TypeError) as exception_info:
+            _ = Bytes32(payload) != Bytes32Sibling(payload)
+        assert (
+            str(exception_info.value)
+            == "Unsupported operand type(s) for !=: 'Bytes32' and 'Bytes32Sibling'"
+        )
+
+    def test_a_sibling_probe_of_a_dict_raises_rather_than_missing_silently(self) -> None:
+        """The reported bug: a dict keyed by one type used to answer absent for the other."""
+        payload = b"\x11" * 32
+        with pytest.raises(TypeError):
+            _ = {Bytes32(payload): 1}[Bytes32Sibling(payload)]
+
+    def test_equality_and_hashing_never_disagree(self) -> None:
+        """Over every pair of the three 32-byte types at two payloads, equal implies one hash."""
+        values = [
+            constructor(payload)
+            for payload in (b"\x11" * 32, b"\x22" * 32)
+            for constructor in (Bytes32, Bytes32Sub, Bytes32Sibling)
+        ]
+        compared = 0
+        for left in values:
+            for right in values:
+                try:
+                    equal = left == right
+                except TypeError:
+                    continue
+                compared += 1
+                # The implication Python requires runs one way only, so an unequal pair
+                # is free to share a hash. Here the payload alone decides both sides.
+                assert equal is (hash(left) == hash(right))
+        # Guard against the loop passing because every pair raised.
+        assert compared == 20
 
 
 class TestBaseBytesOperations:
@@ -395,11 +490,39 @@ class TestBaseByteListEquality:
             == f"Unsupported operand type(s) for !=: 'ByteList16' and '{name}'"
         )
 
-    def test_hash_includes_type(self) -> None:
-        """Instances of different bytelist types with the same data hash differently."""
-        v1 = ByteList5(data=b"\x00\x01")
-        v2 = ByteList16(data=b"\x00\x01")
-        assert hash(v1) != hash(v2)
+    def test_two_unrelated_limits_are_refused(self) -> None:
+        """A payload under a limit of 5 is not the same value as one under a limit of 16."""
+        with pytest.raises(TypeError) as exception_info:
+            _ = ByteList5(data=b"\x00\x01") == ByteList16(data=b"\x00\x01")
+        assert (
+            str(exception_info.value)
+            == "Unsupported operand type(s) for ==: 'ByteList5' and 'ByteList16'"
+        )
+
+    def test_two_unrelated_limits_are_refused_by_inequality_too(self) -> None:
+        """Both operators apply the one relation."""
+        with pytest.raises(TypeError) as exception_info:
+            _ = ByteList5(data=b"\x00\x01") != ByteList16(data=b"\x00\x01")
+        assert (
+            str(exception_info.value)
+            == "Unsupported operand type(s) for !=: 'ByteList5' and 'ByteList16'"
+        )
+
+    def test_a_subclass_and_its_base_compare_and_hash_alike(self) -> None:
+        """Inheritance relates the two types, so one payload is one value under both names."""
+        payload = b"\x00\x01"
+        assert ByteList16Sub(data=payload) == ByteList16(data=payload)
+        assert ByteList16(data=payload) == ByteList16Sub(data=payload)
+        assert hash(ByteList16Sub(data=payload)) == hash(ByteList16(data=payload))
+        assert not (ByteList16Sub(data=payload) != ByteList16(data=payload))
+
+    def test_a_subclass_and_its_base_still_differ_by_value(self) -> None:
+        """The relation admits the comparison; it does not make every pair equal."""
+        assert ByteList16Sub(data=b"\x00") != ByteList16(data=b"\x01")
+
+    def test_hash_is_the_hash_of_the_payload(self) -> None:
+        """Equality compares the payload alone, so the hash is the payload's hash alone."""
+        assert hash(ByteList16(data=b"\x00\x01\x02")) == hash(b"\x00\x01\x02")
 
     def test_hash_same_for_equal_instances(self) -> None:
         """Equal instances of the same type produce the same hash."""

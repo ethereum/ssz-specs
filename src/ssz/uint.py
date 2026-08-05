@@ -467,9 +467,17 @@ class BaseUint(int, SSZType):
         """Informal representation matches the underlying value."""
         return str(int(self))
 
-    def __hash__(self) -> int:
-        """Hash mixes in the concrete subtype so distinct widths never collide."""
-        return hash((type(self), int(self)))
+    # A uint hashes as the integer it holds. Equality relates a type to the types derived
+    # from it, and admits a bare integer, so the value is all the hash can depend on.
+    #
+    # A hash never decides equality, so naming the type in one cannot make a comparison
+    # stricter. It would only break the rule that equal values hash equally.
+    #
+    # What this changes is where a mismatched value lands. A bare 5 now shares a bucket
+    # with Uint64(5), so a lookup of a bare 5 reaches __eq__ and raises the TypeError the
+    # type means to raise, where the former type-mixing hash sent the probe to an empty
+    # bucket and answered "absent" without ever consulting the comparison.
+    __hash__ = int.__hash__
 
     def __index__(self) -> int:
         """Return a plain integer for slicing and indexing."""

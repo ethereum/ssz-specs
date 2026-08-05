@@ -18,7 +18,7 @@ class Boolean(int, SSZType):
     - Inherits from int so true/false work natively in truthiness checks.
     - Arithmetic (+ - * /) is disabled to prevent ambiguous operations.
     - Bitwise ops (& | ^) reject operands of any other type.
-    - Equality rejects comparisons with anything but another boolean.
+    - Equality rejects comparisons with anything but another boolean, and hashing agrees.
 
     Wire format:
 
@@ -211,7 +211,15 @@ class Boolean(int, SSZType):
         return self.__xor__(other)
 
     def __eq__(self, other: object) -> bool:
-        """Strict equality — only another boolean compares; anything else raises."""
+        """
+        Strict equality — only another boolean compares; anything else raises.
+
+        Invariant: the bit is the whole of the value, so the hash below is the bit's hash.
+        A raw bool is still refused, which is the point of wrapping the bit at all.
+
+        Raises:
+            TypeError: If other is not a Boolean.
+        """
         if not isinstance(other, Boolean):
             raise TypeError(
                 f"Unsupported operand type(s) for ==: "
@@ -225,6 +233,9 @@ class Boolean(int, SSZType):
 
         Defined explicitly because the parent class's not-equal would otherwise
         bypass the strict equality above.
+
+        Raises:
+            TypeError: If other is not a Boolean.
         """
         if not isinstance(other, Boolean):
             raise TypeError(
@@ -241,9 +252,12 @@ class Boolean(int, SSZType):
         """Return the user-facing form: True or False."""
         return str(bool(self))
 
-    def __hash__(self) -> int:
-        """Return a hash distinct from the equivalent raw bool, matching strict equality."""
-        return hash((type(self), int(self)))
+    # A boolean hashes as the bit it holds, because equality compares the bit alone.
+    # Defining equality would otherwise clear the inherited hash, so it is spelled out.
+    #
+    # A raw bool now shares a bucket, so a membership test reaches the refusal instead of
+    # answering False from an empty one.
+    __hash__ = int.__hash__
 
 
 Bit: TypeAlias = Boolean

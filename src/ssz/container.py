@@ -87,8 +87,9 @@ def active_fields(width: int, gaps: tuple[int, ...] = ()) -> tuple[int, ...]:
     # A width may be written with a uint.
     # A uint refuses a plain integer operand.
     # The comparison below would therefore raise rather than answer.
-    # A uint left among the positions would also miss the plain position it names.
-    # The two hash apart.
+    # A uint left among the positions would reach the same refusal from inside the
+    # membership test at the end, which hashes by value and so lands on the plain
+    # position it names.
     width = int(width)
     if width < 1:
         raise SSZValueError(f"a layout holds at least one position, got a width of {width}")

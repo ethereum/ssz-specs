@@ -1293,13 +1293,16 @@ class TestALayoutWrittenWithTypedNumbers:
 
     def test_a_typed_position_still_opens_its_vacancy(self) -> None:
         """A position counts as the plain number it names, not as a value of its own type."""
-        # A typed value hashes apart from the plain number it equals.
-        # A position matched by identity in a set would therefore find nothing, and the
-        # vacancy it names would quietly close:
+        # A typed value hashes as the plain number it holds, so the membership test that
+        # decides the vacancy lands in the right bucket and then reaches the uint's own
+        # refusal to be compared with a plain int. Narrowing the position first is what
+        # keeps the layout answering instead of raising:
         #
         #     width 3, gap Uint8(1)   ->  (1, 0, 1)   the vacancy is open
-        #     matched by hash alone   ->  (1, 1, 1)   three fields where two were declared
-        assert hash(Uint8(1)) != hash(1)
+        #     left as a uint          ->  TypeError from the membership test
+        assert hash(Uint8(1)) == hash(1)
+        with pytest.raises(TypeError):
+            _ = Uint8(1) in frozenset({1})
         assert active_fields(width=3, gaps=(Uint8(1),)) == (1, 0, 1)
 
     def test_a_typed_position_out_of_range_is_reported_as_a_plain_number(self) -> None:
@@ -1490,7 +1493,7 @@ class TestProgressiveContainerDecodeErrors:
 
     def test_short_input_on_a_fixed_field_raises(self) -> None:
         """A truncated stream on a fixed field surfaces the field type's own error."""
-        # Two bytes feed `side` and leave nothing for `color`.
+        # Two bytes feed side and leave nothing for color.
         with pytest.raises(SSZSerializationError) as exception_info:
             Square.decode_bytes(bytes.fromhex("3412"))
         assert exception_info.value.args[0] == "Uint8: expected 1 bytes, got 0"

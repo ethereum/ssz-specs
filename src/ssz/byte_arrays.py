@@ -49,7 +49,7 @@ class ByteVector(bytes, SSZType):
 
     - Inherits from bytes so the instance is usable wherever a bytes value is expected.
     - Subclasses pin the byte count by setting the class-level length.
-    - Equality is strict — only another byte-array instance compares.
+    - Equality relates a type only to its ancestors and descendants; hashing agrees.
 
     The spec reads a fixed byte array as a vector of single bytes, so its default is every
     byte zero.
@@ -265,8 +265,34 @@ class ByteVector(bytes, SSZType):
         return f"{type_name}({self.hex()})"
 
     def __eq__(self, other: object) -> bool:
-        """Strict equality — only another byte-array instance compares; anything else raises."""
-        if not isinstance(other, ByteVector):
+        r"""
+        Equality between two byte arrays whose types are related by inheritance.
+
+        One of the two types must derive from the other, and nothing but a byte array may
+        meet one at all. A root is declared a kind of chunk so it is usable where a chunk
+        is expected, and this comparison honours that:
+
+            x = b"\x11" * 32
+
+            Root(x) == Chunk(x)    ->  True     a root is a kind of chunk
+            Bytes32(x) == Root(x)  ->  refused  siblings, neither derives from the other
+            Bytes32(x) == x        ->  refused  raw bytes are not a byte array at all
+
+        Invariant: whenever this returns True, __hash__ agrees. Python requires that of
+        every type, because dict and set find a value by its hash before they compare
+        it. That requirement is what fixes the hash below: Root(x) and Chunk(x) are one
+        value here, so no hash that named the concrete type could keep step.
+
+        Args:
+            other: The value to compare against.
+
+        Raises:
+            TypeError: If other is not a byte array, or is one whose type is a sibling
+                of this one rather than an ancestor or a descendant.
+        """
+        if not isinstance(other, ByteVector) or not (
+            isinstance(other, type(self)) or isinstance(self, type(other))
+        ):
             raise TypeError(
                 f"Unsupported operand type(s) for ==: "
                 f"'{type(self).__name__}' and '{type(other).__name__}'"
@@ -275,21 +301,31 @@ class ByteVector(bytes, SSZType):
 
     def __ne__(self, other: object) -> bool:
         """
-        Strict inequality — only another byte-array instance compares; anything else raises.
+        Inequality under the same relation as equality; anything else raises.
 
         Defined explicitly because the parent bytes class has its own not-equal
-        that would otherwise bypass the strict type contract.
+        that would otherwise bypass the type rule above.
+
+        Raises:
+            TypeError: If other is not a byte array, or is one whose type is a sibling
+                of this one rather than an ancestor or a descendant.
         """
-        if not isinstance(other, ByteVector):
+        if not isinstance(other, ByteVector) or not (
+            isinstance(other, type(self)) or isinstance(self, type(other))
+        ):
             raise TypeError(
                 f"Unsupported operand type(s) for !=: "
                 f"'{type(self).__name__}' and '{type(other).__name__}'"
             )
         return bytes.__ne__(self, other)
 
-    def __hash__(self) -> int:
-        """Return a hash distinct from raw bytes — matches the strict equality contract."""
-        return hash((type(self), bytes(self)))
+    # A byte array hashes as the bytes it holds, because equality calls a root and a chunk
+    # of the same bytes one value, which leaves the concrete type no room in the hash.
+    #
+    # Two types the comparison refuses to relate now share a bucket when their bytes agree,
+    # so a lookup reaches the refusal instead of missing in silence. When the bytes differ
+    # so do the hashes, and absent is the right answer whatever the types were.
+    __hash__ = bytes.__hash__
 
 
 class ByteList(SSZCollection[int]):
@@ -298,7 +334,7 @@ class ByteList(SSZCollection[int]):
 
     - Subclasses pin the maximum byte count by setting the class-level limit.
     - Serialization writes the raw bytes; the length is recovered from the wrapping context.
-    - Equality is strict — only another byte-list instance compares.
+    - Equality relates a type only to its ancestors and descendants; hashing agrees.
 
     For example, a 4-byte payload under a limit of 10:
 
@@ -456,8 +492,25 @@ class ByteList(SSZCollection[int]):
         return f"{type_name}({self.data.hex()})"
 
     def __eq__(self, other: object) -> bool:
-        """Strict equality — only another byte-list instance compares; anything else raises."""
-        if not isinstance(other, ByteList):
+        """
+        Equality between two byte lists whose types are related by inheritance.
+
+        One of the two types must derive from the other, and nothing but a byte list may
+        meet one at all. Two unrelated limits are refused even when the payloads match,
+        because a payload under one limit is not the same value as under another.
+
+        Invariant: whenever this returns True, the hash agrees.
+
+        Args:
+            other: The value to compare against.
+
+        Raises:
+            TypeError: If other is not a byte list, or is one whose type is a sibling
+                of this one rather than an ancestor or a descendant.
+        """
+        if not isinstance(other, ByteList) or not (
+            isinstance(other, type(self)) or isinstance(self, type(other))
+        ):
             raise TypeError(
                 f"Unsupported operand type(s) for ==: "
                 f"'{type(self).__name__}' and '{type(other).__name__}'"
@@ -466,11 +519,17 @@ class ByteList(SSZCollection[int]):
 
     def __ne__(self, other: object) -> bool:
         """
-        Strict inequality — only another byte-list instance compares; anything else raises.
+        Inequality under the same relation as equality; anything else raises.
 
-        Mirrors the strict equality contract — both operators require a matching type.
+        Mirrors the equality contract — both operators apply one type rule.
+
+        Raises:
+            TypeError: If other is not a byte list, or is one whose type is a sibling
+                of this one rather than an ancestor or a descendant.
         """
-        if not isinstance(other, ByteList):
+        if not isinstance(other, ByteList) or not (
+            isinstance(other, type(self)) or isinstance(self, type(other))
+        ):
             raise TypeError(
                 f"Unsupported operand type(s) for !=: "
                 f"'{type(self).__name__}' and '{type(other).__name__}'"
@@ -478,8 +537,8 @@ class ByteList(SSZCollection[int]):
         return self.data != other.data
 
     def __hash__(self) -> int:
-        """Return a hash that ties the value to its concrete type."""
-        return hash((type(self), self.data))
+        """Return the hash of the payload alone — the one thing equality above compares."""
+        return hash(self.data)
 
     def hex(self) -> str:
         """Return the hexadecimal string representation of the underlying bytes."""
