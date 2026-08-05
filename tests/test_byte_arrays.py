@@ -3,7 +3,7 @@
 import hashlib
 import io
 import json
-from typing import Any
+from typing import Any, cast
 
 import pytest
 from hypothesis import given, strategies as st
@@ -454,6 +454,119 @@ class TestBaseByteListOperations:
         concatenated = b"\xff" + byte_list
         assert type(concatenated) is bytes
         assert concatenated == b"\xff\x00\x01"
+
+
+class TestBaseByteListMutation:
+    """
+    Mutation of a byte list, and what the stored payload looks like afterwards.
+
+    The store checks the byte count and nothing else, so each case shows that skipping
+    the coercion skips no check.
+    """
+
+    def test_the_stored_payload_is_still_plain_bytes(self) -> None:
+        """A mutated payload is bytes, not the mutable buffer the mutation worked on."""
+        payload = ByteList16(data=b"\xde")
+        payload.append(0xAD)
+
+        # A stored bytearray would be a payload that could change under a value that
+        # already reported its root.
+        assert type(payload.data) is bytes
+        assert payload.data == b"\xde\xad"
+
+    def test_mutating_the_default_marks_the_field_as_set(self) -> None:
+        """A mutated value is indistinguishable from one that was assigned to."""
+        payload = ByteList16()
+        assert payload.model_fields_set == set()
+
+        payload.append(0xDE)
+
+        # The store writes the field entry itself rather than assigning to the attribute.
+        # A field left unmarked would drop out of a dump that asks only for what was set.
+        assert payload.model_fields_set == {"data"}
+        assert payload.model_dump(exclude_unset=True) == {"data": b"\xde"}
+
+    def test_appending_past_the_capacity_is_refused(self) -> None:
+        """The capacity is the one check a mutation can break, so it is still made."""
+        payload = ByteList5(data=b"\x01\x02\x03\x04\x05")
+        with pytest.raises(SSZValueError) as exception_info:
+            payload.append(0x06)
+
+        # The same message the field validator raises for the same byte count.
+        assert str(exception_info.value) == "ByteList5 exceeds limit of 5, got 6"
+        assert payload.data == b"\x01\x02\x03\x04\x05"
+
+    def test_a_slice_write_past_the_capacity_is_refused(self) -> None:
+        """A slice can grow a payload by more than one byte, and is bounded the same way."""
+        payload = ByteList5(data=b"\x01\x02")
+        with pytest.raises(SSZValueError) as exception_info:
+            payload[0:1] = b"\xaa\xbb\xcc\xdd\xee"
+        assert str(exception_info.value) == "ByteList5 exceeds limit of 5, got 6"
+        assert payload.data == b"\x01\x02"
+
+    @pytest.mark.parametrize(
+        "mutate, expected_error, message",
+        [
+            pytest.param(
+                lambda payload: payload.append(256),
+                ValueError,
+                "byte must be in range(0, 256)",
+                id="append_past_a_byte",
+            ),
+            pytest.param(
+                lambda payload: payload.__setitem__(0, -1),
+                ValueError,
+                "byte must be in range(0, 256)",
+                id="assign_below_a_byte",
+            ),
+            pytest.param(
+                lambda payload: payload.append("x"),
+                TypeError,
+                "'str' object cannot be interpreted as an integer",
+                id="append_something_that_is_not_a_byte",
+            ),
+        ],
+    )
+    def test_a_value_that_is_not_a_byte_is_refused_by_the_buffer(
+        self, mutate: Any, expected_error: type[Exception], message: str
+    ) -> None:
+        """The mutable buffer refuses a value outside a byte, before anything is stored."""
+        payload = ByteList16(data=b"\xde\xad")
+        with pytest.raises(expected_error) as exception_info:
+            mutate(payload)
+        assert str(exception_info.value) == message
+        assert payload.data == b"\xde\xad"
+
+    def test_popping_the_last_byte_of_an_empty_payload_is_refused(self) -> None:
+        """An empty payload has no last byte, so the buffer refuses."""
+        payload = ByteList16()
+        with pytest.raises(IndexError):
+            payload.pop()
+        assert payload.data == b""
+
+    def test_a_mutated_payload_roots_as_the_same_payload_constructed(self) -> None:
+        """Mutation reaches the same value construction does, so it reaches the same root."""
+        mutated = ByteList16(data=b"\xde\xad")
+        mutated.append(0xBE)
+        mutated[0] = 0xFF
+        assert mutated.pop() == 0xBE
+
+        constructed = ByteList16(data=b"\xff\xad")
+        assert mutated == constructed
+        assert mutated.hash_tree_root() == constructed.hash_tree_root()
+        assert mutated.encode_bytes() == constructed.encode_bytes()
+
+    def test_the_payload_still_validates_when_assigned_to(self) -> None:
+        """Assigning the field is untouched: it coerces and bounds the input as before."""
+        payload = ByteList5()
+
+        # A bytearray is one of the inputs the validator coerces, so it still does.
+        payload.data = cast("Any", bytearray(b"\x01\x02"))
+        assert type(payload.data) is bytes
+
+        with pytest.raises(SSZValueError) as exception_info:
+            payload.data = b"\x01\x02\x03\x04\x05\x06"
+        assert str(exception_info.value) == "ByteList5 exceeds limit of 5, got 6"
 
 
 class TestBaseByteListSSZ:

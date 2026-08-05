@@ -354,8 +354,9 @@ class TestProgressiveBitList:
         assert len(instance) == 4096
 
     def test_no_limit_is_declared(self) -> None:
-        """The shape carries no capacity attribute at all."""
-        assert not hasattr(ProgressiveBitList, "LIMIT")
+        """The shape declares no capacity, so the name holds None rather than a count."""
+        assert "LIMIT" not in ProgressiveBitList.__dict__
+        assert ProgressiveBitList.LIMIT is None
 
     @pytest.mark.parametrize(
         "non_iterable, type_name",

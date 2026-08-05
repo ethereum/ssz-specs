@@ -13,7 +13,7 @@ Both flavors serialize as the raw bytes themselves — no length prefix, no deli
 
 from collections.abc import Iterable, Sequence
 from enum import Enum
-from typing import IO, Any, ClassVar, Self, override
+from typing import IO, TYPE_CHECKING, Any, ClassVar, Self, override
 
 from pydantic import Field, field_serializer, field_validator
 from pydantic.annotated_handlers import GetCoreSchemaHandler
@@ -110,7 +110,7 @@ class ByteVector(bytes, SSZType):
             SSZValueError: If the coerced byte count differs from the declared length.
             TypeError: If a value is passed that no coercion accepts.
         """
-        if not hasattr(cls, "LENGTH"):
+        if cls.LENGTH is None:
             raise SSZDefinitionError(cls.__name__, "LENGTH")
 
         # An omitted value is the default, which is every byte zero.
@@ -318,7 +318,7 @@ class ByteList(SSZCollection[int]):
     def _validate_byte_list_data(cls, value: Any) -> bytes:
         """Enforce the maximum byte count and coerce inputs into a plain bytes object."""
         # Subclasses must declare LIMIT before any instances can be validated.
-        if not hasattr(cls, "LIMIT"):
+        if cls.LIMIT is None:
             raise SSZDefinitionError(cls.__name__, "LIMIT")
 
         # Coerce the input first, then enforce the upper bound.
@@ -332,27 +332,46 @@ class ByteList(SSZCollection[int]):
         """Serialize the raw bytes to a 0x-prefixed hex string for JSON output."""
         return "0x" + value.hex()
 
+    def _store(self, working: bytearray) -> None:
+        """
+        Store mutated bytes, checking the byte count and nothing else.
+
+        Assigning to the field would re-coerce a payload that is already bytes.
+
+        Raises:
+            SSZLimitError: When the mutation leaves more bytes than the limit allows.
+        """
+        self._validate_length(len(working))
+        payload = bytes(working)
+        # A type checker reads this field through an inherited sequence declaration, so the
+        # assignment spelling is kept for it and the dictionary write for the runtime.
+        if not TYPE_CHECKING:
+            self.__dict__["data"] = payload
+            self.__pydantic_fields_set__.add("data")
+        else:  # pragma: no cover
+            self.data = payload
+
     @override
     def __setitem__(self, index: int | slice, value: int | Sequence[int]) -> None:
         """Replace the byte(s) at ``index``, revalidating the stored payload."""
         self._begin_mutation()
         working = bytearray(self.data)
         working[index] = value  # ty: ignore[invalid-assignment]
-        self.data = bytes(working)
+        self._store(working)
 
     def append(self, value: int) -> None:
         """Add one byte at the end, revalidating the stored payload."""
         self._begin_mutation()
         working = bytearray(self.data)
         working.append(value)
-        self.data = bytes(working)
+        self._store(working)
 
     def pop(self) -> int:
         """Remove and return the last byte, revalidating the stored payload."""
         self._begin_mutation()
         working = bytearray(self.data)
         last = working.pop()
-        self.data = bytes(working)
+        self._store(working)
         return last
 
     @classmethod

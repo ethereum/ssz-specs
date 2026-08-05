@@ -321,6 +321,60 @@ class TestVectorValidator:
         assert str(exception_info.value) == "Uint8Vector4 requires exactly 4 elements, got 5"
 
 
+class TestElementAcceptance:
+    """
+    Tests for which classes an element may arrive as.
+
+    Asking whether the class is the declared one before asking whether the declared one
+    descends from it cannot change what is accepted, only what the common case costs.
+    """
+
+    def test_an_element_of_the_declared_class_is_stored_untouched(self) -> None:
+        """The element that arrives is the element that is stored, not a copy of it."""
+        element = Uint8(7)
+        values = Uint8List10(data=[element])
+
+        # The same object, not merely an equal one.
+        # A rebuilt element would be a second value with the same contents, and a composite
+        # element rebuilt on entry would stop reporting the mutations made through it.
+        assert values[0] is element
+
+    def test_an_element_of_an_ancestor_class_is_built(self) -> None:
+        """A plain integer is an ancestor value the declared class knows how to take."""
+        values = Uint8List10(data=cast(Any, [7]))
+        assert type(values[0]) is Uint8
+        assert values[0] == Uint8(7)
+
+    def test_an_element_of_a_class_below_the_declared_one_is_refused(self) -> None:
+        """A named subtype is a different type, and is not rewrapped into its parent."""
+
+        class TypedUint8(Uint8):
+            """A Uint8 subtype, as applications define semantic integer types."""
+
+        # The declared class does not descend from this one, so the value is not one the
+        # declared class can be built from.
+        #
+        # Reading the element's class first settles nothing here: the two classes are not
+        # the same object, so the descent test is still what answers.
+        with pytest.raises(TypeOrValidationError) as exception_info:
+            Uint8List10(data=[TypedUint8(7)])
+        assert str(exception_info.value) == "Expected Uint8, got TypedUint8"
+
+    def test_an_unrelated_class_is_refused_and_names_itself(self) -> None:
+        """A boolean is neither the declared class nor an ancestor of it."""
+        with pytest.raises(TypeOrValidationError) as exception_info:
+            Uint8List10(data=cast(Any, [Boolean(True)]))
+        assert str(exception_info.value) == "Expected Uint8, got Boolean"
+
+    def test_an_ancestor_value_out_of_range_reports_both_the_type_and_the_detail(self) -> None:
+        """A value the declared class refuses keeps the reason it refused it."""
+        with pytest.raises(TypeOrValidationError) as exception_info:
+            Uint8List10(data=cast(Any, [256]))
+        assert str(exception_info.value) == (
+            "Expected Uint8, got int: 256 out of range for Uint8 [0, 255]"
+        )
+
+
 class TestVectorClassMetadata:
     """Tests for Vector class-level metadata and inference."""
 
@@ -1027,8 +1081,9 @@ class TestProgressiveListClassMetadata:
         assert "Uint8ProgressiveList" in repr(Uint8ProgressiveList)
 
     def test_no_limit_is_declared(self) -> None:
-        """The shape carries no capacity attribute at all."""
-        assert not hasattr(Uint8ProgressiveList, "LIMIT")
+        """The shape declares no capacity, so the name holds None rather than a count."""
+        assert "LIMIT" not in Uint8ProgressiveList.__dict__
+        assert Uint8ProgressiveList.LIMIT is None
 
     def test_init_subclass_infers_element_type_from_generic(self) -> None:
         """Generic subclasses copy the bracketed type into ELEMENT_TYPE."""

@@ -394,6 +394,145 @@ class TestSSZCollectionMutation:
             SSZCollection._validate_element(values, 1)
 
 
+class TestSliceWriteCount:
+    """
+    Tests for the count a slice write leaves behind.
+
+    Each case writes the same slice to a plain list and to a collection, and requires the
+    two to agree on the count held or on the error raised.
+    """
+
+    def test_a_growing_write_agrees_with_a_plain_list(self) -> None:
+        """One position replaced by three leaves two more elements than were held."""
+        values = Uint16List4(data=[Uint16(1), Uint16(2)])
+        plain = [Uint16(1), Uint16(2)]
+
+        values[0:1] = [Uint16(7), Uint16(8), Uint16(9)]
+        plain[0:1] = [Uint16(7), Uint16(8), Uint16(9)]
+
+        # Held 2, spanned 1, given 3, so 4 — exactly the capacity, and not past it.
+        assert list(values) == plain
+        assert len(values) == 4
+
+    def test_a_shrinking_write_agrees_with_a_plain_list(self) -> None:
+        """A span given no elements at all deletes it."""
+        values = Uint16List4(data=[Uint16(1), Uint16(2), Uint16(3)])
+        plain = [Uint16(1), Uint16(2), Uint16(3)]
+
+        values[1:3] = []
+        plain[1:3] = []
+
+        assert list(values) == plain
+        assert len(values) == 1
+
+    def test_a_span_reaching_past_the_end_appends(self) -> None:
+        """A slice is clamped to the count held, so a span past the end spans nothing."""
+        values = Uint16List4(data=[Uint16(1)])
+        plain = [Uint16(1)]
+
+        values[10:20] = [Uint16(2)]
+        plain[10:20] = [Uint16(2)]
+
+        # Nothing was spanned, so the given element is added rather than replacing one.
+        assert list(values) == plain
+        assert len(values) == 2
+
+    def test_a_span_measured_backwards_spans_nothing(self) -> None:
+        """A stop before the start selects no position, so the given elements are inserted."""
+        values = Uint16List4(data=[Uint16(1), Uint16(2)])
+        plain = [Uint16(1), Uint16(2)]
+
+        values[2:1] = [Uint16(9)]
+        plain[2:1] = [Uint16(9)]
+
+        assert list(values) == plain
+        assert len(values) == 3
+
+    @pytest.mark.parametrize(
+        "collection, replacement, message",
+        [
+            pytest.param(
+                Uint16Vector2(data=[Uint16(1), Uint16(2)]),
+                [Uint16(7), Uint16(8)],
+                "attempt to assign sequence of size 2 to extended slice of size 1",
+                id="fixed_length_shape",
+            ),
+            pytest.param(
+                Uint16List4(data=[Uint16(1), Uint16(2), Uint16(3), Uint16(4)]),
+                [Uint16(7)],
+                "attempt to assign sequence of size 1 to extended slice of size 2",
+                id="bounded_shape_at_its_capacity",
+            ),
+        ],
+    )
+    def test_a_step_other_than_one_cannot_resize(
+        self, collection: SSZCollection[Any], replacement: Any, message: str
+    ) -> None:
+        """A stepped write holds one element per position spanned, and resizes nothing."""
+        contents_before = list(collection)
+
+        # A step of 2 across 2 or 4 positions spans 1 or 2 of them.
+        # Given any other number of elements, the host language refuses the write itself,
+        # and the declared capacity never comes into it: the count cannot have changed.
+        #
+        # So the error is the one a plain list raises, not a length or a capacity error.
+        with pytest.raises(ValueError) as exception_info:
+            collection[::2] = replacement
+        assert str(exception_info.value) == message
+        assert not isinstance(exception_info.value, SSZError)
+        assert list(collection) == contents_before
+
+    def test_a_step_other_than_one_writes_one_element_per_position(self) -> None:
+        """Given exactly the count it spans, a stepped write lands."""
+        values = Uint16List4(data=[Uint16(1), Uint16(2), Uint16(3), Uint16(4)])
+        plain = [Uint16(1), Uint16(2), Uint16(3), Uint16(4)]
+
+        values[::2] = [Uint16(7), Uint16(8)]
+        plain[::2] = [Uint16(7), Uint16(8)]
+
+        assert list(values) == plain
+        assert len(values) == 4
+
+    def test_a_reversing_write_replaces_every_element(self) -> None:
+        """A step of -1 spans every position, which is a stepped write like any other."""
+        values = Uint16Vector2(data=[Uint16(1), Uint16(2)])
+        plain = [Uint16(1), Uint16(2)]
+
+        values[::-1] = [Uint16(7), Uint16(8)]
+        plain[::-1] = [Uint16(7), Uint16(8)]
+
+        # Reversed on the way in: the last position takes the first element given.
+        assert list(values) == plain == [Uint16(8), Uint16(7)]
+
+    def test_a_reversing_write_of_the_wrong_count_is_refused(self) -> None:
+        """A step of -1 spans every position, so it cannot resize either."""
+        values = Uint16List4(data=[Uint16(1), Uint16(2)])
+        with pytest.raises(ValueError) as exception_info:
+            values[::-1] = [Uint16(7)]
+        assert str(exception_info.value) == (
+            "attempt to assign sequence of size 1 to extended slice of size 2"
+        )
+        assert list(values) == [Uint16(1), Uint16(2)]
+
+    def test_a_step_of_zero_spans_nothing_and_is_refused(self) -> None:
+        """A step of zero names no run of positions, and is refused before any check."""
+        values = Uint16List4(data=[Uint16(1)])
+        with pytest.raises(ValueError) as exception_info:
+            values[::0] = [Uint16(7)]
+        assert str(exception_info.value) == "slice step cannot be zero"
+        assert list(values) == [Uint16(1)]
+
+    def test_a_step_that_is_not_a_number_is_refused(self) -> None:
+        """Resolving the slice rejects a step that names no distance."""
+        values = Uint16List4(data=[Uint16(1)])
+        with pytest.raises(TypeError) as exception_info:
+            values[:: cast("Any", "two")] = [Uint16(7)]
+        assert str(exception_info.value) == (
+            "slice indices must be integers or None or have an __index__ method"
+        )
+        assert list(values) == [Uint16(1)]
+
+
 class TestSSZCollectionNegativeIndex:
     """
     Tests for addressing a collection from its end rather than its start.
@@ -566,7 +705,7 @@ class TestSSZCollectionNegativeIndex:
         #     2 elements:  [1, 2]     ->  [-2:] = [9]  ->  1 element,  needs 2
         #     3 bits:      [1, 1, 1]  ->  [-2:] = [0]  ->  2 elements, needs 3
         #
-        # The resulting count is measured on a copy.
+        # The resulting count is computed before anything is stored.
         # So the stored elements never move.
         with pytest.raises(SSZValueError) as exception_info:
             collection[-2:] = replacement
@@ -1038,6 +1177,33 @@ class TestDeclaredCapacity:
     """
 
     @pytest.mark.parametrize(
+        "declared_type, declared_name, absent_name",
+        [
+            pytest.param(TypedLengthVector, "LENGTH", "LIMIT", id="vector"),
+            pytest.param(TypedLimitList, "LIMIT", "LENGTH", id="list"),
+            pytest.param(TypedLengthBitVector, "LENGTH", "LIMIT", id="bitvector"),
+            pytest.param(TypedLimitBitList, "LIMIT", "LENGTH", id="bitlist"),
+            pytest.param(TypedLengthBytes, "LENGTH", "LIMIT", id="fixed_byte_array"),
+            pytest.param(TypedLimitByteList, "LIMIT", "LENGTH", id="byte_list"),
+            pytest.param(Uint64, "", "LENGTH", id="basic_type"),
+            pytest.param(TwoFieldContainer, "", "LIMIT", id="container"),
+        ],
+    )
+    def test_a_capacity_a_type_does_not_declare_reads_as_none(
+        self, declared_type: type[SSZType], declared_name: str, absent_name: str
+    ) -> None:
+        """Both names answer on every type, so neither has to be asked for conditionally."""
+        # No shape declares both kinds of count, and most declare neither.
+        # The one it does not declare is the None every type inherits.
+        #
+        # This is what lets a length check read both names as plain attributes. Asking for
+        # a name that might be absent is the expensive spelling: a missing class attribute
+        # raises inside the interpreter, and a default only hides the raise.
+        assert getattr(declared_type, absent_name) is None
+        if declared_name:
+            assert getattr(declared_type, declared_name) == 4
+
+    @pytest.mark.parametrize(
         "declared_type, capacity_name",
         [
             pytest.param(TypedLengthVector, "LENGTH", id="vector"),
@@ -1330,7 +1496,14 @@ class TestDeclaredCapacity:
         # An abstract layer binds the element type.
         # It leaves the count for a concrete type below it to state.
         # Inventing a count here would make such a layer instantiable by accident.
-        assert not hasattr(Intermediate, "LIMIT")
+        #
+        # An undeclared capacity reads as None, which is not a count and is never taken
+        # for one. So the layer states nothing, and building a value of it still fails.
+        assert "LIMIT" not in Intermediate.__dict__
+        assert Intermediate.LIMIT is None
+        with pytest.raises(SSZDefinitionError) as exception_info:
+            Intermediate.of(1)
+        assert str(exception_info.value) == "Intermediate must define ELEMENT_TYPE and LIMIT"
 
         class Concrete(Intermediate):
             LIMIT = Uint64(4)

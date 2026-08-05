@@ -109,19 +109,25 @@ def _coerce_elements(element_type: type[SSZType], elements: Sequence[Any]) -> li
     - Ancestor-class values go through the element type's constructor.
     - A coercion failure re-raises with the high-level expectation in the message.
     - The chained cause preserves the underlying coercion detail.
+
+    An element of exactly the declared class is settled first, before the ancestor test.
+    A class is a subclass of itself, so the test that order skips is one that could only
+    have passed. What changes is the cost of the common case: an identity check on two type
+    objects, rather than a walk of an abstract base class's registry.
     """
     coerced: list[SSZType] = []
     for element in elements:
-        if not issubclass(element_type, type(element)):
-            raise SSZTypeMismatch(element_type.__name__, type(element))
-        if type(element) is element_type:
+        element_class = type(element)
+        if element_class is element_type:
             coerced.append(element)
             continue
+        if not issubclass(element_type, element_class):
+            raise SSZTypeMismatch(element_type.__name__, element_class)
         try:
             coerced.append(cast(Any, element_type)(element))
         except (SSZTypeError, SSZValueError, TypeError, ValueError) as exception:
             raise SSZTypeMismatch(
-                element_type.__name__, type(element), detail=str(exception)
+                element_type.__name__, element_class, detail=str(exception)
             ) from exception
     return coerced
 
@@ -351,7 +357,7 @@ class Vector[T: SSZType](_SSZSequence[T]):
 
         # A shape that declared neither keeps its inherited default, and fails its own
         # declaration check instead.
-        if not (hasattr(cls, "ELEMENT_TYPE") and hasattr(cls, "LENGTH")):
+        if not hasattr(cls, "ELEMENT_TYPE") or cls.LENGTH is None:
             return
 
         element_type, length = cls.ELEMENT_TYPE, cls.LENGTH
@@ -384,7 +390,7 @@ class Vector[T: SSZType](_SSZSequence[T]):
         The chained cause preserves the underlying coercion detail.
         """
         # Subclasses must declare both annotations before any instance can validate.
-        if not hasattr(cls, "ELEMENT_TYPE") or not hasattr(cls, "LENGTH"):
+        if not hasattr(cls, "ELEMENT_TYPE") or cls.LENGTH is None:
             raise SSZDefinitionError(cls.__name__, "ELEMENT_TYPE and LENGTH")
 
         # Reject strings and non-iterables, then materialize into a sequence.
@@ -709,7 +715,7 @@ class List[T: SSZType](_SSZList[T]):
         The chained cause preserves the underlying coercion detail.
         """
         # Subclasses must declare both annotations before any instance can validate.
-        if not hasattr(cls, "ELEMENT_TYPE") or not hasattr(cls, "LIMIT"):
+        if not hasattr(cls, "ELEMENT_TYPE") or cls.LIMIT is None:
             raise SSZDefinitionError(cls.__name__, "ELEMENT_TYPE and LIMIT")
 
         # Reject strings and non-iterables, then materialize into a sequence.
