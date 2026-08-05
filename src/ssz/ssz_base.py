@@ -32,6 +32,13 @@ _CAPACITY_NAMES: Final = ("LENGTH", "LIMIT")
 
 An exact count and an upper bound are spelled differently, and no shape declares both."""
 
+_COLD_CACHE: Final = {"_version": 0, "_root_memo": None}
+"""What each cache slot holds before anything has touched it.
+
+Filled on first read, so decoding pays nothing and a copied value starts cold rather
+than stale.
+"""
+
 
 class SSZType(ABC):
     """
@@ -268,8 +275,12 @@ class SSZType(ABC):
         - Row four bounds a wider tree, so every leaf sits one level deeper.
         - A capacity reaches that tree only through the width it rounds up to.
 
-        Nothing is cached.
-        A mutated value reports its new root, and an unchanged one is hashed again.
+        A root is remembered until the value changes.
+        A value mutated since it was last rooted is hashed again.
+        One left alone answers with the bytes it answered with before.
+
+        A mutation counter on each model guards the memo.
+        The merkleization module decides what counts as changed.
 
         The tree rules live with the merkleization primitives, not here.
         The module-level function is the form the spec defines.
@@ -330,25 +341,66 @@ class SSZModel(StrictBaseModel, SSZType):
     Mutability is configurable per type through the MUTABLE flag. It defaults
     to on and is inherited, so an application can declare one base with
     MUTABLE set to False and every type built on it is immutable.
+
+    Every mutation raises this value's version.
+    A remembered root is reused only while every version below it is unchanged.
     """
+
+    __slots__ = ("_root_memo", "_version")
+    """The mutation counter and the remembered root, one pair per value.
+
+    Slots, because a field would serialize and a private attribute would take part in
+    equality. A slot is invisible to both, which is what a cache has to be.
+    """
+
+    if TYPE_CHECKING:
+        # Declared for the type checker only. Writing these as annotations in the class
+        # body would make Pydantic read them as private attributes, which is the shape
+        # the slots above exist to avoid. This block never runs, so nothing is declared.
+        _version: ClassVar[int]
+        _root_memo: ClassVar["tuple[object, Root] | None"]
 
     MUTABLE: ClassVar[bool] = True
     """Whether instances accept mutation. Set False on a subclass to freeze it."""
 
-    def _require_mutable(self) -> None:
-        """Reject the mutation when the type declares itself immutable."""
+    def _begin_mutation(self) -> None:
+        """
+        Admit one mutation, refusing it outright on an immutable type.
+
+        Every mutator passes here, so invalidation is one name to grep for.
+        Raising the version retires any remembered root. It only ever goes up.
+        Raising it before validation means a failed mutation costs a recomputation
+        rather than a stale root.
+
+        Raises:
+            SSZTypeError: When the type declares itself immutable.
+        """
         if not type(self).MUTABLE:
             raise SSZTypeError(f"{type(self).__name__} is immutable")
+        # Written past this class's own __setattr__, which is the door itself.
+        object.__setattr__(self, "_version", self._version + 1)
 
     # Hidden from type checkers: a visible __setattr__ typed to accept Any
     # would exempt every field assignment from static checking against the
     # declared field types.
+    # A visible fallback returning Any would make
+    # every misspelled attribute resolve instead of being reported.
     if not TYPE_CHECKING:  # pragma: no cover
 
         def __setattr__(self, name: str, value: Any) -> None:
-            """Gate field assignment on the MUTABLE flag, then validate as usual."""
-            self._require_mutable()
+            """Pass the mutation door, then assign and validate as usual."""
+            self._begin_mutation()
             super().__setattr__(name, value)
+
+        def __getattr__(self, name: str) -> Any:
+            """Fill a cache slot on first read, leaving every other name to Pydantic."""
+            # An unset slot raises before this method is reached, so the common case of
+            # a slot already filled never gets here at all.
+            if name in _COLD_CACHE:
+                cold = _COLD_CACHE[name]
+                object.__setattr__(self, name, cold)
+                return cold
+            return super().__getattr__(name)
 
     def __len__(self) -> int:
         """Element count for a collection, field count for every other shape."""
@@ -474,7 +526,7 @@ class SSZCollection[T](SSZModel):
 
     def __setitem__(self, index: int | slice, value: T | Sequence[T]) -> None:
         """Replace the element(s) at ``index``, validating each new element."""
-        self._require_mutable()
+        self._begin_mutation()
         if isinstance(index, slice):
             elements = [self._validate_element(v) for v in cast("Sequence[T]", value)]
             # Dry run on a copy: the resulting length must pass the declared

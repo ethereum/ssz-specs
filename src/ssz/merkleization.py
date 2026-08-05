@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 import math
+import os
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
-from functools import singledispatch
+from functools import cache, singledispatch
 from hashlib import sha256
 from itertools import accumulate, repeat
 from typing import Final
@@ -16,7 +17,7 @@ from ssz.byte_arrays import ByteList, ByteVector
 from ssz.collections import List, ProgressiveList, Vector
 from ssz.container import Container, ProgressiveContainer
 from ssz.exceptions import SSZTypeError, SSZValueError
-from ssz.ssz_base import SSZType
+from ssz.ssz_base import SSZModel, SSZType
 from ssz.uint import BaseUint
 from ssz.union import CompatibleUnion
 
@@ -25,6 +26,13 @@ BYTES_PER_CHUNK: Final = 32
 
 BITS_PER_CHUNK: Final = BYTES_PER_CHUNK * 8
 """Width of a Merkle leaf chunk in bits."""
+
+PARANOID_ROOTS: bool = os.environ.get("SSZ_PARANOID_ROOTS") == "1"
+"""Whether every remembered root is recomputed and checked against the memo.
+
+A proof built from the same layout agrees with a stale root while both are wrong, so
+recomputing is the only evidence against one. Enable with SSZ_PARANOID_ROOTS=1.
+"""
 
 
 def _next_pow2(x: int) -> int:
@@ -659,12 +667,107 @@ def _layout_container(value: Container) -> MerkleLayout:
     )
 
 
+_IMMUTABLE_LEAVES: Final = (BaseUint, Boolean, ByteVector)
+"""The SSZ types that subclass an immutable builtin, whose roots cannot go stale."""
+
+
+@cache
+def _nested_field_names(cls: type[SSZModel]) -> tuple[str, ...]:
+    """
+    The fields of a struct that can hold a value with a root of its own.
+
+    Leaf fields are dropped: reading eight of them on each of 64 validators would cost
+    512 reads for nothing. A field with no single declared class is kept.
+    """
+    return tuple(
+        name
+        for name, field in cls.model_fields.items()
+        if not (
+            isinstance(field.annotation, type) and issubclass(field.annotation, _IMMUTABLE_LEAVES)
+        )
+    )
+
+
+@singledispatch
+def _root_witness(value: object) -> object:
+    """
+    A token that changes whenever this value's root could change.
+
+    A root is reused only while an equal witness is rebuilt. Three things decide a root:
+
+    - The type, fixed once declared.
+    - Contents this value owns, whose mutation paths raise its version.
+    - The nested values' own witnesses, by the same argument one level down.
+
+    An unregistered shape gets a token equal to nothing, biasing it slow rather than wrong.
+    """
+    return object()
+
+
+@_root_witness.register(BaseUint)
+@_root_witness.register(Boolean)
+@_root_witness.register(ByteVector)
+def _witness_leaf(value: BaseUint | Boolean | ByteVector) -> object:
+    """An immutable leaf cannot change, leaving one shared token to serve them all."""
+    return None
+
+
+@_root_witness.register(ByteList)
+@_root_witness.register(BitVector)
+@_root_witness.register(BitList)
+@_root_witness.register(ProgressiveBitList)
+def _witness_packed(value: ByteList | BitVector | BitList | ProgressiveBitList) -> object:
+    """A packed shape roots from its own contents alone, which its version covers."""
+    return (value._version, len(value.data))
+
+
+@_root_witness.register(Vector)
+@_root_witness.register(List)
+@_root_witness.register(ProgressiveList)
+def _witness_sequence(value: Vector | List | ProgressiveList) -> object:
+    """A sequence of composites carries its elements' witnesses, since each can mutate."""
+    if issubclass(type(value).ELEMENT_TYPE, SSZModel):
+        return (value._version, tuple(_root_witness(element) for element in value.data))
+    return (value._version, len(value.data))
+
+
+@_root_witness.register(Container)
+@_root_witness.register(ProgressiveContainer)
+@_root_witness.register(CompatibleUnion)
+def _witness_fields(value: Container | ProgressiveContainer | CompatibleUnion) -> object:
+    """A struct carries the witness of every field that can hold a root of its own."""
+    return (
+        value._version,
+        tuple(_root_witness(getattr(value, name)) for name in _nested_field_names(type(value))),
+    )
+
+
+def _root_from_layout(value: object) -> Root:
+    """
+    Root a value from its layout, remembering nothing.
+
+    Raises:
+        SSZTypeError: If the value's type has no registered handler.
+    """
+    layout = merkle_layout(value)
+    chunks = layout.chunks()
+    # The two tree shapes are the only ones SSZ defines.
+    # A layout names one of them.
+    if layout.limit is None:
+        root = merkleize_progressive(chunks)
+    else:
+        root = merkleize(chunks, layout.limit)
+    # A shape that mixes a word in puts its contents on the left and the word on the right.
+    return root if layout.mixin is None else _mix_in(root, layout.mixin)
+
+
 def hash_tree_root(value: object) -> Root:
     """
     Compute the SSZ Merkle root of a value.
 
     A value whose whole encoding fits one chunk is its own root, once padded.
-    Everything else lays a tree out and hashes it.
+    A value that can hold one reports the root it last computed, until a mutation
+    invalidates the witness it was taken under.
 
     Raises:
         SSZTypeError: If the value's type has no registered handler.
@@ -677,22 +780,29 @@ def hash_tree_root(value: object) -> Root:
     #
     # The plain checks come first because a negative check against the abstract base
     # costs more than the root it decides.
+    # A leaf needs no memo either.
+    # It cannot go stale, having nowhere to keep one.
     if isinstance(value, int):
         # One conversion at the chunk width gives the encoding and its padding together.
         if isinstance(value, (BaseUint, Boolean)) and value.get_byte_length() <= BYTES_PER_CHUNK:
             return Root._trusted(value.to_bytes(BYTES_PER_CHUNK, "little"))
     # A byte array is its own encoding, needing only the padding.
     # Padding an empty one builds the zero chunk it roots to.
-    elif isinstance(value, bytes) and len(value) <= BYTES_PER_CHUNK:
-        return Root._trusted(value.ljust(BYTES_PER_CHUNK, b"\x00"))
+    elif isinstance(value, bytes):
+        if len(value) <= BYTES_PER_CHUNK:
+            return Root._trusted(value.ljust(BYTES_PER_CHUNK, b"\x00"))
+    elif isinstance(value, SSZModel):
+        witness = _root_witness(value)
+        memo = value._root_memo
+        if memo is not None and memo[0] == witness:
+            if not PARANOID_ROOTS:
+                return memo[1]
+            recomputed = _root_from_layout(value)
+            assert recomputed == memo[1], f"stale remembered root for {type(value).__name__}"
+            return recomputed
+        root = _root_from_layout(value)
+        # A model declares no writable attributes, leaving the slot to be set directly.
+        object.__setattr__(value, "_root_memo", (witness, root))
+        return root
 
-    layout = merkle_layout(value)
-    chunks = layout.chunks()
-    # The two tree shapes are the only ones SSZ defines.
-    # A layout names one of them.
-    if layout.limit is None:
-        root = merkleize_progressive(chunks)
-    else:
-        root = merkleize(chunks, layout.limit)
-    # A shape that mixes a word in puts its contents on the left and the word on the right.
-    return root if layout.mixin is None else _mix_in(root, layout.mixin)
+    return _root_from_layout(value)
