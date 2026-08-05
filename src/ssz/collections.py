@@ -501,14 +501,14 @@ class _SSZList[T: SSZType](_SSZSequence[T]):
 
     def append(self, value: T) -> None:
         """Add one element at the end, validating it and the resulting length."""
-        self._require_mutable()
+        self._begin_mutation()
         element = self._validate_element(value)
         self._validate_length(len(self.data) + 1)
         cast("list[T]", self.data).append(element)
 
     def pop(self) -> T:
         """Remove and return the last element, validating the resulting length."""
-        self._require_mutable()
+        self._begin_mutation()
         self._validate_length(len(self.data) - 1)
         return cast("list[T]", self.data).pop()
 

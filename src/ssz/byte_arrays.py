@@ -335,21 +335,21 @@ class ByteList(SSZCollection[int]):
     @override
     def __setitem__(self, index: int | slice, value: int | Sequence[int]) -> None:
         """Replace the byte(s) at ``index``, revalidating the stored payload."""
-        self._require_mutable()
+        self._begin_mutation()
         working = bytearray(self.data)
         working[index] = value  # ty: ignore[invalid-assignment]
         self.data = bytes(working)
 
     def append(self, value: int) -> None:
         """Add one byte at the end, revalidating the stored payload."""
-        self._require_mutable()
+        self._begin_mutation()
         working = bytearray(self.data)
         working.append(value)
         self.data = bytes(working)
 
     def pop(self) -> int:
         """Remove and return the last byte, revalidating the stored payload."""
-        self._require_mutable()
+        self._begin_mutation()
         working = bytearray(self.data)
         last = working.pop()
         self.data = bytes(working)
