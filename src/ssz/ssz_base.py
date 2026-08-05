@@ -3,6 +3,7 @@
 import io
 from abc import ABC, abstractmethod
 from collections.abc import Iterator, Sequence
+from copy import copy as shallow_copy
 from typing import IO, TYPE_CHECKING, Any, ClassVar, Final, Self, cast, final, overload, override
 
 from pydantic import ConfigDict
@@ -225,6 +226,26 @@ class SSZType(ABC):
         """
         return cls()
 
+    def copy(self) -> Self:
+        """
+        An independent duplicate of this value, at every depth.
+
+        A value that cannot change already satisfies that, so the three immutable shapes
+        hand themselves back.
+
+        Returns:
+            A duplicate nothing can be written through to reach this value.
+        """
+        return self
+
+    def __copy__(self) -> Self:
+        """Answer the copy module with the value itself, where it would rebuild a subclass."""
+        return self
+
+    def __deepcopy__(self, memo: dict[int, Any]) -> Self:
+        """Answer a deep copy with the value itself, there being no depth to descend into."""
+        return self
+
     def is_zero(self) -> bool:
         """
         Whether this value equals the default of its own type.
@@ -401,6 +422,31 @@ class SSZModel(StrictBaseModel, SSZType):
                 object.__setattr__(self, name, cold)
                 return cold
             return super().__getattr__(name)
+
+    @override
+    def copy(self) -> Self:  # ty: ignore[invalid-method-override]
+        """
+        An independent duplicate of this value, at every depth.
+
+        Every field holding something writable is duplicated, stopping at the immutable
+        leaves. Entries are replaced in the field dictionary rather than assigned, because
+        an immutable type refuses assignment and assignment would revalidate.
+
+        Returns:
+            A duplicate that shares no writable object with this value.
+        """
+        duplicate = shallow_copy(self)
+        stored = duplicate.__dict__
+        for name in type(self).model_fields:
+            value = stored[name]
+            if isinstance(value, SSZModel):
+                stored[name] = value.copy()
+            elif type(value) is list:
+                stored[name] = [
+                    element.copy() if isinstance(element, SSZModel) else element
+                    for element in value
+                ]
+        return duplicate
 
     def __len__(self) -> int:
         """Element count for a collection, field count for every other shape."""
