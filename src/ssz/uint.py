@@ -17,7 +17,14 @@ from ssz.ssz_base import SSZType
 
 
 class BaseUint(int, SSZType):
-    """Base class for fixed-width unsigned integer types."""
+    """
+    Base class for fixed-width unsigned integer types.
+
+    Every binary operator applies one operand rule.
+    Two uints may meet only when inheritance relates them, a bare integer meets any of
+    them, and nothing else meets any of them.
+    Every result is range-checked against the width the rule picked.
+    """
 
     __slots__ = ()
 
@@ -59,13 +66,14 @@ class BaseUint(int, SSZType):
             raise SSZTypeMismatch("int", type(value))
         # Invariant: the range check downstream compares against plain int bounds.
         #
-        # A uint refuses a plain int operand in a comparison.
-        # Python gives an int subclass reflected priority over a plain left operand.
-        # So an input of a subclass would send the lower-bound check into its own operator:
+        # Python gives an int subclass reflected priority over a plain left operand, so an
+        # input of a subclass sends the lower-bound check into that class's own operator:
         #
-        #     0 <= input  ->  type(input).__ge__(input, 0)  ->  TypeError
+        #     0 <= input  ->  type(input).__ge__(input, 0)
         #
-        # Narrowing to a plain int keeps the comparison on the base integer type.
+        # A uint answers that correctly, because the relation rule admits a bare int. An
+        # arbitrary int subclass need not: it is free to refuse a plain int and raise.
+        # Narrowing keeps the comparison on the base integer type whatever the input is.
         return cls._wrap(value if type(value) is int else int(value))
 
     @classmethod
@@ -76,7 +84,8 @@ class BaseUint(int, SSZType):
         This is the shared fast path for construction and for arithmetic results.
 
         - The input has to be a plain integer, neither a bool nor a subclass instance.
-        - A subclass instance compares strictly, so it must be narrowed by the caller.
+        - An arbitrary int subclass may refuse a plain int operand in a comparison, so the
+          caller narrows the value before it reaches the bound check here.
         - The type guards the public constructor applies are skipped here.
         - The bound is read from the cached class attribute rather than recomputed.
         - Allocation goes directly through the base integer type.
@@ -184,81 +193,122 @@ class BaseUint(int, SSZType):
         """The maximum value for this unsigned integer."""
         return cls(cls.MAX_VALUE)
 
-    def _raise_type_error(self, other: Any, op_symbol: str) -> NoReturn:
+    @classmethod
+    def _raise_type_error(cls, other: Any, op_symbol: str) -> NoReturn:
         """Helper to raise a consistent TypeError."""
         raise TypeError(
             f"Unsupported operand type(s) for {op_symbol}: "
-            f"'{type(self).__name__}' and '{type(other).__name__}'"
+            f"'{cls.__name__}' and '{type(other).__name__}'"
         )
+
+    @classmethod
+    def _resolve_type(cls, other: Any, op_symbol: str) -> type[Self]:
+        """
+        Decide which type an operation between two different types produces.
+
+        Two uints may meet only when inheritance relates them, and the more derived type
+        wins, so a unit survives contact with the width it is built on:
+
+            Slot(37) % Uint64(8)   ->  Slot     the base carries no unit of its own
+            Uint64(1) + Slot(2)    ->  Slot     order does not change which unit wins
+            Epoch(5) + 1           ->  Epoch    a literal carries no unit either
+            Slot(1) + Epoch(2)     ->  refused  siblings, and a slot is not an epoch
+            Uint64(1) + Uint32(2)  ->  refused  siblings, and the widths disagree
+            Slot(1) + True         ->  refused  a bool counts nothing
+
+        A bare integer is admitted because a literal has no unit to confuse.
+        A bool is not, being a subclass of int rather than int itself.
+
+        Returns:
+            The type to wrap the result in.
+
+        Raises:
+            TypeError: When no inheritance relates the two types.
+        """
+        other_cls = type(other)
+        # Invariant: a plain int is the one non-uint operand allowed through.
+        #
+        # It is compared by identity, not isinstance, so bool stays out.
+        if other_cls is int:
+            return cls
+        if issubclass(other_cls, BaseUint):
+            # The derived type wins in whichever position it appears.
+            if issubclass(other_cls, cls):
+                return other_cls
+            if issubclass(cls, other_cls):
+                return cls
+        # Why: reaching here means the two types are siblings, or the operand is not a
+        # uint at all. Either way there is no answer that would not invent a unit.
+        cls._raise_type_error(other, op_symbol)
 
     def __add__(self, other: Any) -> Self:
         """Forward addition."""
         cls = type(self)
         if type(other) is not cls:
-            self._raise_type_error(other, "+")
+            cls = cls._resolve_type(other, "+")
         return cls._wrap(int.__add__(self, other))
 
     def __radd__(self, other: Any) -> Self:
         """Reverse addition."""
         cls = type(self)
         if type(other) is not cls:
-            self._raise_type_error(other, "+")
+            cls = cls._resolve_type(other, "+")
         return cls._wrap(int.__add__(other, self))
 
     def __sub__(self, other: Any) -> Self:
         """Forward subtraction."""
         cls = type(self)
         if type(other) is not cls:
-            self._raise_type_error(other, "-")
+            cls = cls._resolve_type(other, "-")
         return cls._wrap(int.__sub__(self, other))
 
     def __rsub__(self, other: Any) -> Self:
         """Reverse subtraction."""
         cls = type(self)
         if type(other) is not cls:
-            self._raise_type_error(other, "-")
+            cls = cls._resolve_type(other, "-")
         return cls._wrap(int.__sub__(other, self))
 
     def __mul__(self, other: Any) -> Self:
         """Forward multiplication."""
         cls = type(self)
         if type(other) is not cls:
-            self._raise_type_error(other, "*")
+            cls = cls._resolve_type(other, "*")
         return cls._wrap(int.__mul__(self, other))
 
     def __rmul__(self, other: Any) -> Self:
         """Reverse multiplication."""
         cls = type(self)
         if type(other) is not cls:
-            self._raise_type_error(other, "*")
+            cls = cls._resolve_type(other, "*")
         return cls._wrap(int.__mul__(other, self))
 
     def __floordiv__(self, other: Any) -> Self:
         """Forward floor division."""
         cls = type(self)
         if type(other) is not cls:
-            self._raise_type_error(other, "//")
+            cls = cls._resolve_type(other, "//")
         return cls._wrap(int.__floordiv__(self, other))
 
     def __rfloordiv__(self, other: Any) -> Self:
         """Reverse floor division."""
         cls = type(self)
         if type(other) is not cls:
-            self._raise_type_error(other, "//")
+            cls = cls._resolve_type(other, "//")
         return cls._wrap(int.__floordiv__(other, self))
 
     def __mod__(self, other: Any) -> Self:
         """Forward modulo."""
         cls = type(self)
         if type(other) is not cls:
-            self._raise_type_error(other, "%")
+            cls = cls._resolve_type(other, "%")
         return cls._wrap(int.__mod__(self, other))
 
     def __rmod__(self, other: Any) -> Self:
         """Reverse modulo."""
         cls = type(self)
         if type(other) is not cls:
-            self._raise_type_error(other, "%")
+            cls = cls._resolve_type(other, "%")
         return cls._wrap(int.__mod__(other, self))
 
     @overload
@@ -271,27 +321,31 @@ class BaseUint(int, SSZType):
     # The strict overload-match check rejects it regardless.
     def __pow__(self, value: int, mod: int | None = None, /) -> Self:  # ty: ignore[invalid-method-override]
         """Forward exponentiation and three-argument pow."""
-        if type(value) is not type(self):
-            self._raise_type_error(value, "**")
-        if mod is not None and type(mod) is not type(self):
-            self._raise_type_error(mod, "**")
+        cls = type(self)
+        if type(value) is not cls:
+            cls = cls._resolve_type(value, "**")
+        # The modulus resolves against the type the exponent already settled on, so a
+        # unit picked up from the exponent is not thrown away by a bare base and modulus.
+        if mod is not None and type(mod) is not cls:
+            cls = cls._resolve_type(mod, "**")
         power = pow(int(self), int(value), int(mod) if mod is not None else None)
-        return type(self)._wrap(power)
+        return cls._wrap(power)
 
     def __rpow__(self, base: int, modulo: int | None = None, /) -> Self:
         """Reverse exponentiation and three-argument pow."""
-        if type(base) is not type(self):
-            self._raise_type_error(base, "**")
-        if modulo is not None and type(modulo) is not type(self):
-            self._raise_type_error(modulo, "**")
+        cls = type(self)
+        if type(base) is not cls:
+            cls = cls._resolve_type(base, "**")
+        if modulo is not None and type(modulo) is not cls:
+            cls = cls._resolve_type(modulo, "**")
         power = pow(int(base), int(self), int(modulo) if modulo is not None else None)
-        return type(self)._wrap(power)
+        return cls._wrap(power)
 
     def __divmod__(self, other: Any) -> tuple[Self, Self]:
         """Forward divmod."""
         cls = type(self)
         if type(other) is not cls:
-            self._raise_type_error(other, "divmod")
+            cls = cls._resolve_type(other, "divmod")
         quotient, remainder = int.__divmod__(self, other)
         return cls._wrap(quotient), cls._wrap(remainder)
 
@@ -299,7 +353,7 @@ class BaseUint(int, SSZType):
         """Reverse divmod."""
         cls = type(self)
         if type(other) is not cls:
-            self._raise_type_error(other, "divmod")
+            cls = cls._resolve_type(other, "divmod")
         quotient, remainder = int.__rdivmod__(self, other)
         return cls._wrap(quotient), cls._wrap(remainder)
 
@@ -307,7 +361,7 @@ class BaseUint(int, SSZType):
         """Forward bitwise AND."""
         cls = type(self)
         if type(other) is not cls:
-            self._raise_type_error(other, "&")
+            cls = cls._resolve_type(other, "&")
         return cls._wrap(int.__and__(self, other))
 
     def __rand__(self, other: Any) -> Self:
@@ -318,7 +372,7 @@ class BaseUint(int, SSZType):
         """Forward bitwise OR."""
         cls = type(self)
         if type(other) is not cls:
-            self._raise_type_error(other, "|")
+            cls = cls._resolve_type(other, "|")
         return cls._wrap(int.__or__(self, other))
 
     def __ror__(self, other: Any) -> Self:
@@ -329,7 +383,7 @@ class BaseUint(int, SSZType):
         """Forward bitwise XOR."""
         cls = type(self)
         if type(other) is not cls:
-            self._raise_type_error(other, "^")
+            cls = cls._resolve_type(other, "^")
         return cls._wrap(int.__xor__(self, other))
 
     def __rxor__(self, other: Any) -> Self:
@@ -340,64 +394,69 @@ class BaseUint(int, SSZType):
         """Forward left bit-shift."""
         cls = type(self)
         if type(other) is not cls:
-            self._raise_type_error(other, "<<")
+            cls = cls._resolve_type(other, "<<")
         return cls._wrap(int.__lshift__(self, other))
 
     def __rlshift__(self, other: Any) -> Self:
         """Reverse left bit-shift."""
         cls = type(self)
         if type(other) is not cls:
-            self._raise_type_error(other, "<<")
+            cls = cls._resolve_type(other, "<<")
         return cls._wrap(int.__lshift__(other, self))
 
     def __rshift__(self, other: Any) -> Self:
         """Forward right bit-shift."""
         cls = type(self)
         if type(other) is not cls:
-            self._raise_type_error(other, ">>")
+            cls = cls._resolve_type(other, ">>")
         return cls._wrap(int.__rshift__(self, other))
 
     def __rrshift__(self, other: Any) -> Self:
         """Reverse right bit-shift."""
         cls = type(self)
         if type(other) is not cls:
-            self._raise_type_error(other, ">>")
+            cls = cls._resolve_type(other, ">>")
         return cls._wrap(int.__rshift__(other, self))
+
+    # A comparison answers with a bool, so which of the two types is more derived does not
+    # matter. Only the relation does, and the resolved type is dropped on the floor. That
+    # is also why none of the six binds it to a local: the same-type path stays two type
+    # calls and a branch, exactly as it was before the rule was widened.
 
     def __eq__(self, other: object) -> bool:
         """Equality."""
         if type(other) is not type(self):
-            self._raise_type_error(other, "==")
+            self._resolve_type(other, "==")
         return super().__eq__(other)
 
     def __ne__(self, other: object) -> bool:
         """Inequality."""
         if type(other) is not type(self):
-            self._raise_type_error(other, "!=")
+            self._resolve_type(other, "!=")
         return super().__ne__(other)
 
     def __lt__(self, other: Any) -> bool:
         """Less-than."""
         if type(other) is not type(self):
-            self._raise_type_error(other, "<")
+            self._resolve_type(other, "<")
         return super().__lt__(other)
 
     def __le__(self, other: Any) -> bool:
         """Less-than-or-equal."""
         if type(other) is not type(self):
-            self._raise_type_error(other, "<=")
+            self._resolve_type(other, "<=")
         return super().__le__(other)
 
     def __gt__(self, other: Any) -> bool:
         """Greater-than."""
         if type(other) is not type(self):
-            self._raise_type_error(other, ">")
+            self._resolve_type(other, ">")
         return super().__gt__(other)
 
     def __ge__(self, other: Any) -> bool:
         """Greater-than-or-equal."""
         if type(other) is not type(self):
-            self._raise_type_error(other, ">=")
+            self._resolve_type(other, ">=")
         return super().__ge__(other)
 
     def __repr__(self) -> str:
