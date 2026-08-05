@@ -116,7 +116,7 @@ def test_instantiation_from_invalid_types_raises_error(
 
 @pytest.mark.parametrize("uint_class", ALL_UINT_TYPES)
 def test_instantiation_and_type(uint_class: Type[BaseUint]) -> None:
-    """Tests that Uint types are instances of `int` and their own class."""
+    """Tests that Uint types are instances of int and their own class."""
     uint_instance = uint_class(5)
     assert isinstance(uint_instance, int)
     assert isinstance(uint_instance, BaseUint)
@@ -402,8 +402,8 @@ def test_repr_and_str(uint_class: Type[BaseUint]) -> None:
 
 @pytest.mark.parametrize("uint_class", ALL_UINT_TYPES)
 def test_hash(uint_class: Type[BaseUint]) -> None:
-    """Tests that the hash is distinct from a raw int."""
-    assert hash(uint_class(1)) != hash(1)
+    """Tests that a uint hashes exactly as the integer it holds."""
+    assert hash(uint_class(1)) == hash(1)
     assert hash(uint_class(1)) == hash(uint_class(1))
     assert hash(uint_class(1)) != hash(uint_class(2))
 
@@ -536,7 +536,7 @@ class TestUintSSZ:
 
     @pytest.mark.parametrize("uint_class", ALL_UINT_TYPES)
     def test_decode_bytes_invalid_length(self, uint_class: Type[BaseUint]) -> None:
-        """Tests that `decode_bytes` raises SSZSerializationError for wrong length data."""
+        """Tests that decode_bytes raises SSZSerializationError for wrong length data."""
         # Create byte string that is one byte too short.
         expected_length = uint_class.get_byte_length()
         invalid_data = b"\x00" * (expected_length - 1)
@@ -568,7 +568,7 @@ class TestUintSSZ:
 
     @pytest.mark.parametrize("uint_class", ALL_UINT_TYPES)
     def test_deserialize_invalid_scope(self, uint_class: Type[BaseUint]) -> None:
-        """Tests that `deserialize` raises an SSZSerializationError if the scope is incorrect."""
+        """Tests that deserialize raises an SSZSerializationError if the scope is incorrect."""
         byte_length = uint_class.get_byte_length()
         stream = io.BytesIO(b"\x00" * byte_length)
         invalid_scope = byte_length - 1
@@ -582,7 +582,7 @@ class TestUintSSZ:
 
     @pytest.mark.parametrize("uint_class", ALL_UINT_TYPES)
     def test_deserialize_stream_too_short(self, uint_class: Type[BaseUint]) -> None:
-        """Tests that `deserialize` raises SSZSerializationError if stream ends prematurely."""
+        """Tests that deserialize raises SSZSerializationError if stream ends prematurely."""
         byte_length = uint_class.get_byte_length()
         # Create a stream that is shorter than what the type requires.
         stream = io.BytesIO(b"\x00" * (byte_length - 1))
@@ -928,11 +928,31 @@ class TestCrossWidthEqualityIsStrict:
         assert not (uint_class(7) != uint_class(7))
 
     @pytest.mark.parametrize("type_a, type_b", CROSS_UINT_TYPE_PAIRS)
-    def test_hash_differs_across_widths(
+    def test_hash_is_the_value_across_widths(
         self, type_a: Type[BaseUint], type_b: Type[BaseUint]
     ) -> None:
-        """Equal-by-value instances of different widths hash differently."""
-        assert hash(type_a(5)) != hash(type_b(5))
+        """A uint hashes as its value, so two widths holding 5 share the hash of 5."""
+        assert hash(type_a(5)) == hash(type_b(5)) == hash(5)
+
+    @pytest.mark.parametrize("type_a, type_b", CROSS_UINT_TYPE_PAIRS)
+    def test_a_cross_width_dict_probe_raises_rather_than_missing(
+        self, type_a: Type[BaseUint], type_b: Type[BaseUint]
+    ) -> None:
+        """One bucket holds both, so the container reaches the refusal above.
+
+        A type-mixing hash sent the probe to a different bucket, which answered
+        "absent" without ever consulting the comparison that decides the question.
+        """
+        with pytest.raises(TypeError):
+            _ = {type_a(5): 1}[type_b(5)]
+
+    @pytest.mark.parametrize("type_a, type_b", CROSS_UINT_TYPE_PAIRS)
+    def test_a_cross_width_dict_probe_of_another_value_is_simply_absent(
+        self, type_a: Type[BaseUint], type_b: Type[BaseUint]
+    ) -> None:
+        """Different values hash apart, so the comparison is never reached."""
+        with pytest.raises(KeyError):
+            _ = {type_a(5): 1}[type_b(6)]
 
 
 @pytest.mark.parametrize("uint_class", ALL_UINT_TYPES)
