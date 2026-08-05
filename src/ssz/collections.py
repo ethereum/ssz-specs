@@ -343,8 +343,9 @@ class Vector[T: SSZType](_SSZSequence[T]):
         """
         Give the elements their default, which is the element default at every position.
 
-        Each element is built when the elements are left out, never shared: one instance
-        placed at every position would alias, and an element is mutable.
+        One instance is shared across every position when the element type cannot be
+        mutated, and built per position otherwise, since two positions holding one mutable
+        element would alias.
         """
         super().__pydantic_init_subclass__(**kwargs)
 
@@ -354,7 +355,16 @@ class Vector[T: SSZType](_SSZSequence[T]):
             return
 
         element_type, length = cls.ELEMENT_TYPE, cls.LENGTH
-        cls.model_fields["data"].default_factory = lambda: [element_type() for _ in range(length)]
+        # A uint, a boolean and a fixed byte array each subclass an immutable builtin, so
+        # no position can alter what another holds. The bitfield default already shares one
+        # boolean on that argument, and it holds for every such element type.
+        if issubclass(element_type, (int, bytes)):
+            shared = element_type()
+            cls.model_fields["data"].default_factory = lambda: [shared] * length
+        else:
+            cls.model_fields["data"].default_factory = lambda: [
+                element_type() for _ in range(length)
+            ]
         cls.model_rebuild(force=True)
 
     @field_validator("data", mode="before")
