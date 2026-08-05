@@ -7,7 +7,7 @@ from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from functools import singledispatch
 from hashlib import sha256
-from itertools import accumulate, batched, repeat
+from itertools import accumulate, repeat
 from typing import Final
 
 from ssz.bitfields import BitList, BitVector, ProgressiveBitList
@@ -92,7 +92,7 @@ def _zero_tree_root(width: int) -> Root:
     return _ZERO_ROOTS[depth]
 
 
-def merkleize(chunks: Sequence[Chunk], limit: int | None = None) -> Root:
+def merkleize(chunks: Sequence[bytes], limit: int | None = None) -> Root:
     r"""
     Compute the SSZ Merkle root over a chunk sequence.
 
@@ -108,8 +108,21 @@ def merkleize(chunks: Sequence[Chunk], limit: int | None = None) -> Root:
     Missing leaves contribute pre-computed zero subtree roots instead of
     materialized zero chunks, so allocation stays proportional to actual data.
 
+    Every node below the root is a plain 32-byte string.
+    The root alone carries a type.
+    It is the only node returned.
+
+    Two shapes skip the layer walk:
+
+    - A level of one repeated value spanning its data tree has a root in closed form.
+    - A single node with capacity above it pairs only against cached zero subtrees.
+
+    A 65_536-leaf tree of zero chunks costs 16 hashes.
+    Walking it would cost 65_535.
+
     Args:
-        chunks: Leaf chunks, each exactly 32 bytes wide.
+        chunks: Leaf chunks, each exactly 32 bytes wide. A chunk of any other width is the
+            caller's error and is not diagnosed here.
         limit: Optional leaf-count capacity; tree width is rounded up to the next power of two.
 
     Returns:
@@ -127,33 +140,60 @@ def merkleize(chunks: Sequence[Chunk], limit: int | None = None) -> Root:
         raise SSZValueError("merkleize: input exceeds limit")
     else:
         width = _next_pow2(limit)
+    # A one-leaf tree has no parent to hash: the leaf is the root.
     if width == 1:
-        return Root(chunks[0])
+        return Root._trusted(chunks[0])
+
+    # Width of the perfect subtree the data fills, where the layer walk ends.
+    # Above it every height holds one real node beside an all-zero subtree.
+    data_width = _next_pow2(chunk_count)
 
     # Walk one tree layer per outer iteration.
-    # A missing right sibling pulls the all-zero subtree of the current size from the cache,
-    # so unused zero leaves are never allocated.
-    level: list[Chunk] = list(chunks)
+    level: list[bytes] = list(chunks)
     subtree_size = 1
-    while subtree_size < width:
-        next_level: list[Chunk] = []
-        # Each pair holds the left and right child of one parent node.
-        # An odd tail yields a length-one tuple.
-        # Its missing right sibling is the all-zero subtree of the current size.
-        for child_pair in batched(level, 2):
-            left = child_pair[0]
-            right = child_pair[1] if len(child_pair) == 2 else _zero_tree_root(subtree_size)
-            next_level.append(Root(sha256(left + right).digest()))
-        level = next_level
+    while len(level) > 1:
+        # Pairing a uniform level yields the same value one size up.
+        # The tail below folds it once per remaining height.
+        #
+        # Invariant: the level must also span its data tree.
+        # A shorter one meets a zero subtree as a sibling above it.
+        # Zero does not fold.
+        #
+        # The comparison goes through plain bytes.
+        # A level mixes bare digests with typed leaves that refuse equality against bytes.
+        if (
+            len(level) * subtree_size == data_width
+            and bytes(level[0]) == bytes(level[-1])
+            and b"".join(level) == level[0] * len(level)
+        ):
+            break
+
+        # An odd node count is missing exactly one right sibling, at the end of the level.
+        # Supplying it here, rather than once per pair, keeps the branch out of the loop.
+        if len(level) & 1:
+            level.append(_zero_tree_root(subtree_size))
+        level = [sha256(level[i] + level[i + 1]).digest() for i in range(0, len(level), 2)]
         subtree_size *= 2
 
-    # Invariant: width is the next power of two of the leaf count or capacity,
-    # so the loop above halves the level count down to exactly one root.
-    assert len(level) == 1
-    return Root(level[0])
+    # Neither spine above this point branches.
+    # A list per height would allocate only to carry a single node.
+    #
+    # - Up to the data tree, after a fold: every sibling is the node itself.
+    # - Up to the full width: every sibling is the all-zero subtree beside the data.
+    node = level[0]
+    while subtree_size < data_width:
+        node = sha256(node + node).digest()
+        subtree_size *= 2
+    while subtree_size < width:
+        node = sha256(node + _zero_tree_root(subtree_size)).digest()
+        subtree_size *= 2
+    # Invariant: a width above one leaves at least one height.
+    # One spine above therefore hashed.
+    # A digest is exactly the chunk width.
+    return Root._trusted(node)
 
 
-def merkleize_progressive(chunks: Sequence[Chunk], num_leaves: int = 1) -> Root:
+def merkleize_progressive(chunks: Sequence[bytes], num_leaves: int = 1) -> Root:
     r"""
     Compute the progressive Merkle root over a chunk sequence, per EIP-7916.
 
@@ -226,12 +266,14 @@ def merkleize_progressive(chunks: Sequence[Chunk], num_leaves: int = 1) -> Root:
     # Right child: every chunk past this level, in a level four times as wide.
     successor_root = merkleize_progressive(chunks[num_leaves:], num_leaves * 4)
 
-    return Root(sha256(subtree_root + successor_root).digest())
+    # Invariant: a digest is exactly the chunk width.
+    return Root._trusted(sha256(subtree_root + successor_root).digest())
 
 
 def _mix_in(root: Root, word: Chunk) -> Root:
     """Hash a subtree root against the word its shape mixes in, as the right child."""
-    return Root(sha256(root + word).digest())
+    # Invariant: a digest is exactly the chunk width.
+    return Root._trusted(sha256(root + word).digest())
 
 
 def length_word(length: int) -> Chunk:
@@ -243,7 +285,8 @@ def length_word(length: int) -> Chunk:
     """
     if length < 0:
         raise SSZValueError("length must be non-negative")
-    return Chunk(length.to_bytes(BYTES_PER_CHUNK, "little"))
+    # Invariant: to_bytes yields exactly the requested width, or raises OverflowError.
+    return Chunk._trusted(length.to_bytes(BYTES_PER_CHUNK, "little"))
 
 
 def active_fields_word(active_fields: Sequence[int]) -> Chunk:
@@ -257,7 +300,8 @@ def active_fields_word(active_fields: Sequence[int]) -> Chunk:
     The bound of 256 is enforced by the type that declares the layout, not here.
     """
     packed_bits = sum(1 << i for i, bit in enumerate(active_fields) if bit)
-    return Chunk(packed_bits.to_bytes(BYTES_PER_CHUNK, "little"))
+    # Invariant: to_bytes yields exactly the requested width, or raises OverflowError.
+    return Chunk._trusted(packed_bits.to_bytes(BYTES_PER_CHUNK, "little"))
 
 
 def selector_word(selector: int) -> Chunk:
@@ -274,7 +318,8 @@ def selector_word(selector: int) -> Chunk:
     """
     if not 0 <= selector <= 0xFF:
         raise SSZValueError(f"selector {selector} does not fit one byte")
-    return Chunk(selector.to_bytes(BYTES_PER_CHUNK, "little"))
+    # Invariant: to_bytes yields exactly the requested width, or raises OverflowError.
+    return Chunk._trusted(selector.to_bytes(BYTES_PER_CHUNK, "little"))
 
 
 def mix_in_length(root: Root, length: int) -> Root:
@@ -347,7 +392,7 @@ def mix_in_selector(root: Root, selector: int) -> Root:
     return _mix_in(root, selector_word(selector))
 
 
-def _pack_bytes(data: bytes) -> list[Chunk]:
+def _pack_bytes(data: bytes) -> list[bytes]:
     """
     Right-pad serialized bytes to a chunk boundary and split into chunks.
 
@@ -355,17 +400,24 @@ def _pack_bytes(data: bytes) -> list[Chunk]:
 
         bytes    :  01 02 03 04 05
         padded   :  01 02 03 04 05 00 00 ... 00     (zero-padded to 32 bytes)
-        chunks   :  [ Chunk(01 02 03 04 05 00 ...) ]
+        chunks   :  [ 01 02 03 04 05 00 ... 00 ]
 
-    Inner chunks are already chunk-aligned; only the trailing chunk is padded.
+    Inner chunks are already chunk-aligned.
+    Only the trailing chunk is padded.
+    Padding a full chunk returns it unchanged.
+    Either branch therefore gives exactly 32 bytes.
+
+    The chunks are plain bytes rather than a typed array.
+    Nothing reads them except as a hash operand.
+    Typing them would re-check a width the slice and the padding already fix.
     """
     return [
-        Chunk(data[i : i + BYTES_PER_CHUNK].ljust(BYTES_PER_CHUNK, b"\x00"))
+        data[i : i + BYTES_PER_CHUNK].ljust(BYTES_PER_CHUNK, b"\x00")
         for i in range(0, len(data), BYTES_PER_CHUNK)
     ]
 
 
-def _pack_bits(bits: Sequence[Boolean]) -> list[Chunk]:
+def _pack_bits(bits: Sequence[Boolean]) -> list[bytes]:
     """
     Pack a boolean sequence into bytes, then into chunks for merkleization.
 
@@ -404,7 +456,7 @@ class MerkleLayout:
     Leaves past the last one are the zero padding the tree shape supplies.
     """
 
-    packed: tuple[Chunk, ...]
+    packed: tuple[bytes, ...]
     """Leaves as data, for a shape whose elements pack into chunks.
 
     An element of such a shape shares its chunk with its neighbours.
@@ -426,7 +478,7 @@ class MerkleLayout:
 
     @classmethod
     def packing(
-        cls, chunks: Sequence[Chunk], *, limit: int | None, mixin: Chunk | None = None
+        cls, chunks: Sequence[bytes], *, limit: int | None, mixin: Chunk | None = None
     ) -> MerkleLayout:
         """A layout whose leaves are packed data."""
         return cls(packed=tuple(chunks), nested=None, limit=limit, mixin=mixin)
@@ -443,13 +495,17 @@ class MerkleLayout:
         """Leaves the shape produced, before any zero padding."""
         return len(self.packed) if self.nested is None else len(self.nested)
 
-    def chunks(self, start: int = 0, stop: int | None = None) -> list[Chunk]:
+    def chunks(self, start: int = 0, stop: int | None = None) -> list[bytes]:
         """
         The leaves in a half-open range, as chunks.
 
         A nested value is rooted here rather than when the layout is built.
         A proof therefore hashes only the part of the tree it walks into.
         A root asks for every leaf, and hashes all of it.
+
+        Every leaf is 32 bytes wide. A packed one carries no type, being only a hash
+        operand.
+        A nested one arrives as the root that rooting it produced.
         """
         if self.nested is None:
             return list(self.packed[start:stop])
@@ -607,9 +663,29 @@ def hash_tree_root(value: object) -> Root:
     """
     Compute the SSZ Merkle root of a value.
 
+    A value whose whole encoding fits one chunk is its own root, once padded.
+    Everything else lays a tree out and hashes it.
+
     Raises:
         SSZTypeError: If the value's type has no registered handler.
     """
+    # A value of at most one chunk bounds its tree at one leaf.
+    # A one-leaf tree has no parent to hash, leaving the padded encoding as the root.
+    #
+    # Invariant: the layout states this rule too, for the proof machinery to walk.
+    # A test pins the two against each other for every type.
+    #
+    # The plain checks come first because a negative check against the abstract base
+    # costs more than the root it decides.
+    if isinstance(value, int):
+        # One conversion at the chunk width gives the encoding and its padding together.
+        if isinstance(value, (BaseUint, Boolean)) and value.get_byte_length() <= BYTES_PER_CHUNK:
+            return Root._trusted(value.to_bytes(BYTES_PER_CHUNK, "little"))
+    # A byte array is its own encoding, needing only the padding.
+    # Padding an empty one builds the zero chunk it roots to.
+    elif isinstance(value, bytes) and len(value) <= BYTES_PER_CHUNK:
+        return Root._trusted(value.ljust(BYTES_PER_CHUNK, b"\x00"))
+
     layout = merkle_layout(value)
     chunks = layout.chunks()
     # The two tree shapes are the only ones SSZ defines.

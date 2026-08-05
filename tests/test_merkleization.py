@@ -39,6 +39,7 @@ from ssz.merkleization import (
     mix_in_length,
     mix_in_selector,
 )
+from ssz.uint import BaseUint
 from ssz.union import CompatibleUnion
 
 
@@ -2136,7 +2137,8 @@ def test_layout_of_a_bounded_list_packs_its_elements_and_mixes_the_count_in() ->
     """
     value = Uint16List32(data=(Uint16(1), Uint16(2)))
     layout = merkle_layout(value)
-    assert layout.packed == (pad(b"\x01\x00\x02\x00"),)
+    # Packed leaves are plain 32-byte strings now, since nothing reads them but the hash.
+    assert layout.packed == (b"\x01\x00\x02\x00".ljust(32, b"\x00"),)
     assert layout.nested is None
     # Two elements fill four bytes of one chunk.
     # That chunk is the only leaf there is.
@@ -2168,3 +2170,139 @@ def test_a_layout_roots_only_the_leaves_a_range_asks_for() -> None:
     assert layout.chunks(1, 3) == [sample_chunks[1], sample_chunks[2]]
     # A range starting past the last leaf is empty rather than an error.
     assert layout.chunks(3) == []
+
+
+class Bytes1(ByteVector):
+    """Byte array of one byte: the narrowest leaf a fixed byte array can be."""
+
+    LENGTH = 1
+
+
+class Bytes31(ByteVector):
+    """Byte array one byte short of a chunk, still a single leaf."""
+
+    LENGTH = 31
+
+
+class Bytes32(ByteVector):
+    """Byte array filling a chunk exactly, the last width that is still one leaf."""
+
+    LENGTH = 32
+
+
+class Bytes33(ByteVector):
+    """Byte array one byte past a chunk: two leaves and a hash above them."""
+
+    LENGTH = 33
+
+
+class Uint512(BaseUint):
+    """Uint wide enough that its encoding spans two leaves."""
+
+    BITS = 512
+
+
+class MyUint64(Uint64):
+    """User subclass of a declared width, reached by inheritance rather than registration."""
+
+
+class MyBoolean(Boolean):
+    """User subclass of the boolean."""
+
+
+class MyBytes32(Bytes32):
+    """User subclass of a chunk-wide byte array."""
+
+
+class MyBytes48(Bytes48):
+    """User subclass of a byte array too wide to be one leaf."""
+
+
+def root_the_long_way(value: object) -> Root:
+    """Root a value by the general path alone, with no short circuit in front of it."""
+    layout = merkle_layout(value)
+    chunks = layout.chunks()
+    if layout.limit is None:
+        root = merkleize_progressive(chunks)
+    else:
+        root = merkleize(chunks, layout.limit)
+    return root if layout.mixin is None else h(root, layout.mixin)
+
+
+def every_shape() -> list[object]:
+    """One value per type the library merkleizes, at the widths and edges that matter."""
+    uint_values: list[object] = [
+        uint_type(number)
+        for uint_type in (Uint8, Uint16, Uint32, Uint64, Uint128, Uint256, MyUint64, Uint512)
+        for number in (0, 1, 2**uint_type.BITS - 1)
+    ]
+    boolean_values: list[object] = [
+        boolean_type(state) for boolean_type in (Boolean, MyBoolean) for state in (False, True)
+    ]
+    # Widths on both sides of the chunk boundary, and exactly upon it.
+    byte_array_values: list[object] = [
+        byte_array_type(byte * byte_array_type.LENGTH)
+        for byte_array_type in (Bytes1, Bytes31, Bytes32, Bytes33, Bytes48, Bytes96)
+        for byte in (b"\x00", b"\xff", b"\x5a")
+    ]
+    byte_array_values += [
+        Chunk.zero(),
+        Root(bytes(range(32))),
+        MyBytes32(b"\x01" * 32),
+        MyBytes48(b"\x02" * 48),
+    ]
+    # Plain bytes are not an SSZ type, but the layout accepts them.
+    # One chunk or many, the short circuit must agree with the layout.
+    raw_byte_values: list[object] = [b"\x01", b"\xff" * 32, bytes(range(33)), bytes(range(96))]
+    composite_values: list[object] = [
+        ByteList10(data=b""),
+        ByteList10(data=b"\x01\x02\x03"),
+        ByteList50(data=b"\x07" * 50),
+        BitVector1(data=(Boolean(True),)),
+        BitVector9(data=tuple(Boolean(index % 2 == 0) for index in range(9))),
+        BitList8(data=()),
+        BitList8(data=(Boolean(True), Boolean(False), Boolean(True))),
+        ProgressiveBitList(data=tuple(Boolean(index % 3 == 0) for index in range(100))),
+        Uint16Vector2(data=(Uint16(1), Uint16(2))),
+        ChunkVector3(data=tuple(sample_chunks[:3])),
+        Uint16List32(data=()),
+        Uint16List32(data=(Uint16(1), Uint16(2))),
+        ChunkList32(data=(sample_chunks[0],)),
+        Uint8ProgressiveList(data=()),
+        Uint8ProgressiveList(data=tuple(Uint8(index) for index in range(100))),
+        ChunkProgressiveList(data=tuple(sample_chunks[:3])),
+        EmptyContainer(),
+        SingleField(A=Uint8(9)),
+        Fixed(A=Uint8(1), B=Uint64(2), C=Uint32(3)),
+        Var(A=Uint16(1), B=Uint16List1024(data=(Uint16(2),)), C=Uint8(3)),
+        FixedVector4.default(),
+        OneFieldProgressive(A=Uint16(5)),
+        GappedProgressive(A=Uint16(0x1234), B=Uint8(0x56)),
+        UnionShape(selector=Uint8(1), data=UnionSquare(side=Uint16(7), color=Uint8(8))),
+        UnionShape(selector=Uint8(2), data=UnionCircle(radius=Uint16(7), color=Uint8(8))),
+    ]
+    return uint_values + boolean_values + byte_array_values + raw_byte_values + composite_values
+
+
+def shape_id(value: object) -> str:
+    """Name a parametrized case by the head of its repr."""
+    return repr(value)[:40]
+
+
+@pytest.mark.parametrize("value", every_shape(), ids=shape_id)
+def test_the_root_of_a_value_is_the_root_its_layout_describes(value: object) -> None:
+    """The leaf rule exists in two places. This is what stops the two drifting."""
+    assert hash_tree_root(value) == root_the_long_way(value)
+
+
+def test_an_encoding_of_no_bytes_roots_to_the_zero_chunk_either_way() -> None:
+    """The one width where the two forms reach the zero root by different routes."""
+    assert hash_tree_root(b"") == ZERO_ROOT
+    assert root_the_long_way(b"") == ZERO_ROOT
+
+
+def test_a_plain_integer_is_still_rejected_by_the_dispatch() -> None:
+    """A type that only looks like an integer must still fall through to the dispatch."""
+    for not_an_ssz_type in (7, True, 2**512):
+        with pytest.raises(SSZTypeError):
+            hash_tree_root(not_an_ssz_type)

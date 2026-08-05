@@ -41,7 +41,8 @@ type PathStep = int | str
 
 def _hash_pair(left: bytes, right: bytes) -> Root:
     """Join two nodes into their parent."""
-    return Root(sha256(left + right).digest())
+    # Invariant: a digest is exactly the chunk width.
+    return Root._trusted(sha256(left + right).digest())
 
 
 def gindex_length(index: int) -> int:
@@ -442,7 +443,8 @@ def node_root(value: object, index: int) -> Root:
         if gindex_bit(index, depth):
             if depth:
                 raise SSZValueError(f"the path descends into {name}'s mixed-in word")
-            return Root(layout.mixin)
+            # Invariant: a mixed-in word is exactly one chunk wide.
+            return Root._trusted(layout.mixin)
 
     # First leaf of the bounded subtree the walk ends in, and that subtree's capacity.
     leaves_from, capacity = 0, layout.limit
@@ -529,7 +531,10 @@ def calculate_merkle_root(leaf: Chunk, proof: Sequence[Chunk], index: int) -> Ro
     node = leaf
     for level, sibling in enumerate(proof):
         node = _hash_pair(sibling, node) if gindex_bit(index, level) else _hash_pair(node, sibling)
-    return Root(node)
+    # Invariant: the depth of a provable index is at least one.
+    # The loop above therefore ran and
+    # left a digest behind. Re-measuring it would only re-derive what _hash_pair guarantees.
+    return Root._trusted(node)
 
 
 def verify_merkle_proof(leaf: Chunk, proof: Sequence[Chunk], index: int, root: Root) -> bool:
@@ -575,7 +580,9 @@ def calculate_multi_merkle_root(
             pending.append(parent)
         position += 1
 
-    return Root(nodes[1])
+    # Invariant: index one is refused as a claim.
+    # The root can only have been built by the loop above, leaving a digest behind.
+    return Root._trusted(nodes[1])
 
 
 def verify_merkle_multiproof(
