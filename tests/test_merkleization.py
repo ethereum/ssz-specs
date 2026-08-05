@@ -30,6 +30,8 @@ from ssz.container import Container, ProgressiveContainer
 from ssz.merkleization import (
     BYTES_PER_CHUNK,
     _next_pow2,
+    _pack_basic_elements,
+    _pack_bytes,
     _zero_tree_root,
     hash_tree_root,
     merkle_layout,
@@ -2306,3 +2308,24 @@ def test_a_plain_integer_is_still_rejected_by_the_dispatch() -> None:
     for not_an_ssz_type in (7, True, 2**512):
         with pytest.raises(SSZTypeError):
             hash_tree_root(not_an_ssz_type)
+
+
+@pytest.mark.parametrize(
+    "element_type",
+    [Boolean, Uint8, Uint16, Uint32, Uint64, Uint128, Uint256],
+    ids=lambda element_type: element_type.__name__,
+)
+@pytest.mark.parametrize("count", [0, 1, 3, 32, 33, 100])
+def test_packing_basic_elements_agrees_with_encoding_each_one(
+    element_type: type[BaseUint | Boolean], count: int
+) -> None:
+    """Batched packing is the per-element encoding, chunk for chunk."""
+    span = element_type.MAX_VALUE if issubclass(element_type, BaseUint) else 1
+    # Zero, one and the maximum are forced to the front, so a wide type is never packed
+    # only at values a narrow one also holds.
+    elements = [element_type((index * 7919) % (span + 1)) for index in range(count)]
+    elements[:3] = [element_type(0), element_type(1), element_type(span)][:count]
+
+    assert _pack_basic_elements(elements, element_type.get_byte_length()) == _pack_bytes(
+        b"".join(element.encode_bytes() for element in elements)
+    )

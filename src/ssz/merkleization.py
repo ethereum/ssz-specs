@@ -446,6 +446,24 @@ def _pack_bits(bits: Sequence[Boolean]) -> list[bytes]:
     return _pack_bytes(packed_bits.to_bytes(math.ceil(len(bits) / 8), "little"))
 
 
+def _pack_basic_elements(elements: Sequence[int], element_size: int) -> list[bytes]:
+    """
+    Serialize a sequence of basic elements, then split the result into chunks.
+
+    Layout for [1, 2, 3] of a two-byte width:
+
+        bytes   :  01 00    02 00    03 00
+        chunks  :  [ 01 00 02 00 03 00 00 ... 00 ]
+
+    Invariant: the width is the declared element type's, which every element was coerced
+    to on the way in. Little-endian is written out rather than read from the host.
+    """
+    if element_size == 1:
+        return _pack_bytes(bytes(elements))
+    # A list rather than a generator, so the join can size its result in one pass.
+    return _pack_bytes(b"".join([int.to_bytes(e, element_size, "little") for e in elements]))
+
+
 @dataclass(frozen=True, slots=True)
 class MerkleLayout:
     """
@@ -597,7 +615,7 @@ def _layout_vector(value: Vector) -> MerkleLayout:
         # Basic elements pack their serialized bytes into a single byte stream before chunking.
         element_size = element_type.get_byte_length()
         return MerkleLayout.packing(
-            _pack_bytes(b"".join(e.encode_bytes() for e in value)),
+            _pack_basic_elements(value.data, element_size),
             limit=math.ceil(length * element_size / BYTES_PER_CHUNK),
         )
     # Composite elements each contribute their own hash tree root as a leaf.
@@ -612,7 +630,7 @@ def _layout_list(value: List) -> MerkleLayout:
     if issubclass(element_type, (BaseUint, Boolean)):
         element_size = element_type.get_byte_length()
         return MerkleLayout.packing(
-            _pack_bytes(b"".join(e.encode_bytes() for e in value)),
+            _pack_basic_elements(value.data, element_size),
             limit=math.ceil(limit * element_size / BYTES_PER_CHUNK),
             mixin=mixin,
         )
@@ -629,7 +647,9 @@ def _layout_progressive_list(value: ProgressiveList) -> MerkleLayout:
     mixin = length_word(len(value))
     if issubclass(element_type, (BaseUint, Boolean)):
         return MerkleLayout.packing(
-            _pack_bytes(b"".join(e.encode_bytes() for e in value)), limit=None, mixin=mixin
+            _pack_basic_elements(value.data, element_type.get_byte_length()),
+            limit=None,
+            mixin=mixin,
         )
     return MerkleLayout.nesting(value, limit=None, mixin=mixin)
 
