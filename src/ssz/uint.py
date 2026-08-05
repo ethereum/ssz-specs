@@ -130,8 +130,8 @@ class BaseUint(int, SSZType):
 
     @override
     def encode_bytes(self) -> bytes:
-        """Serialize to little-endian bytes."""
-        return self.to_bytes(length=self.get_byte_length(), byteorder="little")
+        """Serialize to little-endian bytes, reading the width off the cached attribute."""
+        return self.to_bytes(self.BYTE_LENGTH, "little")
 
     @classmethod
     @override
