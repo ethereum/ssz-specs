@@ -243,6 +243,57 @@ def test_merkleize_error_on_exceeding_limit() -> None:
     assert str(exception_info.value) == "merkleize: input exceeds limit"
 
 
+# Chunk counts and capacities for an all-zero payload, at the shapes where the closed
+# form for a zero tree and the layer walk over one have to agree.
+#
+# A uniform level collapses only where it spans its own data tree, so a level short of
+# that — a count below the capacity, or a count that is no power of two — is the shape no
+# collapse reaches and the walk had to hash out node by node.
+ALL_ZERO_SHAPES = [
+    pytest.param(1, None, id="one_chunk_no_limit"),
+    pytest.param(2, None, id="full_level_no_limit"),
+    pytest.param(3, None, id="partial_level_no_limit"),
+    pytest.param(1, 1, id="one_chunk_at_capacity"),
+    pytest.param(1, 4, id="one_chunk_under_capacity"),
+    pytest.param(4, 4, id="full_level_at_capacity"),
+    pytest.param(3, 8, id="partial_level_under_capacity"),
+    pytest.param(7, 7, id="partial_level_at_an_odd_capacity"),
+    pytest.param(5, 64, id="partial_level_far_under_capacity"),
+    pytest.param(2795, 4096, id="wide_partial_level"),
+]
+
+
+@pytest.mark.parametrize("chunk_count, limit", ALL_ZERO_SHAPES)
+def test_merkleize_all_zero_payload_is_the_tree_a_walk_over_it_builds(
+    chunk_count: int, limit: int | None
+) -> None:
+    """Zero data under zero padding roots where hashing every layer of it lands."""
+    zero_chunks = [ZERO_ROOT] * chunk_count
+    # The capacity sets the width, and its absence leaves the data to set it.
+    width = _next_pow2(chunk_count if limit is None else limit)
+    assert merkleize(zero_chunks, limit=limit) == perfect_tree_root(zero_chunks, width)
+
+
+@pytest.mark.parametrize(
+    "nonzero_position",
+    [
+        pytest.param(0, id="first_chunk"),
+        pytest.param(1, id="second_chunk"),
+        pytest.param(4, id="last_chunk"),
+    ],
+)
+def test_merkleize_a_payload_zero_but_for_one_chunk_is_not_a_zero_tree(
+    nonzero_position: int,
+) -> None:
+    """One chunk of data anywhere in a zero payload keeps the whole root off the zero tree."""
+    # Five chunks under a capacity of eight: a partial level, and no power of two either.
+    chunks: list[Chunk] = [ZERO_ROOT] * 5
+    chunks[nonzero_position] = Chunk(b"\xff" * 32)
+    assert merkleize(chunks, limit=8) == perfect_tree_root(chunks, 8)
+    # A zero prefix is not a zero payload, wherever the data that follows it sits.
+    assert merkleize(chunks, limit=8) != _zero_tree_root(8)
+
+
 def test_mix_in_length() -> None:
     """Mixes the length encoded as little-endian uint256 into the root."""
     root = Root(sample_chunks[0])
@@ -511,6 +562,22 @@ def test_merkleize_progressive_sweeps_every_count_through_the_fourth_level() -> 
     for chunk_count in range(90):
         chunks = chunk_run(chunk_count)
         assert merkleize_progressive(chunks) == naive_merkleize_progressive(chunks)
+
+
+@pytest.mark.parametrize(
+    "chunk_count",
+    # One level open, then each cumulative capacity probed at and past its boundary, up to
+    # the level that holds 1024 chunks.
+    [1, 2, 5, 6, 20, 21, 22, 84, 85, 86, 340, 341, 342, 1023, 1024, 1025],
+)
+def test_merkleize_progressive_over_an_all_zero_payload_matches_the_definition(
+    chunk_count: int,
+) -> None:
+    """A spine of zero levels is still the spine the definition builds, level by level."""
+    # Every level of this payload is all zero, so each subtree root has a closed form and
+    # none of them is walked. The spine above them has to come out unchanged regardless.
+    zero_chunks = [ZERO_ROOT] * chunk_count
+    assert merkleize_progressive(zero_chunks) == naive_merkleize_progressive(zero_chunks)
 
 
 def test_merkleize_progressive_accepts_a_wider_starting_level() -> None:
