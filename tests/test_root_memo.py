@@ -14,7 +14,7 @@ from ssz.boolean import Boolean
 from ssz.byte_arrays import ByteList, ByteVector
 from ssz.collections import List, ProgressiveList, Vector
 from ssz.container import Container, ProgressiveContainer
-from ssz.exceptions import SSZTypeError
+from ssz.exceptions import SSZTypeError, SSZTypeMismatch
 from ssz.merkleization import _root_witness, hash_tree_root
 from ssz.proofs import build_proof, get_generalized_index, node_root, verify_merkle_proof
 from ssz.ssz_base import SSZModel
@@ -37,6 +37,16 @@ class Bytes48(ByteVector):
     LENGTH = 48
 
 
+class Bytes64(Bytes32):
+    """A leaf class twice as wide as the one it subclasses, to be held where that is declared."""
+
+    LENGTH = 64
+
+
+class Gwei(Uint64):
+    """A leaf class to be held where only the class it subclasses is declared."""
+
+
 class Validator(Container):
     pubkey: Bytes48
     effective_balance: Uint64
@@ -47,8 +57,20 @@ class Validators(List[Validator]):
     LIMIT = 8
 
 
+class Committee(Vector[Validator]):
+    """A second sequence class over Validator, so one element class serves two."""
+
+    LENGTH = 2
+
+
 class Balances(List[Uint64]):
     LIMIT = 8
+
+
+class Ledger(List[Balances]):
+    """A sequence whose element class is itself a sequence."""
+
+    LIMIT = 4
 
 
 class BlockRoots(Vector[Bytes32]):
@@ -63,6 +85,12 @@ class Blob(ByteList):
     LIMIT = 8
 
 
+class Blobs(List[Blob]):
+    """A sequence whose element class is a packed one, carrying a version and a count."""
+
+    LIMIT = 4
+
+
 class Votes(ProgressiveList[Uint64]):
     pass
 
@@ -70,6 +98,13 @@ class Votes(ProgressiveList[Uint64]):
 class Header(Container):
     slot: Uint64
     state_root: Bytes32
+
+
+class WideHeader(Container):
+    """Header's shape, with the classes a Header can end up holding declared honestly."""
+
+    slot: Gwei
+    state_root: Bytes64
 
 
 class Summary(ProgressiveContainer):
@@ -90,6 +125,9 @@ class MiniState(Container):
     blob: Blob
     votes: Votes
     summary: Summary
+    committee: Committee
+    ledger: Ledger
+    blobs: Blobs
 
 
 class Square(Container):
@@ -150,6 +188,12 @@ def a_state() -> MiniState:
         blob=Blob(data=b"\xde\xad"),
         votes=Votes.of(Uint64(1), Uint64(2)),
         summary=Summary(epoch=Uint64(3), root=Bytes32(b"\x03" * 32)),
+        committee=Committee.of(
+            Validator(pubkey=Bytes48(b"\x07" * 48)),  # ty: ignore[missing-argument]
+            Validator(pubkey=Bytes48(b"\x08" * 48)),  # ty: ignore[missing-argument]
+        ),
+        ledger=Ledger.of(Balances.of(Uint64(1)), Balances.of(Uint64(2), Uint64(3))),
+        blobs=Blobs.of(Blob(data=b"\xbe"), Blob(data=b"\xef")),
     )
 
 
@@ -172,6 +216,19 @@ MUTATIONS: list[tuple[str, object]] = [
         "list append",
         lambda s: s.validators.append(
             Validator(pubkey=Bytes48(b"\x04" * 48))  # ty: ignore[missing-argument]
+        ),
+    ),
+    # The same trap one shape further out: the element mutated is itself a sequence, so
+    # the rule that witnesses it is the sequence rule again, one level down.
+    ("list of lists element in place", lambda s: s.ledger[0].__setitem__(0, Uint64(9))),
+    ("list of byte lists element in place", lambda s: s.blobs[0].append(0x01)),
+    # A vector of composites: fixed length, so only its elements can move.
+    ("vector of composites in place", lambda s: setattr(s.committee[1], "slashed", Boolean(1))),
+    (
+        "vector of composites element assigned",
+        lambda s: s.committee.__setitem__(
+            0,
+            Validator(pubkey=Bytes48(b"\x09" * 48)),  # ty: ignore[missing-argument]
         ),
     ),
     ("packed list append", lambda s: s.balances.append(Uint64(64))),
@@ -200,6 +257,15 @@ MUTATIONS: list[tuple[str, object]] = [
         ),
     ),
     ("slice assigned", lambda s: s.block_roots.__setitem__(slice(0, 2), [Bytes32.zero()] * 2)),
+    # A slice of composites, the one write route into a sequence of them not exercised above.
+    # It follows the replacement above, so the count it leaves behind is the count it found.
+    (
+        "composite slice assigned",
+        lambda s: s.validators.__setitem__(
+            slice(0, 1),
+            [Validator(pubkey=Bytes48(b"\x0a" * 48))],  # ty: ignore[missing-argument]
+        ),
+    ),
 ]
 """A cumulative mutation sequence, one entry per way this library can change a value."""
 
@@ -246,6 +312,35 @@ def test_a_value_mutated_back_reports_the_root_it_had_before() -> None:
     assert balances.hash_tree_root() == before
 
 
+def test_a_leaf_field_holding_a_subclass_of_what_it_declares_still_follows_it() -> None:
+    """
+    A field is dropped from the witness by what it declares, and it may hold a subclass.
+
+    That is sound because every dropped class is immutable, and so is any subclass of one:
+    the only way such a field changes is being replaced, which raises its holder's version.
+    The subclass held here is twice as wide as the class declared, so a root taken from the
+    annotation rather than from the value held would not survive.
+
+    Checked against a value whose annotations name the classes actually held, which roots
+    the same way because a struct's tree is its field values and their number.
+    """
+    header = Header(slot=Gwei(7), state_root=Bytes64(b"\x01" * 64))
+    # The premise: nothing narrows either value back to the class its field declares.
+    assert (type(header.slot), type(header.state_root)) == (Gwei, Bytes64)
+    # A struct of leaves alone is witnessed by its version and nothing else.
+    assert _root_witness(header) == 0
+
+    before = header.hash_tree_root()
+    assert before == round_trip_root(WideHeader(slot=Gwei(7), state_root=Bytes64(b"\x01" * 64)))
+
+    header.slot = Gwei(8)
+    header.state_root = Bytes64(b"\x02" * 64)
+    assert header.hash_tree_root() != before
+    assert header.hash_tree_root() == round_trip_root(
+        WideHeader(slot=Gwei(8), state_root=Bytes64(b"\x02" * 64))
+    )
+
+
 def test_two_holders_of_one_child_both_see_it_change() -> None:
     """
     A child with two holders invalidates for both.
@@ -264,6 +359,89 @@ def test_two_holders_of_one_child_both_see_it_change() -> None:
     assert left.hash_tree_root() != left_before
     assert left.hash_tree_root() == round_trip_root(left)
     assert right.hash_tree_root() == round_trip_root(right)
+
+
+def test_two_sequence_classes_over_one_element_class_both_follow_a_shared_element() -> None:
+    """
+    An element's witness is read from the element, not from the sequence holding it.
+
+    A list and a vector of the same class answer the same way about their elements, and the
+    two answers are kept apart from each other and from the sequences' own. One element in
+    both therefore has to invalidate both.
+    """
+    validator = Validator(pubkey=Bytes48(b"\x0b" * 48))  # ty: ignore[missing-argument]
+    listed = Validators.of(validator)
+    fixed = Committee.of(
+        validator,
+        Validator(pubkey=Bytes48(b"\x0c" * 48)),  # ty: ignore[missing-argument]
+    )
+    listed_before, fixed_before = listed.hash_tree_root(), fixed.hash_tree_root()
+    # Two shapes over one element class root differently, so neither check stands in for
+    # the other below.
+    assert listed_before != fixed_before
+
+    validator.effective_balance = Uint64(5)
+    assert listed.hash_tree_root() != listed_before
+    assert fixed.hash_tree_root() != fixed_before
+    assert listed.hash_tree_root() == round_trip_root(listed)
+    assert fixed.hash_tree_root() == round_trip_root(fixed)
+
+
+def test_a_sequence_holds_exactly_its_element_class_on_every_write_route() -> None:
+    """
+    The premise under witnessing every element of a sequence by one rule.
+
+    A rule read from the declared element class serves each element only while every
+    element is exactly that class. Coercion enforces that on every route in: a subclass,
+    whose root could be anything, is refused rather than stored.
+    """
+
+    class Slashable(Validator):
+        """A subclass of an element class, which no write route may let through."""
+
+    validators = Validators.of(
+        Validator(pubkey=Bytes48(b"\x0d" * 48))  # ty: ignore[missing-argument]
+    )
+    validators.append(Validator(pubkey=Bytes48(b"\x0e" * 48)))  # ty: ignore[missing-argument]
+    validators[0] = Validator(pubkey=Bytes48(b"\x0f" * 48))  # ty: ignore[missing-argument]
+    validators[0:1] = [Validator(pubkey=Bytes48(b"\x10" * 48))]  # ty: ignore[missing-argument]
+    assert [type(element) for element in validators] == [Validator, Validator]
+
+    intruder = Slashable(pubkey=Bytes48(b"\x11" * 48))  # ty: ignore[missing-argument]
+    for write in (
+        lambda: validators.append(intruder),
+        lambda: validators.__setitem__(0, intruder),
+        lambda: validators.__setitem__(slice(0, 1), [intruder]),
+    ):
+        with pytest.raises(SSZTypeMismatch, match="Expected Validator, got Slashable"):
+            write()
+    assert [type(element) for element in validators] == [Validator, Validator]
+
+
+def test_an_element_that_skipped_validation_is_witnessed_by_its_own_class() -> None:
+    """
+    Construction that skips validation can seat an element of another class entirely.
+
+    A rule read from the declared element class then serves elements it was not written
+    for, and only a rule that re-reads the class survives that. A nested sequence or
+    struct re-reads it to find its own element type or field names. A packed rule reads a
+    version and a count, which any shape answers and few are described by, so a sequence
+    over packed elements resolves the rule from each element instead of pinning one.
+
+    The second opinion here is a cold twin rather than a round trip: this value cannot
+    serialize, which is exactly why nothing but an unvalidated route reaches the shape.
+    """
+    held = Validators.of(
+        Validator(pubkey=Bytes48(b"\x12" * 48))  # ty: ignore[missing-argument]
+    )
+    # A sequence declared over byte lists, holding a list of composites.
+    blobs = Blobs.model_construct(data=[held])
+    before = blobs.hash_tree_root()
+
+    # A fully validated mutation two levels down, which a pinned packed rule cannot see.
+    held[0].effective_balance = Uint64(31)
+    assert blobs.hash_tree_root() != before
+    assert blobs.hash_tree_root() == Blobs.model_construct(data=[held]).hash_tree_root()
 
 
 def test_a_copy_carries_no_memo_of_the_value_it_came_from() -> None:

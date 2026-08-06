@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import math
 import os
-from collections.abc import Iterable, Sequence
+from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass
 from functools import cache, singledispatch
 from hashlib import sha256
@@ -724,6 +724,17 @@ def _root_witness(value: object) -> object:
     return object()
 
 
+@cache
+def _witness_rule(cls: type) -> Callable[..., object]:
+    """
+    The rule that witnesses one class, resolved from the registry above once per class.
+
+    A rule follows from a class's bases alone, so the answer never changes.
+    A warm root is little more than this walk, so it is walked once per class.
+    """
+    return _root_witness.dispatch(cls)
+
+
 @_root_witness.register(BaseUint)
 @_root_witness.register(Boolean)
 @_root_witness.register(ByteVector)
@@ -741,25 +752,62 @@ def _witness_packed(value: ByteList | BitVector | BitList | ProgressiveBitList) 
     return (value._version, len(value.data))
 
 
+@cache
+def _element_witness_rule(
+    cls: type[Vector | List | ProgressiveList],
+) -> Callable[..., object] | None:
+    """
+    The rule that witnesses one element of this sequence, or None if the elements need none.
+
+    A leaf element has no interior to change, so the sequence's own version covers it.
+
+    Every validated element is exactly ELEMENT_TYPE, so one resolution serves the whole
+    sequence. Construction that skips validation can still leave an element of another
+    class, and only a rule that re-reads that class survives it:
+
+    - A nested sequence or struct re-reads it, to find its own element type or field names.
+    - A packed shape reads a version and a count, which suit any shape and describe few.
+
+    So the packed rule is the one that is never pinned to a sequence, and its elements
+    keep the rule their own class resolves to.
+    """
+    element_type = cls.ELEMENT_TYPE
+    if not issubclass(element_type, SSZModel):
+        return None
+    rule = _witness_rule(element_type)
+    return _root_witness if rule is _witness_packed else rule
+
+
 @_root_witness.register(Vector)
 @_root_witness.register(List)
 @_root_witness.register(ProgressiveList)
 def _witness_sequence(value: Vector | List | ProgressiveList) -> object:
     """A sequence of composites carries its elements' witnesses, since each can mutate."""
-    if issubclass(type(value).ELEMENT_TYPE, SSZModel):
-        return (value._version, tuple(_root_witness(element) for element in value.data))
-    return (value._version, len(value.data))
+    element_rule = _element_witness_rule(type(value))
+    if element_rule is None:
+        return (value._version, len(value.data))
+    # Mapped rather than looped: a comprehension would capture the rule in a cell, and
+    # building that cell would cost every packed sequence above, which reads no rule at all.
+    return (value._version, tuple(map(element_rule, value.data)))
 
 
 @_root_witness.register(Container)
 @_root_witness.register(ProgressiveContainer)
 @_root_witness.register(CompatibleUnion)
 def _witness_fields(value: Container | ProgressiveContainer | CompatibleUnion) -> object:
-    """A struct carries the witness of every field that can hold a root of its own."""
-    return (
-        value._version,
-        tuple(_root_witness(getattr(value, name)) for name in _nested_field_names(type(value))),
-    )
+    """
+    A struct carries the witness of every field that can hold a root of its own.
+
+    A struct of leaves alone carries its version, which every field replacement raises.
+    """
+    names = _nested_field_names(type(value))
+    if not names:
+        return value._version
+    # A field may hold a subclass of its annotation, so the rule follows the value's own class.
+    #
+    # A list rather than a generator, so the tuple can size its result in one pass.
+    fields = [getattr(value, name) for name in names]
+    return (value._version, tuple([_witness_rule(type(field))(field) for field in fields]))
 
 
 def _root_from_layout(value: object) -> Root:
@@ -812,7 +860,7 @@ def hash_tree_root(value: object) -> Root:
         if len(value) <= BYTES_PER_CHUNK:
             return Root._trusted(value.ljust(BYTES_PER_CHUNK, b"\x00"))
     elif isinstance(value, SSZModel):
-        witness = _root_witness(value)
+        witness = _witness_rule(type(value))(value)
         memo = value._root_memo
         if memo is not None and memo[0] == witness:
             if not PARANOID_ROOTS:
