@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from numbers import Number
 from typing import IO, Any, ClassVar, NoReturn, Self, SupportsInt, TypeAlias, overload, override
 
 from pydantic.annotated_handlers import GetCoreSchemaHandler
@@ -23,6 +24,8 @@ class BaseUint(int, SSZType):
     Every binary operator applies one operand rule.
     Two uints may meet only when inheritance relates them, a bare integer meets any of
     them, and nothing else meets any of them.
+    A number the rule turns away is refused outright.
+    Anything else is declined instead, so a list multiplied by a uint still repeats itself.
     Every result is range-checked against the width the rule picked.
     """
 
@@ -220,10 +223,11 @@ class BaseUint(int, SSZType):
         A bool is not, being a subclass of int rather than int itself.
 
         Returns:
-            The type to wrap the result in.
+            The type to wrap the result in, or NotImplemented to leave the operation to
+            the other operand.
 
         Raises:
-            TypeError: When no inheritance relates the two types.
+            TypeError: When the operand is a number that no inheritance relates.
         """
         other_cls = type(other)
         # Invariant: a plain int is the one non-uint operand allowed through.
@@ -237,15 +241,37 @@ class BaseUint(int, SSZType):
                 return other_cls
             if issubclass(cls, other_cls):
                 return cls
-        # Why: reaching here means the two types are siblings, or the operand is not a
-        # uint at all. Either way there is no answer that would not invent a unit.
-        cls._raise_type_error(other, op_symbol)
+        # Why: a number reaching here is a sibling width, or a unit this one cannot count in.
+        # No result type would avoid inventing a unit, so it is refused where it stands.
+        if isinstance(other, Number):
+            cls._raise_type_error(other, op_symbol)
+        # Anything else is not a count at all, though it may know what to do with one.
+        # A sequence repeats by reading its count through the index protocol.
+        # Raising here would end the expression before Python could offer it that chance.
+        return NotImplemented
+
+    @classmethod
+    def _require_relation(cls, other: Any, op_symbol: str) -> None:
+        """
+        Insist on a relation where an arithmetic operator would settle for declining.
+
+        A declined arithmetic operand still ends in a TypeError once both sides decline.
+        A declined equality does not: Python answers false instead, which is the silent
+        type mixing this type exists to prevent.
+
+        Raises:
+            TypeError: When no relation admits the operand.
+        """
+        if cls._resolve_type(other, op_symbol) is NotImplemented:
+            cls._raise_type_error(other, op_symbol)
 
     def __add__(self, other: Any) -> Self:
         """Forward addition."""
         cls = type(self)
         if type(other) is not cls:
             cls = cls._resolve_type(other, "+")
+            if cls is NotImplemented:
+                return NotImplemented
         return cls._wrap(int.__add__(self, other))
 
     def __radd__(self, other: Any) -> Self:
@@ -253,6 +279,8 @@ class BaseUint(int, SSZType):
         cls = type(self)
         if type(other) is not cls:
             cls = cls._resolve_type(other, "+")
+            if cls is NotImplemented:
+                return NotImplemented
         return cls._wrap(int.__add__(other, self))
 
     def __sub__(self, other: Any) -> Self:
@@ -260,6 +288,8 @@ class BaseUint(int, SSZType):
         cls = type(self)
         if type(other) is not cls:
             cls = cls._resolve_type(other, "-")
+            if cls is NotImplemented:
+                return NotImplemented
         return cls._wrap(int.__sub__(self, other))
 
     def __rsub__(self, other: Any) -> Self:
@@ -267,6 +297,8 @@ class BaseUint(int, SSZType):
         cls = type(self)
         if type(other) is not cls:
             cls = cls._resolve_type(other, "-")
+            if cls is NotImplemented:
+                return NotImplemented
         return cls._wrap(int.__sub__(other, self))
 
     def __mul__(self, other: Any) -> Self:
@@ -274,6 +306,8 @@ class BaseUint(int, SSZType):
         cls = type(self)
         if type(other) is not cls:
             cls = cls._resolve_type(other, "*")
+            if cls is NotImplemented:
+                return NotImplemented
         return cls._wrap(int.__mul__(self, other))
 
     def __rmul__(self, other: Any) -> Self:
@@ -281,6 +315,8 @@ class BaseUint(int, SSZType):
         cls = type(self)
         if type(other) is not cls:
             cls = cls._resolve_type(other, "*")
+            if cls is NotImplemented:
+                return NotImplemented
         return cls._wrap(int.__mul__(other, self))
 
     def __floordiv__(self, other: Any) -> Self:
@@ -288,6 +324,8 @@ class BaseUint(int, SSZType):
         cls = type(self)
         if type(other) is not cls:
             cls = cls._resolve_type(other, "//")
+            if cls is NotImplemented:
+                return NotImplemented
         return cls._wrap(int.__floordiv__(self, other))
 
     def __rfloordiv__(self, other: Any) -> Self:
@@ -295,6 +333,8 @@ class BaseUint(int, SSZType):
         cls = type(self)
         if type(other) is not cls:
             cls = cls._resolve_type(other, "//")
+            if cls is NotImplemented:
+                return NotImplemented
         return cls._wrap(int.__floordiv__(other, self))
 
     def __mod__(self, other: Any) -> Self:
@@ -302,6 +342,8 @@ class BaseUint(int, SSZType):
         cls = type(self)
         if type(other) is not cls:
             cls = cls._resolve_type(other, "%")
+            if cls is NotImplemented:
+                return NotImplemented
         return cls._wrap(int.__mod__(self, other))
 
     def __rmod__(self, other: Any) -> Self:
@@ -309,6 +351,8 @@ class BaseUint(int, SSZType):
         cls = type(self)
         if type(other) is not cls:
             cls = cls._resolve_type(other, "%")
+            if cls is NotImplemented:
+                return NotImplemented
         return cls._wrap(int.__mod__(other, self))
 
     @overload
@@ -324,10 +368,14 @@ class BaseUint(int, SSZType):
         cls = type(self)
         if type(value) is not cls:
             cls = cls._resolve_type(value, "**")
+            if cls is NotImplemented:
+                return NotImplemented
         # The modulus resolves against the type the exponent already settled on, so a
         # unit picked up from the exponent is not thrown away by a bare base and modulus.
         if mod is not None and type(mod) is not cls:
             cls = cls._resolve_type(mod, "**")
+            if cls is NotImplemented:
+                return NotImplemented
         power = pow(int(self), int(value), int(mod) if mod is not None else None)
         return cls._wrap(power)
 
@@ -336,8 +384,12 @@ class BaseUint(int, SSZType):
         cls = type(self)
         if type(base) is not cls:
             cls = cls._resolve_type(base, "**")
+            if cls is NotImplemented:
+                return NotImplemented
         if modulo is not None and type(modulo) is not cls:
             cls = cls._resolve_type(modulo, "**")
+            if cls is NotImplemented:
+                return NotImplemented
         power = pow(int(base), int(self), int(modulo) if modulo is not None else None)
         return cls._wrap(power)
 
@@ -346,6 +398,8 @@ class BaseUint(int, SSZType):
         cls = type(self)
         if type(other) is not cls:
             cls = cls._resolve_type(other, "divmod")
+            if cls is NotImplemented:
+                return NotImplemented
         quotient, remainder = int.__divmod__(self, other)
         return cls._wrap(quotient), cls._wrap(remainder)
 
@@ -354,6 +408,8 @@ class BaseUint(int, SSZType):
         cls = type(self)
         if type(other) is not cls:
             cls = cls._resolve_type(other, "divmod")
+            if cls is NotImplemented:
+                return NotImplemented
         quotient, remainder = int.__rdivmod__(self, other)
         return cls._wrap(quotient), cls._wrap(remainder)
 
@@ -362,6 +418,8 @@ class BaseUint(int, SSZType):
         cls = type(self)
         if type(other) is not cls:
             cls = cls._resolve_type(other, "&")
+            if cls is NotImplemented:
+                return NotImplemented
         return cls._wrap(int.__and__(self, other))
 
     def __rand__(self, other: Any) -> Self:
@@ -373,6 +431,8 @@ class BaseUint(int, SSZType):
         cls = type(self)
         if type(other) is not cls:
             cls = cls._resolve_type(other, "|")
+            if cls is NotImplemented:
+                return NotImplemented
         return cls._wrap(int.__or__(self, other))
 
     def __ror__(self, other: Any) -> Self:
@@ -384,6 +444,8 @@ class BaseUint(int, SSZType):
         cls = type(self)
         if type(other) is not cls:
             cls = cls._resolve_type(other, "^")
+            if cls is NotImplemented:
+                return NotImplemented
         return cls._wrap(int.__xor__(self, other))
 
     def __rxor__(self, other: Any) -> Self:
@@ -395,6 +457,8 @@ class BaseUint(int, SSZType):
         cls = type(self)
         if type(other) is not cls:
             cls = cls._resolve_type(other, "<<")
+            if cls is NotImplemented:
+                return NotImplemented
         return cls._wrap(int.__lshift__(self, other))
 
     def __rlshift__(self, other: Any) -> Self:
@@ -402,6 +466,8 @@ class BaseUint(int, SSZType):
         cls = type(self)
         if type(other) is not cls:
             cls = cls._resolve_type(other, "<<")
+            if cls is NotImplemented:
+                return NotImplemented
         return cls._wrap(int.__lshift__(other, self))
 
     def __rshift__(self, other: Any) -> Self:
@@ -409,6 +475,8 @@ class BaseUint(int, SSZType):
         cls = type(self)
         if type(other) is not cls:
             cls = cls._resolve_type(other, ">>")
+            if cls is NotImplemented:
+                return NotImplemented
         return cls._wrap(int.__rshift__(self, other))
 
     def __rrshift__(self, other: Any) -> Self:
@@ -416,6 +484,8 @@ class BaseUint(int, SSZType):
         cls = type(self)
         if type(other) is not cls:
             cls = cls._resolve_type(other, ">>")
+            if cls is NotImplemented:
+                return NotImplemented
         return cls._wrap(int.__rshift__(other, self))
 
     # A comparison answers with a bool, so which of the two types is more derived does not
@@ -426,37 +496,37 @@ class BaseUint(int, SSZType):
     def __eq__(self, other: object) -> bool:
         """Equality."""
         if type(other) is not type(self):
-            self._resolve_type(other, "==")
+            self._require_relation(other, "==")
         return super().__eq__(other)
 
     def __ne__(self, other: object) -> bool:
         """Inequality."""
         if type(other) is not type(self):
-            self._resolve_type(other, "!=")
+            self._require_relation(other, "!=")
         return super().__ne__(other)
 
     def __lt__(self, other: Any) -> bool:
         """Less-than."""
         if type(other) is not type(self):
-            self._resolve_type(other, "<")
+            self._require_relation(other, "<")
         return super().__lt__(other)
 
     def __le__(self, other: Any) -> bool:
         """Less-than-or-equal."""
         if type(other) is not type(self):
-            self._resolve_type(other, "<=")
+            self._require_relation(other, "<=")
         return super().__le__(other)
 
     def __gt__(self, other: Any) -> bool:
         """Greater-than."""
         if type(other) is not type(self):
-            self._resolve_type(other, ">")
+            self._require_relation(other, ">")
         return super().__gt__(other)
 
     def __ge__(self, other: Any) -> bool:
         """Greater-than-or-equal."""
         if type(other) is not type(self):
-            self._resolve_type(other, ">=")
+            self._require_relation(other, ">=")
         return super().__ge__(other)
 
     def __repr__(self) -> str:
