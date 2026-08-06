@@ -61,6 +61,9 @@ class Root(Chunk):
 ZERO_ROOT: Final = Root.zero()
 """All-zero 32-byte root, used as the merkleization padding value."""
 
+_ZERO_CHUNK: Final = bytes(BYTES_PER_CHUNK)
+"""The zero chunk as plain bytes, since a typed chunk refuses to compare against them."""
+
 _ZERO_ROOTS: Final[tuple[Root, ...]] = tuple(
     accumulate(
         repeat(None, 64),
@@ -120,12 +123,13 @@ def merkleize(chunks: Sequence[bytes], limit: int | None = None) -> Root:
     The root alone carries a type.
     It is the only node returned.
 
-    Two shapes skip the layer walk:
+    Three shapes skip the layer walk:
 
+    - An all-zero input roots to a zero tree, cached at every depth.
     - A level of one repeated value spanning its data tree has a root in closed form.
     - A single node with capacity above it pairs only against cached zero subtrees.
 
-    A 65_536-leaf tree of zero chunks costs 16 hashes.
+    A 65_536-leaf tree of one repeated chunk costs 16 hashes.
     Walking it would cost 65_535.
 
     Args:
@@ -151,6 +155,13 @@ def merkleize(chunks: Sequence[bytes], limit: int | None = None) -> Root:
     # A one-leaf tree has no parent to hash: the leaf is the root.
     if width == 1:
         return Root._trusted(chunks[0])
+
+    # Zero data under zero padding is a zero tree, at any width.
+    # The fold below fires only from a level spanning its data tree, so a count short of a power
+    # of two hashes its way up to one.
+    # The first chunk rules out anything that starts with data, before the join copies it all.
+    if bytes(chunks[0]) == _ZERO_CHUNK and b"".join(chunks) == _ZERO_CHUNK * chunk_count:
+        return _zero_tree_root(width)
 
     # Width of the perfect subtree the data fills, where the layer walk ends.
     # Above it every height holds one real node beside an all-zero subtree.
@@ -662,7 +673,7 @@ def _layout_progressive_container(value: ProgressiveContainer) -> MerkleLayout:
     # A layout is declared as bits and never coerced, so a list of them arrives as one.
     layout = tuple(cls.ACTIVE_FIELDS)
     try:
-        names, word = _progressive_container_plan(layout, tuple(cls.model_fields))
+        names, word = _progressive_container_plan(layout, _field_names(cls))
     except ValueError as mismatch:
         raise SSZActiveFieldsError(cls.__name__, layout, str(mismatch)) from mismatch
     return MerkleLayout.nesting(
@@ -682,11 +693,8 @@ def _layout_compatible_union(value: CompatibleUnion) -> MerkleLayout:
 
 @merkle_layout.register
 def _layout_container(value: Container) -> MerkleLayout:
-    # Pydantic preserves declaration order, which is the canonical SSZ field order.
-    cls = type(value)
-    return MerkleLayout.nesting(
-        (getattr(value, name) for name in cls.model_fields), limit=len(cls.model_fields)
-    )
+    names = _field_names(type(value))
+    return MerkleLayout.nesting([getattr(value, name) for name in names], limit=len(names))
 
 
 @cache
@@ -725,6 +733,17 @@ def _progressive_container_plan(
 
 _IMMUTABLE_LEAVES: Final = (BaseUint, Boolean, ByteVector)
 """The SSZ types that subclass an immutable builtin, whose roots cannot go stale."""
+
+
+@cache
+def _field_names(cls: type[SSZModel]) -> tuple[str, ...]:
+    """
+    Every field name, in the declaration order that is the canonical SSZ field order.
+
+    Reading the model's own mapping goes through a property, and a layout wants the names
+    twice: once to read the fields and once for the count that sizes the tree.
+    """
+    return tuple(cls.model_fields)
 
 
 @cache

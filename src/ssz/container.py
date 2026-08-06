@@ -11,6 +11,7 @@ Both encode identically: fixed-size fields inline, variable-size fields behind o
 """
 
 import io
+from functools import cache
 from itertools import pairwise
 from typing import IO, Any, ClassVar, Final, Self, override
 
@@ -214,8 +215,7 @@ class _SSZContainer(SSZModel):
         bytes_read = 0
 
         # Phase 1: each slot is either the field itself or an offset to its tail payload.
-        for name, field_definition in cls.model_fields.items():
-            field_type: type[SSZType] = field_definition.annotation
+        for name, field_type in _field_types(cls):
             if field_type.is_fixed_size():
                 width = field_type.get_byte_length()
                 fields[name] = field_type.deserialize(stream, width)
@@ -388,3 +388,18 @@ class ProgressiveContainer(_SSZContainer):
                 f"the layout sets {active_count} positions, "
                 f"and the struct declares {len(cls.model_fields)}",
             )
+
+
+type _FieldType = tuple[str, type[SSZType]]
+"""One field: its name and the type it declares."""
+
+
+@cache
+def _field_types(cls: type[_SSZContainer]) -> tuple[_FieldType, ...]:
+    """
+    Each field's declared type, in the declaration order the wire format follows.
+
+    Only what the declaration settles is kept. A width is asked of the type each time,
+    because the attributes a type derives one from stay writable for as long as the type does.
+    """
+    return tuple((name, field.annotation) for name, field in cls.model_fields.items())

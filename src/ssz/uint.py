@@ -193,8 +193,7 @@ class BaseUint(int, SSZType):
         Raises:
             SSZSerializationError: If the byte string has the wrong length.
         """
-        # Ensure the input data has the correct number of bytes.
-        expected_length = cls.get_byte_length()
+        expected_length = cls.BYTE_LENGTH
         if len(data) != expected_length:
             raise SSZScopeError(cls.__name__, expected_length, len(data))
         return cls(int.from_bytes(data, "little"))
@@ -217,7 +216,7 @@ class BaseUint(int, SSZType):
         Raises:
             SSZSerializationError: If the scope mismatches, or the stream ends early.
         """
-        byte_length = cls.get_byte_length()
+        byte_length = cls.BYTE_LENGTH
         if scope != byte_length:
             raise SSZSerializationError(
                 f"{cls.__name__}: invalid scope, expected {byte_length} bytes, got {scope}"

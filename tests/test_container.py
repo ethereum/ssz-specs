@@ -120,6 +120,15 @@ class OneByte(Container):
     a: Uint8
 
 
+class HoldsANothingField(Container):
+    """A field of no width at all, between fields that have one and a field that has none."""
+
+    a: Uint8
+    nothing: EmptyContainer
+    b: Uint16List4
+    c: Uint8
+
+
 class Uint16ProgressiveList(ProgressiveList[Uint16]):
     """Progressive list of Uint16, used as a variable-size progressive-container field."""
 
@@ -497,6 +506,21 @@ class TestMixedContainer:
         expected_encoding = bytes.fromhex("ddccbbaa0000000014000000ffee000018000000010002000300")
         assert original.encode_bytes() == expected_encoding
         assert Mixed.decode_bytes(expected_encoding) == original
+
+
+class TestZeroWidthFixedField:
+    """A fixed field of no width is a fixed field, and never an offset."""
+
+    def test_a_field_of_no_width_occupies_no_slot_and_reads_back_as_itself(self) -> None:
+        """Zero is a width a fixed field can have, and the only one that is also falsy."""
+        # Fixed part: a (1) + nothing (0) + the offset for b (4) + c (1) = 6 bytes.
+        # A decoder that read the zero-width field as an offset instead would spend four
+        # bytes of the fixed part on it and reject the offset that follows.
+        original = HoldsANothingField(
+            a=Uint8(1), nothing=EmptyContainer(), b=Uint16List4(data=[Uint16(2)]), c=Uint8(3)
+        )
+        assert original.encode_bytes() == bytes.fromhex("0106000000030200")
+        assert HoldsANothingField.decode_bytes(original.encode_bytes()) == original
 
 
 class TestNestedContainer:

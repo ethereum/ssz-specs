@@ -585,6 +585,51 @@ class TestUintSSZ:
         assert str(exception_info.value) == expected_message
 
 
+class AccessorNarrowerThanTheWidth(Uint64):
+    """A subtype that answers the width question with something other than its declared width."""
+
+    @classmethod
+    def get_byte_length(cls) -> int:
+        """Answer with half the width the type is declared at."""
+        return 4
+
+
+class TestTheDeclaredWidthIsTheWireWidth:
+    """
+    ``BYTE_LENGTH`` is the width both directions of the wire read.
+
+    An encode has always taken the width off the declared attribute, so a subtype that
+    overrides only the accessor cannot move the width it writes at. A decode reads the
+    same attribute, which is what keeps the pair total: the bytes such a subtype writes
+    are bytes it reads back. The accessor is left to the callers that ask a type its
+    width, and answering them differently is that subtype's own business.
+    """
+
+    def test_an_overridden_accessor_does_not_move_the_width_a_value_round_trips_at(self) -> None:
+        """The declared eight bytes are written, and the same eight are read back."""
+        value = AccessorNarrowerThanTheWidth(7)
+        assert AccessorNarrowerThanTheWidth.get_byte_length() == 4
+        assert value.encode_bytes() == (7).to_bytes(8, "little")
+        assert AccessorNarrowerThanTheWidth.decode_bytes(value.encode_bytes()) == value
+
+    def test_a_payload_of_the_wrong_width_is_refused_against_the_declared_width(self) -> None:
+        """A payload of the accessor's four bytes is short of the width, and reported as such."""
+        with pytest.raises(
+            SSZSerializationError,
+            match=r"^AccessorNarrowerThanTheWidth: expected 8 bytes, got 4$",
+        ):
+            AccessorNarrowerThanTheWidth.decode_bytes(b"\x00" * 4)
+
+    def test_a_scope_of_the_wrong_width_is_refused_against_the_declared_width(self) -> None:
+        """A stream read is scoped by the declared width too, and says which width it wanted."""
+        stream = io.BytesIO(b"\x00" * 8)
+        with pytest.raises(
+            SSZSerializationError,
+            match=r"^AccessorNarrowerThanTheWidth: invalid scope, expected 8 bytes, got 4$",
+        ):
+            AccessorNarrowerThanTheWidth.deserialize(stream, scope=4)
+
+
 class TestForwardArithmeticTypeErrors:
     """Tests which operand types a forward arithmetic operator admits."""
 
