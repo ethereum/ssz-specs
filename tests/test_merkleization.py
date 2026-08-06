@@ -13,6 +13,7 @@ from ssz import (
     ByteVector,
     Chunk,
     Root,
+    SSZActiveFieldsError,
     SSZType,
     SSZTypeError,
     SSZValueError,
@@ -22,6 +23,7 @@ from ssz import (
     Uint64,
     Uint128,
     Uint256,
+    merkleization,
 )
 from ssz.bitfields import BitList, BitVector, ProgressiveBitList
 from ssz.boolean import Boolean
@@ -1749,6 +1751,166 @@ def test_progressive_and_bounded_container_share_bytes_but_not_roots() -> None:
     assert hash_tree_root(bounded) == h(h(leaves[0], leaves[1]), h(leaves[2], Z[0]))
     assert hash_tree_root(progressive) == h(naive_merkleize_progressive(leaves), pad(b"\x07"))
     assert hash_tree_root(bounded) != hash_tree_root(progressive)
+
+
+memo_in_force = pytest.mark.skipif(
+    merkleization.PARANOID_ROOTS,
+    reason="PARANOID_ROOTS recomputes every remembered root, which is the behaviour "
+    "this test observes the absence of",
+)
+"""Marks a test that observes the memo being reused, which paranoid mode suspends."""
+
+
+INTERIOR_GAP_LEAVES = [pad(b"\x34\x12"), ZERO_ROOT, pad(b"\x56")]
+"""The two fields of the tests below at positions 0 and 2, as (1, 0, 1) places them."""
+
+LEADING_GAP_LEAVES = [ZERO_ROOT, pad(b"\x34\x12"), pad(b"\x56")]
+"""The same two fields at positions 1 and 2, as (0, 1, 1) places them."""
+
+
+def test_a_root_follows_a_layout_reassigned_after_the_type_was_declared() -> None:
+    """A layout is a class attribute, so it can be rewritten, and the root has to follow."""
+    # The layout decides where each field is hashed and the word mixed in on top. Neither
+    # is a property of the type: a type only holds whatever layout it is holding now.
+
+    class Reassigned(ProgressiveContainer):
+        ACTIVE_FIELDS = (1, 0, 1)
+
+        head: Uint16
+        tail: Uint8
+
+    before = hash_tree_root(Reassigned(head=Uint16(0x1234), tail=Uint8(0x56)))
+    assert before == expected_progressive_container_root(INTERIOR_GAP_LEAVES, (1, 0, 1))
+
+    # The same two fields, each moved one position along.
+    Reassigned.ACTIVE_FIELDS = (0, 1, 1)
+    # A value built after the rewrite, because one rooted before it answers from its memo.
+    fresh = Reassigned(head=Uint16(0x1234), tail=Uint8(0x56))
+    assert hash_tree_root(fresh) == expected_progressive_container_root(
+        LEADING_GAP_LEAVES, (0, 1, 1)
+    )
+    assert hash_tree_root(fresh) != before
+
+
+@pytest.mark.parametrize(
+    "reassigned_layout, expected_counts",
+    [
+        pytest.param(
+            (1, 1, 1), "sets 3 positions, and the struct declares 2", id="position_gained"
+        ),
+        pytest.param((1,), "sets 1 positions, and the struct declares 2", id="position_lost"),
+    ],
+)
+def test_a_layout_that_stopped_pairing_with_the_fields_is_refused_by_name(
+    reassigned_layout: tuple[int, ...], expected_counts: str
+) -> None:
+    """A declaration checks this pairing; merkleization cannot assume it still holds."""
+    # A rewritten layout can set more positions than there are fields, or fewer.
+    # Pairing them off regardless would hash a field at a position no declaration gave it.
+
+    class Drifted(ProgressiveContainer):
+        ACTIVE_FIELDS = (1, 0, 1)
+
+        head: Uint16
+        tail: Uint8
+
+    Drifted.ACTIVE_FIELDS = reassigned_layout
+    with pytest.raises(
+        SSZActiveFieldsError,
+        match=rf"^Drifted: invalid active fields, the layout {expected_counts}$",
+    ) as exception_info:
+        hash_tree_root(Drifted(head=Uint16(1), tail=Uint8(2)))
+    # The refusal carries the layout in force, not the one the declaration approved.
+    assert exception_info.value.active_fields == reassigned_layout
+
+
+def test_a_layout_and_its_field_names_settle_the_positions_by_themselves() -> None:
+    """Two shapes agreeing on both root alike; two agreeing on the name alone do not."""
+    # A root is the field positions and the layout word. A type name enters neither, so
+    # two shapes over one layout and one field list are meant to reach one root.
+
+    class LeftShape(ProgressiveContainer):
+        ACTIVE_FIELDS = (1, 0, 1)
+
+        head: Uint16
+        tail: Uint8
+
+    class RightShape(ProgressiveContainer):
+        ACTIVE_FIELDS = (1, 0, 1)
+
+        head: Uint16
+        tail: Uint8
+
+    interior_gap = expected_progressive_container_root(INTERIOR_GAP_LEAVES, (1, 0, 1))
+    assert hash_tree_root(LeftShape(head=Uint16(0x1234), tail=Uint8(0x56))) == interior_gap
+    assert hash_tree_root(RightShape(head=Uint16(0x1234), tail=Uint8(0x56))) == interior_gap
+    # Whatever two shapes share, the field values still decide the root.
+    assert hash_tree_root(RightShape(head=Uint16(0x1234), tail=Uint8(0x57))) != interior_gap
+
+    class OtherLayout(ProgressiveContainer):
+        """The same field names over a layout that places them one position along."""
+
+        ACTIVE_FIELDS = (0, 1, 1)
+
+        head: Uint16
+        tail: Uint8
+
+    # One name over two layouts, the field names held identical, so only the layout differs.
+    LeftShape.__name__ = OtherLayout.__name__ = "Shape"
+    value = LeftShape(head=Uint16(0x1234), tail=Uint8(0x56))
+    twin = OtherLayout(head=Uint16(0x1234), tail=Uint8(0x56))
+    # The bytes cannot tell the two apart, exactly as for the two shapes of the EIP.
+    assert value.encode_bytes() == twin.encode_bytes()
+    assert hash_tree_root(value) == interior_gap
+    assert hash_tree_root(twin) == expected_progressive_container_root(
+        LEADING_GAP_LEAVES, (0, 1, 1)
+    )
+
+
+@memo_in_force
+def test_a_layout_rewritten_under_a_rooted_value_leaves_a_stale_root() -> None:
+    """
+    A known limitation, pinned rather than hidden.
+
+    A remembered root is kept under a witness of the value: its version and its fields.
+    The layout of the type holding it is not in there, so a layout rewritten afterwards is
+    invisible to the memo, and the value goes on answering with the root it took under the
+    layout it no longer has. A value built after the rewrite roots correctly.
+    """
+
+    class Restaled(ProgressiveContainer):
+        ACTIVE_FIELDS = (1, 0, 1)
+
+        head: Uint16
+        tail: Uint8
+
+    value = Restaled(head=Uint16(0x1234), tail=Uint8(0x56))
+    remembered = hash_tree_root(value)
+
+    Restaled.ACTIVE_FIELDS = (0, 1, 1)
+    correct = expected_progressive_container_root(LEADING_GAP_LEAVES, (0, 1, 1))
+    assert hash_tree_root(value) == remembered != correct
+    assert hash_tree_root(Restaled(head=Uint16(0x1234), tail=Uint8(0x56))) == correct
+
+
+def test_paranoid_roots_catches_a_root_left_behind_by_a_rewritten_layout(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The mode that recomputes every remembered root sees the layout the witness cannot."""
+
+    class Repinned(ProgressiveContainer):
+        ACTIVE_FIELDS = (1, 0, 1)
+
+        head: Uint16
+        tail: Uint8
+
+    value = Repinned(head=Uint16(0x1234), tail=Uint8(0x56))
+    hash_tree_root(value)
+
+    Repinned.ACTIVE_FIELDS = (0, 1, 1)
+    monkeypatch.setattr(merkleization, "PARANOID_ROOTS", True)
+    with pytest.raises(AssertionError, match=r"^stale remembered root for Repinned$"):
+        hash_tree_root(value)
 
 
 @pytest.mark.parametrize(

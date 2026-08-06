@@ -16,7 +16,7 @@ from ssz.boolean import Boolean
 from ssz.byte_arrays import ByteList, ByteVector
 from ssz.collections import List, ProgressiveList, Vector
 from ssz.container import Container, ProgressiveContainer
-from ssz.exceptions import SSZTypeError, SSZValueError
+from ssz.exceptions import SSZActiveFieldsError, SSZTypeError, SSZValueError
 from ssz.ssz_base import SSZModel, SSZType
 from ssz.uint import BaseUint
 from ssz.union import CompatibleUnion
@@ -656,18 +656,20 @@ def _layout_progressive_list(value: ProgressiveList) -> MerkleLayout:
 
 @merkle_layout.register
 def _layout_progressive_container(value: ProgressiveContainer) -> MerkleLayout:
-    cls = type(value)
     # One leaf per layout position, not per field, though the spec's formula reads that way.
     # A cleared bit keeps its zero leaf, the gap that holds every other field still.
-    positions: list[SSZType | None] = [None] * len(cls.ACTIVE_FIELDS)
-
-    # Fields follow the set bits: the n-th field belongs at the n-th set position.
-    # A strict pairing fails loudly rather than placing a field at the wrong one.
-    active_positions = (i for i, bit in enumerate(cls.ACTIVE_FIELDS) if bit)
-    for position, name in zip(active_positions, cls.model_fields, strict=True):
-        positions[position] = getattr(value, name)
-
-    return MerkleLayout.nesting(positions, limit=None, mixin=active_fields_word(cls.ACTIVE_FIELDS))
+    cls = type(value)
+    # A layout is declared as bits and never coerced, so a list of them arrives as one.
+    layout = tuple(cls.ACTIVE_FIELDS)
+    try:
+        names, word = _progressive_container_plan(layout, tuple(cls.model_fields))
+    except ValueError as mismatch:
+        raise SSZActiveFieldsError(cls.__name__, layout, str(mismatch)) from mismatch
+    return MerkleLayout.nesting(
+        [None if name is None else getattr(value, name) for name in names],
+        limit=None,
+        mixin=word,
+    )
 
 
 @merkle_layout.register
@@ -685,6 +687,40 @@ def _layout_container(value: Container) -> MerkleLayout:
     return MerkleLayout.nesting(
         (getattr(value, name) for name in cls.model_fields), limit=len(cls.model_fields)
     )
+
+
+@cache
+def _progressive_container_plan(
+    active_fields: tuple[int, ...], field_names: tuple[str, ...]
+) -> tuple[tuple[str | None, ...], Chunk]:
+    """
+    Which field sits at each position of a progressive layout, and the word mixed in.
+
+    One entry per position, naming the field that sits there, or None for a gap.
+    Neither answer reads the value, so both are worked out once per layout.
+
+    Keyed by the layout and the field names, never by the type that declares them.
+    ACTIVE_FIELDS is a plain class attribute, reassignable after the type is declared, and
+    a root follows the reassignment.
+    A key naming the type would answer with the layout that type used to have.
+    The names beside it are rebuilt per root for the same reason.
+
+    Raises:
+        ValueError: If the layout and the fields do not pair up one to one. The caller
+            names the type, which no plan depends on and so none is keyed by.
+    """
+    positions: list[str | None] = [None] * len(active_fields)
+    active_positions = [position for position, bit in enumerate(active_fields) if bit]
+    # The declaration checks this pairing too, and a reassigned layout arrives unchecked.
+    if len(active_positions) != len(field_names):
+        raise ValueError(
+            f"the layout sets {len(active_positions)} positions, "
+            f"and the struct declares {len(field_names)}"
+        )
+    # Fields follow the set bits: the n-th field belongs at the n-th set position.
+    for position, name in zip(active_positions, field_names, strict=True):
+        positions[position] = name
+    return tuple(positions), active_fields_word(active_fields)
 
 
 _IMMUTABLE_LEAVES: Final = (BaseUint, Boolean, ByteVector)
