@@ -2,6 +2,8 @@
 
 import io
 import operator
+from decimal import Decimal
+from fractions import Fraction
 from itertools import permutations
 from typing import Any, Type
 
@@ -606,11 +608,11 @@ class TestForwardArithmeticTypeErrors:
 
     @pytest.mark.parametrize("uint_class", ALL_UINT_TYPES)
     @pytest.mark.parametrize("method, op_symbol", ARITHMETIC_DUNDERS)
-    @pytest.mark.parametrize("bad", [True, "3", 1.5, None])
+    @pytest.mark.parametrize("bad", [True, 1.5])
     def test_forward_operator_rejects_an_unrelated_operand(
         self, uint_class: Type[BaseUint], method: str, op_symbol: str, bad: Any
     ) -> None:
-        """Forward arithmetic operator raises TypeError for anything but a uint or an int."""
+        """Forward arithmetic operator raises TypeError for a number no relation admits."""
         # Call the dunder method directly so no reflected fallback can intervene.
         expected_message = (
             f"Unsupported operand type(s) for {op_symbol}: "
@@ -618,6 +620,92 @@ class TestForwardArithmeticTypeErrors:
         )
         with pytest.raises(TypeError) as exception_info:
             getattr(uint_class(5), method)(bad)
+        assert str(exception_info.value) == expected_message
+
+
+NOT_A_NUMBER: Any = "2"
+"""A stand-in for an operand that is not a number, held loosely so a bad call type-checks."""
+
+
+class TestANonNumberIsDeclined:
+    """
+    An operand that is not a number at all is declined rather than refused.
+
+    A refusal ends the expression where it stands.
+    Declining hands the question to the other operand, which is what a sequence needs:
+    it repeats by reading its count through the index protocol, never seeing a uint.
+    """
+
+    DECLINING_DUNDERS = [
+        "__add__",
+        "__radd__",
+        "__sub__",
+        "__rsub__",
+        "__mul__",
+        "__rmul__",
+        "__floordiv__",
+        "__rfloordiv__",
+        "__mod__",
+        "__rmod__",
+        "__divmod__",
+        "__rdivmod__",
+        "__and__",
+        "__or__",
+        "__xor__",
+        "__lshift__",
+        "__rlshift__",
+        "__rshift__",
+        "__rrshift__",
+    ]
+    """Every arithmetic and bitwise dunder that settles a result type of its own."""
+
+    @pytest.mark.parametrize("method", DECLINING_DUNDERS)
+    def test_every_operator_declines_a_non_number(self, method: str) -> None:
+        """Called directly, a declining dunder answers NotImplemented instead of raising."""
+        assert getattr(Uint64(6), method)(NOT_A_NUMBER) is NotImplemented
+
+    @pytest.mark.parametrize(
+        "apply",
+        [
+            lambda: Uint64(2).__pow__(NOT_A_NUMBER),
+            lambda: Uint64(2).__pow__(3, NOT_A_NUMBER),
+            lambda: Uint64(2).__rpow__(NOT_A_NUMBER),
+            lambda: Uint64(2).__rpow__(3, NOT_A_NUMBER),
+        ],
+    )
+    def test_pow_declines_in_either_argument(self, apply: Any) -> None:
+        """Exponent and modulus each decline, in the forward form and in the reverse one."""
+        assert apply() is NotImplemented
+
+    @pytest.mark.parametrize(
+        "apply, expected",
+        [
+            (lambda: [1] * Uint64(3), [1, 1, 1]),
+            (lambda: Uint64(3) * [1], [1, 1, 1]),
+            (lambda: "ab" * Uint64(2), "abab"),
+            (lambda: b"x" * Uint64(2), b"xx"),
+            (lambda: (1,) * Uint64(2), (1, 1)),
+            (lambda: bytearray(b"x") * Uint64(2), bytearray(b"xx")),
+        ],
+    )
+    def test_a_sequence_repeats_by_a_typed_count(self, apply: Any, expected: Any) -> None:
+        """Every builtin sequence repeats by a uint, in either operand position."""
+        assert apply() == expected
+
+    @pytest.mark.parametrize("bad", ["2", None])
+    def test_the_host_language_reports_what_both_sides_decline(self, bad: Any) -> None:
+        """With nobody left to answer, Python raises the TypeError any other type would."""
+        # Lower case where this library's own message is capitalised, because the message
+        # here is the interpreter's.
+        with pytest.raises(TypeError, match="^unsupported operand type"):
+            _ = Uint64(1) + bad
+
+    @pytest.mark.parametrize("bad", [Decimal(2), Fraction(1, 2)])
+    def test_a_number_outside_the_integers_is_refused_by_name(self, bad: Any) -> None:
+        """The refusal reaches the whole numeric tower, not only the builtin widths."""
+        expected_message = f"Unsupported operand type(s) for +: 'Uint64' and '{type(bad).__name__}'"
+        with pytest.raises(TypeError) as exception_info:
+            _ = Uint64(1) + bad
         assert str(exception_info.value) == expected_message
 
 
@@ -710,9 +798,9 @@ class TestPowShiftStrictOperands:
         assert type(uint_class(8) >> 3) is uint_class
 
     @pytest.mark.parametrize("uint_class", ALL_UINT_TYPES)
-    @pytest.mark.parametrize("bad", [True, "3", 1.5])
+    @pytest.mark.parametrize("bad", [True, 1.5])
     def test_pow_rejects_non_uint_exponent(self, uint_class: Type[BaseUint], bad: Any) -> None:
-        """Exponentiation rejects any exponent of a different type."""
+        """Exponentiation rejects any exponent that is a number of another type."""
         expected_message = (
             f"Unsupported operand type(s) for **: "
             f"'{uint_class.__name__}' and '{type(bad).__name__}'"
@@ -722,9 +810,9 @@ class TestPowShiftStrictOperands:
         assert str(exception_info.value) == expected_message
 
     @pytest.mark.parametrize("uint_class", ALL_UINT_TYPES)
-    @pytest.mark.parametrize("bad", [True, "100"])
+    @pytest.mark.parametrize("bad", [True])
     def test_pow_rejects_non_uint_modulo(self, uint_class: Type[BaseUint], bad: Any) -> None:
-        """Three-argument pow rejects any modulo of a different type."""
+        """Three-argument pow rejects any modulo that is a number of another type."""
         expected_message = (
             f"Unsupported operand type(s) for **: "
             f"'{uint_class.__name__}' and '{type(bad).__name__}'"
@@ -734,9 +822,9 @@ class TestPowShiftStrictOperands:
         assert str(exception_info.value) == expected_message
 
     @pytest.mark.parametrize("uint_class", ALL_UINT_TYPES)
-    @pytest.mark.parametrize("bad", [True, "2"])
+    @pytest.mark.parametrize("bad", [True])
     def test_rpow_rejects_non_uint_base(self, uint_class: Type[BaseUint], bad: Any) -> None:
-        """Reverse pow rejects any base of a different type."""
+        """Reverse pow rejects any base that is a number of another type."""
         expected_message = (
             f"Unsupported operand type(s) for **: "
             f"'{uint_class.__name__}' and '{type(bad).__name__}'"
@@ -746,9 +834,9 @@ class TestPowShiftStrictOperands:
         assert str(exception_info.value) == expected_message
 
     @pytest.mark.parametrize("uint_class", ALL_UINT_TYPES)
-    @pytest.mark.parametrize("bad", [True, "100"])
+    @pytest.mark.parametrize("bad", [True])
     def test_rpow_rejects_non_uint_modulo(self, uint_class: Type[BaseUint], bad: Any) -> None:
-        """Three-argument reverse pow rejects any modulo of a different type."""
+        """Three-argument reverse pow rejects any modulo that is a number of another type."""
         expected_message = (
             f"Unsupported operand type(s) for **: "
             f"'{uint_class.__name__}' and '{type(bad).__name__}'"
@@ -758,9 +846,9 @@ class TestPowShiftStrictOperands:
         assert str(exception_info.value) == expected_message
 
     @pytest.mark.parametrize("uint_class", ALL_UINT_TYPES)
-    @pytest.mark.parametrize("bad", [True, "3"])
+    @pytest.mark.parametrize("bad", [True])
     def test_lshift_rejects_non_uint(self, uint_class: Type[BaseUint], bad: Any) -> None:
-        """Left shift rejects any shift amount of a different type."""
+        """Left shift rejects any shift amount that is a number of another type."""
         expected_message = (
             f"Unsupported operand type(s) for <<: "
             f"'{uint_class.__name__}' and '{type(bad).__name__}'"
@@ -770,9 +858,9 @@ class TestPowShiftStrictOperands:
         assert str(exception_info.value) == expected_message
 
     @pytest.mark.parametrize("uint_class", ALL_UINT_TYPES)
-    @pytest.mark.parametrize("bad", [True, "2"])
+    @pytest.mark.parametrize("bad", [True])
     def test_rshift_rejects_non_uint(self, uint_class: Type[BaseUint], bad: Any) -> None:
-        """Right shift rejects any shift amount of a different type."""
+        """Right shift rejects any shift amount that is a number of another type."""
         expected_message = (
             f"Unsupported operand type(s) for >>: "
             f"'{uint_class.__name__}' and '{type(bad).__name__}'"
@@ -794,11 +882,11 @@ class TestDivmodEdgeCases:
         assert type(remainder) is uint_class
 
     @pytest.mark.parametrize("uint_class", ALL_UINT_TYPES)
-    @pytest.mark.parametrize("bad", [True, "3"])
+    @pytest.mark.parametrize("bad", [True])
     def test_divmod_rejects_an_unrelated_divisor(
         self, uint_class: Type[BaseUint], bad: Any
     ) -> None:
-        """Forward divmod raises TypeError when the divisor is neither a uint nor an int."""
+        """Forward divmod raises TypeError when the divisor is a number no relation admits."""
         expected_message = (
             f"Unsupported operand type(s) for divmod: "
             f"'{uint_class.__name__}' and '{type(bad).__name__}'"
@@ -856,11 +944,13 @@ class TestReverseShiftOperators:
         reverse_left_shift = uint_class(2).__rlshift__(uint_class(1))
         assert reverse_left_shift == uint_class(4)
         assert isinstance(reverse_left_shift, uint_class)
+        # A bare literal on the left is admitted, so the receiver's type carries the result.
+        assert type(1 << uint_class(2)) is uint_class
 
     @pytest.mark.parametrize("uint_class", ALL_UINT_TYPES)
-    @pytest.mark.parametrize("bad", [True, "1"])
+    @pytest.mark.parametrize("bad", [True])
     def test_rlshift_rejects_non_uint(self, uint_class: Type[BaseUint], bad: Any) -> None:
-        """Reverse left shift rejects any operand of a different type."""
+        """Reverse left shift rejects any operand that is a number of another type."""
         expected_message = (
             f"Unsupported operand type(s) for <<: "
             f"'{uint_class.__name__}' and '{type(bad).__name__}'"
@@ -876,11 +966,13 @@ class TestReverseShiftOperators:
         reverse_right_shift = uint_class(2).__rrshift__(uint_class(8))
         assert reverse_right_shift == uint_class(2)
         assert isinstance(reverse_right_shift, uint_class)
+        # A bare literal on the left is admitted, so the receiver's type carries the result.
+        assert type(8 >> uint_class(2)) is uint_class
 
     @pytest.mark.parametrize("uint_class", ALL_UINT_TYPES)
-    @pytest.mark.parametrize("bad", [True, "8"])
+    @pytest.mark.parametrize("bad", [True])
     def test_rrshift_rejects_non_uint(self, uint_class: Type[BaseUint], bad: Any) -> None:
-        """Reverse right shift rejects any operand of a different type."""
+        """Reverse right shift rejects any operand that is a number of another type."""
         expected_message = (
             f"Unsupported operand type(s) for >>: "
             f"'{uint_class.__name__}' and '{type(bad).__name__}'"
