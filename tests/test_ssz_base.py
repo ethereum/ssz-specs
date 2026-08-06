@@ -1158,12 +1158,8 @@ class TestDeclaredCapacity:
         class Attestations(List[Attestation]):
             LIMIT = MAX_ATTESTATIONS   # already a 64-bit unsigned integer
 
-    Two facts make that narrowing necessary rather than cosmetic.
-
-    - Every element count this library computes internally is a plain integer.
-    - This library's unsigned integers refuse to compare against a plain integer at all.
-
-    So a capacity left typed reaches an internal comparison it cannot take part in.
+    Narrowing keeps every count this library computes, compares and reports a plain
+    integer, whatever the declaration was written at.
 
     Six families declare a capacity, in one of two kinds:
 

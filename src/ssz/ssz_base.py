@@ -80,12 +80,8 @@ class SSZType(ABC):
             class Attestations(List[Attestation]):
                 LIMIT = MAX_ATTESTATIONS   # already a Uint64
 
-        Two facts make narrowing necessary rather than cosmetic.
-
-        - Every element count computed inside this library is a plain integer.
-        - A uint refuses a plain integer operand outright.
-
-        A capacity left typed would reach a comparison it cannot take part in.
+        Narrowing keeps every count this library computes, compares and reports a plain
+        integer, whatever the declaration was written at.
 
         A capacity that is not an integer at all is refused here as well.
         Declaration is the only place that refusal can be useful:
