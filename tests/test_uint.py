@@ -128,6 +128,7 @@ def test_instantiation_and_type(uint_class: Type[BaseUint]) -> None:
 @pytest.mark.parametrize("uint_class", ALL_UINT_TYPES)
 def test_instantiation_negative(uint_class: Type[BaseUint]) -> None:
     """Tests that instantiating with a negative number raises SSZValueError."""
+    # A negative also indexes the shared table from the end, so this refusal blocks that.
     expected_message = f"-5 out of range for {uint_class.__name__} [0, {2**uint_class.BITS - 1}]"
     with pytest.raises(SSZValueError) as exception_info:
         uint_class(-5)
@@ -1463,3 +1464,89 @@ class TestOpaqueByteSpelling:
         # Importing the name at the top of this module proves it is reachable.
         # Only the export list proves it is public.
         assert "Byte" in ssz.__all__
+
+
+class NarrowerThanTheTable(BaseUint):
+    """A width narrower than the shared table, to exercise the clamp."""
+
+    BITS = 2
+
+
+class LiesInComparisons(int):
+    """An integer subclass that answers every ordering question the way it prefers."""
+
+    def __lt__(self, other: Any) -> bool:
+        """Claim to be below anything it is compared against."""
+        return False
+
+    def __le__(self, other: Any) -> bool:
+        """Claim to be within any upper bound."""
+        return True
+
+    def __gt__(self, other: Any) -> bool:
+        """Claim never to exceed anything."""
+        return False
+
+    def __ge__(self, other: Any) -> bool:
+        """Claim to be above any lower bound."""
+        return True
+
+
+class TestSmallValuesAreShared:
+    """The smallest values of each width come from a shared table rather than an allocation."""
+
+    @pytest.mark.parametrize("uint_class", ALL_UINT_TYPES)
+    def test_a_small_value_is_the_same_object_every_time(self, uint_class: Type[BaseUint]) -> None:
+        """Two constructions of one small value answer with one instance."""
+        # Every width shares its low values, so 7 is served from the table in all of them.
+        assert uint_class(7) is uint_class(7)
+        # Arithmetic returns through the same path, so a small result is shared too.
+        assert uint_class(5) + uint_class(2) is uint_class(7)
+
+    def test_a_value_past_the_table_is_allocated(self) -> None:
+        """Sharing stops where the table does."""
+        # 256 is one past the last shared entry.
+        assert Uint64(256) is not Uint64(256)
+        assert Uint64(256) == 256
+
+    def test_arithmetic_across_the_edge_of_the_table_stays_correct(self) -> None:
+        """The last shared value and the first allocated one meet without an off-by-one."""
+        # 255 is the final entry, so it is shared while the 256 just past it is not.
+        assert Uint64(255) is Uint64(255)
+        assert Uint64(254) + Uint64(1) is Uint64(255)
+        # Stepping up out of the table and back down again returns the shared instance.
+        assert Uint64(255) + Uint64(1) == 256
+        assert Uint64(256) - Uint64(1) is Uint64(255)
+
+    def test_each_width_and_subtype_holds_its_own_table(self) -> None:
+        """A named subtype keeps answering as itself instead of as the width it is built on."""
+        assert type(Slot(7)) is Slot
+        assert Slot(7) is Slot(7)
+        # Two types over the same width therefore hold two different instances of one value.
+        assert Slot(7) is not Uint64(7)
+        assert Slot(7) is not Epoch(7)
+
+    def test_a_narrow_width_refuses_what_its_table_would_not_reach(self) -> None:
+        """The table is clamped to the width, so it cannot serve a value out of range."""
+        # Two bits hold 0 through 3, and the clamp keeps the top of that range shared.
+        assert NarrowerThanTheTable(3) == 3
+        # An unclamped table would answer with a shared 10 here instead of refusing it.
+        with pytest.raises(SSZValueError):
+            NarrowerThanTheTable(10)
+
+    def test_an_operand_that_lies_about_its_size_is_still_refused(self) -> None:
+        """The bound is checked against a plain integer, never against the input's own answers."""
+        # An input that answers its own ordering questions would pass on its own word.
+        with pytest.raises(SSZValueError):
+            Uint8(LiesInComparisons(999))
+
+
+class TestAValueCarriesNoState:
+    """A shared instance reaches every holder of that value, so it accepts no attributes."""
+
+    def test_attaching_state_to_a_value_is_refused(self) -> None:
+        """Setting an attribute would publish it to every other holder of the same value."""
+        expected_message = "Uint64 is immutable"
+        with pytest.raises(SSZTypeError) as exception_info:
+            Uint64(7).note = "mine"  # type: ignore[attr-defined]
+        assert str(exception_info.value) == expected_message

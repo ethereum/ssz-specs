@@ -12,9 +12,13 @@ from ssz.exceptions import (
     SSZRangeError,
     SSZScopeError,
     SSZSerializationError,
+    SSZTypeError,
     SSZTypeMismatch,
 )
 from ssz.ssz_base import SSZType
+
+INTERN_BELOW = 256
+"""How many of the smallest values each width shares, covering where consensus arithmetic stays."""
 
 
 class BaseUint(int, SSZType):
@@ -40,6 +44,12 @@ class BaseUint(int, SSZType):
     BYTE_LENGTH: ClassVar[int]
     """Cached serialized byte width ``BITS // 8``, computed once per width."""
 
+    _INTERNED: ClassVar[tuple[Any, ...]] = ()
+    """Shared instances of this class, indexed by the value each one holds."""
+
+    _INTERN_LEN: ClassVar[int] = 0
+    """How many entries the shared table holds, kept apart so a wrap measures nothing."""
+
     def __init_subclass__(cls, **kwargs: Any) -> None:
         """
         Cache the per-width constants so hot paths never recompute them.
@@ -51,6 +61,12 @@ class BaseUint(int, SSZType):
         super().__init_subclass__(**kwargs)
         cls.MAX_VALUE = 2**cls.BITS - 1
         cls.BYTE_LENGTH = cls.BITS // 8
+        # One table per class, so a named subtype comes back as itself.
+        # The clamp keeps the table inside the width, so it holds nothing out of range.
+        cls._INTERNED = tuple(
+            int.__new__(cls, n) for n in range(min(INTERN_BELOW, cls.MAX_VALUE + 1))
+        )
+        cls._INTERN_LEN = len(cls._INTERNED)
 
     def __new__(cls, value: SupportsInt = 0) -> Self:
         """
@@ -64,6 +80,9 @@ class BaseUint(int, SSZType):
             SSZTypeError: If value is not an int. Bool, string, and float are rejected.
             SSZValueError: If value is outside [0, 2**BITS - 1].
         """
+        # An exact int match settles both guards below: a bool is a subclass, not int itself.
+        if type(value) is int:
+            return cls._wrap(value)
         # Bool subclasses int, so reject it explicitly before the value check.
         if not isinstance(value, int) or isinstance(value, bool):
             raise SSZTypeMismatch("int", type(value))
@@ -77,7 +96,7 @@ class BaseUint(int, SSZType):
         # A uint answers that correctly, because the relation rule admits a bare int. An
         # arbitrary int subclass need not: it is free to refuse a plain int and raise.
         # Narrowing keeps the comparison on the base integer type whatever the input is.
-        return cls._wrap(value if type(value) is int else int(value))
+        return cls._wrap(int(value))
 
     @classmethod
     def _wrap(cls, value: int) -> Self:
@@ -90,16 +109,36 @@ class BaseUint(int, SSZType):
         - An arbitrary int subclass may refuse a plain int operand in a comparison, so the
           caller narrows the value before it reaches the bound check here.
         - The type guards the public constructor applies are skipped here.
+        - A value the shared table covers is returned from it, already in range.
         - The bound is read from the cached class attribute rather than recomputed.
         - Allocation goes directly through the base integer type.
 
         Raises:
             SSZValueError: If value is outside [0, 2**BITS - 1].
         """
-        max_value = cls.MAX_VALUE
-        if not (0 <= value <= max_value):
-            raise SSZRangeError(cls.__name__, value, max_value)
-        return int.__new__(cls, value)
+        # Testing the table first lets a larger value reach its own bound in one comparison.
+        if value < cls._INTERN_LEN:
+            # A negative index would read from the end of the table instead of refusing.
+            if value >= 0:
+                interned: tuple[Self, ...] = cls._INTERNED
+                return interned[value]
+        elif value <= cls.MAX_VALUE:
+            return int.__new__(cls, value)
+        raise SSZRangeError(cls.__name__, value, cls.MAX_VALUE)
+
+    # A shared instance reaches every holder of that value, so state attached through one
+    # would be readable through all the others.
+    #
+    # A slot declaration cannot close this off, because any subclass omitting one regains
+    # the dictionary this refusal guards.
+    def __setattr__(self, name: str, value: Any) -> NoReturn:
+        """
+        Refuse to attach state to a value.
+
+        Raises:
+            SSZTypeError: Always, because a count is only the number it holds.
+        """
+        raise SSZTypeError(f"{type(self).__name__} is immutable")
 
     @classmethod
     def __get_pydantic_core_schema__(
