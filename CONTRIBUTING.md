@@ -46,7 +46,7 @@ If anything fails before the release job, no tag was created: fix and re-dispatc
 only the PyPI publish fails, re-run the failed job on the same run instead.
 
 Before the first release: add a PyPI trusted publisher (project `eth-ssz-specs`, owner
-`leanEthereum`, repository `ssz-specs`, workflow `release.yaml`, environment `pypi`)
+`ethereum`, repository `ssz-specs`, workflow `release.yaml`, environment `pypi`)
 and create the `pypi` environment in the GitHub repository settings.
 
 Reproduce the artifacts locally with `just build` and `just pack-fixtures <tag>`
