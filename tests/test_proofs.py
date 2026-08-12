@@ -304,6 +304,12 @@ SPARSE_PAIR_LIST = PairList8(data=(PAIR, PAIR))
 VECTOR_OF_BASICS = Uint64Vector8(data=tuple(Uint64(position) for position in range(8)))
 VECTOR_OF_COMPOSITES = PairVector4(data=(PAIR, PAIR, PAIR, PAIR))
 
+# The same four positions with one element of their own at position 2.
+# The ends are one value and the middle is not, so the elements are neither all one value
+# nor all distinct, and a proof reads them a range at a time.
+ODD_ONE_OUT = Pair(a=Uint64(6), b=Uint64(7))
+VECTOR_WITH_A_REPEAT = PairVector4(data=(PAIR, PAIR, ODD_ONE_OUT, PAIR))
+
 # 300 bits spill into the second of two capacity chunks.
 BITLIST = Bitlist512(data=(Boolean(True),) * 300)
 BITVECTOR = Bitvector512(data=(Boolean(True), Boolean(False)) * 256)
@@ -1286,6 +1292,25 @@ class TestSparsePositions:
         # Each empty position is its own node, not a shared one.
         # The branches at two of them therefore differ.
         assert build_proof(SPARSE_PAIR_LIST, 18) != build_proof(SPARSE_PAIR_LIST, 22)
+
+
+class TestRepeatedElements:
+    """One value standing at several positions, which a layout roots once for all of them."""
+
+    def test_every_node_of_a_vector_holding_a_repeat_verifies(self) -> None:
+        """
+        A proof reads leaves a range at a time, so a repeat has to survive being sliced.
+
+        A wrong leaf inside a range would still verify against the root that range built,
+        so the odd element's node is checked against the element's own root as well.
+        """
+        assert VECTOR_WITH_A_REPEAT[0] is VECTOR_WITH_A_REPEAT[3] is PAIR
+        for index in sorted(resolvable_indices(VECTOR_WITH_A_REPEAT)):
+            assert round_trip(VECTOR_WITH_A_REPEAT, index), f"index {index}"
+        # Leaves 0 and 2 sit at indices 4 and 6, one holding the repeat and one not.
+        assert node_root(VECTOR_WITH_A_REPEAT, 4) == hash_tree_root(PAIR)
+        assert node_root(VECTOR_WITH_A_REPEAT, 6) == hash_tree_root(ODD_ONE_OUT)
+        assert hash_tree_root(ODD_ONE_OUT) != hash_tree_root(PAIR)
 
 
 class TestResolvableSetMatchesTheTree:

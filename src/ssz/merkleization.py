@@ -546,10 +546,19 @@ class MerkleLayout:
         """
         if self.nested is None:
             return list(self.packed[start:stop])
-        return [
-            ZERO_ROOT if value is None else hash_tree_root(value)
-            for value in self.nested[start:stop]
-        ]
+        values = self.nested[start:stop]
+        # Ends that differ rule out a repeat, so distinct leaves stay in the comprehension.
+        if not values or values[0] is not values[-1]:
+            return [ZERO_ROOT if value is None else hash_tree_root(value) for value in values]
+        roots: list[bytes] = []
+        previous = values[0]
+        previous_root = ZERO_ROOT if previous is None else hash_tree_root(previous)
+        for value in values:
+            if value is not previous:
+                previous = value
+                previous_root = ZERO_ROOT if value is None else hash_tree_root(value)
+            roots.append(previous_root)
+        return roots
 
 
 @singledispatch
