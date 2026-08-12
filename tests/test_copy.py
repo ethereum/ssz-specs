@@ -28,7 +28,7 @@ from ssz import (
     Uint256,
     Vector,
 )
-from ssz.ssz_base import SSZModel
+from ssz.ssz_base import SSZCollection, SSZModel
 
 
 class Bytes32(ByteVector):
@@ -76,6 +76,25 @@ class Balances(List[Uint64]):
     """A list of basic elements, where every element is already its own duplicate."""
 
     LIMIT = 1024
+
+
+class Roots(Vector[Bytes32]):
+    """A run of byte arrays, so elements subclassing bytes are covered as well as ints."""
+
+    LENGTH = 4
+
+
+class TaggedBalances(Balances):
+    """A list declaring a field beyond its contents, which a duplicate has to carry too."""
+
+    tag: Uint64 = Uint64(0)
+
+
+class Ledger(Container):
+    """Two fields able to hold one and the same list, so a duplicate has sharing to resolve."""
+
+    current: Balances
+    previous: Balances
 
 
 class Graffiti(ByteList):
@@ -485,6 +504,108 @@ def test_two_fields_holding_one_value_duplicate_into_two() -> None:
     memo_honest = copy_module.deepcopy(registry)
     assert memo_honest[0] is memo_honest[1]
     assert memo_honest[0] is not shared
+
+
+DEEP_COPIED_SEQUENCES = [
+    pytest.param(
+        Balances(data=[Uint64(32 * 10**9 + index) for index in range(4)]),
+        lambda balances: balances.append(Uint64(1)),
+        id="list_of_uints",
+    ),
+    pytest.param(
+        Roots(data=[Bytes32(bytes([index + 1]) * 32) for index in range(4)]),
+        lambda roots: roots.__setitem__(0, Bytes32(bytes(32))),
+        id="vector_of_byte_arrays",
+    ),
+]
+
+
+@pytest.mark.parametrize("value, write", DEEP_COPIED_SEQUENCES)
+def test_a_deep_copy_rebuilds_the_sequence_around_the_elements_it_already_holds(
+    value: SSZCollection[SSZType], write: object
+) -> None:
+    duplicate = copy_module.deepcopy(value)
+    before = value.hash_tree_root()
+
+    assert duplicate == value
+    assert type(duplicate) is type(value)
+    assert duplicate.encode_bytes() == value.encode_bytes()
+    assert duplicate.data is not value.data
+    for original_element, duplicate_element in zip(value.data, duplicate.data, strict=True):
+        assert duplicate_element is original_element
+
+    write(duplicate)  # ty: ignore[call-non-callable]
+    assert value.hash_tree_root() == before
+    assert duplicate.hash_tree_root() != before
+
+
+def test_a_list_reachable_twice_deep_copies_into_one_object() -> None:
+    shared = Balances(data=[Uint64(1), Uint64(2)])
+    ledger = Ledger(current=shared, previous=shared)
+    assert ledger.current is ledger.previous
+
+    duplicate = copy_module.deepcopy(ledger)
+
+    assert duplicate.current is duplicate.previous
+    assert duplicate.current is not shared
+    duplicate.current.append(Uint64(3))
+    assert len(duplicate.previous) == 3
+    assert len(shared) == 2
+
+
+def test_a_sequence_declaring_more_than_its_contents_deep_copies_every_field() -> None:
+    """The extra field travels with the duplicate instead of reverting to its default."""
+    tagged = TaggedBalances(data=[Uint64(1), Uint64(2)], tag=Uint64(7))
+
+    duplicate = copy_module.deepcopy(tagged)
+
+    assert duplicate.tag == Uint64(7)
+    assert duplicate.data is not tagged.data
+    duplicate.append(Uint64(3))
+    assert len(tagged) == 2
+
+
+def test_a_deep_copy_carries_its_own_record_of_which_fields_were_passed() -> None:
+    empty = Balances()
+
+    duplicate = copy_module.deepcopy(empty)
+
+    assert duplicate.model_fields_set == set()
+    assert duplicate.model_dump(exclude_unset=True) == {}
+
+    duplicate.data = [Uint64(1)]
+    assert duplicate.model_fields_set == {"data"}
+    assert empty.model_fields_set == set()
+
+
+MODEL_COPIED_SEQUENCES = [
+    pytest.param(Balances(data=[Uint64(1), Uint64(2)]), id="list_of_uints"),
+    pytest.param(
+        Roots(data=[Bytes32(bytes([index + 1]) * 32) for index in range(4)]),
+        id="vector_of_byte_arrays",
+    ),
+    pytest.param(
+        ValidatorList(data=[make_validator(1), make_validator(2)]), id="list_of_composites"
+    ),
+]
+"""Every sequence shape Pydantic's deep copy has to answer, fast path or not."""
+
+
+@pytest.mark.parametrize("value", MODEL_COPIED_SEQUENCES)
+def test_pydantics_deep_model_copy_answers_a_sequence_with_an_independent_one(
+    value: SSZCollection[SSZType],
+) -> None:
+    """Pydantic asks for a deep copy with no memo."""
+    duplicate = value.model_copy(deep=True)
+
+    assert duplicate == value
+    assert type(duplicate) is type(value)
+    assert duplicate.data is not value.data
+    for original_element, duplicate_element in zip(value.data, duplicate.data, strict=True):
+        if isinstance(original_element, SSZModel):
+            assert duplicate_element is not original_element
+        else:
+            assert duplicate_element is original_element
 
 
 @given(counts=st.lists(st.integers(min_value=0, max_value=22), min_size=1, max_size=3))

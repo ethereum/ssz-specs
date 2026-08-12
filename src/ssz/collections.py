@@ -161,6 +161,22 @@ class _SSZSequence[T: SSZType](SSZCollection[T]):
     every element is validated on entry.
     """
 
+    # Pydantic's own deep copy asks with no memo.
+    def __deepcopy__(self, memo: dict[int, Any] | None = None) -> Self:
+        """A duplicate over the very same elements, none of which can be written through."""
+        cls = type(self)
+        element_type = getattr(cls, "ELEMENT_TYPE", None)
+        if (
+            element_type is None
+            or not issubclass(element_type, (int, bytes))
+            # A subclass declaring more than the contents is copied whole, field by field.
+            or len(cls.model_fields) != 1
+        ):
+            return super().__deepcopy__(memo)
+        return cls.model_construct(
+            _fields_set=set(self.__pydantic_fields_set__), data=list(self.data)
+        )
+
     @override
     def _validate_element(self, value: Any) -> T:
         """Coerce one incoming element exactly as construction does."""
