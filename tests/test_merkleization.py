@@ -2403,6 +2403,90 @@ def test_a_layout_roots_only_the_leaves_a_range_asks_for() -> None:
     assert layout.chunks(3) == []
 
 
+class GappedRunProgressive(ProgressiveContainer):
+    """Two fields either side of a run of gaps, so one value can stand at both ends."""
+
+    ACTIVE_FIELDS = (1, 0, 0, 0, 1)
+
+    A: Chunk
+    B: Chunk
+
+
+def rooted_from_cold(vector: FixedVector4) -> Root:
+    """Root these contents through a value sharing no element with the one given."""
+    return hash_tree_root(FixedVector4.decode_bytes(vector.encode_bytes()))
+
+
+def test_a_vector_of_one_repeated_value_roots_that_value_at_every_position() -> None:
+    """One value at every position is one root at every leaf, and nothing else."""
+    # This is the shape a vector's own default takes, which is what makes it worth stating.
+    assert Bytes48Vector4().data[0] is Bytes48Vector4().data[3]
+
+    fingerprint = Bytes48(b"\x03" * 48)
+    uniform = Bytes48Vector4(data=[fingerprint] * 4)
+    layout = merkle_layout(uniform)
+    assert layout.nested is not None
+    assert all(element is fingerprint for element in layout.nested)
+    leaf = hash_tree_root(fingerprint)
+    assert layout.chunks() == [leaf] * 4
+    assert hash_tree_root(uniform) == perfect_tree_root([leaf] * 4, 4)
+    # Four equal values that are not one value reach the very same tree, leaf for leaf.
+    distinct = Bytes48Vector4(data=[Bytes48(b"\x03" * 48) for _ in range(4)])
+    assert distinct.data[0] is not distinct.data[3]
+    assert hash_tree_root(distinct) == hash_tree_root(uniform)
+
+
+def test_a_repeat_broken_in_the_middle_roots_every_position_on_its_own() -> None:
+    """Ends that match say nothing about the middle: [a, b, a] is two roots, not one."""
+    first, middle = sample_chunks[1], sample_chunks[2]
+    value = ChunkVector3(data=[first, middle, first])
+    layout = merkle_layout(value)
+    # The ends are one value, so the whole range is walked as a run of one.
+    assert layout.nested is not None and layout.nested[0] is layout.nested[2] is first
+    # A chunk is its own root, so the leaves are the elements verbatim.
+    assert layout.chunks() == [first, middle, first]
+    assert hash_tree_root(value) == perfect_tree_root([first, middle, first], 4)
+
+
+def test_a_progressive_layout_holding_one_value_twice_keeps_its_gaps_zero() -> None:
+    """A gap holds nothing, so a run of them takes neither neighbour's root."""
+    fingerprint = Chunk(b"\x07" * 32)
+    value = GappedRunProgressive(A=fingerprint, B=fingerprint)
+    layout = merkle_layout(value)
+    assert layout.nested == (fingerprint, None, None, None, fingerprint)
+    expected_leaves = [fingerprint, ZERO_ROOT, ZERO_ROOT, ZERO_ROOT, fingerprint]
+    assert layout.chunks() == expected_leaves
+    assert hash_tree_root(value) == expected_progressive_container_root(
+        expected_leaves, GappedRunProgressive.ACTIVE_FIELDS
+    )
+
+
+def test_a_repeated_element_and_a_merely_equal_one_each_follow_the_value_standing_there() -> None:
+    """
+    One value at two positions is one root; two equal values are two roots that can part.
+
+    The ends hold one object, so the whole sequence is walked as a run. Inside it stands a
+    second value, equal to that one today and free to stop being so.
+    """
+    shared = Fixed(A=Uint8(1), B=Uint64(2), C=Uint32(3))
+    twin = Fixed(A=Uint8(1), B=Uint64(2), C=Uint32(3))
+    vector = FixedVector4(data=[shared, twin, twin, shared])
+    assert vector[0] is vector[3] is shared
+    assert twin == shared and twin is not shared
+    before = hash_tree_root(vector)
+    assert before == rooted_from_cold(vector)
+
+    # The two equal values part company: only the one standing at positions 1 and 2 moves.
+    twin.C = Uint32(9)
+    assert hash_tree_root(vector) == rooted_from_cold(vector) != before
+
+    # A write through the collection reaches the value held at both ends.
+    parted = hash_tree_root(vector)
+    vector[0].A = Uint8(9)
+    assert vector[3].A == Uint8(9)
+    assert hash_tree_root(vector) == rooted_from_cold(vector) != parted
+
+
 class Bytes1(ByteVector):
     """Byte array of one byte: the narrowest leaf a fixed byte array can be."""
 
