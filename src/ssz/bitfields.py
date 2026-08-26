@@ -64,30 +64,29 @@ class BitVector(SSZCollection[Boolean]):
 
     @classmethod
     def __pydantic_init_subclass__(cls, **kwargs: Any) -> None:
-        """
-        Give the bits their default, which is every bit clear.
-
-        A shape that never declared its bit count keeps its inherited default, and fails
-        its own declaration check instead.
-        """
+        """Give the bits their default, which is every bit clear."""
         super().__pydantic_init_subclass__(**kwargs)
 
+        # A shape that never declared its bit count keeps its inherited default.
+        # The missing declaration is rejected when a value is validated.
         if cls.LENGTH is None:
             return
 
-        length = cls.LENGTH
-        # One shared boolean, repeated: a boolean cannot be mutated, so no bit can alias
-        # another. A vector of composite elements cannot take this shortcut.
-        cls.model_fields["data"].default_factory = lambda: [Boolean(False)] * length
+        length, shared = cls.LENGTH, Boolean(False)
+        # One shared boolean fills every position.
+        # - A boolean cannot be mutated, so no bit can alias another.
+        # - A vector of composite elements cannot take this shortcut.
+        cls.model_fields["data"].default_factory = lambda: [shared] * length
         cls.model_rebuild(force=True)
 
     data: Sequence[Boolean] = Field(default_factory=list)
     """
-    The bit data stored as a sequence of booleans.
+    The bits, in position order.
 
-    Accepts lists, tuples, or iterables of bool-like values on input.
-    Stored as a list after validation. Mutate through the bitfield API so
-    every bit is validated on entry.
+    - Any iterable of bool-like values is accepted on input, lists and tuples included.
+    - Stored as a list once validated.
+    - Indexed writes and assignment to this attribute both validate every bit.
+    - Writing into the sequence in place skips validation entirely.
     """
 
     @override
@@ -241,11 +240,12 @@ class _SSZBitList(SSZCollection[Boolean]):
 
     data: Sequence[Boolean] = Field(default_factory=list)
     """
-    The bit data stored as a sequence of booleans.
+    The bits, in position order.
 
-    Accepts lists, tuples, or iterables of bool-like values on input.
-    Stored as a list after validation. Mutate through the bitfield API so
-    every bit is validated on entry.
+    - Any iterable of bool-like values is accepted on input, lists and tuples included.
+    - Stored as a list once validated.
+    - Indexed writes and assignment to this attribute both validate every bit.
+    - Writing into the sequence in place skips validation entirely.
     """
 
     @classmethod
