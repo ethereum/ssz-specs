@@ -20,7 +20,6 @@ from typing import (
     Any,
     ClassVar,
     Self,
-    cast,
     override,
 )
 
@@ -275,13 +274,21 @@ class _SSZBitList(SSZCollection[Boolean]):
         self._begin_mutation()
         element = self._validate_element(value)
         self._validate_length(len(self.data) + 1)
-        cast("list[Boolean]", self.data).append(element)
+        self._mutable_data.append(element)
 
     def pop(self) -> Boolean:
-        """Remove and return the last bit, validating the resulting length."""
+        """
+        Remove and return the last bit.
+
+        - Removing one can never breach a capacity.
+        - No shape offering this declares a fixed bit count.
+        - So the resulting length has nothing left to check.
+
+        Raises:
+            IndexError: If the bitfield is empty.
+        """
         self._begin_mutation()
-        self._validate_length(len(self.data) - 1)
-        return cast("list[Boolean]", self.data).pop()
+        return self._mutable_data.pop()
 
     def __add__(self, other: Any) -> Self:
         """

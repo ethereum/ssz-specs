@@ -586,9 +586,20 @@ class SSZCollection[T](SSZModel):
             start, stop, step = index.indices(held)
             selected = len(range(start, stop, step))
             self._validate_length(held - selected + len(elements) if step == 1 else held)
-            cast("list[T]", self.data)[index] = elements
+            self._mutable_data[index] = elements
         else:
-            cast("list[T]", self.data)[index] = self._validate_element(value)
+            self._mutable_data[index] = self._validate_element(value)
+
+    @property
+    def _mutable_data(self) -> list[T]:
+        """
+        The contents as the list they are stored in, for a mutator to write through.
+
+        - The field is declared a sequence, so any iterable is accepted on input.
+        - Validation always returns a list, so a list is always what is stored.
+        - A shape holding anything else overrides every mutator and never asks for this.
+        """
+        return cast("list[T]", self.data)
 
     def _validate_element(self, value: Any) -> Any:
         """
