@@ -10,7 +10,6 @@ Both encode identically: fixed-size fields inline, variable-size fields behind o
 """
 
 import io
-from functools import cache
 from itertools import pairwise
 from typing import IO, Any, ClassVar, Final, Self, override
 
@@ -124,6 +123,12 @@ class _SSZContainer(SSZModel):
 
     model_config = ConfigDict(validate_assignment=True)
 
+    _FIELD_TYPES: ClassVar[tuple[tuple[str, type[SSZType]], ...]] = ()
+    """Each field's name and declared type, in the declaration order the wire format follows.
+
+    Settled once per shape, since a declaration cannot change.
+    A width is still asked each time, since what a type derives one from stays writable."""
+
     @model_validator(mode="wrap")
     @classmethod
     def _accept_hex_string(cls, value: Any, handler: ModelWrapValidatorHandler[Self]) -> Self:
@@ -155,6 +160,7 @@ class _SSZContainer(SSZModel):
             if field.default_factory is None and field.default is PydanticUndefined:
                 field.default_factory = field.annotation
         cls.model_rebuild(force=True)
+        cls._FIELD_TYPES = tuple((name, f.annotation) for name, f in cls.model_fields.items())
 
     @classmethod
     @override
@@ -209,7 +215,7 @@ class _SSZContainer(SSZModel):
         bytes_read = 0
 
         # Phase 1: each slot is either the field itself or an offset to its tail payload.
-        for name, field_type in _field_types(cls):
+        for name, field_type in cls._FIELD_TYPES:
             if field_type.is_fixed_size():
                 width = field_type.get_byte_length()
                 fields[name] = field_type.deserialize(stream, width)
@@ -370,18 +376,3 @@ class ProgressiveContainer(_SSZContainer):
                 f"the layout sets {active_count} positions, "
                 f"and the struct declares {len(cls.model_fields)}",
             )
-
-
-type _FieldType = tuple[str, type[SSZType]]
-"""One field: its name and the type it declares."""
-
-
-@cache
-def _field_types(cls: type[_SSZContainer]) -> tuple[_FieldType, ...]:
-    """
-    Each field's declared type, in the declaration order the wire format follows.
-
-    Only the declaration is cached, never a width.
-    The attributes a width derives from stay writable for as long as the type does.
-    """
-    return tuple((name, field.annotation) for name, field in cls.model_fields.items())
