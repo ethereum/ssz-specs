@@ -63,42 +63,6 @@ class ByteVector(bytes, SSZType):
     LENGTH: ClassVar[int]
     """The exact number of bytes (overridden by subclasses)."""
 
-    @staticmethod
-    def _coerce_to_bytes(value: bytes | bytearray | str | Iterable[int]) -> bytes:
-        """
-        Coerce an input into a plain bytes object.
-
-        Accepts:
-
-        - bytes — handed back as it stands, being immutable already.
-        - A bytes subclass or a bytearray — copied into a plain, immutable bytes object.
-        - Iterables of integers in 0..255.
-        - Hex strings, optionally prefixed with 0x.
-
-        Args:
-            value: The raw input to convert.
-
-        Returns:
-            The coerced bytes.
-
-        Raises:
-            TypeError: If the input type is not coercible.
-            ValueError: If a hex string is malformed or an integer is out of range.
-        """
-        # A plain bytes object is already the answer, and a subclass is copied out below.
-        if type(value) is bytes:
-            return value
-
-        match value:
-            case bytes() | bytearray():
-                return bytes(value)
-            case str():
-                return bytes.fromhex(value.removeprefix("0x"))
-            case Iterable():
-                return bytes(value)
-            case _:
-                raise TypeError(f"Cannot coerce {type(value).__name__} to bytes")
-
     def __new__(
         cls, value: bytes | bytearray | str | Iterable[int] | _Omitted = _Omitted.TOKEN
     ) -> Self:
@@ -128,7 +92,19 @@ class ByteVector(bytes, SSZType):
         if value is _Omitted.TOKEN:
             return cls._trusted(b"\x00" * cls.LENGTH)
 
-        coerced_bytes = cls._coerce_to_bytes(value)
+        # A plain bytes object is already the answer, and a subclass is copied out below.
+        if type(value) is bytes:
+            coerced_bytes = value
+        else:
+            match value:
+                case bytes() | bytearray():
+                    coerced_bytes = bytes(value)
+                case str():
+                    coerced_bytes = bytes.fromhex(value.removeprefix("0x"))
+                case Iterable():
+                    coerced_bytes = bytes(value)
+                case _:
+                    raise TypeError(f"Cannot coerce {type(value).__name__} to bytes")
         if len(coerced_bytes) != cls.LENGTH:
             raise SSZLengthError(cls.__name__, cls.LENGTH, len(coerced_bytes), unit="bytes")
         return super().__new__(cls, coerced_bytes)
@@ -384,7 +360,19 @@ class ByteList(SSZCollection[int]):
             raise SSZDefinitionError(cls.__name__, "LIMIT")
 
         # Coerce the input first, then enforce the upper bound.
-        coerced_bytes = ByteVector._coerce_to_bytes(value)
+        # A plain bytes object is already the answer, and a subclass is copied out below.
+        if type(value) is bytes:
+            coerced_bytes = value
+        else:
+            match value:
+                case bytes() | bytearray():
+                    coerced_bytes = bytes(value)
+                case str():
+                    coerced_bytes = bytes.fromhex(value.removeprefix("0x"))
+                case Iterable():
+                    coerced_bytes = bytes(value)
+                case _:
+                    raise TypeError(f"Cannot coerce {type(value).__name__} to bytes")
         if len(coerced_bytes) > cls.LIMIT:
             raise SSZLimitError(cls.__name__, cls.LIMIT, len(coerced_bytes))
         return coerced_bytes
