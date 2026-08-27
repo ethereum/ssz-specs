@@ -405,7 +405,7 @@ class SSZModel(StrictBaseModel, SSZType):
         Hash by Merkle tree root, which is what equality compares.
 
         A mutable value hashes differently once mutated.
-        A dict or set then fails to find it, so anything held in one must go unmutated.
+        A dict or set still files it under the old root, so a lookup by value misses it.
         """
         return hash(self.hash_tree_root())
 

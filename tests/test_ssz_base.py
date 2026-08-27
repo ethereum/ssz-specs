@@ -992,10 +992,10 @@ class TestSSZMutabilityFlag:
         lookup = {first: "found"}
         assert lookup[second] == "found"
 
-    def test_a_mutated_value_is_lost_by_the_dict_holding_it(self) -> None:
-        """Hashing by root is hashing by value, so mutation moves a value out of reach."""
+    def test_a_mutated_value_is_filed_under_a_root_it_no_longer_has(self) -> None:
+        """Hashing by root is hashing by value, so mutation strands an entry under its old key."""
         # The two rules meet here: a container is mutable, and it hashes by what it holds.
-        # A dict places a key by the hash it had on the way in, and never revisits it.
+        # A dict files an entry by the hash the key had on the way in, and never revisits it.
         #
         # So this is the cost of value semantics, not a defect in them.
         # A value held in a dict or a set has to go unmutated for as long as it is held.
@@ -1005,9 +1005,12 @@ class TestSSZMutabilityFlag:
 
         value.x = Uint8(7)
 
+        # The root moved, so the entry is filed under a key nothing in the dict now equals.
         assert hash(value) != before
-        # The key is still the very same object, and the dict no longer finds it.
-        assert value not in lookup
+        assert TwoFieldContainer(x=Uint8(1), y=Uint16(2)) not in lookup
+        # Looking the mutated value up again is not asserted, and cannot be.
+        # A dict compares the key it lands on by identity before it compares the hash,
+        # so a probe that reaches this entry's slot answers found however the root moved.
         assert next(iter(lookup)) is value
 
 
