@@ -33,8 +33,6 @@ class BaseUint(int, SSZType):
     Every result is range-checked against the width the rule picked.
     """
 
-    __slots__ = ()
-
     BITS: ClassVar[int]
     """The number of bits in the integer (overridden by subclasses)."""
 

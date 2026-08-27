@@ -13,7 +13,7 @@ Both flavors serialize as the raw bytes themselves — no length prefix, no deli
 
 from collections.abc import Iterable, Sequence
 from enum import Enum
-from typing import IO, TYPE_CHECKING, Any, ClassVar, Self, override
+from typing import IO, TYPE_CHECKING, Any, ClassVar, NoReturn, Self, override
 
 from pydantic import Field, field_serializer, field_validator
 from pydantic.annotated_handlers import GetCoreSchemaHandler
@@ -26,6 +26,7 @@ from ssz.exceptions import (
     SSZLimitError,
     SSZScopeError,
     SSZSerializationError,
+    SSZTypeError,
 )
 from ssz.ssz_base import SSZCollection, SSZType
 
@@ -58,8 +59,6 @@ class ByteVector(bytes, SSZType):
 
         Bytes4(b"\x01\x02\x03\x04")  ->  wire bytes 01 02 03 04
     """
-
-    __slots__ = ()
 
     LENGTH: ClassVar[int]
     """The exact number of bytes (overridden by subclasses)."""
@@ -134,6 +133,15 @@ class ByteVector(bytes, SSZType):
         if len(coerced_bytes) != cls.LENGTH:
             raise SSZLengthError(cls.__name__, cls.LENGTH, len(coerced_bytes), unit="bytes")
         return super().__new__(cls, coerced_bytes)
+
+    def __setattr__(self, name: str, value: Any) -> NoReturn:
+        """
+        Refuse to attach state to a value.
+
+        Raises:
+            SSZTypeError: Always, because a byte array is only the bytes it holds.
+        """
+        raise SSZTypeError(f"{type(self).__name__} is immutable")
 
     @classmethod
     def _trusted(cls, data: bytes) -> Self:

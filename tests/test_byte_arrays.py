@@ -1,5 +1,6 @@
 """Tests for the ByteVector and ByteList types."""
 
+import copy
 import hashlib
 import io
 import json
@@ -339,6 +340,31 @@ class TestBaseBytesOperations:
         byte_array = Bytes32(b"\x01" + b"\x00" * 31)
         digest = hashlib.sha256(byte_array).digest()
         assert len(digest) == 32
+
+
+class TestAByteArrayCarriesNoState:
+    """A copy of an immutable shape is the shape itself, so it accepts no attributes."""
+
+    def test_attaching_state_to_a_byte_array_is_refused(self) -> None:
+        """Setting an attribute would reach every other name for the same value."""
+        expected_message = "Bytes32 is immutable"
+        with pytest.raises(SSZTypeError) as exception_info:
+            Bytes32(b"\x01" * 32).note = "mine"  # type: ignore[attr-defined]
+        assert str(exception_info.value) == expected_message
+
+    def test_a_subclass_is_refused_under_its_own_name(self) -> None:
+        """The refusal names the type the value was built as, not the one declaring it."""
+        with pytest.raises(SSZTypeError, match=r"^Bytes32Sub is immutable$"):
+            Bytes32Sub(b"\x01" * 32).note = "mine"  # type: ignore[attr-defined]
+
+    def test_a_deep_copy_cannot_be_written_through_to_the_original(self) -> None:
+        """The duplicate promised by copy is this same object, and it stays unwritable."""
+        original = Bytes32(b"\x01" * 32)
+        duplicate = copy.deepcopy(original)
+        # The premise: an immutable shape answers a copy with itself.
+        assert duplicate is original
+        with pytest.raises(SSZTypeError, match=r"^Bytes32 is immutable$"):
+            duplicate.note = "mine"  # type: ignore[attr-defined]
 
 
 class TestBaseBytesSSZ:
