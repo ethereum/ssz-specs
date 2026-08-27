@@ -308,8 +308,11 @@ class ByteVector(bytes, SSZType):
             TypeError: If other is not a byte array, or is a sibling type rather than an
                 ancestor or a descendant.
         """
-        if not isinstance(other, ByteVector) or not (
-            isinstance(other, type(self)) or isinstance(self, type(other))
+        # An exact type match answers most calls without consulting the abstract base.
+        # The base test guards the other branch, which bytes and object would pass.
+        if not (
+            isinstance(other, type(self))
+            or (isinstance(other, ByteVector) and isinstance(self, type(other)))
         ):
             raise TypeError(
                 f"Unsupported operand type(s) for ==: "
@@ -328,8 +331,9 @@ class ByteVector(bytes, SSZType):
             TypeError: If other is not a byte array, or is a sibling type rather than an
                 ancestor or a descendant.
         """
-        if not isinstance(other, ByteVector) or not (
-            isinstance(other, type(self)) or isinstance(self, type(other))
+        if not (
+            isinstance(other, type(self))
+            or (isinstance(other, ByteVector) and isinstance(self, type(other)))
         ):
             raise TypeError(
                 f"Unsupported operand type(s) for !=: "
@@ -540,8 +544,11 @@ class ByteList(SSZCollection[int]):
             TypeError: If other is not a byte list, or is a sibling type rather than an
                 ancestor or a descendant.
         """
-        if not isinstance(other, ByteList) or not (
-            isinstance(other, type(self)) or isinstance(self, type(other))
+        # An exact type match answers most calls without consulting the abstract base.
+        # The base test guards the other branch, which object would pass.
+        if not (
+            isinstance(other, type(self))
+            or (isinstance(other, ByteList) and isinstance(self, type(other)))
         ):
             raise TypeError(
                 f"Unsupported operand type(s) for ==: "
@@ -559,8 +566,9 @@ class ByteList(SSZCollection[int]):
             TypeError: If other is not a byte list, or is a sibling type rather than an
                 ancestor or a descendant.
         """
-        if not isinstance(other, ByteList) or not (
-            isinstance(other, type(self)) or isinstance(self, type(other))
+        if not (
+            isinstance(other, type(self))
+            or (isinstance(other, ByteList) and isinstance(self, type(other)))
         ):
             raise TypeError(
                 f"Unsupported operand type(s) for !=: "
