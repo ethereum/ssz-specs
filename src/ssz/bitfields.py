@@ -29,11 +29,8 @@ from ssz.boolean import Boolean
 from ssz.exceptions import (
     SSZDefinitionError,
     SSZFixedSizeError,
-    SSZLengthError,
-    SSZLimitError,
     SSZScopeError,
     SSZSerializationError,
-    SSZTypeMismatch,
     SSZValueError,
 )
 from ssz.ssz_base import SSZCollection
@@ -88,33 +85,41 @@ class BitVector(SSZCollection[Boolean]):
         cls.model_fields["data"].default_factory = lambda: [shared] * length
         cls.model_rebuild(force=True)
 
+    @classmethod
     @override
-    def _validate_element(self, value: Any) -> Boolean:
-        """Wrap one incoming bit in Boolean, exactly as construction does."""
+    def _validate_element(cls, value: Any) -> Boolean:
+        """Wrap one incoming bit as a boolean, exactly as construction does."""
         return Boolean(value)
 
     @field_validator("data", mode="before")
     @classmethod
     def _coerce_and_validate(cls, bits_input: Any) -> list[Boolean]:
-        """Enforce the exact bit count and coerce inputs into booleans."""
-        # Subclasses must declare LENGTH before any instances can be validated.
+        """
+        Enforce the exact bit count and coerce every input into a boolean.
+
+        Raises:
+            SSZDefinitionError: When the bit count was never declared.
+        """
+        # A shape that never declared its bit count cannot judge any input.
         if cls.LENGTH is None:
             raise SSZDefinitionError(cls.__name__, "LENGTH")
 
-        # Materialize generic iterables into a tuple so the length check works.
-        if not isinstance(bits_input, (list, tuple)):
-            bits_input = tuple(bits_input)
+        # Materialize a length-checkable sequence, refusing strings and non-iterables.
+        #
+        # Bytes are refused here as they are everywhere else.
+        # Iterating one yields ints, so four bytes would silently pass for four bits.
+        bits = cls._shape_input(bits_input)
 
-        # Fixed-length type: the input must contain exactly LENGTH elements.
-        if len(bits_input) != cls.LENGTH:
-            raise SSZLengthError(cls.__name__, cls.LENGTH, len(bits_input))
+        # Fixed-length shape: the input must hold exactly the declared bit count.
+        cls._validate_length(len(bits))
 
         # Each value is wrapped as a bit, which refuses anything outside 0 and 1.
         #
         # One already of exactly that class is the shared value for its bit.
-        # Wrapping it again would hand back the object it is.
+        # Wrapping it again would only hand back the object it already is.
+        #
         # A named spelling is still converted, the test being on the exact class.
-        return [bit if type(bit) is Boolean else Boolean(bit) for bit in bits_input]
+        return [bit if type(bit) is Boolean else Boolean(bit) for bit in bits]
 
     @classmethod
     @override
@@ -256,18 +261,49 @@ class _SSZBitList(SSZCollection[Boolean]):
     """
 
     @classmethod
-    def _reject_excess_bits(cls, count: int) -> None:
-        """
-        Reject a bit count the type cannot hold.
-
-        A progressive bitlist has no capacity, so it rejects nothing.
-        The bounded bitlist overrides this with its capacity check.
-        """
-
     @override
-    def _validate_element(self, value: Any) -> Boolean:
-        """Wrap one incoming bit in Boolean, exactly as construction does."""
+    def _validate_element(cls, value: Any) -> Boolean:
+        """Wrap one incoming bit as a boolean, exactly as construction does."""
         return Boolean(value)
+
+    @field_validator("data", mode="before")
+    @classmethod
+    def _coerce_and_validate(cls, bits_input: Any) -> list[Boolean]:
+        """
+        Coerce every input into a boolean, under whatever bit count the shape allows.
+
+        A bounded bitlist declares a limit and is held to it.
+
+        A progressive bitlist declares none, so every count it is handed is valid.
+
+        Raises:
+            SSZDefinitionError: When a bounded shape never declared its limit.
+        """
+        # A bounded shape needs its limit before it can judge any input.
+        # An undeclared limit cannot be told apart from the absence of one.
+        cls._check_declaration()
+
+        # Materialize a length-checkable sequence, refusing strings and non-iterables.
+        bits = cls._shape_input(bits_input)
+
+        # One rule reads whichever bound was declared, or waves through when none was.
+        cls._validate_length(len(bits))
+
+        # Each value is wrapped as a bit, which refuses anything outside 0 and 1.
+        #
+        # One already of exactly that class is the shared value for its bit.
+        # Wrapping it again would only hand back the object it already is.
+        return [bit if type(bit) is Boolean else Boolean(bit) for bit in bits]
+
+    @classmethod
+    def _check_declaration(cls) -> None:
+        """
+        Refuse a shape that has not declared what it needs to hold a value.
+
+        A progressive bitlist needs nothing, since a bit is a bit and any count is valid.
+
+        The bounded shape names the limit it enforces.
+        """
 
     def append(self, value: Boolean) -> None:
         """Add one bit at the end, validating it and the resulting length."""
@@ -480,7 +516,7 @@ class _SSZBitList(SSZCollection[Boolean]):
         # Recovered bits: [1, 0, 1]
         num_bits = delimiter_pos
         # Checked before the bits are built, so an over-capacity payload is refused cheaply.
-        cls._reject_excess_bits(num_bits)
+        cls._validate_length(num_bits)
 
         # - Every byte is unpacked whole, then the bits past the wanted count dropped.
         # - One to eight go, the delimiter always among them.
@@ -515,48 +551,17 @@ class BitList(_SSZBitList):
     LIMIT: ClassVar[int]
     """Maximum number of bits allowed."""
 
-    @field_validator("data", mode="before")
-    @classmethod
-    def _coerce_and_validate(cls, bits_input: Any) -> list[Boolean]:
-        """Enforce the maximum bit count and coerce inputs into booleans."""
-        # Subclasses must declare LIMIT before any instances can be validated.
-        if cls.LIMIT is None:
-            raise SSZDefinitionError(cls.__name__, "LIMIT")
-
-        # Accept the natural input shapes:
-        #
-        #   - list or tuple    pass through directly.
-        #   - other iterables  materialize into a list so the length is known.
-        #   - str or bytes     rejected — iterable, but the elements are not booleans.
-        if isinstance(bits_input, (list, tuple)):
-            elements = bits_input
-        elif hasattr(bits_input, "__iter__") and not isinstance(bits_input, (str, bytes)):
-            elements = list(bits_input)
-        else:
-            raise SSZTypeMismatch("iterable", type(bits_input))
-
-        # Variable-length type: any count is fine, up to LIMIT.
-        if len(elements) > cls.LIMIT:
-            raise SSZLimitError(cls.__name__, cls.LIMIT, len(elements))
-
-        # Each value is wrapped as a bit, which refuses anything outside 0 and 1.
-        #
-        # One already of exactly that class is the shared value for its bit.
-        # Wrapping it again would hand back the object it is.
-        # A named spelling is still converted, the test being on the exact class.
-        return [bit if type(bit) is Boolean else Boolean(bit) for bit in elements]
-
     @classmethod
     @override
-    def _reject_excess_bits(cls, count: int) -> None:
+    def _check_declaration(cls) -> None:
         """
-        Reject a count above the declared capacity.
+        A bounded bitlist needs the limit it enforces.
 
         Raises:
-            SSZValueError: When the count exceeds the declared capacity.
+            SSZDefinitionError: When the limit was never declared.
         """
-        if count > cls.LIMIT:
-            raise SSZLimitError(cls.__name__, cls.LIMIT, count)
+        if cls.LIMIT is None:
+            raise SSZDefinitionError(cls.__name__, "LIMIT")
 
 
 class ProgressiveBitList(_SSZBitList):
@@ -580,24 +585,10 @@ class ProgressiveBitList(_SSZBitList):
     Nothing is declared to use the type, so it is instantiated directly:
 
         ProgressiveBitList(data=[1, 0, 1])
+
+    Nothing else is declared here.
+
+    The count rule this shape inherits is "no bound".
+
+    Declaring no limit already says exactly that.
     """
-
-    @field_validator("data", mode="before")
-    @classmethod
-    def _coerce_and_validate(cls, bits_input: Any) -> list[Boolean]:
-        """Coerce inputs into booleans, with no count rule to apply."""
-        # The accepted input shapes are the ones the bounded bitlist takes, listed there.
-        # No capacity check follows, because every count this shape holds is valid.
-        if isinstance(bits_input, (list, tuple)):
-            elements = bits_input
-        elif hasattr(bits_input, "__iter__") and not isinstance(bits_input, (str, bytes)):
-            elements = list(bits_input)
-        else:
-            raise SSZTypeMismatch("iterable", type(bits_input))
-
-        # Each value is wrapped as a bit, which refuses anything outside 0 and 1.
-        #
-        # One already of exactly that class is the shared value for its bit.
-        # Wrapping it again would hand back the object it is.
-        # A named spelling is still converted, the test being on the exact class.
-        return [bit if type(bit) is Boolean else Boolean(bit) for bit in elements]
