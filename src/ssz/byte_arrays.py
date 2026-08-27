@@ -49,7 +49,8 @@ class ByteVector(bytes, SSZType):
 
     - Inherits from bytes so the instance is usable wherever a bytes value is expected.
     - Subclasses pin the byte count by setting the class-level length.
-    - Equality relates a type only to its ancestors and descendants; hashing agrees.
+    - Equality relates a type only to its ancestors and descendants.
+    - Hashing agrees with that relation.
 
     The spec reads a fixed byte array as a vector of single bytes, so its default is every
     byte zero.
@@ -116,20 +117,14 @@ class ByteVector(bytes, SSZType):
         if cls.LENGTH is None:
             raise SSZDefinitionError(cls.__name__, "LENGTH")
 
-        # An omitted value is the default, which is every byte zero.
-        # An empty one is a wrong byte count: a 32-byte array wants 32, so no argument
-        # gives 32 zeros while an empty input is an error.
+        # Only the total absence of an argument asks for the default:
         #
-        # The sentinel is a private marker rather than a missing value, so that a caller
-        # passing a missing value explicitly still meets the coercion error below:
+        #     Bytes4()      ->  00000000        four zero bytes
+        #     Bytes4(b"")   ->  length error    zero bytes is a wrong count, not a request
+        #     Bytes4(None)  ->  coercion error  a missing value passed by hand is an input
         #
-        #     Bytes4()      ->  00000000
-        #     Bytes4(None)  ->  TypeError
-        #
-        # Repeating a zero byte the declared number of times gives exactly that many.
-        # The width holds by construction.
-        #
-        # So neither the coercion nor the count check below has anything left to settle.
+        # Repeating a zero byte the declared number of times gives exactly that many, so the
+        # coercion and the count check below have nothing left to settle.
         if value is _Omitted.TOKEN:
             return cls._trusted(b"\x00" * cls.LENGTH)
 
@@ -202,14 +197,15 @@ class ByteVector(bytes, SSZType):
 
         Args:
             stream: Source binary stream.
-            scope: Number of bytes the caller has allocated for this value (must equal LENGTH).
+            scope: Number of bytes the caller has allocated for this value.
+                Must equal the declared width.
 
         Returns:
             A new instance wrapping the read bytes.
 
         Raises:
             SSZSerializationError:
-                - When scope does not equal the declared LENGTH.
+                - When scope does not equal the declared width.
                 - When the stream ends before delivering scope bytes.
         """
         if scope != cls.LENGTH:
@@ -290,9 +286,10 @@ class ByteVector(bytes, SSZType):
         r"""
         Equality between two byte arrays whose types are related by inheritance.
 
-        One of the two types must derive from the other, and nothing but a byte array may
-        meet one at all. A root is declared a kind of chunk so it is usable where a chunk
-        is expected, and this comparison honours that:
+        - One of the two types must derive from the other.
+        - Nothing but a byte array may meet one at all.
+
+        A root is declared a kind of chunk, so it is usable where a chunk is expected:
 
             x = b"\x11" * 32
 
@@ -300,17 +297,16 @@ class ByteVector(bytes, SSZType):
             Bytes32(x) == Root(x)  ->  refused  siblings, neither derives from the other
             Bytes32(x) == x        ->  refused  raw bytes are not a byte array at all
 
-        Invariant: whenever this returns True, __hash__ agrees. Python requires that of
-        every type, because dict and set find a value by its hash before they compare
-        it. That requirement is what fixes the hash below: Root(x) and Chunk(x) are one
-        value here, so no hash that named the concrete type could keep step.
+        Whenever this returns True the hash agrees, as every Python type must.
+        A container finds a value by its hash before it compares it.
+        Two related types are one value here, so no hash naming the concrete type could keep step.
 
         Args:
             other: The value to compare against.
 
         Raises:
-            TypeError: If other is not a byte array, or is one whose type is a sibling
-                of this one rather than an ancestor or a descendant.
+            TypeError: If other is not a byte array, or is a sibling type rather than an
+                ancestor or a descendant.
         """
         if not isinstance(other, ByteVector) or not (
             isinstance(other, type(self)) or isinstance(self, type(other))
@@ -323,14 +319,14 @@ class ByteVector(bytes, SSZType):
 
     def __ne__(self, other: object) -> bool:
         """
-        Inequality under the same relation as equality; anything else raises.
+        Inequality under the same relation as equality.
 
-        Defined explicitly because the parent bytes class has its own not-equal
-        that would otherwise bypass the type rule above.
+        Defined explicitly because the parent bytes class has a not-equal of its own that
+        would bypass the type rule.
 
         Raises:
-            TypeError: If other is not a byte array, or is one whose type is a sibling
-                of this one rather than an ancestor or a descendant.
+            TypeError: If other is not a byte array, or is a sibling type rather than an
+                ancestor or a descendant.
         """
         if not isinstance(other, ByteVector) or not (
             isinstance(other, type(self)) or isinstance(self, type(other))
@@ -341,12 +337,11 @@ class ByteVector(bytes, SSZType):
             )
         return bytes.__ne__(self, other)
 
-    # A byte array hashes as the bytes it holds, because equality calls a root and a chunk
-    # of the same bytes one value, which leaves the concrete type no room in the hash.
-    #
-    # Two types the comparison refuses to relate now share a bucket when their bytes agree,
-    # so a lookup reaches the refusal instead of missing in silence. When the bytes differ
-    # so do the hashes, and absent is the right answer whatever the types were.
+    # Equality calls a root and a chunk of the same bytes one value, which leaves the
+    # concrete type no room in the hash.
+    # Two types the comparison refuses to relate then share a bucket when their bytes agree,
+    # so a lookup reaches the refusal rather than missing in silence.
+    # Differing bytes give differing hashes, where absent is the right answer either way.
     __hash__ = bytes.__hash__
 
 
@@ -355,8 +350,10 @@ class ByteList(SSZCollection[int]):
     Variable-length SSZ byte array with 0 to N bytes.
 
     - Subclasses pin the maximum byte count by setting the class-level limit.
-    - Serialization writes the raw bytes; the length is recovered from the wrapping context.
-    - Equality relates a type only to its ancestors and descendants; hashing agrees.
+    - Serialization writes the raw bytes.
+    - The byte count is recovered from the wrapping context.
+    - Equality relates a type only to its ancestors and descendants.
+    - Hashing agrees with that relation.
 
     For example, a 4-byte payload under a limit of 10:
 
@@ -411,7 +408,7 @@ class ByteList(SSZCollection[int]):
 
     @override
     def __setitem__(self, index: int | slice, value: int | Sequence[int]) -> None:
-        """Replace the byte(s) at ``index``, revalidating the stored payload."""
+        """Replace the byte or bytes at a position, revalidating the stored payload."""
         self._begin_mutation()
         working = bytearray(self.data)
         working[index] = value  # ty: ignore[invalid-assignment]
@@ -474,7 +471,7 @@ class ByteList(SSZCollection[int]):
             SSZSerializationError:
                 - When scope is negative.
                 - When the stream ends before delivering scope bytes.
-            SSZValueError: When scope exceeds the declared LIMIT.
+            SSZValueError: When scope exceeds the declared limit.
         """
         if scope < 0:
             raise SSZSerializationError(f"{cls.__name__}: negative scope")
@@ -493,7 +490,7 @@ class ByteList(SSZCollection[int]):
     @classmethod
     @override
     def decode_bytes(cls, data: bytes) -> Self:
-        """Parse SSZ bytes into an instance — the validator enforces the LIMIT."""
+        """Parse SSZ bytes into an instance — the validator enforces the declared limit."""
         return cls(data=data)
 
     def __bytes__(self) -> bytes:
@@ -517,18 +514,19 @@ class ByteList(SSZCollection[int]):
         """
         Equality between two byte lists whose types are related by inheritance.
 
-        One of the two types must derive from the other, and nothing but a byte list may
-        meet one at all. Two unrelated limits are refused even when the payloads match,
-        because a payload under one limit is not the same value as under another.
+        - One of the two types must derive from the other.
+        - Nothing but a byte list may meet one at all.
+        - Whenever this returns True the hash agrees.
 
-        Invariant: whenever this returns True, the hash agrees.
+        Two unrelated limits are refused even when the payloads match, because a payload
+        under one limit is not the same value as under another.
 
         Args:
             other: The value to compare against.
 
         Raises:
-            TypeError: If other is not a byte list, or is one whose type is a sibling
-                of this one rather than an ancestor or a descendant.
+            TypeError: If other is not a byte list, or is a sibling type rather than an
+                ancestor or a descendant.
         """
         if not isinstance(other, ByteList) or not (
             isinstance(other, type(self)) or isinstance(self, type(other))
@@ -541,13 +539,13 @@ class ByteList(SSZCollection[int]):
 
     def __ne__(self, other: object) -> bool:
         """
-        Inequality under the same relation as equality; anything else raises.
+        Inequality under the same relation as equality.
 
-        Mirrors the equality contract — both operators apply one type rule.
+        Both operators apply the one type rule.
 
         Raises:
-            TypeError: If other is not a byte list, or is one whose type is a sibling
-                of this one rather than an ancestor or a descendant.
+            TypeError: If other is not a byte list, or is a sibling type rather than an
+                ancestor or a descendant.
         """
         if not isinstance(other, ByteList) or not (
             isinstance(other, type(self)) or isinstance(self, type(other))
@@ -559,7 +557,7 @@ class ByteList(SSZCollection[int]):
         return self.data != other.data
 
     def __hash__(self) -> int:
-        """Return the hash of the payload alone — the one thing equality above compares."""
+        """Return the hash of the payload alone, which is the one thing equality compares."""
         return hash(self.data)
 
     def hex(self) -> str:
