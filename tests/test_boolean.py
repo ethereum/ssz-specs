@@ -87,19 +87,23 @@ def test_instantiation_and_type() -> None:
 
 
 @pytest.mark.parametrize(
-    "op",
+    "op, op_symbol, operand_name",
     [
-        lambda a, b: a + b,
-        lambda a, b: a - b,
-        lambda a, b: 1 + b,
-        lambda a, b: 1 - b,
+        (lambda a, b: a + b, "+", "Boolean"),
+        (lambda a, b: a - b, "-", "Boolean"),
+        (lambda a, b: 1 + b, "+", "int"),
+        (lambda a, b: 1 - b, "-", "int"),
     ],
 )
-def test_arithmetic_operators_raise_error(op: Callable[[Any, Any], Any]) -> None:
-    """Tests that all arithmetic operators are disabled and raise TypeError."""
+def test_arithmetic_operators_raise_error(
+    op: Callable[[Any, Any], Any], op_symbol: str, operand_name: str
+) -> None:
+    """Tests that all arithmetic operators are disabled and name the operand types."""
     with pytest.raises(TypeError) as exception_info:
         op(Boolean(True), Boolean(False))
-    assert str(exception_info.value) == "Arithmetic operations are not supported for Boolean."
+    assert str(exception_info.value) == (
+        f"Unsupported operand type(s) for {op_symbol}: 'Boolean' and '{operand_name}'"
+    )
 
 
 def test_bitwise_operators() -> None:
