@@ -433,9 +433,14 @@ class Vector[T: SSZType](_SSZSequence[T]):
         Raises:
             SSZTypeError: When the element type is variable-size.
         """
-        if not cls.is_fixed_size():
-            raise SSZFixedSizeError(cls.__name__, "vector")
-        return cls.ELEMENT_TYPE.get_byte_length() * cls.LENGTH
+        # A variable-size element has no width to give.
+        # Asking for one is therefore the check.
+        #
+        # Asking first puts the same question to the same type twice.
+        try:
+            return cls.ELEMENT_TYPE.get_byte_length() * cls.LENGTH
+        except SSZFixedSizeError as variable_element:
+            raise SSZFixedSizeError(cls.__name__, "vector") from variable_element
 
     @override
     def serialize(self, stream: IO[bytes]) -> int:

@@ -179,10 +179,21 @@ class _SSZContainer(SSZModel):
     @classmethod
     @override
     def get_byte_length(cls) -> int:
-        """Sum of field widths; raises for variable-size containers."""
-        if not cls.is_fixed_size():
-            raise SSZFixedSizeError(cls.__name__, "container")
-        return sum(f.annotation.get_byte_length() for f in cls.model_fields.values())
+        """
+        Sum of field widths.
+
+        Raises:
+            SSZFixedSizeError: When any field is variable-size, so the struct has no width.
+        """
+        # A variable-size field has no width to give.
+        # Asking for one is therefore the check.
+        #
+        # Asking first walks the declared types to decide, and the widths walk them again.
+        # Each nested struct repeats both walks over its own fields.
+        try:
+            return sum(f.annotation.get_byte_length() for f in cls.model_fields.values())
+        except SSZFixedSizeError as variable_field:
+            raise SSZFixedSizeError(cls.__name__, "container") from variable_field
 
     @override
     def serialize(self, stream: IO[bytes]) -> int:
