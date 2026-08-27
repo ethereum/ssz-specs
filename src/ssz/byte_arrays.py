@@ -69,7 +69,8 @@ class ByteVector(bytes, SSZType):
 
         Accepts:
 
-        - bytes or bytearray — returned as an immutable bytes copy.
+        - bytes — handed back as it stands, being immutable already.
+        - A bytes subclass or a bytearray — copied into a plain, immutable bytes object.
         - Iterables of integers in 0..255.
         - Hex strings, optionally prefixed with 0x.
 
@@ -83,6 +84,10 @@ class ByteVector(bytes, SSZType):
             TypeError: If the input type is not coercible.
             ValueError: If a hex string is malformed or an integer is out of range.
         """
+        # A plain bytes object is already the answer, and a subclass is copied out below.
+        if type(value) is bytes:
+            return value
+
         match value:
             case bytes() | bytearray():
                 return bytes(value)
