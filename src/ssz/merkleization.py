@@ -453,8 +453,17 @@ def _pack_bits(bits: Sequence[Boolean]) -> list[bytes]:
     The SSZ serialization delimiter and the length-mix are separate steps,
     handled by the caller when needed.
     """
-    packed_bits = sum(1 << i for i, bit in enumerate(bits) if bit)
-    return _pack_bytes(packed_bits.to_bytes(math.ceil(len(bits) / 8), "little"))
+    # Each bit is set in place, in a buffer already the width of the result.
+    #
+    # Accumulating one wide integer instead grows that integer with the data.
+    # Every addition then costs more than the one before it.
+    # Packing a long bitfield that way is quadratic in its bit count.
+    packed = bytearray(math.ceil(len(bits) / 8))
+    # Bit i lives in byte i // 8, at position i % 8 counted from the low end.
+    for position, bit in enumerate(bits):
+        if bit:
+            packed[position >> 3] |= 1 << (position & 7)
+    return _pack_bytes(bytes(packed))
 
 
 def _pack_basic_elements(elements: Sequence[int], element_size: int) -> list[bytes]:
