@@ -469,7 +469,7 @@ class SSZModel(StrictBaseModel, SSZType):
         return f"{cls_name}({' '.join(field_strs)})"
 
 
-class SSZCollection[T](SSZModel):
+class SSZCollection[T](SSZModel, Sequence[T]):
     """
     Pydantic-backed SSZ base for collections that wrap their contents in one data field.
 
