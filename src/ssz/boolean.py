@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from numbers import Number
 from typing import IO, Any, ClassVar, NoReturn, Self, TypeAlias, override
 
 from pydantic.annotated_handlers import GetCoreSchemaHandler
@@ -21,7 +22,8 @@ class Boolean(int, SSZType):
     Strict SSZ boolean encoded as exactly one byte.
 
     - Inherits from int so true/false work natively in truthiness checks.
-    - Arithmetic (+ - * /) is disabled to prevent ambiguous operations.
+    - Arithmetic and the shifts are refused, a bit being nothing to count with.
+    - Counting the set bits of a bitfield therefore runs over plain integers.
     - Bitwise ops (& | ^) reject operands of any other type.
     - Equality rejects comparisons with anything but another boolean, and hashing agrees.
 
@@ -209,21 +211,124 @@ class Boolean(int, SSZType):
             f"'{cls.__name__}' and '{type(other).__name__}'"
         )
 
-    def __add__(self, other: Any) -> NoReturn:
-        """Forward addition, which no operand is admitted for."""
-        self._raise_type_error(other, "+")
+    @classmethod
+    def _raise_unary_type_error(cls, op_symbol: str) -> NoReturn:
+        """Helper to raise a consistent TypeError where there is one operand only."""
+        raise TypeError(f"Unsupported operand type for {op_symbol}: '{cls.__name__}'")
 
-    def __radd__(self, other: Any) -> NoReturn:
-        """Reverse addition, which no operand is admitted for."""
-        self._raise_type_error(other, "+")
+    @classmethod
+    def _refuse_arithmetic(cls, other: Any, op_symbol: str) -> Any:
+        """
+        Refuse a number, and decline anything else.
 
-    def __sub__(self, other: Any) -> NoReturn:
-        """Forward subtraction, which no operand is admitted for."""
-        self._raise_type_error(other, "-")
+        No number stands in an arithmetic relation to a truth value.
+        Declining leaves a type that knows how to combine with a bit free to answer.
 
-    def __rsub__(self, other: Any) -> NoReturn:
-        """Reverse subtraction, which no operand is admitted for."""
-        self._raise_type_error(other, "-")
+        Returns:
+            NotImplemented, for an operand that is not a number.
+
+        Raises:
+            TypeError: When the operand is a number.
+        """
+        if isinstance(other, Number):
+            cls._raise_type_error(other, op_symbol)
+        return NotImplemented
+
+    def __add__(self, other: Any) -> Any:
+        """Forward addition."""
+        return self._refuse_arithmetic(other, "+")
+
+    def __radd__(self, other: Any) -> Any:
+        """Reverse addition."""
+        return self._refuse_arithmetic(other, "+")
+
+    def __sub__(self, other: Any) -> Any:
+        """Forward subtraction."""
+        return self._refuse_arithmetic(other, "-")
+
+    def __rsub__(self, other: Any) -> Any:
+        """Reverse subtraction."""
+        return self._refuse_arithmetic(other, "-")
+
+    def __mul__(self, other: Any) -> Any:
+        """Forward multiplication."""
+        return self._refuse_arithmetic(other, "*")
+
+    def __rmul__(self, other: Any) -> Any:
+        """Reverse multiplication."""
+        return self._refuse_arithmetic(other, "*")
+
+    def __truediv__(self, other: Any) -> Any:
+        """Forward true division."""
+        return self._refuse_arithmetic(other, "/")
+
+    def __rtruediv__(self, other: Any) -> Any:
+        """Reverse true division."""
+        return self._refuse_arithmetic(other, "/")
+
+    def __floordiv__(self, other: Any) -> Any:
+        """Forward floor division."""
+        return self._refuse_arithmetic(other, "//")
+
+    def __rfloordiv__(self, other: Any) -> Any:
+        """Reverse floor division."""
+        return self._refuse_arithmetic(other, "//")
+
+    def __mod__(self, other: Any) -> Any:
+        """Forward modulo."""
+        return self._refuse_arithmetic(other, "%")
+
+    def __rmod__(self, other: Any) -> Any:
+        """Reverse modulo."""
+        return self._refuse_arithmetic(other, "%")
+
+    def __divmod__(self, other: Any) -> Any:
+        """Forward divmod."""
+        return self._refuse_arithmetic(other, "divmod")
+
+    def __rdivmod__(self, other: Any) -> Any:
+        """Reverse divmod."""
+        return self._refuse_arithmetic(other, "divmod")
+
+    def __pow__(self, other: Any, modulo: Any = None) -> Any:
+        """Forward exponentiation and three-argument pow."""
+        return self._refuse_arithmetic(other, "**")
+
+    def __rpow__(self, other: Any, modulo: Any = None) -> Any:
+        """Reverse exponentiation and three-argument pow."""
+        return self._refuse_arithmetic(other, "**")
+
+    def __lshift__(self, other: Any) -> Any:
+        """Forward left bit-shift."""
+        return self._refuse_arithmetic(other, "<<")
+
+    def __rlshift__(self, other: Any) -> Any:
+        """Reverse left bit-shift."""
+        return self._refuse_arithmetic(other, "<<")
+
+    def __rshift__(self, other: Any) -> Any:
+        """Forward right bit-shift."""
+        return self._refuse_arithmetic(other, ">>")
+
+    def __rrshift__(self, other: Any) -> Any:
+        """Reverse right bit-shift."""
+        return self._refuse_arithmetic(other, ">>")
+
+    def __neg__(self) -> NoReturn:
+        """Negation, which lands outside the two values a bit may hold."""
+        self._raise_unary_type_error("unary -")
+
+    def __pos__(self) -> NoReturn:
+        """Unary plus, which reads a bit as the quantity it is not."""
+        self._raise_unary_type_error("unary +")
+
+    def __invert__(self) -> NoReturn:
+        """Inversion, which complements a whole integer rather than one bit."""
+        self._raise_unary_type_error("~")
+
+    def __abs__(self) -> NoReturn:
+        """Magnitude, which a truth value has none of."""
+        self._raise_unary_type_error("abs()")
 
     def __and__(self, other: Any) -> Self:
         """Bitwise AND between two booleans — rejects any other operand."""

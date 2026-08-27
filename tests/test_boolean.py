@@ -1,6 +1,7 @@
 """Tests for the Boolean Type."""
 
 import io
+from decimal import Decimal
 from typing import Any, Callable
 
 import pytest
@@ -104,6 +105,106 @@ def test_arithmetic_operators_raise_error(
     assert str(exception_info.value) == (
         f"Unsupported operand type(s) for {op_symbol}: 'Boolean' and '{operand_name}'"
     )
+
+
+class TestArithmeticOperands:
+    """
+    Which operands the arithmetic and shift operators admit, which is none of them.
+
+    A number is refused where it stands.
+    Anything else is declined, leaving the other operand its turn.
+    """
+
+    BINARY_DUNDERS = [
+        ("__add__", "+"),
+        ("__radd__", "+"),
+        ("__sub__", "-"),
+        ("__rsub__", "-"),
+        ("__mul__", "*"),
+        ("__rmul__", "*"),
+        ("__truediv__", "/"),
+        ("__rtruediv__", "/"),
+        ("__floordiv__", "//"),
+        ("__rfloordiv__", "//"),
+        ("__mod__", "%"),
+        ("__rmod__", "%"),
+        ("__divmod__", "divmod"),
+        ("__rdivmod__", "divmod"),
+        ("__pow__", "**"),
+        ("__rpow__", "**"),
+        ("__lshift__", "<<"),
+        ("__rlshift__", "<<"),
+        ("__rshift__", ">>"),
+        ("__rrshift__", ">>"),
+    ]
+    """Every arithmetic and shift dunder, paired with the symbol its message names."""
+
+    @pytest.mark.parametrize("method, op_symbol", BINARY_DUNDERS)
+    @pytest.mark.parametrize("other", [Boolean(True), 1, True, 1.5, Decimal(2)])
+    def test_a_number_is_refused(self, method: str, op_symbol: str, other: Any) -> None:
+        """The refusal reaches the whole numeric tower, another bit included."""
+        expected_message = (
+            f"Unsupported operand type(s) for {op_symbol}: 'Boolean' and '{type(other).__name__}'"
+        )
+        with pytest.raises(TypeError) as exception_info:
+            getattr(Boolean(True), method)(other)
+        assert str(exception_info.value) == expected_message
+
+    @pytest.mark.parametrize("method, op_symbol", BINARY_DUNDERS)
+    def test_a_non_number_is_declined(self, method: str, op_symbol: str) -> None:
+        """Called directly, the dunder answers NotImplemented instead of raising."""
+        assert getattr(Boolean(True), method)("2") is NotImplemented
+
+    def test_a_type_that_knows_a_bit_still_gets_its_turn(self) -> None:
+        """Declining is what leaves the other operand free to answer for the pair."""
+
+        class Sink:
+            """A type of its own, which combines with whatever is handed to it."""
+
+            def __radd__(self, other: Any) -> str:
+                return "answered"
+
+        assert Boolean(True) + Sink() == "answered"
+
+    def test_the_host_language_reports_what_both_sides_decline(self) -> None:
+        """With nobody left to answer, Python raises the TypeError any other type would."""
+        # Lower case where this library's own message is capitalised, because the message
+        # here is the interpreter's.
+        with pytest.raises(TypeError, match="^unsupported operand type"):
+            _ = Boolean(True) + "2"
+
+    @pytest.mark.parametrize(
+        "apply, expected_message",
+        [
+            (lambda bit: bit * 3, "Unsupported operand type(s) for *: 'Boolean' and 'int'"),
+            (lambda bit: 3 * bit, "Unsupported operand type(s) for *: 'Boolean' and 'int'"),
+            (lambda bit: bit / 1, "Unsupported operand type(s) for /: 'Boolean' and 'int'"),
+            (lambda bit: bit << 3, "Unsupported operand type(s) for <<: 'Boolean' and 'int'"),
+            (lambda bit: bit >> 1, "Unsupported operand type(s) for >>: 'Boolean' and 'int'"),
+            (lambda bit: -bit, "Unsupported operand type for unary -: 'Boolean'"),
+            (lambda bit: +bit, "Unsupported operand type for unary +: 'Boolean'"),
+            (lambda bit: ~bit, "Unsupported operand type for ~: 'Boolean'"),
+            (lambda bit: abs(bit), "Unsupported operand type for abs(): 'Boolean'"),
+        ],
+    )
+    def test_the_written_form_is_refused_too(
+        self, apply: Callable[[Boolean], Any], expected_message: str
+    ) -> None:
+        """What the reader writes reaches the same refusal the dunder raises."""
+        with pytest.raises(TypeError) as exception_info:
+            apply(Boolean(True))
+        assert str(exception_info.value) == expected_message
+
+    def test_a_total_of_bits_is_taken_over_plain_integers(self) -> None:
+        """A total is a count, and a bit counts nothing, so the bits are read as integers."""
+        bits = [Boolean(True), Boolean(False), Boolean(True)]
+        # A total seeded with the integer zero meets the refusal at its first bit.
+        with pytest.raises(TypeError) as exception_info:
+            sum(bits)
+        assert str(exception_info.value) == (
+            "Unsupported operand type(s) for +: 'Boolean' and 'int'"
+        )
+        assert sum(int(bit) for bit in bits) == 2
 
 
 def test_bitwise_operators() -> None:
