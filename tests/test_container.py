@@ -2,7 +2,7 @@
 
 import io
 from collections.abc import Sequence
-from typing import Any
+from typing import Any, cast
 
 import pytest
 from hypothesis import given, strategies as st
@@ -28,7 +28,7 @@ from ssz.exceptions import (
     SSZTypeMismatch,
     SSZValueError,
 )
-from ssz.merkleization import hash_tree_root
+from ssz.merkleization import ZERO_ROOT, hash_tree_root, merkleize_progressive, mix_in_active_fields
 from ssz.ssz_base import SSZType
 from ssz.uint import Uint8, Uint16, Uint32, Uint64
 from ssz.union import CompatibleUnion
@@ -341,6 +341,24 @@ class WideForkEvolvedState(ProgressiveContainer):
     current_sync_committee_root: Uint64
     next_sync_committee_root: Uint64
     execution_payload_block_number: Uint64
+
+
+MisplacedGapState = cast(
+    "type[ProgressiveContainer]",
+    type(
+        "MisplacedGapState",
+        (ProgressiveContainer,),
+        {
+            "__doc__": "The same thirty fields, with the second gap written one position late.",
+            "ACTIVE_FIELDS": active_fields(width=32, gaps=(4, 20)),
+            "__annotations__": dict.fromkeys(WideForkEvolvedState.model_fields, Uint64),
+        },
+    ),
+)
+"""The shape a misplaced gap declares: the counts still agree, and the fields move.
+
+Built by hand rather than written out, so the two shapes cannot drift apart in their
+fields, which is the one thing this shape must hold constant against the one above."""
 
 
 class SquareList4(List[Square]):
@@ -1302,6 +1320,48 @@ class TestAWideLayout:
         # Both values here are all zeros on the wire, over 240 bytes and 8 bytes.
         # The layout is mixed into the root, so two widths cannot collide on it.
         assert hash_tree_root(value) != hash_tree_root(FourFieldOriginal.default())
+
+    def test_the_wide_shape_hashes_each_field_at_its_own_position(self) -> None:
+        """Thirty fields land on the thirty set positions, and the two gaps hold zero."""
+        # Every field takes a distinct value, so a field hashed one position off
+        # changes the root instead of colliding with its neighbour.
+        value = WideForkEvolvedState(
+            **{name: Uint64(n) for n, name in enumerate(WideForkEvolvedState.model_fields, 1)}
+        )
+
+        # The expected leaves are laid out by position, not by declaration index:
+        # a field root where the layout sets a bit, and a zero chunk at each gap.
+        fields = iter(WideForkEvolvedState.model_fields)
+        leaves = [
+            hash_tree_root(getattr(value, next(fields))) if bit else ZERO_ROOT
+            for bit in WideForkEvolvedState.ACTIVE_FIELDS
+        ]
+        assert leaves[4] == ZERO_ROOT
+        assert leaves[19] == ZERO_ROOT
+
+        expected = mix_in_active_fields(
+            merkleize_progressive(leaves), WideForkEvolvedState.ACTIVE_FIELDS
+        )
+        assert hash_tree_root(value) == expected
+
+    def test_a_gap_written_at_the_wrong_position_is_a_different_shape(self) -> None:
+        """A misplaced gap keeps every count agreeing, and moves the fields under it."""
+        # This is the mistake the declaration rules cannot catch.
+        # Thirty-two positions and thirty fields hold either way, so the shape is
+        # accepted, and only the root says the two are not the same type.
+        misplaced = MisplacedGapState.ACTIVE_FIELDS
+        intended = WideForkEvolvedState.ACTIVE_FIELDS
+        assert len(misplaced) == len(intended)
+        assert sum(misplaced) == sum(intended)
+        assert len(MisplacedGapState.model_fields) == len(WideForkEvolvedState.model_fields)
+        assert misplaced != intended
+
+        # The wire format reads a gap as no bytes at all, so both encode identically.
+        assert MisplacedGapState.default().encode_bytes() == b"\x00" * 240
+        # The layout word separates them, and so does the field that moved under the gap.
+        assert hash_tree_root(MisplacedGapState.default()) != hash_tree_root(
+            WideForkEvolvedState.default()
+        )
 
 
 class TestALayoutWrittenWithTypedNumbers:
