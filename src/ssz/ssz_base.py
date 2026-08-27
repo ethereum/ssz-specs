@@ -6,7 +6,7 @@ from collections.abc import Iterator, Sequence
 from copy import copy as shallow_copy
 from typing import IO, TYPE_CHECKING, Any, ClassVar, Final, Self, cast, final, overload, override
 
-from pydantic import ConfigDict
+from pydantic import ConfigDict, Field
 
 from ssz.base import StrictBaseModel
 from ssz.exceptions import (
@@ -519,7 +519,8 @@ class SSZCollection[T](SSZModel, Sequence[T]):
 
     model_config = ConfigDict(validate_assignment=True)
 
-    data: Sequence[T]
+    # A subclass narrows this field only where the declaration here carries a value.
+    data: Sequence[T] = Field()
     """The contents, declared with its concrete type and default by each subclass."""
 
     @classmethod
