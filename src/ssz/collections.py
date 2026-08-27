@@ -41,6 +41,7 @@ from typing import (
     ClassVar,
     Self,
     cast,
+    overload,
     override,
 )
 
@@ -560,6 +561,34 @@ class _SSZList[T: SSZType](_SSZSequence[T]):
         """
         self._begin_mutation()
         return self._mutable_data.pop()
+
+    @overload
+    def __getitem__(self, index: int) -> T: ...
+    @overload
+    def __getitem__(self, index: slice) -> Self: ...
+
+    @override
+    def __getitem__(self, index: int | slice) -> T | Self:
+        """
+        Read the element or elements at a position, a range giving this same type.
+
+        A variable-length shape can hold any count up to its capacity, so a range
+        of its elements is a shorter value of that shape. Answering with one keeps
+        a range where it started:
+
+            queue[1:] + [item]        concatenates as the shape, not as a list
+            state.queue = queue[1:]   assigns without naming the type again
+
+        This follows the host language, where a range of a list is a list and a
+        range of bytes is bytes. A fixed-length shape cannot do the same, because
+        a range of it holds the wrong number of elements to be that shape, so it
+        answers with a plain sequence.
+
+        The range is built through the constructor, so it revalidates.
+        """
+        if isinstance(index, slice):
+            return type(self)(data=self.data[index])
+        return self.data[index]
 
     def __add__(self, other: Any) -> Self:
         """
