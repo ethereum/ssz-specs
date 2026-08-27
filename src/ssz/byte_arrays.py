@@ -363,10 +363,13 @@ class ByteList(SSZCollection[int]):
     LIMIT: ClassVar[int]
     """Maximum number of bytes the instance may contain."""
 
-    # The spec's default for a byte list is empty, and bytes cannot be mutated, so one
-    # shared empty value is safe here where a shared list would not be.
     data: bytes = Field(default=b"")
-    """The raw bytes stored in this list."""
+    """
+    The raw bytes stored in this list.
+
+    The spec's default is empty, and bytes cannot be mutated.
+    One shared empty value is therefore safe here, where a shared list would not be.
+    """
 
     @field_validator("data", mode="before")
     @classmethod
