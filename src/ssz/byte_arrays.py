@@ -122,8 +122,13 @@ class ByteVector(bytes, SSZType):
         #
         #     Bytes4()      ->  00000000
         #     Bytes4(None)  ->  TypeError
+        #
+        # Repeating a zero byte the declared number of times gives exactly that many.
+        # The width holds by construction.
+        #
+        # So neither the coercion nor the count check below has anything left to settle.
         if value is _Omitted.TOKEN:
-            value = b"\x00" * cls.LENGTH
+            return cls._trusted(b"\x00" * cls.LENGTH)
 
         coerced_bytes = cls._coerce_to_bytes(value)
         if len(coerced_bytes) != cls.LENGTH:
@@ -151,8 +156,13 @@ class ByteVector(bytes, SSZType):
 
     @classmethod
     def zero(cls) -> Self:
-        """Return a new instance filled with zero bytes, which is also the default."""
-        return cls(b"\x00" * cls.LENGTH)
+        """
+        Return a new instance filled with zero bytes, which is also the default.
+
+        A shape with no declared width has no byte count to zero.
+        It reports its declaration error instead.
+        """
+        return cls()
 
     @classmethod
     @override
