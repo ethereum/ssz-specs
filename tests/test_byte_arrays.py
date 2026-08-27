@@ -674,6 +674,19 @@ class TestBaseByteListMutation:
                 "'str' object cannot be interpreted as an integer",
                 id="append_something_that_is_not_a_byte",
             ),
+            # The declaration refuses both pairings, so the cast is what reaches the buffer.
+            pytest.param(
+                lambda payload: payload.__setitem__(0, cast("Any", [1, 2])),
+                TypeError,
+                "'list' object cannot be interpreted as an integer",
+                id="assign_a_sequence_to_one_position",
+            ),
+            pytest.param(
+                lambda payload: payload.__setitem__(slice(0, 2), cast("Any", 5)),
+                TypeError,
+                "can assign only bytes, buffers, or iterables of ints in range(0, 256)",
+                id="assign_one_byte_over_a_range",
+            ),
         ],
     )
     def test_a_value_that_is_not_a_byte_is_refused_by_the_buffer(
