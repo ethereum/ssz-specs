@@ -169,7 +169,11 @@ class Boolean(int, SSZType):
             raise SSZSerializationError(f"Boolean: expected 1 byte, got {len(data)}")
         if data[0] not in (0, 1):
             raise SSZSerializationError(f"Boolean: byte must be 0x00 or 0x01, got {data[0]:#04x}")
-        return cls(data[0])
+
+        # The byte is 0 or 1 by the guard above.
+        # That is the whole of what the constructor settles before indexing this same pair.
+        interned: tuple[Self, ...] = cls._INTERNED
+        return interned[data[0]]
 
     @override
     def serialize(self, stream: IO[bytes]) -> int:
