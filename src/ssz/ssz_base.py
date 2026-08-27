@@ -533,16 +533,14 @@ class SSZCollection[T](SSZModel):
         """
         return cls(data=elements)
 
-    # The parent Pydantic model iterates field name and value pairs.
-    # Yielding the contents instead is the intended collection behavior.
     # The narrower element type violates strict Liskov substitution, so it is suppressed.
     @override
     def __iter__(self) -> Iterator[T]:  # ty: ignore[invalid-method-override]
         """
         Iterate over the contents.
 
-        Defined here because the parent Pydantic model otherwise yields
-        name/value pairs of its fields.
+        The parent Pydantic model otherwise yields field name and value pairs.
+        Yielding the contents instead is the intended collection behavior.
         """
         return iter(self.data)
 

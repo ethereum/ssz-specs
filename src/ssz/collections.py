@@ -161,9 +161,13 @@ class _SSZSequence[T: SSZType](SSZCollection[T]):
     every element is validated on entry.
     """
 
-    # Pydantic's own deep copy asks with no memo.
     def __deepcopy__(self, memo: dict[int, Any] | None = None) -> Self:
-        """A duplicate over the very same elements, none of which can be written through."""
+        """
+        A duplicate over the very same elements, none of which can be written through.
+
+        The table of copied objects is optional, since Pydantic's own deep copy asks
+        without one.
+        """
         cls = type(self)
         element_type = getattr(cls, "ELEMENT_TYPE", None)
         if (

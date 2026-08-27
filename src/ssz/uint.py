@@ -124,14 +124,14 @@ class BaseUint(int, SSZType):
             return int.__new__(cls, value)
         raise SSZRangeError(cls.__name__, value, cls.MAX_VALUE)
 
-    # A shared instance reaches every holder of that value, so state attached through one
-    # would be readable through all the others.
-    #
-    # A slot declaration cannot close this off, because any subclass omitting one regains
-    # the dictionary this refusal guards.
     def __setattr__(self, name: str, value: Any) -> NoReturn:
         """
         Refuse to attach state to a value.
+
+        - A shared instance reaches every holder of that value.
+        - State attached through one would be readable through all the others.
+        - A slot declaration cannot close this off.
+        - Any subclass omitting one regains the dictionary this refusal guards.
 
         Raises:
             SSZTypeError: Always, because a count is only the number it holds.

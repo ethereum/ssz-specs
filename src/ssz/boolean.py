@@ -74,14 +74,14 @@ class Boolean(int, SSZType):
         interned: tuple[Self, ...] = cls._INTERNED
         return interned[bit]
 
-    # A shared instance reaches every holder of that bit.
-    # State attached through one would be readable through all the others.
-    #
-    # A slot declaration cannot close this off.
-    # Any subclass omitting one regains the dictionary this refusal guards.
     def __setattr__(self, name: str, value: Any) -> NoReturn:
         """
         Refuse to attach state to a value.
+
+        - A shared instance reaches every holder of that bit.
+        - State attached through one would be readable through all the others.
+        - A slot declaration cannot close this off.
+        - Any subclass omitting one regains the dictionary this refusal guards.
 
         Raises:
             SSZTypeError: Always, because a bit is only the bit it holds.
@@ -95,17 +95,16 @@ class Boolean(int, SSZType):
         """
         Provide a Pydantic core schema that enforces strict boolean validation.
 
-        Only true or false are accepted as input at the Pydantic layer.
-        Any other type — including int 0 or 1 — is rejected here, even though
-        the constructor itself accepts them.
+        - Only true or false are accepted as input at the Pydantic layer.
+        - Any other type, int 0 or 1 included, is refused even though the constructor takes it.
         """
         # Validator that wraps a verified bool into a typed instance.
         from_bool_validator = core_schema.no_info_plain_validator_function(cls)
 
-        # Two-step input validation:
+        # Validation runs in two steps:
         #
-        #   - bool_schema(strict=True)   rejects anything that is not exactly a bool.
-        #   - from_bool_validator        wraps the validated bool into a Boolean.
+        #   - Strict bool validation rejects anything that is not exactly a bool.
+        #   - A plain validator wraps what survives into a typed instance.
         python_schema = core_schema.chain_schema(
             [core_schema.bool_schema(strict=True), from_bool_validator]
         )
