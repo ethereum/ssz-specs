@@ -230,6 +230,19 @@ class SSZType(ABC):
         """
         return cls()
 
+    @classmethod
+    def empty(cls) -> Self:
+        """
+        Build a value holding nothing.
+
+        Returns:
+            A fresh default value.
+
+        Raises:
+            SSZTypeError: When the type has no default value.
+        """
+        return cls.default()
+
     def copy(self) -> Self:
         """
         An independent duplicate of this value, at every depth.
