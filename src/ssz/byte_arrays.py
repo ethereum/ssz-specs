@@ -134,12 +134,6 @@ class ByteVector(bytes, SSZType):
             raise SSZLengthError(cls.__name__, cls.LENGTH, len(coerced_bytes), unit="bytes")
         return super().__new__(cls, coerced_bytes)
 
-    # An immutable shape answers a copy with itself, so a duplicate here is the original.
-    # State attached through either one would be readable through the other, and the shared
-    # padding root circulates further still.
-    #
-    # A slot declaration cannot close this off, because any subclass omitting one regains
-    # the dictionary this refusal guards.
     def __setattr__(self, name: str, value: Any) -> NoReturn:
         """
         Refuse to attach state to a value.
