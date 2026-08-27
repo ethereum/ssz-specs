@@ -1,12 +1,11 @@
 """
 SSZ container types.
 
-Two struct shapes are defined by the SSZ spec, the second added by EIP-7495:
+Two struct shapes, the second added by EIP-7495:
 
 - A container merkleizes its fields into a tree sized by the field count.
 - A progressive container merkleizes each field at the position its layout assigns.
 
-A layout outlives any one version of a struct, so its fields keep their positions.
 Both encode identically: fixed-size fields inline, variable-size fields behind offsets.
 """
 
@@ -34,37 +33,34 @@ from ssz.uint import Uint32
 MAX_ACTIVE_FIELDS: Final = 256
 """Widest field layout a progressive container may declare.
 
-One layout is mixed into the root as a single 32-byte word, which holds 256 bits.
-That matches how a length is mixed into a list root.
+The whole layout is mixed into the root as one 32-byte word, which holds 256 bits.
 
-The value is the chunk width in bits, restated rather than imported: the merkleization
-module imports this one, so the dependency cannot run the other way."""
+The chunk width in bits is restated here rather than imported.
+The merkleization module imports this one, so the dependency cannot run the other way."""
 
 
 def active_fields(width: int, gaps: tuple[int, ...] = ()) -> tuple[int, ...]:
     """
     Build a field layout from its width and the positions no field occupies.
 
-    A layout is one bit per position, and most positions hold a field.
-    Writing every bit out is unreadable past a handful of fields, and a change to one of
-    them is invisible in review:
+    A layout is one bit per position, clearest written out as (1, 0, 1) while they are few.
+    Past a handful, a changed bit is invisible in review, and the width and gaps read better:
 
-        (1, 1, 1, 0, 1, 1, 1, 1, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, ...)
+        [1] * 8 + [0] * 3 + [1] * 17 + [0] + [1] * 17   the post-EIP-8015 beacon state
 
-        active_fields(width=40, gaps=(3, 8, 9))
+        active_fields(width=46, gaps=(8, 9, 10, 28))    the same layout, here
 
-    Both give the same layout, and the second states the whole of what makes it unusual.
+    Public because the consensus specs import it by name, though nothing here calls it.
 
     # Why the width is given rather than counted
 
-    The width could be read off the field count and the number of gaps.
-    Stating it keeps the two independent, which is what lets a dropped field be caught:
+    The width and the field count are stated independently, and cross-checked on declaration:
 
         a struct drops a field and records the gap  ->  width rises by 0, fields fall by 1
         a struct drops a field and records nothing  ->  the counts disagree, and it fails
 
-    Counting the width instead would make the second case derive a narrower layout and
-    accept it, moving every later field to a new position under the same declaration.
+    A counted width would derive the narrower layout instead, renumbering every later field.
+    The check counts positions and does not place them, so a misplaced gap still passes.
 
     Args:
         width: Total positions in the layout, occupied or not.
@@ -85,8 +81,9 @@ def active_fields(width: int, gaps: tuple[int, ...] = ()) -> tuple[int, ...]:
 
     # Narrow before anything reads the value.
     #
-    # A width may be written with a uint.
-    # Narrowing keeps the positions below plain, as well as the messages naming them.
+    # A width and a gap may each be written with a uint, and of different sizes.
+    # A uint refuses a relation against a uint of another size.
+    # The range check below compares the two, so plain integers keep it about the layout.
     width = int(width)
     if width < 1:
         raise SSZValueError(f"a layout holds at least one position, got a width of {width}")
@@ -102,9 +99,9 @@ def active_fields(width: int, gaps: tuple[int, ...] = ()) -> tuple[int, ...]:
             raise SSZValueError(f"gap {position} falls outside a layout of {width} positions")
         positions.append(position)
 
-    # Ascending order rules out a repeat as well.
-    # A repeat would otherwise be absorbed: two gaps at one position leave one hole,
-    # which puts one more field in the layout than the width was written for.
+    # Two gaps at one position leave one hole, so the layout carries one field too many.
+    # Reordering changes nothing in the layout itself.
+    # One order is fixed so that every layout reads the same way in review.
     if any(later <= earlier for earlier, later in pairwise(positions)):
         raise SSZValueError(f"gaps {tuple(positions)} are not in ascending order")
 
@@ -116,18 +113,13 @@ class _SSZContainer(SSZModel):
     """
     Shared wire format for the two SSZ struct shapes.
 
-    Both shapes encode the same way and differ only in how their fields are merkleized.
+    They differ only in how their fields are merkleized.
 
     Built from nothing, a struct holds one field default per field.
-    One field whose type has no default leaves the struct with none.
+    A field whose type has no default leaves the struct with none.
 
-    Containers are mutable: assigning a field revalidates the value against
-    the field's declared type, exactly as construction does. Assignment is
-    typed against the declared field types, so type checkers flag raw values
-    even though runtime validation coerces them. Hashing is by Merkle tree
-    root, so containers work as dict keys and set members with value
-    semantics that match equality. Mutability itself is configurable
-    through the inherited MUTABLE flag.
+    Assigning a field validates it against its declared type, exactly as construction does.
+    That declared type is what a type checker sees, so it flags a value the validator would coerce.
     """
 
     model_config = ConfigDict(validate_assignment=True)
@@ -153,11 +145,9 @@ class _SSZContainer(SSZModel):
         """
         Give every field the default of its own type, so a struct needs no arguments.
 
-        Each default is built when a field is left out, never shared, since a value is
-        mutable and one instance handed to two fields would alias.
+        Each default is built on the omission, so two fields never alias one mutable value.
 
-        A field whose type has no default raises when that field is left out, which is how
-        a struct holding such a type inherits the absence.
+        A field whose type has no default raises when left out, and the struct inherits that.
         """
         super().__pydantic_init_subclass__(**kwargs)
 
@@ -181,11 +171,8 @@ class _SSZContainer(SSZModel):
         Raises:
             SSZFixedSizeError: When any field is variable-size, so the struct has no width.
         """
-        # A variable-size field has no width to give.
-        # Asking for one is therefore the check.
-        #
-        # Asking first walks the declared types to decide, and the widths walk them again.
-        # Each nested struct repeats both walks over its own fields.
+        # A variable-size field has no width to give, so asking for one is the check.
+        # Checking first would walk every declared type twice, and again at every nesting.
         try:
             return sum(f.annotation.get_byte_length() for f in cls.model_fields.values())
         except SSZFixedSizeError as variable_field:
@@ -235,11 +222,9 @@ class _SSZContainer(SSZModel):
         if not variable_fields:
             return cls(**fields)
 
-        # These offset checks mirror the variable-length collection decoder.
-        # The duplication is intentional: inlining keeps the per-field name in each error.
-        #
-        # Canonical form: the first offset must point to the end of the fixed part.
-        # Any other value leaves a gap or overlap, allowing two encodings of one value.
+        # Duplicated from the collection decoder on purpose, so each error names its field.
+        # The first offset must land on the end of the fixed part.
+        # Any other value leaves a gap or an overlap, giving one value two encodings.
         if variable_fields[0][2] != bytes_read:
             first_offset = variable_fields[0][2]
             raise SSZSerializationError(
@@ -280,10 +265,8 @@ class Container(_SSZContainer):
                       \________/
                           root
 
-    A third field widens that tree to four leaves.
-    Both existing fields drop one level down.
-    A proof against the two-field version therefore stops verifying.
-    The progressive shape avoids that.
+    A third field widens that tree to four leaves, and both existing fields drop one level.
+    A proof against the two-field version then stops verifying, which the other shape avoids.
     """
 
 
@@ -313,15 +296,13 @@ class ProgressiveContainer(_SSZContainer):
         (1, 0, 1)   root(side)   ZERO           root(color)
         (0, 1, 1)   ZERO         root(radius)   root(color)
 
-    So a position decides where a field is hashed, never a declaration index:
+    A position decides where a field is hashed, never a declaration index:
 
     - A proof about the shared position verifies against either shape.
-    - Dropping a field clears its bit, leaving a zero leaf that holds the rest in place.
+    - Dropping a field clears its bit, and the zero leaf holds the rest in place.
     - Adding a position extends the tree past every position already placed.
-    - Two layouts share proofs only where a set position holds the same field.
 
-    The layout is mixed into the root.
-    A gap therefore never reads as a field that holds zero.
+    The layout is mixed into the root, so a gap never reads as a field holding zero.
 
     Encoding is that of an ordinary container, and a gap costs no bytes:
 
@@ -337,9 +318,9 @@ class ProgressiveContainer(_SSZContainer):
     ACTIVE_FIELDS: ClassVar[tuple[int, ...]]
     """Field layout, one bit per position, lowest position first, set where a field sits.
 
-    Past a handful of positions the bits are easier to state by their width and their gaps:
+    Past a handful of positions, state it by width and gaps instead:
 
-        ACTIVE_FIELDS = active_fields(width=40, gaps=(3, 8, 9))
+        ACTIVE_FIELDS = active_fields(width=46, gaps=(8, 9, 10, 28))
     """
 
     @classmethod
@@ -348,10 +329,8 @@ class ProgressiveContainer(_SSZContainer):
         Enforce the layout rules of EIP-7495 on every declared shape.
 
         Raises:
-            SSZTypeError: When no layout is declared.
-            SSZTypeError: When the layout is empty, ends in a gap, holds anything but
-                bits, is wider than the word it is mixed into, or disagrees with the
-                declared fields.
+            SSZDefinitionError: When no layout is declared.
+            SSZActiveFieldsError: When a declared layout breaks one of those rules.
         """
         super().__pydantic_init_subclass__(**kwargs)
 
@@ -359,22 +338,18 @@ class ProgressiveContainer(_SSZContainer):
         if not hasattr(cls, "ACTIVE_FIELDS"):
             raise SSZDefinitionError(cls.__name__, "ACTIVE_FIELDS")
 
-        # Every shape is checked, not only the one that introduces a layout.
-        # A restated layout that disagrees with the fields would drop one from the tree.
+        # Every shape is checked, since a restated layout that disagrees would drop a field.
         layout, name = cls.ACTIVE_FIELDS, cls.__name__
 
-        # A layout is bits, so anything else is a typo rather than a value to coerce.
-        # The string "100" would otherwise read as three set positions.
+        # A layout is bits and nothing else: the string "100" would read as three set positions.
         if any(bit not in (0, 1) for bit in layout):
             raise SSZActiveFieldsError(name, layout, "a position holds neither 0 nor 1")
 
-        # An empty layout admits no field, so the container would encode to zero bytes.
-        # A list of zero-byte elements has no recoverable element count.
+        # An empty layout encodes to zero bytes, and a list of those has no recoverable count.
         if not layout:
             raise SSZActiveFieldsError(name, layout, "the layout is empty")
 
-        # A trailing gap is a second spelling of one type, invisible to the packed word.
-        # At some widths the tree ignores it too, so (1, 1, 0) and (1, 1) root alike.
+        # A trailing gap is a second spelling of one shape: (1, 1, 0) and (1, 1) root alike.
         if not layout[-1]:
             raise SSZActiveFieldsError(name, layout, "the layout ends in a gap")
 
@@ -406,7 +381,7 @@ def _field_types(cls: type[_SSZContainer]) -> tuple[_FieldType, ...]:
     """
     Each field's declared type, in the declaration order the wire format follows.
 
-    Only what the declaration settles is kept. A width is asked of the type each time,
-    because the attributes a type derives one from stay writable for as long as the type does.
+    Only the declaration is cached, never a width.
+    The attributes a width derives from stay writable for as long as the type does.
     """
     return tuple((name, field.annotation) for name, field in cls.model_fields.items())
