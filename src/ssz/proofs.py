@@ -10,13 +10,15 @@ from ssz.boolean import Boolean
 from ssz.byte_arrays import ByteList, ByteVector
 from ssz.collections import List, ProgressiveList, Vector
 from ssz.container import Container, ProgressiveContainer
-from ssz.exceptions import SSZTypeError, SSZValueError
+from ssz.exceptions import SSZActiveFieldsError, SSZTypeError, SSZValueError
 from ssz.merkleization import (
     BITS_PER_CHUNK,
     BYTES_PER_CHUNK,
     Chunk,
     Root,
+    _field_names,
     _next_pow2,
+    _progressive_container_plan,
     hash_tree_root,
     merkle_layout,
     merkleize,
@@ -159,7 +161,7 @@ def chunk_count(ssz_type: type[SSZType]) -> int:
     if issubclass(ssz_type, List):
         return math.ceil(ssz_type.LIMIT * item_length(ssz_type.ELEMENT_TYPE) / BYTES_PER_CHUNK)
     if issubclass(ssz_type, Container):
-        return len(ssz_type.model_fields)
+        return len(_field_names(ssz_type))
     # A progressive shape grows without bound.
     # It therefore has no leaf count to report.
     raise SSZTypeError(f"{ssz_type.__name__} has no bounded chunk count")
@@ -205,7 +207,7 @@ def chunk_position(ssz_type: type[SSZType], step: PathStep) -> tuple[int, int, i
         SSZValueError: When a container has no field of that name.
     """
     if issubclass(ssz_type, (Container, ProgressiveContainer)):
-        names = list(ssz_type.model_fields)
+        names = _field_names(ssz_type)
         if str(step) not in names:
             raise SSZValueError(f"{ssz_type.__name__} has no field named {step!r}")
         return names.index(str(step)), 0, item_length(element_type(ssz_type, step))
@@ -227,14 +229,23 @@ def _field_layout_position(ssz_type: type[ProgressiveContainer], step: PathStep)
 
         layout (1, 0, 1, 1) with fields p, q, r  ->  p at 0, q at 2, r at 3
 
+    The plan that roots a value places its fields, so an index and a root agree.
+    A layout rewritten after the type was declared is a new plan.
+
     Raises:
         SSZValueError: When the container has no field of that name.
+        SSZActiveFieldsError: When the layout and the fields no longer pair up one to one.
     """
-    names = list(ssz_type.model_fields)
+    names = _field_names(ssz_type)
     if str(step) not in names:
         raise SSZValueError(f"{ssz_type.__name__} has no field named {step!r}")
-    set_positions = [i for i, bit in enumerate(ssz_type.ACTIVE_FIELDS) if bit]
-    return set_positions[names.index(str(step))]
+    # A layout is declared as bits and never coerced, so a list of them arrives as one.
+    layout = tuple(ssz_type.ACTIVE_FIELDS)
+    try:
+        positions, _ = _progressive_container_plan(layout, names)
+    except ValueError as mismatch:
+        raise SSZActiveFieldsError(ssz_type.__name__, layout, str(mismatch)) from mismatch
+    return positions.index(str(step))
 
 
 def get_generalized_index(ssz_type: type[SSZType], *path: PathStep) -> int:
@@ -262,6 +273,7 @@ def get_generalized_index(ssz_type: type[SSZType], *path: PathStep) -> int:
         SSZTypeError:
             - When a step descends into a basic value, which has no parts.
             - When a reserved word is used on a type that mixes in no such word.
+            - When a progressive container's layout and fields no longer pair up one to one.
         SSZValueError: When a container has no field of the given name.
     """
     index = 1
