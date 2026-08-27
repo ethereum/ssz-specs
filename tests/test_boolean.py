@@ -215,6 +215,75 @@ def test_inequality_reflected_int_raises(other: int) -> None:
     assert str(exception_info.value) == "Unsupported operand type(s) for !=: 'Boolean' and 'int'"
 
 
+class TestOrdering:
+    """
+    The four orderings, held to what equality is held to.
+
+    Two bits order, false below true.
+    Anything else is refused, rather than being read as the integer behind the bit.
+    """
+
+    @pytest.mark.parametrize(
+        "apply, expected",
+        [
+            (lambda low, high: low < high, True),
+            (lambda low, high: high < low, False),
+            (lambda low, high: low <= low, True),
+            (lambda low, high: high > low, True),
+            (lambda low, high: low > high, False),
+            (lambda low, high: high >= high, True),
+        ],
+    )
+    def test_two_bits_order_false_below_true(
+        self, apply: Callable[[Boolean, Boolean], bool], expected: bool
+    ) -> None:
+        """The two values of the type carry the order the wire gives them."""
+        assert apply(Boolean(False), Boolean(True)) is expected
+
+    def test_a_pair_of_bits_sorts(self) -> None:
+        """Ordering between bits is what a sort needs, and it is answered."""
+        assert sorted([Boolean(True), Boolean(False)]) == [Boolean(False), Boolean(True)]
+
+    @pytest.mark.parametrize("other", [True, False, 1, 0, "a string", 1.0, None])
+    @pytest.mark.parametrize(
+        "apply, op_symbol",
+        [
+            (lambda bit, other: bit < other, "<"),
+            (lambda bit, other: bit <= other, "<="),
+            (lambda bit, other: bit > other, ">"),
+            (lambda bit, other: bit >= other, ">="),
+        ],
+    )
+    def test_ordering_cross_type_raises(
+        self, apply: Callable[[Boolean, Any], bool], op_symbol: str, other: Any
+    ) -> None:
+        """A boolean ordered against any other value raises, as equality does."""
+        expected_message = (
+            f"Unsupported operand type(s) for {op_symbol}: 'Boolean' and '{type(other).__name__}'"
+        )
+        with pytest.raises(TypeError) as exception_info:
+            apply(Boolean(True), other)
+        assert str(exception_info.value) == expected_message
+
+    @pytest.mark.parametrize(
+        "apply, op_symbol",
+        [
+            (lambda other, bit: other < bit, ">"),
+            (lambda other, bit: other <= bit, ">="),
+            (lambda other, bit: other > bit, "<"),
+            (lambda other, bit: other >= bit, "<="),
+        ],
+    )
+    def test_ordering_reflected_int_raises(
+        self, apply: Callable[[Any, Boolean], bool], op_symbol: str
+    ) -> None:
+        """A boolean subclasses int, so its own mirrored ordering runs first and raises."""
+        expected_message = f"Unsupported operand type(s) for {op_symbol}: 'Boolean' and 'int'"
+        with pytest.raises(TypeError) as exception_info:
+            apply(1, Boolean(True))
+        assert str(exception_info.value) == expected_message
+
+
 def test_repr_and_str() -> None:
     """Tests the string and official representations."""
     assert str(Boolean(True)) == "True"
