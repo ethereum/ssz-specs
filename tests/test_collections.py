@@ -652,6 +652,13 @@ class TestListAccessors:
         assert instance[-1] == Uint8(30)
         assert instance[-3] == Uint8(10)
 
+    def test_hashes_by_root(self) -> None:
+        """A sequence hashes by Merkle root, so it serves as a set member."""
+        instance = Uint8List4(data=[Uint8(1), Uint8(2)])
+        same = Uint8List4(data=[Uint8(1), Uint8(2)])
+
+        assert len({instance, same}) == 1
+
     def test_slice_returns_its_own_type(self) -> None:
         """Slicing returns a shorter value of the same shape."""
         instance = Uint8List4(data=[Uint8(1), Uint8(2), Uint8(3)])

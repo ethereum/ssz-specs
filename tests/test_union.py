@@ -306,6 +306,12 @@ class TestConstruction:
         assert repr(value) == "ScalarUnion(selector=Uint8(1) data=Uint8(7))"
         assert len(value) == 2
 
+    def test_a_value_rejects_attribute_assignment(self) -> None:
+        """A union declares itself frozen, so neither half changes after construction."""
+        value = ScalarUnion(selector=Uint8(1), data=Uint8(7))
+        with pytest.raises(ValidationError):
+            value.selector = Uint8(1)
+
     def test_a_value_holds_its_selector_and_its_data(self) -> None:
         """Construction keeps both halves exactly as given."""
         value = Shape(selector=Uint8(1), data=SQUARE)

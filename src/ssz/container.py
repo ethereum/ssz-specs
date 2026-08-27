@@ -130,11 +130,7 @@ class _SSZContainer(SSZModel):
     through the inherited MUTABLE flag.
     """
 
-    model_config = ConfigDict(frozen=False, validate_assignment=True)
-
-    def __hash__(self) -> int:
-        """Hash by Merkle tree root — equal containers hash equally."""
-        return hash(self.hash_tree_root())
+    model_config = ConfigDict(validate_assignment=True)
 
     @model_validator(mode="wrap")
     @classmethod
