@@ -216,13 +216,16 @@ Named fields that keep their positions as the set changes.
 
 ```python
 class Square(ProgressiveContainer):
-    ACTIVE_FIELDS = active_fields(width=3, gaps=(1,))
+    ACTIVE_FIELDS = (1, 0, 1)
 
     side: Uint16   # position 0
     color: Uint8   # position 2
 
 Square(side=0x1234, color=0x42)
 ```
+
+Past a handful of positions, state the width and the gaps instead:
+`ACTIVE_FIELDS = active_fields(width=46, gaps=(8, 9, 10, 28))`.
 
 ### `CompatibleUnion`
 

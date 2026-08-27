@@ -376,9 +376,8 @@ class SSZModel(StrictBaseModel, SSZType):
 
     The default length and string forms switch on which shape the subclass uses.
 
-    Mutability is configurable per type through the MUTABLE flag. It defaults
-    to on and is inherited, so an application can declare one base with
-    MUTABLE set to False and every type built on it is immutable.
+    Mutability is configurable per type through the MUTABLE flag, which defaults to on.
+    The flag is inherited, so one base declaring it False freezes every type built on it.
 
     Every mutation raises this value's version.
     A remembered root is reused only while every version below it is unchanged.
@@ -402,7 +401,12 @@ class SSZModel(StrictBaseModel, SSZType):
     """Whether instances accept mutation. Set False on a subclass to freeze it."""
 
     def __hash__(self) -> int:
-        """Hash by Merkle tree root, which is what equality compares."""
+        """
+        Hash by Merkle tree root, which is what equality compares.
+
+        A mutable value hashes differently once mutated.
+        A dict or set still files it under the old root, so a lookup by value misses it.
+        """
         return hash(self.hash_tree_root())
 
     def _begin_mutation(self) -> None:
@@ -501,20 +505,19 @@ class SSZCollection[T](SSZModel, Sequence[T]):
         Uint8List4(data=[1, 2, 3])
         Uint8List4.of(1, 2, 3)
 
-    Collections mutate in place. Mutation validates the incoming elements and
-    the resulting length by the same rules construction applies. Elements
-    already inside the collection were validated when they entered, so they
-    are left alone and mutation cost is proportional to the change, not the
-    collection size.
-    Reading a position and assigning to one both live on this shared base.
-    Only variable-size collections offer append and pop. Fixed-length shapes accept
-    element assignment but reject any length change. Mutability itself is
-    configurable through the inherited MUTABLE flag.
+    Collections mutate in place, by the same rules construction applies.
+    Mutation validates the incoming elements and the resulting length.
+    Elements already inside were validated when they entered, and are left alone.
+    Mutation therefore costs the change rather than the collection size.
 
-    The type parameter is the declared element type: sequences bind their own
-    element type, bitfields bind Boolean, and byte lists bind int. Mutation is
-    typed against it, so type checkers flag raw values at mutation sites even
-    though runtime validation coerces them exactly as construction does.
+    Reading a position and assigning to one both live on this shared base.
+    Only variable-size collections offer append and pop.
+    A fixed-length shape accepts element assignment and rejects any length change.
+
+    The type parameter is the declared element type.
+    Sequences bind their own element type, bitfields bind Boolean, and byte lists bind int.
+    Mutation is typed against it, not against the values it accepts.
+    A type checker therefore flags a raw value that the validator would have coerced.
     """
 
     model_config = ConfigDict(validate_assignment=True)
