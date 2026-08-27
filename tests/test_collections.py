@@ -10,7 +10,7 @@ from pydantic import BaseModel, ValidationError
 from ssz import Uint8, Uint16, Uint32
 from ssz.boolean import Boolean
 from ssz.byte_arrays import ByteVector
-from ssz.collections import List, ProgressiveList, Vector, _validate_offsets
+from ssz.collections import List, ProgressiveList, Vector
 from ssz.container import Container
 from ssz.exceptions import (
     SSZDefaultError,
@@ -836,33 +836,45 @@ class TestVectorSerialization:
 
     def test_variable_size_vector_rejects_non_monotonic_offsets(self) -> None:
         """A later offset smaller than an earlier one means a body would have negative width."""
-        # Layout:
+        # Invariant: an offset never exceeds the one after it, or the span between them
+        # is a body of negative width.
         #
-        #     offsets[0] = 8   (table-end, valid first offset)
-        #     offsets[1] = 6   (decreasing, triggers the monotonic check)
+        # Fixture state: a 2-element vector, so a table of two offsets and no bodies.
+        #
+        # Mutation: the second offset points behind the first.
+        #
+        #     offsets       8       6
+        #     boundaries    8       6       8
+        #     spans         8..6            -> negative width, refused at element 0
         encoded_bytes = b"\x08\x00\x00\x00\x06\x00\x00\x00"
         with pytest.raises(SSZSerializationError) as exception_info:
             VariableContainerVector2.decode_bytes(encoded_bytes)
         assert (
             str(exception_info.value)
-            == "VariableContainerVector2: offsets not monotonically increasing: 8 -> 6"
+            == "VariableContainerVector2[0]: offset 8 is above the next offset 6"
         )
 
     def test_variable_size_vector_rejects_final_offset_overflow(self) -> None:
-        """A final offset that exceeds the scope triggers the monotonic check first."""
-        # Layout:
+        """A last offset past the byte budget is reported as the overrun it is."""
+        # Invariant: the last body ends at the budget, so the last offset cannot exceed it.
         #
-        #     offsets[0] = 8       (table-end, valid first offset)
-        #     offsets[1] = 100     (past scope of 20, but also greater than next, scope=20)
+        # Fixture state: a 2-element vector over 20 bytes, so a table of two offsets
+        # followed by 12 bytes of bodies.
         #
-        # Pairwise iteration appends scope as the final boundary, so the 100 -> 20
-        # transition trips the monotonic check before the final-offset-exceeds-scope check.
+        # Mutation: the second offset points past the end of the input.
+        #
+        #     offsets       8       100
+        #     boundaries    8       100      20
+        #     spans         8..100  100..20  -> element 1 starts past the budget
+        #
+        # The failing pair is the one closed by the budget, which is what separates this
+        # fault from a table that is merely out of order.
         encoded_bytes = b"\x08\x00\x00\x00\x64\x00\x00\x00" + b"\x00" * 12
         with pytest.raises(SSZSerializationError) as exception_info:
             VariableContainerVector2.decode_bytes(encoded_bytes)
         assert (
             str(exception_info.value)
-            == "VariableContainerVector2: offsets not monotonically increasing: 100 -> 20"
+            == "VariableContainerVector2[1]: offset 100 runs past the scope of 20"
         )
 
 
@@ -939,30 +951,45 @@ class TestListSerialization:
 
     def test_variable_size_list_rejects_scope_below_offset_word(self) -> None:
         """A variable-size list requires at least one offset word in the payload."""
+        # An offset word is 4 bytes, so 3 bytes cannot even hold the first one.
         with pytest.raises(SSZSerializationError) as exception_info:
             VariableContainerList2.decode_bytes(b"\x00\x00\x00")
         assert (
-            str(exception_info.value)
-            == "VariableContainerList2: scope 3 too small for variable-size list"
+            str(exception_info.value) == "VariableContainerList2: scope 3 too small, "
+            "expected at least 4"
         )
 
     def test_variable_size_list_rejects_first_offset_past_scope(self) -> None:
         """A first offset larger than the available scope is invalid."""
+        # The first offset is the table's own width, so 100 claims a 100-byte table
+        # inside a 4-byte payload, leaving every body outside the input.
         with pytest.raises(SSZSerializationError) as exception_info:
             VariableContainerList2.decode_bytes(b"\x64\x00\x00\x00")
-        assert str(exception_info.value) == "VariableContainerList2: invalid offset 100"
+        assert (
+            str(exception_info.value)
+            == "VariableContainerList2: first offset 100 runs past the scope of 4"
+        )
 
     def test_variable_size_list_rejects_misaligned_first_offset(self) -> None:
         """A first offset that is not a multiple of the offset width is invalid."""
+        # The table is a whole number of 4-byte words, so 5 divides into no element count.
         with pytest.raises(SSZSerializationError) as exception_info:
             VariableContainerList2.decode_bytes(b"\x05\x00\x00\x00\x00\x00\x00\x00")
-        assert str(exception_info.value) == "VariableContainerList2: invalid offset 5"
+        assert (
+            str(exception_info.value)
+            == "VariableContainerList2: first offset 5 is not a multiple of 4"
+        )
 
     def test_variable_size_list_rejects_zero_first_offset(self) -> None:
         """A zero first offset is contradictory and rejected before building the boundary list."""
+        # Zero says the table is empty, so there are no elements — yet the payload then
+        # claims one body spanning the whole budget.
         with pytest.raises(SSZSerializationError) as exception_info:
             VariableContainerList2.decode_bytes(bytes.fromhex("00000000aabbccdd"))
-        assert str(exception_info.value) == "VariableContainerList2: invalid offset 0"
+        assert (
+            str(exception_info.value)
+            == "VariableContainerList2: first offset 0 is below the table's own width of 4"
+        )
 
     def test_variable_size_list_rejects_count_beyond_limit(self) -> None:
         """A first offset that implies more than LIMIT elements is rejected."""
@@ -976,26 +1003,34 @@ class TestListSerialization:
 
     def test_variable_size_list_rejects_non_monotonic_offsets(self) -> None:
         """A later offset smaller than an earlier one means a body would have negative width."""
-        # Layout:
+        # Fixture state: first offset 8, so the table is 8 bytes and holds 2 offsets.
         #
-        #     first_offset = 8     (count = 2, table-end)
-        #     offsets[1]   = 6     (decreasing, triggers the monotonic check)
+        # Mutation: the second offset points behind the first.
+        #
+        #     offsets       8       6
+        #     spans         8..6            -> negative width, refused at element 0
         encoded_bytes = b"\x08\x00\x00\x00\x06\x00\x00\x00" + b"\x00" * 12
         with pytest.raises(SSZSerializationError) as exception_info:
             VariableContainerList2.decode_bytes(encoded_bytes)
         assert (
             str(exception_info.value)
-            == "VariableContainerList2: offsets not monotonically increasing: 8 -> 6"
+            == "VariableContainerList2[0]: offset 8 is above the next offset 6"
         )
 
     def test_variable_size_list_rejects_final_offset_overflow(self) -> None:
-        """An interior offset past the payload's end triggers the monotonic check."""
+        """A last offset past the byte budget is reported as the overrun it is."""
+        # Fixture state: 20 bytes of payload, so the budget closing the table is 20.
+        #
+        # Mutation: the second offset points past the end of the input.
+        #
+        #     offsets       8       100
+        #     spans         8..100  100..20  -> element 1 starts past the budget
         encoded_bytes = b"\x08\x00\x00\x00\x64\x00\x00\x00" + b"\x00" * 12
         with pytest.raises(SSZSerializationError) as exception_info:
             VariableContainerList2.decode_bytes(encoded_bytes)
         assert (
             str(exception_info.value)
-            == "VariableContainerList2: offsets not monotonically increasing: 100 -> 20"
+            == "VariableContainerList2[1]: offset 100 runs past the scope of 20"
         )
 
     def test_variable_size_list_single_element_decodes(self) -> None:
@@ -1425,53 +1460,76 @@ class TestProgressiveListSerialization:
 
     def test_variable_size_list_rejects_scope_below_offset_word(self) -> None:
         """A variable-size list requires at least one offset word in the payload."""
+        # An offset word is 4 bytes, so 3 bytes cannot even hold the first one.
         with pytest.raises(SSZSerializationError) as exception_info:
             VariableContainerProgressiveList.decode_bytes(b"\x00\x00\x00")
         assert (
             str(exception_info.value)
-            == "VariableContainerProgressiveList: scope 3 too small for variable-size list"
+            == "VariableContainerProgressiveList: scope 3 too small, expected at least 4"
         )
 
     def test_variable_size_list_rejects_first_offset_past_scope(self) -> None:
         """A first offset larger than the available scope is invalid."""
+        # The first offset is the table's own width, so 100 claims a 100-byte table
+        # inside a 4-byte payload, leaving every body outside the input.
         with pytest.raises(SSZSerializationError) as exception_info:
             VariableContainerProgressiveList.decode_bytes(b"\x64\x00\x00\x00")
-        assert str(exception_info.value) == "VariableContainerProgressiveList: invalid offset 100"
+        assert (
+            str(exception_info.value)
+            == "VariableContainerProgressiveList: first offset 100 runs past the scope of 4"
+        )
 
     def test_variable_size_list_rejects_misaligned_first_offset(self) -> None:
         """A first offset that is not a multiple of the offset width is invalid."""
+        # The table is a whole number of 4-byte words, so 5 divides into no element count.
         with pytest.raises(SSZSerializationError) as exception_info:
             VariableContainerProgressiveList.decode_bytes(b"\x05\x00\x00\x00\x00\x00\x00\x00")
-        assert str(exception_info.value) == "VariableContainerProgressiveList: invalid offset 5"
+        assert (
+            str(exception_info.value)
+            == "VariableContainerProgressiveList: first offset 5 is not a multiple of 4"
+        )
 
     def test_variable_size_list_rejects_zero_first_offset(self) -> None:
         """A zero first offset is contradictory and rejected before any body is read."""
+        # Zero says the table is empty, so there are no elements — yet the payload then
+        # claims one body spanning the whole budget.
         with pytest.raises(SSZSerializationError) as exception_info:
             VariableContainerProgressiveList.decode_bytes(bytes.fromhex("00000000aabbccdd"))
-        assert str(exception_info.value) == "VariableContainerProgressiveList: invalid offset 0"
+        assert (
+            str(exception_info.value) == "VariableContainerProgressiveList: first offset 0 "
+            "is below the table's own width of 4"
+        )
 
     def test_variable_size_list_rejects_non_monotonic_offsets(self) -> None:
         """A later offset smaller than an earlier one means a body would have negative width."""
-        # Layout:
+        # Fixture state: first offset 8, so the table is 8 bytes and holds 2 offsets.
         #
-        #     first_offset = 8     (count = 2, table-end)
-        #     offsets[1]   = 6     (decreasing, triggers the monotonic check)
+        # Mutation: the second offset points behind the first.
+        #
+        #     offsets       8       6
+        #     spans         8..6            -> negative width, refused at element 0
         encoded_bytes = b"\x08\x00\x00\x00\x06\x00\x00\x00" + b"\x00" * 12
         with pytest.raises(SSZSerializationError) as exception_info:
             VariableContainerProgressiveList.decode_bytes(encoded_bytes)
         assert (
             str(exception_info.value)
-            == "VariableContainerProgressiveList: offsets not monotonically increasing: 8 -> 6"
+            == "VariableContainerProgressiveList[0]: offset 8 is above the next offset 6"
         )
 
     def test_variable_size_list_rejects_interior_offset_past_scope(self) -> None:
-        """An interior offset past the payload's end triggers the monotonic check."""
+        """A last offset past the byte budget is reported as the overrun it is."""
+        # Fixture state: 20 bytes of payload, so the budget closing the table is 20.
+        #
+        # Mutation: the second offset points past the end of the input.
+        #
+        #     offsets       8       100
+        #     spans         8..100  100..20  -> element 1 starts past the budget
         encoded_bytes = b"\x08\x00\x00\x00\x64\x00\x00\x00" + b"\x00" * 12
         with pytest.raises(SSZSerializationError) as exception_info:
             VariableContainerProgressiveList.decode_bytes(encoded_bytes)
         assert (
             str(exception_info.value)
-            == "VariableContainerProgressiveList: offsets not monotonically increasing: 100 -> 20"
+            == "VariableContainerProgressiveList[1]: offset 100 runs past the scope of 20"
         )
 
     def test_variable_size_list_single_element_decodes(self) -> None:
@@ -1629,25 +1687,6 @@ class TestSequenceDefaults:
         assert len(FixedContainerUnionVector2(data=[element, element])) == 2
 
 
-class TestOffsetValidation:
-    """Tests the offset-table invariant checker directly.
-
-    Both decoders append the scope as the final boundary before validating.
-    An empty table and a final offset past the scope therefore never arise
-    from a decode call, so the helper is exercised on its own here.
-    """
-
-    def test_empty_offset_table_is_a_no_op(self) -> None:
-        """An empty table has no bodies to bound, so validation returns nothing."""
-        assert _validate_offsets([], scope=0, type_name="EmptyList") is None
-
-    def test_final_offset_beyond_scope_is_rejected(self) -> None:
-        """A monotonic table whose final offset exceeds the scope reads past its budget."""
-        with pytest.raises(SSZSerializationError) as exception_info:
-            _validate_offsets([8, 20], scope=12, type_name="OverflowList")
-        assert str(exception_info.value) == "OverflowList: final offset 20 exceeds scope 12"
-
-
 class TestJsonSerialization:
     """Tests for the JSON field serializer on SSZ sequences."""
 
@@ -1720,3 +1759,152 @@ def test_progressive_and_bounded_list_encode_identically(values: list[int]) -> N
     progressive_bytes = Uint16ProgressiveList(data=elements).encode_bytes()
 
     assert progressive_bytes == Uint16List32(data=elements).encode_bytes()
+
+
+class TestDeclarationIsolation:
+    """A shape installing its own default leaves the field it inherits alone."""
+
+    def test_a_vector_declaration_does_not_change_other_shapes(self) -> None:
+        """A vector's default reaches its own type and no other."""
+        # The contents field is declared once, on the base the three shapes share.
+        #
+        # A vector installs its default by writing through that field's descriptor, so a
+        # shape declared after it would inherit the vector's default if that write reached
+        # the shared descriptor rather than a copy of it.
+
+        class LaterVector(Vector[Uint8]):
+            LENGTH = 7
+
+        class LaterList(List[Uint8]):
+            LIMIT = 7
+
+        class LaterProgressive(ProgressiveList[Uint8]):
+            pass
+
+        # The vector gets the default it declared: 7 zero bytes.
+        assert list(LaterVector()) == [Uint8(0)] * 7
+
+        # Every other shape keeps the empty default of the shared base.
+        assert len(LaterList()) == 0
+        assert len(LaterProgressive()) == 0
+
+        # A shape declared before the vector is untouched too.
+        assert len(Uint16List4()) == 0
+
+    def test_two_vector_declarations_keep_their_own_defaults(self) -> None:
+        """A later vector does not reach back into an earlier one."""
+
+        class FirstVector(Vector[Uint8]):
+            LENGTH = 3
+
+        class SecondVector(Vector[Uint8]):
+            LENGTH = 9
+
+        # Both counts survive, so neither declaration overwrote the other's default.
+        assert len(FirstVector()) == 3
+        assert len(SecondVector()) == 9
+
+
+class TestZeroLengthVector:
+    """The SSZ spec writes a vector as Vector[type, N] with N > 0."""
+
+    def test_zero_length_is_refused_at_declaration(self) -> None:
+        """A vector of no elements is refused where it is written, not where it is used."""
+        # A zero-length vector has no offset table, so a variable-size body would have
+        # nowhere to be read from.
+        with pytest.raises(SSZValueError) as exception_info:
+
+            class EmptyVector(Vector[Uint8]):
+                LENGTH = 0
+
+        assert str(exception_info.value) == "EmptyVector: LENGTH must be positive, got 0"
+
+    def test_negative_length_is_refused_at_declaration(self) -> None:
+        """A negative count is refused the same way, and for the same reason."""
+        with pytest.raises(SSZValueError) as exception_info:
+
+            class NegativeVector(Vector[Uint8]):
+                LENGTH = -1
+
+        assert str(exception_info.value) == "NegativeVector: LENGTH must be positive, got -1"
+
+
+class TestJsonRoundTrip:
+    """Whatever a sequence renders to JSON, it reads back in."""
+
+    def test_a_sequence_of_containers_round_trips(self) -> None:
+        """A container element renders as a mapping, and validates back from one."""
+        # Rendering:  {"data": [{"a": 1, "b": [2, 3]}]}
+        instance = VariableContainerList2(
+            data=[VariableContainer(a=Uint8(1), b=Uint16List4(data=[Uint16(2), Uint16(3)]))]
+        )
+
+        assert VariableContainerList2.model_validate_json(instance.model_dump_json()) == instance
+
+    def test_a_sequence_of_byte_arrays_round_trips(self) -> None:
+        """A fixed byte array renders as a 0x-prefixed hex string, and validates back."""
+        # Rendering:  {"data": ["0xaaaa...", "0xbbbb..."]}
+        instance = Bytes32List32(data=[Bytes32(b"\xaa" * 32), Bytes32(b"\xbb" * 32)])
+
+        assert Bytes32List32.model_validate_json(instance.model_dump_json()) == instance
+
+    def test_a_bare_hex_string_element_is_still_refused(self) -> None:
+        """Only the 0x-prefixed rendering is accepted, never a bare hex string."""
+        # A byte count read as characters is the mistake this refusal exists to catch,
+        # so an unprefixed string stays a type error rather than becoming 64 bytes.
+        with pytest.raises(SSZTypeMismatch) as exception_info:
+            Bytes32List32(data=cast(Any, ["ab" * 32]))
+
+        assert str(exception_info.value) == "Expected Bytes32, got str"
+
+    def test_a_sequence_of_uints_round_trips(self) -> None:
+        """An integer leaf renders as a plain int, which is already an ancestor class."""
+        instance = Uint16List4(data=[Uint16(7), Uint16(8)])
+
+        assert Uint16List4.model_validate_json(instance.model_dump_json()) == instance
+
+    def test_a_nested_sequence_round_trips(self) -> None:
+        """A sequence element is Pydantic-backed, so it renders and validates as a mapping."""
+        # Rendering:  {"data": [{"data": [1, 2]}, {"data": []}]}
+        instance = NestedProgressiveList(
+            data=[
+                Uint16ProgressiveList(data=[Uint16(1), Uint16(2)]),
+                Uint16ProgressiveList(data=[]),
+            ]
+        )
+
+        assert NestedProgressiveList.model_validate_json(instance.model_dump_json()) == instance
+
+
+class TestTruncatedOffsetTable:
+    """A stream that ends mid-table is refused before any span is derived from it."""
+
+    def test_a_vector_refuses_a_table_the_stream_cannot_back(self) -> None:
+        """A budget larger than the stream is caught while the table is read."""
+        # A 2-element vector needs a table of 2 offsets, so 8 bytes before any body.
+        #
+        # Fixture state: the caller promises 20 bytes, but the stream holds only 4.
+        #
+        #     promised   [ off_0 | off_1 | bodies... ]   20 bytes
+        #     actual     [ off_0 ]                        4 bytes
+        #
+        # This is what a corrupt outer offset table looks like from the inside: the
+        # span handed down is wider than the bytes that back it.
+        stream = io.BytesIO(b"\x08\x00\x00\x00")
+        with pytest.raises(SSZSerializationError) as exception_info:
+            VariableContainerVector2.deserialize(stream, 20)
+
+        assert str(exception_info.value) == "VariableContainerVector2: expected 8 bytes, got 4"
+
+    def test_a_list_refuses_a_table_the_stream_cannot_back(self) -> None:
+        """The same truncation is caught when the count came from the first offset."""
+        # First offset 12 means a 12-byte table, so 3 elements and 2 offsets still to read.
+        #
+        # Fixture state: the caller promises 24 bytes, but only the first offset is there.
+        stream = io.BytesIO(b"\x0c\x00\x00\x00")
+        with pytest.raises(SSZSerializationError) as exception_info:
+            VariableContainerProgressiveList.deserialize(stream, 24)
+
+        assert (
+            str(exception_info.value) == "VariableContainerProgressiveList: expected 8 bytes, got 0"
+        )

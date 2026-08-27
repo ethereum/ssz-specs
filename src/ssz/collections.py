@@ -7,144 +7,51 @@ Three sequence shapes are defined by the SSZ spec, the third added by EIP-7916:
 - A list holds between zero and LIMIT elements of one declared type.
 - A progressive list holds any number of elements of one declared type.
 
-A type is fixed-size when every value encodes to the same number of bytes.
-A variable-size type allows different values to encode to different widths.
-
 The encoding shape follows from the element type:
 
-- Fixed-size elements share one known width.
-  Bodies pack back-to-back with no separator.
+- Fixed-size elements share one known width, and pack back-to-back.
+- Variable-size elements are prefixed by a table of uint32 byte offsets.
 
-- Variable-size elements are prefixed by a uint32 offset table.
-  Each offset is a byte position from the start of the sequence.
-  It points at the start of one encoded element body.
+The table takes 4 bytes per element, so the first offset is 4 * N.
 
-The offset table takes 4 * N bytes for N elements.
-The first offset therefore equals 4 * N — the byte position right after the table.
-
-For example, three variable-size bodies of widths 5, 3, and 7 encode to 27 bytes:
+Three variable-size bodies of widths 5, 3 and 7 encode to 27 bytes:
 
     bytes 0..3   : off_0 = 12   (first body starts at byte 12)
-    bytes 4..7   : off_1 = 17   (second body starts at byte 17)
-    bytes 8..11  : off_2 = 20   (third body starts at byte 20)
+    bytes 4..7   : off_1 = 17
+    bytes 8..11  : off_2 = 20
     bytes 12..16 : body_0       (5 bytes)
     bytes 17..19 : body_1       (3 bytes)
     bytes 20..26 : body_2       (7 bytes)
 """
 
 import io
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from itertools import pairwise
-from typing import (
-    IO,
-    Any,
-    ClassVar,
-    Self,
-    cast,
-    overload,
-    override,
-)
+from typing import IO, Any, ClassVar, Self, cast, overload, override
 
-from pydantic import Field, field_serializer, field_validator
+from pydantic import Field, ValidationError, field_serializer, field_validator
 
 from ssz.byte_arrays import ByteVector
 from ssz.exceptions import (
     SSZDefinitionError,
+    SSZError,
     SSZFixedSizeError,
-    SSZLengthError,
-    SSZLimitError,
     SSZScopeError,
     SSZSerializationError,
-    SSZTypeError,
     SSZTypeMismatch,
     SSZValueError,
 )
-from ssz.ssz_base import BYTES_PER_LENGTH_OFFSET, SSZCollection, SSZType
+from ssz.ssz_base import BYTES_PER_LENGTH_OFFSET, SSZCollection, SSZModel, SSZType
 from ssz.uint import Uint32
-
-
-def _validate_offsets(offsets: list[int], scope: int, type_name: str) -> None:
-    """
-    Enforce the offset-table invariants before reading element bodies.
-
-    Two rules imply that every (start, end) pair is valid:
-
-    - Offsets are monotonically non-decreasing, so no body has negative width.
-    - The final offset stays within scope, so no body reads past its budget.
-
-    The container decoder repeats these same checks inline.
-    The duplication is intentional: inlining there keeps the per-field name in each error.
-
-    Raises:
-        SSZSerializationError: When a later offset is smaller than an earlier one.
-        SSZSerializationError: When the final offset exceeds the available scope.
-    """
-    # Empty sequences have no bodies and therefore no boundaries to enforce.
-    if not offsets:
-        return
-
-    # Pairwise comparison catches any decreasing step in the table.
-    for previous_offset, current_offset in pairwise(offsets):
-        if current_offset < previous_offset:
-            raise SSZSerializationError(
-                f"{type_name}: offsets not monotonically increasing: "
-                f"{previous_offset} -> {current_offset}"
-            )
-
-    # The final boundary is the scope appended by the decoder.
-    # A larger final offset would extend past the available bytes.
-    if offsets[-1] > scope:
-        raise SSZSerializationError(
-            f"{type_name}: final offset {offsets[-1]} exceeds scope {scope}"
-        )
-
-
-def _coerce_elements(element_type: type[SSZType], elements: Sequence[Any]) -> list[SSZType]:
-    """
-    Coerce every element of an already-shaped sequence into the declared type.
-
-    - Already-typed elements pass through untouched.
-    - A value converts only from the element class itself or an ancestor of
-      it (such as a plain int for uints, or plain bytes for byte arrays).
-      Any other class is a type error, not a value to rewrap.
-    - Ancestor-class values go through the element type's constructor.
-    - A coercion failure re-raises with the high-level expectation in the message.
-    - The chained cause preserves the underlying coercion detail.
-
-    An element of exactly the declared class is settled first, before the ancestor test.
-    A class is a subclass of itself, so the test that order skips is one that could only
-    have passed. What changes is the cost of the common case: an identity check on two type
-    objects, rather than a walk of an abstract base class's registry.
-    """
-    coerced: list[SSZType] = []
-    for element in elements:
-        element_class = type(element)
-        if element_class is element_type:
-            coerced.append(element)
-            continue
-        if not issubclass(element_type, element_class):
-            raise SSZTypeMismatch(element_type.__name__, element_class)
-        try:
-            coerced.append(cast(Any, element_type)(element))
-        except (SSZTypeError, SSZValueError, TypeError, ValueError) as exception:
-            raise SSZTypeMismatch(
-                element_type.__name__, element_class, detail=str(exception)
-            ) from exception
-    return coerced
 
 
 class _SSZSequence[T: SSZType](SSZCollection[T]):
     """
-    Shared scaffolding for fixed- and variable-length SSZ sequences.
+    Shared scaffolding for the three SSZ sequence shapes.
 
-    Three shapes concretize this base:
-
-    - A vector pins the element count at LENGTH.
-    - A list bounds the element count by LIMIT.
-    - A progressive list leaves the element count unbounded.
-
-    All of them store elements in a Pydantic field named data.
-    All of them share the offset-table writer used by variable-size encodings.
+    All of them store their elements in one field.
+    All of them share one input rule, one count rule, and one coercion rule.
+    All of them share the offset-table reader and writer.
 
     The element type is inferred from the generic parameter, once per subclass.
     """
@@ -152,148 +59,238 @@ class _SSZSequence[T: SSZType](SSZCollection[T]):
     ELEMENT_TYPE: ClassVar[type[SSZType]]
     """SSZ type of every element, inferred from the generic parameter."""
 
+    IMMUTABLE_ELEMENTS: ClassVar[bool] = False
+    """
+    Whether one element object may stand in every position and in every copy.
+
+    Uints, booleans and fixed byte arrays all subclass an immutable builtin.
+    Nothing written through one position can reach another.
+    """
+
     # A fresh list per instance: the spec's default is empty, and the contents mutate.
     data: Sequence[T] = Field(default_factory=list)
-    """
-    The sequence of elements.
-
-    Accepts lists, tuples, or iterables of compatible values on input.
-    Stored as a list after validation. Mutate through the collection API so
-    every element is validated on entry.
-    """
-
-    def __deepcopy__(self, memo: dict[int, Any] | None = None) -> Self:
-        """
-        A duplicate over the very same elements, none of which can be written through.
-
-        The table of copied objects is optional, since Pydantic's own deep copy asks
-        without one.
-        """
-        cls = type(self)
-        element_type = getattr(cls, "ELEMENT_TYPE", None)
-        if (
-            element_type is None
-            or not issubclass(element_type, (int, bytes))
-            # A subclass declaring more than the contents is copied whole, field by field.
-            or len(cls.model_fields) != 1
-        ):
-            return super().__deepcopy__(memo)
-        return cls.model_construct(
-            _fields_set=set(self.__pydantic_fields_set__), data=list(self.data)
-        )
-
-    @override
-    def _validate_element(self, value: Any) -> T:
-        """Coerce one incoming element exactly as construction does."""
-        return cast("T", _coerce_elements(type(self).ELEMENT_TYPE, (value,))[0])
+    """The elements, stored as a list once validated."""
 
     @classmethod
     def __pydantic_init_subclass__(cls, **kwargs: Any) -> None:
         """
-        Read the element type from the generic parameter.
+        Read the element type from the generic parameter, then classify it.
 
-        The parameter is picked up from a class declaration:
+        The bracketed type sits on a base, or on the type itself when inline:
 
-            class Uint16Vector2(Vector[Uint16]):
-                LENGTH = 2
-
-        the Uint16 inside the brackets is copied into Uint16Vector2.ELEMENT_TYPE.
-        This way, a user does not have to write ELEMENT_TYPE = Uint16 by hand.
-
-        A shape needing no further declaration is usable inline too, written the
-        way the SSZ spec writes it, as ProgressiveList[Uint16]. The bracketed type
-        then sits on the type itself instead of on a base of it.
-
-        The hook runs once the model is fully built, which is the point at which
-        the bracketed types of an inline parameterization are readable.
+            class Uint16Vector2(Vector[Uint16])   ->  found on the parent
+            ProgressiveList[Uint16]               ->  found on the type itself
         """
         super().__pydantic_init_subclass__(**kwargs)
-        if "ELEMENT_TYPE" in cls.__dict__:
-            return
 
-        # Look at the type itself first, then at its direct parents.
-        # The first concrete element type wins.
-        # Layers carrying only a TypeVar are skipped.
-        for base in (cls, *cls.__bases__):
-            # Pydantic stores the generic parameterization on every generic parent.
-            # An empty default skips bases that were never made generic.
-            metadata = getattr(base, "__pydantic_generic_metadata__", {})
+        # A shape naming its element type by hand has nothing left to infer.
+        if "ELEMENT_TYPE" not in cls.__dict__:
+            for base in (cls, *cls.__bases__):
+                # An empty default skips bases that were never made generic.
+                metadata = getattr(base, "__pydantic_generic_metadata__", {})
 
-            # Origin is the unparameterized class — for example Vector itself.
-            # Skip bases outside the sequence hierarchy.
-            origin = metadata.get("origin")
-            if not (isinstance(origin, type) and issubclass(origin, _SSZSequence)):
-                continue
+                # Bases outside the sequence hierarchy carry no element type.
+                origin = metadata.get("origin")
+                if not (isinstance(origin, type) and issubclass(origin, _SSZSequence)):
+                    continue
 
-            # Args holds the types that appeared between the brackets.
-            # A real SSZType subclass wins.
-            # A bare TypeVar means an abstract layer has not bound the parameter yet.
-            for arg in metadata.get("args", ()):
-                if isinstance(arg, type) and issubclass(arg, SSZType):
-                    cls.ELEMENT_TYPE = arg
-                    return
+                # A bare TypeVar means this layer is abstract, so it is skipped.
+                inferred = next(
+                    (
+                        argument
+                        for argument in metadata.get("args", ())
+                        if isinstance(argument, type) and issubclass(argument, SSZType)
+                    ),
+                    None,
+                )
+                if inferred is not None:
+                    cls.ELEMENT_TYPE = inferred
+                    break
 
-    @field_serializer("data", when_used="json")
-    def _serialize_data(self, value: Sequence[T]) -> list[Any]:
+        # Asked once here, because the vector default and the deep copy both need it.
+        if (element_type := getattr(cls, "ELEMENT_TYPE", None)) is not None:
+            cls.IMMUTABLE_ELEMENTS = issubclass(element_type, (int, bytes))
+
+    @classmethod
+    def _check_declaration(cls) -> None:
         """
-        Render the elements as a JSON-friendly list.
+        Refuse a shape that has not declared what it needs to hold a value.
 
-        Two leaf shapes need bespoke handling:
+        Not checked at declaration time.
+        A layer may bind the element type and leave the count to the shape below.
 
-        - Byte arrays render as 0x-prefixed hex strings.
-        - Integer leaves (uints, field elements) flatten to a plain int.
-
-        Anything else passes through for Pydantic's downstream serializers.
+        Raises:
+            SSZDefinitionError: When the element type was never declared.
         """
-        # Pydantic does not auto-flatten SSZ leaf types into JSON primitives.
-        # Each element is inspected and rewritten according to the rules below.
-        serialized_elements: list[Any] = []
-        for element in value:
-            # Byte-array leaves render as 0x-prefixed hex strings.
-            # This matches how every other byte value appears in spec output.
-            if isinstance(element, ByteVector):
-                serialized_elements.append("0x" + element.hex())
+        if not hasattr(cls, "ELEMENT_TYPE"):
+            raise SSZDefinitionError(cls.__name__, "ELEMENT_TYPE")
 
-            # Integer leaves (uints, field elements) flatten to a plain int.
-            # Bool also subclasses int.
-            # It is excluded so True and False survive in JSON unchanged.
-            elif isinstance(element, int) and not isinstance(element, bool):
-                serialized_elements.append(int(element))
+    @classmethod
+    @override
+    def _input_expectation(cls) -> str:
+        """Name the element type in a refusal, since a sequence declares one."""
+        return f"iterable of {cls.ELEMENT_TYPE.__name__}"
 
-            # Anything else passes through for Pydantic's downstream serializers.
-            # Nested containers, booleans, strings, and primitive values land here.
-            else:
-                serialized_elements.append(element)
-        return serialized_elements
+    @field_validator("data", mode="before")
+    @classmethod
+    def _coerce_and_validate(cls, raw_input: Any) -> list[SSZType]:
+        """Shape the input, check the element count, then coerce every element."""
+        cls._check_declaration()
 
-    def _write_variable_payload(self, stream: IO[bytes], offset_count: int) -> int:
+        # Strings and non-iterables are refused, and a generator is materialized.
+        elements = cls._shape_input(raw_input)
+
+        # Checked before coercion, so an oversized input reports the capacity it broke.
+        cls._validate_length(len(elements))
+
+        # An element already of the declared class is settled without a call.
+        # Whole sequences of them arrive here whenever a value is revalidated.
+        element_type = cls.ELEMENT_TYPE
+        coerce = cls._validate_element
+        return [
+            element if type(element) is element_type else coerce(element) for element in elements
+        ]
+
+    @classmethod
+    @override
+    def _validate_element(cls, value: Any) -> SSZType:
         """
-        Write the offset table followed by the buffered element bodies.
+        Coerce one value into the declared element type.
 
-        Offsets are emitted to the output stream first.
-        Bodies are buffered and flushed after the table.
+        The last two arms are what this type's own JSON rendering produces.
+        Accepting them is what makes that rendering readable back in:
 
-        Args:
-            stream: Output binary stream.
-            offset_count: Number of offset entries in the table.
+            Vector[Point]    ->  {"data": [{"x": 1, "y": 2}]}
+            Vector[Bytes4]   ->  {"data": ["0x01020304"]}
+
+        Each is as narrow as the rendering it mirrors.
+        So a hex string with no prefix stays refused.
+
+        Raises:
+            SSZTypeMismatch: When the class is unrelated, or the value fails its type.
+        """
+        element_type = cls.ELEMENT_TYPE
+        element_class = type(value)
+
+        # An identity check on two type objects, not a walk of an abstract base.
+        if element_class is element_type:
+            return value
+
+        # Past here the class is accepted, so a failure is about the value's contents.
+        try:
+            # An ancestor class is a raw value to wrap: an int for a uint.
+            if issubclass(element_type, element_class):
+                return element_type(value)
+
+            # A mapping is how a Pydantic-backed element renders, and how it reads back.
+            if isinstance(value, Mapping) and issubclass(element_type, SSZModel):
+                return element_type.model_validate(value)
+
+            # A 0x-prefixed string is how a fixed byte array renders, and nothing else.
+            if (
+                isinstance(value, str)
+                and value.startswith("0x")
+                and issubclass(element_type, ByteVector)
+            ):
+                return element_type(value)
+        except (SSZError, ValidationError, TypeError, ValueError) as exception:
+            raise SSZTypeMismatch(
+                element_type.__name__, element_class, detail=str(exception)
+            ) from exception
+
+        raise SSZTypeMismatch(element_type.__name__, element_class)
+
+    def _write_variable_payload(self, stream: IO[bytes]) -> int:
+        """
+        Write the offset table, then the element bodies.
+
+        An offset is only known once every body before it has been measured.
+        A forward-only stream cannot revisit an earlier slot, so bodies are buffered.
 
         Returns:
-            Total bytes written, equal to the final offset value.
+            Total bytes written, which is also the final offset.
         """
-        # A forward-only stream cannot revisit earlier offset slots to fix them up.
-        # Bodies must be buffered until the table is fully written.
         bodies = io.BytesIO()
 
-        # The first offset points past the entire offset table.
-        # Each subsequent offset advances by the previous body's width.
-        offset = offset_count * BYTES_PER_LENGTH_OFFSET
+        # The first offset points just past the whole table.
+        offset = len(self.data) * BYTES_PER_LENGTH_OFFSET
+
+        # An offset written here comes from arithmetic and could exceed the width.
+        # Its range check is a real spec rule, while reading needs no such check.
         for element in self.data:
             Uint32(offset).serialize(stream)
             offset += element.serialize(bodies)
 
-        # Bodies land at the byte positions the offsets just declared.
         stream.write(bodies.getvalue())
         return offset
+
+    @classmethod
+    def _read_offsets(cls, stream: IO[bytes], count: int) -> list[int]:
+        """
+        Read the given number of table entries, each a little-endian uint32.
+
+        An offset is a byte position, not a value the spec gives a type to.
+        So it is read as the plain integer it is compared and subtracted as.
+
+        Raises:
+            SSZScopeError: When the stream ends before the table is complete.
+        """
+        width = count * BYTES_PER_LENGTH_OFFSET
+        table = stream.read(width)
+        if len(table) != width:
+            raise SSZScopeError(cls.__name__, width, len(table))
+        return [
+            int.from_bytes(table[at : at + BYTES_PER_LENGTH_OFFSET], "little")
+            for at in range(0, width, BYTES_PER_LENGTH_OFFSET)
+        ]
+
+    @classmethod
+    def _read_bodies(cls, stream: IO[bytes], offsets: list[int], scope: int) -> Self:
+        """
+        Read one body per offset, after checking the table closes over the budget.
+
+        Appending the budget gives one boundary more than there are bodies.
+        Consecutive pairs are then exactly the spans to read:
+
+            offsets       12       17       20
+            boundaries    12       17       20       27
+            spans         12..17   17..20   20..27
+
+        A pair that decreases is a body of negative width.
+        The pair closed by the budget is a body reaching past the input.
+
+        This is the only place that reads bodies.
+        So a table cannot be read from without having been checked.
+
+        Raises:
+            SSZSerializationError: When an offset is above the one after it.
+            SSZSerializationError: When the last offset runs past the budget.
+        """
+        boundaries = [*offsets, scope]
+
+        # The last pair is the only one closed by the budget rather than an offset.
+        last = len(offsets) - 1
+
+        for index, (start, end) in enumerate(pairwise(boundaries)):
+            if end >= start:
+                continue
+            if index == last:
+                raise SSZSerializationError(
+                    f"{cls.__name__}[{index}]: offset {start} runs past the scope of {end}"
+                )
+            raise SSZSerializationError(
+                f"{cls.__name__}[{index}]: offset {start} is above the next offset {end}"
+            )
+
+        # Every element is already the declared type, and the caller settled the count.
+        # So the value is built past validation rather than through it.
+        element_type = cls.ELEMENT_TYPE
+        return cls.model_construct(
+            _fields_set={"data"},
+            data=[
+                element_type.deserialize(stream, end - start) for start, end in pairwise(boundaries)
+            ],
+        )
 
     @override
     def __len__(self) -> int:
@@ -302,64 +299,56 @@ class _SSZSequence[T: SSZType](SSZCollection[T]):
 
     @property
     def elements(self) -> list[T]:
-        """Return a mutable copy of the elements as a list."""
+        """A fresh list of the elements, which writing to never reaches this value."""
         return list(self.data)
 
-    @classmethod
-    def _shape_input(cls, raw_input: Any) -> Sequence[Any]:
-        """
-        Normalize a validator input into a length-checkable sequence.
+    def __deepcopy__(self, memo: dict[int, Any] | None = None) -> Self:
+        """A duplicate over the very same elements, none of which can be written to."""
+        cls = type(self)
 
-        Accept the natural input shapes:
+        # Sharing needs immutable elements and no other field to copy.
+        if not cls.IMMUTABLE_ELEMENTS or len(cls.model_fields) != 1:
+            return super().__deepcopy__(cast("dict[int, Any]", memo))
+        return cls.model_construct(
+            _fields_set=set(self.__pydantic_fields_set__), data=list(self.data)
+        )
 
-        - list or tuple    pass through directly.
-        - other iterables  materialize into a list so the length check works.
-        - str or bytes     rejected — iterating yields characters or ints.
+    @field_serializer("data", when_used="json")
+    def _serialize_data(self, value: Sequence[T]) -> list[Any]:
+        """Render the elements as a JSON-friendly list."""
+        # Pydantic does not flatten SSZ leaf types into JSON primitives on its own.
+        serialized_elements: list[Any] = []
+        for element in value:
+            if isinstance(element, ByteVector):
+                serialized_elements.append("0x" + element.hex())
 
-        The subclass enforces its own element-count rule on the returned sequence.
+            # A boolean also subclasses int, and is excluded so it stays true or false.
+            elif isinstance(element, int) and not isinstance(element, bool):
+                serialized_elements.append(int(element))
 
-        Raises:
-            SSZTypeError: When the input is a string, bytes, or non-iterable.
-        """
-        if isinstance(raw_input, (list, tuple)):
-            return raw_input
-        if isinstance(raw_input, (str, bytes, bytearray)):
-            raise SSZTypeMismatch(f"iterable of {cls.ELEMENT_TYPE.__name__}", type(raw_input))
-        if hasattr(raw_input, "__iter__"):
-            return list(raw_input)
-        raise SSZTypeMismatch("iterable", type(raw_input))
+            # Nested containers and primitives are left to Pydantic.
+            else:
+                serialized_elements.append(element)
+        return serialized_elements
 
 
 class Vector[T: SSZType](_SSZSequence[T]):
     """
-    Fixed-length SSZ sequence.
+    Fixed-length SSZ sequence, holding exactly LENGTH elements of one type.
 
-    Holds exactly LENGTH elements of one declared type.
-    The element count is pinned at the type level and never changes at runtime.
+    Subclasses declare their length in the class body.
+    The element type comes from the generic parameter.
 
-    Two encoding shapes follow from the element type:
-
-    - Fixed-size elements pack back-to-back with no separators.
-    - Variable-size elements use the offset-table layout.
-
-    Subclasses declare LENGTH directly in the class body.
-    The element type is inferred from the generic parameter.
-
-    For example, three Uint16 values encode as six raw bytes:
+    Three Uint16 values encode as six raw bytes:
 
         bytes 0..1 : 67 45   (= 0x4567, little-endian)
         bytes 2..3 : 23 01   (= 0x0123)
         bytes 4..5 : ef cd   (= 0xCDEF)
 
-    Two variable-size bodies of widths 5 and 7 encode to 20 bytes:
-
-        bytes 0..3   : off_0 = 8    (first body starts at byte 8)
-        bytes 4..7   : off_1 = 13   (second body starts at byte 13)
-        bytes 8..12  : body_0       (5 bytes)
-        bytes 13..19 : body_1       (7 bytes)
-
     Built from nothing, a vector holds the element default at every position.
-    An element type with no default leaves the vector with none.
+    An element type with no default leaves it with none.
+
+    A range of a vector is a plain sequence, holding too few elements to be one.
     """
 
     LENGTH: ClassVar[int]
@@ -368,60 +357,49 @@ class Vector[T: SSZType](_SSZSequence[T]):
     @classmethod
     def __pydantic_init_subclass__(cls, **kwargs: Any) -> None:
         """
-        Give the elements their default, which is the element default at every position.
+        Refuse a count no vector can have, then give the elements their default.
 
-        One instance is shared across every position when the element type cannot be
-        mutated, and built per position otherwise, since two positions holding one mutable
-        element would alias.
+        Raises:
+            SSZValueError: When the declared length is zero or negative.
         """
         super().__pydantic_init_subclass__(**kwargs)
 
-        # A shape that declared neither keeps its inherited default, and fails its own
-        # declaration check instead.
+        # An abstract layer keeps the empty default it inherits.
+        # Building a value from it fails its own declaration check instead.
         if not hasattr(cls, "ELEMENT_TYPE") or cls.LENGTH is None:
             return
 
+        # The spec writes a vector as Vector[type, N] with N > 0.
+        # A vector of no elements has no offset table to read a body from.
+        if cls.LENGTH < 1:
+            raise SSZValueError(f"{cls.__name__}: LENGTH must be positive, got {cls.LENGTH}")
+
         element_type, length = cls.ELEMENT_TYPE, cls.LENGTH
-        # A uint, a boolean and a fixed byte array each subclass an immutable builtin, so
-        # no position can alter what another holds. The bitfield default already shares one
-        # boolean on that argument, and it holds for every such element type.
-        if issubclass(element_type, (int, bytes)):
+        if cls.IMMUTABLE_ELEMENTS:
             shared = element_type()
             cls.model_fields["data"].default_factory = lambda: [shared] * length
+
+        # A mutable element needs one instance per position.
+        # Sharing one would make a write to position 0 visible at every position.
         else:
             cls.model_fields["data"].default_factory = lambda: [
                 element_type() for _ in range(length)
             ]
+
+        # The compiled schema holds the previous factory until it is rebuilt.
         cls.model_rebuild(force=True)
 
-    @field_validator("data", mode="before")
     @classmethod
-    def _coerce_and_validate(cls, raw_input: Any) -> list[SSZType]:
+    @override
+    def _check_declaration(cls) -> None:
         """
-        Enforce the exact element count and coerce inputs into ELEMENT_TYPE.
+        A vector also needs its exact count, which no input can supply.
 
-        Three rejections happen before coercion:
-
-        - Misconfigured subclasses without ELEMENT_TYPE or LENGTH fail.
-        - String and bytes inputs are rejected to avoid silent character iteration.
-        - Non-iterable inputs fail fast with a descriptive message.
-
-        Each element passes through the declared type's constructor on coercion.
-        Failures re-raise with the high-level expectation in the message.
-        The chained cause preserves the underlying coercion detail.
+        Raises:
+            SSZDefinitionError: When the element type or the length was never declared.
         """
-        # Subclasses must declare both annotations before any instance can validate.
         if not hasattr(cls, "ELEMENT_TYPE") or cls.LENGTH is None:
             raise SSZDefinitionError(cls.__name__, "ELEMENT_TYPE and LENGTH")
-
-        # Reject strings and non-iterables, then materialize into a sequence.
-        input_elements = cls._shape_input(raw_input)
-
-        # Fixed-length type: the input must contain exactly LENGTH elements.
-        if len(input_elements) != cls.LENGTH:
-            raise SSZLengthError(cls.__name__, cls.LENGTH, len(input_elements))
-
-        return _coerce_elements(cls.ELEMENT_TYPE, input_elements)
 
     @classmethod
     @override
@@ -433,15 +411,12 @@ class Vector[T: SSZType](_SSZSequence[T]):
     @override
     def get_byte_length(cls) -> int:
         """
-        Return the fixed encoded byte length.
+        Return the element width times the element count.
 
         Raises:
             SSZTypeError: When the element type is variable-size.
         """
-        # A variable-size element has no width to give.
-        # Asking for one is therefore the check.
-        #
-        # Asking first puts the same question to the same type twice.
+        # A variable-size element has no width to give, so asking for one is the check.
         try:
             return cls.ELEMENT_TYPE.get_byte_length() * cls.LENGTH
         except SSZFixedSizeError as variable_element:
@@ -449,12 +424,10 @@ class Vector[T: SSZType](_SSZSequence[T]):
 
     @override
     def serialize(self, stream: IO[bytes]) -> int:
-        """Write the SSZ encoding to a binary stream and return the byte count."""
-        # Fixed-size elements: serialize each body directly, no offsets needed.
-        if self.is_fixed_size():
+        """Write the SSZ encoding to a binary stream, and return the byte count."""
+        if self.ELEMENT_TYPE.is_fixed_size():
             return sum(element.serialize(stream) for element in self.data)
-        # Variable-size elements: emit a table of LENGTH offsets, then the bodies.
-        return self._write_variable_payload(stream, self.LENGTH)
+        return self._write_variable_payload(stream)
 
     @classmethod
     @override
@@ -462,102 +435,76 @@ class Vector[T: SSZType](_SSZSequence[T]):
         """
         Read one vector from a binary stream within the given byte budget.
 
-        Two cases mirror the encoder:
-
-        - Fixed-size elements: scope equals LENGTH times the element byte width.
-        - Variable-size elements: a LENGTH-wide offset table precedes the bodies.
-
         Raises:
-            SSZSerializationError: When scope or any offset is inconsistent.
+            SSZScopeError: When a fixed-size budget is not the exact width.
+            SSZSerializationError: When the budget or any offset is inconsistent.
         """
-        # Fixed-size case: elements pack back-to-back at a known stride.
-        # The byte budget must match LENGTH times the element width exactly.
+        # Fixed-size case: the budget is the element width times the count, exactly.
         if cls.is_fixed_size():
             element_byte_length = cls.ELEMENT_TYPE.get_byte_length()
             expected_total = element_byte_length * cls.LENGTH
             if scope != expected_total:
                 raise SSZScopeError(cls.__name__, expected_total, scope)
-            elements = [
-                cls.ELEMENT_TYPE.deserialize(stream, element_byte_length) for _ in range(cls.LENGTH)
-            ]
-            return cls(data=elements)
+            return cls.model_construct(
+                _fields_set={"data"},
+                data=[
+                    cls.ELEMENT_TYPE.deserialize(stream, element_byte_length)
+                    for _ in range(cls.LENGTH)
+                ],
+            )
 
-        # Variable-size case: read the full offset table, then slice each body.
-        #
-        # Scope must cover at least the offset table itself.
-        # The first offset must then equal the table's own byte width.
-        # Scope is appended as the final boundary so pairwise iteration yields every span.
+        # Variable-size case: the count is known, so the table's width is known too.
         expected_first = cls.LENGTH * BYTES_PER_LENGTH_OFFSET
         if scope < expected_first:
             raise SSZSerializationError(
                 f"{cls.__name__}: scope {scope} too small, expected at least {expected_first}"
             )
-        offsets = [
-            int(Uint32.deserialize(stream, BYTES_PER_LENGTH_OFFSET)) for _ in range(cls.LENGTH)
-        ]
+
+        # The declared length is positive, so there is always a first offset to read.
+        offsets = cls._read_offsets(stream, cls.LENGTH)
+
+        # The first body starts right after the table.
+        # Any other value leaves a gap or an overlap, so one value could encode twice.
         if offsets[0] != expected_first:
             raise SSZSerializationError(
                 f"{cls.__name__}: invalid offset {offsets[0]}, expected {expected_first}"
             )
-        offsets.append(scope)
-        _validate_offsets(offsets, scope, cls.__name__)
-
-        return cls(
-            data=[
-                cls.ELEMENT_TYPE.deserialize(stream, end - start)
-                for start, end in pairwise(offsets)
-            ]
-        )
+        return cls._read_bodies(stream, offsets, scope)
 
 
 class _SSZList[T: SSZType](_SSZSequence[T]):
     """
     Shared behavior for the two variable-length SSZ sequence shapes.
 
-    The bounded list and the progressive list both build on this base:
+    Both encode identically, and differ in exactly two places:
 
-    - A bounded list caps its element count at a declared limit.
-    - A progressive list accepts any element count.
-
-    The base carries the element field, and each shape carries its own count rule.
-
-    The wire format is identical for both:
-
-    - Fixed-size elements pack back-to-back, and the byte budget reveals the count.
-    - Variable-size elements are prefixed by an offset table that reveals the count.
-
-    They differ in exactly two places:
-
-    - The element-count rule, applied on construction and again on decode.
+    - The element-count rule, which is the bound each one declares, or none at all.
     - The Merkle tree shape, which lives in the merkleization module.
     """
 
-    @classmethod
-    def _reject_excess_elements(cls, count: int) -> None:
-        """
-        Reject an element count the type cannot hold.
-
-        A progressive list has no capacity, so it rejects nothing.
-        The bounded list overrides this with its capacity check.
-        """
-
     def append(self, value: T) -> None:
-        """Add one element at the end, validating it and the resulting length."""
+        """
+        Add one element at the end, coerced as construction coerces one.
+
+        Raises:
+            SSZLimitError: When the resulting count exceeds a declared capacity.
+        """
         self._begin_mutation()
+
+        # Coerced before the count is checked, so a bad value is reported as one.
         element = self._validate_element(value)
         self._validate_length(len(self.data) + 1)
-        self._mutable_data.append(element)
+        self._mutable_data.append(cast("T", element))
 
     def pop(self) -> T:
         """
         Remove and return the last element.
 
-        - Removing one can never breach a capacity.
-        - No shape offering this declares a fixed length.
-        - So the resulting length has nothing left to check.
+        Removing one can never breach a capacity.
+        No shape offering this pins a length, so the count has nothing to check.
 
         Raises:
-            IndexError: If the sequence is empty.
+            IndexError: When the sequence is empty.
         """
         self._begin_mutation()
         return self._mutable_data.pop()
@@ -572,43 +519,31 @@ class _SSZList[T: SSZType](_SSZSequence[T]):
         """
         Read the element or elements at a position, a range giving this same type.
 
-        A variable-length shape can hold any count up to its capacity, so a range
-        of its elements is a shorter value of that shape. Answering with one keeps
-        a range where it started:
+        A range of these shapes is a shorter value of the same shape.
+        Answering with one keeps a range where it started:
 
             queue[1:] + [item]        concatenates as the shape, not as a list
             state.queue = queue[1:]   assigns without naming the type again
-
-        This follows the host language, where a range of a list is a list and a
-        range of bytes is bytes. A fixed-length shape cannot do the same, because
-        a range of it holds the wrong number of elements to be that shape, so it
-        answers with a plain sequence.
-
-        The range is built through the constructor, so it revalidates.
         """
+        # A range goes through the constructor.
+        # So a bounded list still refuses one that would overflow it.
         if isinstance(index, slice):
             return type(self)(data=self.data[index])
         return self.data[index]
 
     def __add__(self, other: Any) -> Self:
-        """
-        Concatenate with another sequence and return a new instance.
-
-        The left operand decides the resulting type, whatever the right one is:
-
-        - Two sequences of different capacities concatenate into the left one's type.
-        - A bounded and a progressive sequence do too, and merkleize as that type.
-
-        The result is built through the constructor, so it revalidates.
-        A bounded list therefore still rejects a concatenation that overflows it.
-        """
+        """Concatenate with another sequence, the left operand deciding the type."""
         match other:
             case _SSZList():
                 new_data = (*self.data, *other.data)
             case list() | tuple():
                 new_data = (*self.data, *other)
+
+            # Anything else lets the right operand try the reflected operation.
             case _:
                 return NotImplemented
+
+        # Built through the constructor, so a bounded list still rejects an overflow.
         return type(self)(data=new_data)
 
     @classmethod
@@ -630,13 +565,12 @@ class _SSZList[T: SSZType](_SSZSequence[T]):
 
     @override
     def serialize(self, stream: IO[bytes]) -> int:
-        """Write the SSZ encoding to a binary stream and return the byte count."""
-        # Fixed-size elements pack back-to-back with no length prefix.
-        # The element count is recovered on decode from the wire scope.
+        """Write the SSZ encoding to a binary stream, and return the byte count."""
+        # No length prefix either way.
+        # The count is recovered on decode from the budget, or from the table.
         if self.ELEMENT_TYPE.is_fixed_size():
             return sum(element.serialize(stream) for element in self.data)
-        # Variable-size elements: emit a table sized for the runtime count, then bodies.
-        return self._write_variable_payload(stream, len(self.data))
+        return self._write_variable_payload(stream)
 
     @classmethod
     @override
@@ -644,26 +578,18 @@ class _SSZList[T: SSZType](_SSZSequence[T]):
         """
         Read one sequence from a binary stream within the given byte budget.
 
-        Three cases cover all valid inputs:
-
-        - Empty scope decodes to an empty sequence.
-        - Fixed-size elements: count equals scope divided by element width.
-        - Variable-size elements: the first offset locates bodies and reveals the count.
-
-        A declared capacity is enforced as soon as the count is known, before any
-        body is read. A shape without one is still bounded by the byte budget, so
-        it cannot be driven to allocate beyond its input.
+        A declared capacity is checked as soon as the count is known.
+        A shape without one is still bounded by the budget.
+        So neither can be driven to allocate beyond its input.
 
         Raises:
-            SSZSerializationError: When scope or any offset is malformed.
-            SSZValueError: When the recovered count exceeds a declared capacity.
+            SSZSerializationError: When the budget or any offset is malformed.
+            SSZLimitError: When the recovered count exceeds a declared capacity.
         """
-        # Empty case: any zero-byte payload decodes to an empty sequence.
         if scope == 0:
-            return cls(data=())
+            return cls.model_construct(_fields_set={"data"}, data=[])
 
-        # Fixed-size case: elements pack back-to-back at a known stride.
-        # The count is recovered by dividing the byte budget by the element width.
+        # Fixed-size case: the count is the budget divided by the element width.
         if cls.ELEMENT_TYPE.is_fixed_size():
             element_size = cls.ELEMENT_TYPE.get_byte_length()
             if scope % element_size != 0:
@@ -671,177 +597,96 @@ class _SSZList[T: SSZType](_SSZSequence[T]):
                     f"{cls.__name__}: scope {scope} not divisible by element size {element_size}"
                 )
             num_elements = scope // element_size
-            # The count is checked here rather than left to the constructor so that an
-            # over-capacity payload reports its capacity, not whatever the offsets
-            # derived from that count happen to look like.
-            cls._reject_excess_elements(num_elements)
-            elements = [
-                cls.ELEMENT_TYPE.deserialize(stream, element_size) for _ in range(num_elements)
-            ]
-            return cls(data=elements)
 
-        # Variable-size case: the first offset reveals both where bodies begin
-        # and the element count (the offset width divides the table width).
+            # Checked here, so an over-capacity payload reports the capacity it broke.
+            cls._validate_length(num_elements)
+            return cls.model_construct(
+                _fields_set={"data"},
+                data=[
+                    cls.ELEMENT_TYPE.deserialize(stream, element_size) for _ in range(num_elements)
+                ],
+            )
+
+        # Variable-size case: the first offset is the table's own width.
+        # So it gives both where the bodies begin and how many there are.
         if scope < BYTES_PER_LENGTH_OFFSET:
             raise SSZSerializationError(
-                f"{cls.__name__}: scope {scope} too small for variable-size list"
+                f"{cls.__name__}: scope {scope} too small, "
+                f"expected at least {BYTES_PER_LENGTH_OFFSET}"
             )
-        first_offset = int(Uint32.deserialize(stream, BYTES_PER_LENGTH_OFFSET))
-        # A non-empty variable-size list carries at least one offset word before any body.
-        # A zero first offset is contradictory: it means zero elements yet one full-scope element.
-        if (
-            first_offset < BYTES_PER_LENGTH_OFFSET
-            or first_offset > scope
-            or first_offset % BYTES_PER_LENGTH_OFFSET != 0
-        ):
-            raise SSZSerializationError(f"{cls.__name__}: invalid offset {first_offset}")
+        first_offset = cls._read_offsets(stream, 1)[0]
+
+        # Zero is contradictory: no elements, yet one body spanning the whole budget.
+        if first_offset < BYTES_PER_LENGTH_OFFSET:
+            raise SSZSerializationError(
+                f"{cls.__name__}: first offset {first_offset} is below "
+                f"the table's own width of {BYTES_PER_LENGTH_OFFSET}"
+            )
+        if first_offset % BYTES_PER_LENGTH_OFFSET != 0:
+            raise SSZSerializationError(
+                f"{cls.__name__}: first offset {first_offset} is not a multiple "
+                f"of {BYTES_PER_LENGTH_OFFSET}"
+            )
+        if first_offset > scope:
+            raise SSZSerializationError(
+                f"{cls.__name__}: first offset {first_offset} runs past the scope of {scope}"
+            )
+
         num_elements = first_offset // BYTES_PER_LENGTH_OFFSET
-        cls._reject_excess_elements(num_elements)
+        cls._validate_length(num_elements)
 
-        # Read the remaining offsets, append scope as the final boundary,
-        # then pairwise-iterate the boundary list to yield each body's byte span.
-        offsets = [
-            first_offset,
-            *(
-                int(Uint32.deserialize(stream, BYTES_PER_LENGTH_OFFSET))
-                for _ in range(num_elements - 1)
-            ),
-            scope,
-        ]
-        _validate_offsets(offsets, scope, cls.__name__)
-
-        return cls(
-            data=[
-                cls.ELEMENT_TYPE.deserialize(stream, end - start)
-                for start, end in pairwise(offsets)
-            ]
-        )
+        # The first offset is read already, so only the rest of the table remains.
+        offsets = [first_offset, *cls._read_offsets(stream, num_elements - 1)]
+        return cls._read_bodies(stream, offsets, scope)
 
 
 class List[T: SSZType](_SSZList[T]):
     """
-    Variable-length SSZ sequence with a maximum capacity.
-
-    Holds between zero and LIMIT elements of one declared type.
-    The element count is set at construction time and varies between instances.
-
-    Two encoding shapes mirror the vector cases:
-
-    - Fixed-size elements pack back-to-back, count recovered from wire scope.
-    - Variable-size elements use an offset table that also reveals the count.
+    Variable-length SSZ sequence holding zero to LIMIT elements of one type.
 
     The hash tree root mixes in the element count alongside the chunked data.
 
-    A declared capacity reaches the root only through the width of the tree it bounds.
+    A capacity reaches the root only through the width of the tree it bounds.
+    That width is the next power of two at or above the capacity in chunks.
+    Two capacities rounding to the same width root the same contents identically.
+    Eight-byte elements pack four to a chunk, so a capacity of three roots as four.
 
-    - That width is the next power of two at or above the capacity counted in chunks.
-    - Two capacities that round to the same width bound the same tree.
-    - The same contents then root identically under both.
-    - Eight-byte elements pack four to a chunk, so a capacity of three roots as four does.
-    - So do twelve and sixteen, whose three chunks and four fill one four-leaf tree.
-
-    Subclasses declare LIMIT directly in the class body.
-    The element type is inferred from the generic parameter.
-
-    For example, three Uint16 values under a limit of eight encode as six bytes:
-
-        bytes 0..1 : bb aa   (= 0xAABB, little-endian, no length prefix)
-        bytes 2..3 : ad c0   (= 0xC0AD)
-        bytes 4..5 : ff ee   (= 0xEEFF)
-
-    Two variable-size bodies of widths 4 and 6 encode to 18 bytes:
-
-        bytes 0..3   : off_0 = 8    (first body starts at byte 8)
-        bytes 4..7   : off_1 = 12   (second body starts at byte 12)
-        bytes 8..11  : body_0       (4 bytes)
-        bytes 12..17 : body_1       (6 bytes)
+    Subclasses declare their limit in the class body.
+    The element type comes from the generic parameter.
     """
 
     LIMIT: ClassVar[int]
     """Maximum number of elements allowed."""
 
-    @field_validator("data", mode="before")
-    @classmethod
-    def _coerce_and_validate(cls, raw_input: Any) -> list[SSZType]:
-        """
-        Enforce the maximum element count and coerce inputs into ELEMENT_TYPE.
-
-        Three rejections happen before coercion:
-
-        - Misconfigured subclasses without ELEMENT_TYPE or LIMIT fail.
-        - String and bytes inputs are rejected to avoid silent character iteration.
-        - Non-iterable inputs fail fast with a descriptive message.
-
-        Each element passes through the declared type's constructor on coercion.
-        Failures re-raise with the high-level expectation in the message.
-        The chained cause preserves the underlying coercion detail.
-        """
-        # Subclasses must declare both annotations before any instance can validate.
-        if not hasattr(cls, "ELEMENT_TYPE") or cls.LIMIT is None:
-            raise SSZDefinitionError(cls.__name__, "ELEMENT_TYPE and LIMIT")
-
-        # Reject strings and non-iterables, then materialize into a sequence.
-        input_elements = cls._shape_input(raw_input)
-
-        # Variable-length type: any count is fine, up to LIMIT.
-        if len(input_elements) > cls.LIMIT:
-            raise SSZLimitError(cls.__name__, cls.LIMIT, len(input_elements))
-
-        return _coerce_elements(cls.ELEMENT_TYPE, input_elements)
-
     @classmethod
     @override
-    def _reject_excess_elements(cls, count: int) -> None:
+    def _check_declaration(cls) -> None:
         """
-        Reject a count above the declared capacity.
+        A bounded list also needs the bound it enforces.
 
         Raises:
-            SSZValueError: When the count exceeds the declared capacity.
+            SSZDefinitionError: When the element type or the limit was never declared.
         """
-        if count > cls.LIMIT:
-            raise SSZLimitError(cls.__name__, cls.LIMIT, count)
+        if not hasattr(cls, "ELEMENT_TYPE") or cls.LIMIT is None:
+            raise SSZDefinitionError(cls.__name__, "ELEMENT_TYPE and LIMIT")
 
 
 class ProgressiveList[T: SSZType](_SSZList[T]):
     """
     Variable-length SSZ sequence with no capacity, per EIP-7916.
 
-    Any number of elements of one declared type, encoded like a bounded list:
+    It encodes to the same bytes as a bounded list, and only the Merkle trees differ.
 
-    - Fixed-size elements pack back-to-back with no length prefix.
-    - Variable-size elements are prefixed by an offset table.
-
-    So the two encode to the same bytes, and only their Merkle trees differ.
     A bounded list pads its tree to the depth its limit needs.
-    One eight-byte element under a 1024-element limit spans 256 chunks, so it costs
-    8 hashes rather than 1.
-    This shape grows its tree with the data instead:
+    One eight-byte element under a 1024-element limit spans 256 chunks.
+    That costs 8 hashes rather than 1, and this shape grows with the data instead:
 
     - A short list hashes through a shallow tree.
     - An element keeps its position however many follow it, so proofs survive growth.
     - No capacity is guessed up front, so none can be outgrown or redefined later.
 
-    The merkleization module builds that tree.
-
-    The element type is the only declaration, so the type is usable inline, written
-    the way the SSZ spec writes it:
+    The element type is the only declaration this shape needs.
+    That is why its body holds nothing else, and why it is usable inline:
 
         ProgressiveList[Uint16](data=[1, 2, 3])
-
-    A named subclass is equivalent, and reads better when the type recurs:
-
-        class Uint16ProgressiveList(ProgressiveList[Uint16]):
-            pass
     """
-
-    @field_validator("data", mode="before")
-    @classmethod
-    def _coerce_and_validate(cls, raw_input: Any) -> list[SSZType]:
-        """Coerce every input into the declared element type, with no count rule to apply."""
-        # The element type is the one declaration this shape needs, and coercion needs it.
-        if not hasattr(cls, "ELEMENT_TYPE"):
-            raise SSZDefinitionError(cls.__name__, "ELEMENT_TYPE")
-
-        # Shaping rejects strings and non-iterables, then materializes a sequence.
-        # No capacity check follows, because every count this shape holds is valid.
-        return _coerce_elements(cls.ELEMENT_TYPE, cls._shape_input(raw_input))

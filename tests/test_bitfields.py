@@ -928,3 +928,21 @@ def test_progressive_and_bounded_bitlist_encode_identically(bits: list[bool]) ->
     progressive_bytes = ProgressiveBitList(data=typed_bits).encode_bytes()
 
     assert progressive_bytes == BitList8(data=typed_bits).encode_bytes()
+
+
+class TestBitVectorInputShapes:
+    """A bitvector answers the "which iterables may become contents" question once."""
+
+    @pytest.mark.parametrize("rejected", ["0101", b"\x01\x00\x01\x00", bytearray(b"\x01\x00")])
+    def test_instantiation_from_str_or_bytes_raises(self, rejected: Any) -> None:
+        """Strings and byte buffers are iterable, but their items are not bits."""
+        # Iterating four bytes yields four ints, so bytes would silently pass for bits
+        # and a byte count would be read as a bit count.
+        #
+        # The bounded and progressive bitlists refuse these already, so refusing them
+        # here is what makes one question have one answer across the three shapes.
+        type_name = type(rejected).__name__
+        with pytest.raises((SSZTypeError, ValidationError)) as exception_info:
+            BitVector4(data=rejected)
+
+        assert str(exception_info.value) == f"Expected iterable, got {type_name}"

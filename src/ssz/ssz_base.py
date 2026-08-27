@@ -622,7 +622,43 @@ class SSZCollection[T](SSZModel, Sequence[T]):
         """
         return cast("list[T]", self.data)
 
-    def _validate_element(self, value: Any) -> Any:
+    @classmethod
+    def _input_expectation(cls) -> str:
+        """
+        How this shape names the input it accepts, for the error a refusal raises.
+
+        A shape declaring an element type names it, since "iterable of Uint8" tells a
+        caller more than "iterable" does. One binding its element type in advance has
+        no name to add, and keeps the bare word.
+        """
+        return "iterable"
+
+    @classmethod
+    def _shape_input(cls, raw_input: Any) -> Sequence[Any]:
+        """
+        Normalize a validator input into a length-checkable sequence.
+
+        Accept the natural input shapes:
+
+        - list or tuple        pass through directly.
+        - other iterables      materialize into a list so the length check works.
+        - str, bytes, bytearray  rejected — iterating yields characters or ints.
+
+        The count rule is applied to the returned sequence by the caller.
+
+        Raises:
+            SSZTypeMismatch: When the input is a string, bytes, or non-iterable.
+        """
+        if isinstance(raw_input, (list, tuple)):
+            return raw_input
+        if isinstance(raw_input, (str, bytes, bytearray)):
+            raise SSZTypeMismatch(cls._input_expectation(), type(raw_input))
+        if hasattr(raw_input, "__iter__"):
+            return list(raw_input)
+        raise SSZTypeMismatch("iterable", type(raw_input))
+
+    @classmethod
+    def _validate_element(cls, value: Any) -> Any:
         """
         Validate one incoming element by the family's construction rule.
 
@@ -631,9 +667,19 @@ class SSZCollection[T](SSZModel, Sequence[T]):
         """
         raise NotImplementedError
 
-    def _validate_length(self, length: int) -> None:
-        """Check a prospective element count against the declared size bound."""
-        cls = type(self)
+    @classmethod
+    def _validate_length(cls, length: int) -> None:
+        """
+        Check a prospective element count against whatever bound the shape declares.
+
+        A shape pinning an exact count declares LENGTH; one bounding it declares LIMIT;
+        a progressive shape declares neither and accepts any count. So this one rule
+        covers every collection, and no shape needs a count check of its own.
+
+        Raises:
+            SSZLengthError: When a pinned count is not met exactly.
+            SSZLimitError: When a bounded count is exceeded.
+        """
         if cls.LENGTH is not None and length != cls.LENGTH:
             raise SSZLengthError(cls.__name__, cls.LENGTH, length)
         if cls.LIMIT is not None and length > cls.LIMIT:

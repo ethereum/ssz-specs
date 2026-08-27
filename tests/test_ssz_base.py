@@ -425,9 +425,10 @@ class TestSSZCollectionMutation:
 
     def test_base_collection_leaves_element_validation_abstract(self) -> None:
         """The shared base defers single-element validation to each family."""
-        values = Uint16List4(data=[])
+        # The rule depends on the declared element type, never on the value holding it,
+        # so the base declares it as a classmethod and each family fills it in.
         with pytest.raises(NotImplementedError):
-            SSZCollection._validate_element(values, 1)
+            SSZCollection._validate_element(1)
 
 
 class TestSliceWriteCount:
