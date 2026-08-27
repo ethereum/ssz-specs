@@ -366,12 +366,8 @@ class TestSSZCollectionMutation:
     )
     def test_popping_an_empty_collection_is_refused(self, shape: Any) -> None:
         """An empty collection has no last element, so the store refuses."""
-        # No size bound can reject the count a pop would leave behind.
-        #
-        #     a capacity  : shrinking stays under an upper bound, whatever it is
-        #     a fixed size: never declared by a shape that offers the hook at all
-        #
-        # So the refusal is the store's own, and it is the one indexing already gives.
+        # Shrinking breaches no bound, so nothing rejects the count a pop would leave.
+        # The refusal is the store's own, and it is the one indexing already gives.
         empty = shape()
         with pytest.raises(IndexError):
             empty.pop()
@@ -392,8 +388,7 @@ class TestSSZCollectionMutation:
         # A tuple is accepted here only because the declared type is the wider one.
         values = shape(data=contents)
 
-        # Validation returns a list whatever it was handed, so a list is what is held.
-        # That is what lets a mutator append to the contents and pop from them.
+        # Validation returns a list whatever it was handed, which is what a mutator writes through.
         assert type(values.data) is list
 
         values.append(contents[0])
