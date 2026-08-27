@@ -35,10 +35,9 @@ class _Omitted(Enum):
     """
     Marks a constructor argument that was never passed.
 
-    A byte array cannot use a plain value to mean this, since every value it accepts is a
-    legal input.
-
-    A single-member enum is the spelling that a type checker narrows.
+    - The default depends on the declared width, so no signature default can hold it.
+    - Zero bytes stays a byte-count error, so the one in-domain candidate is unavailable.
+    - A single-member enum is the one sentinel spelling a type checker narrows.
     """
 
     TOKEN = "omitted"
