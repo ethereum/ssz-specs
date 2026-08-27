@@ -285,19 +285,23 @@ class _SSZBitList(SSZCollection[Boolean]):
 
     def __add__(self, other: Any) -> Self:
         """
-        Concatenate with another bit sequence.
+        Concatenate with another bit sequence and return a new instance.
 
         The left operand decides the resulting type, whatever the right one is:
 
         - Two bitlists of different capacities concatenate into the left one's type.
         - A bounded and a progressive bitlist do too, and merkleize as that type.
+
+        The result is built through the constructor, so every bit is wrapped there.
+        A bounded bitlist therefore still rejects a concatenation that overflows it.
         """
-        if isinstance(other, _SSZBitList):
-            new_data = (*self.data, *other.data)
-        elif isinstance(other, (list, tuple)):
-            new_data = (*self.data, *(Boolean(b) for b in other))
-        else:
-            return NotImplemented
+        match other:
+            case _SSZBitList():
+                new_data = (*self.data, *other.data)
+            case list() | tuple():
+                new_data = (*self.data, *other)
+            case _:
+                return NotImplemented
         return type(self)(data=new_data)
 
     @classmethod
