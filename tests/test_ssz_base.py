@@ -359,6 +359,47 @@ class TestSSZCollectionMutation:
         assert values.pop() == Uint16(2)
         assert values == Uint16List4(data=[Uint16(1)])
 
+    @pytest.mark.parametrize(
+        "shape",
+        [Uint16List4, Uint16ProgressiveList, SmallBitList, ProgressiveBitList],
+        ids=["list", "progressive list", "bitlist", "progressive bitlist"],
+    )
+    def test_popping_an_empty_collection_is_refused(self, shape: Any) -> None:
+        """An empty collection has no last element, so the store refuses."""
+        # No size bound can reject the count a pop would leave behind.
+        #
+        #     a capacity  : shrinking stays under an upper bound, whatever it is
+        #     a fixed size: never declared by a shape that offers the hook at all
+        #
+        # So the refusal is the store's own, and it is the one indexing already gives.
+        empty = shape()
+        with pytest.raises(IndexError):
+            empty.pop()
+        assert len(empty) == 0
+
+    @pytest.mark.parametrize(
+        ("shape", "contents"),
+        [
+            (Uint16List4, (Uint16(1), Uint16(2))),
+            (SmallBitList, (Boolean(True), Boolean(False))),
+        ],
+        ids=["list", "bitlist"],
+    )
+    def test_a_tuple_input_is_stored_as_the_list_mutation_writes_through(
+        self, shape: Any, contents: tuple[Any, ...]
+    ) -> None:
+        """The contents are declared a sequence to accept any iterable, and stored as a list."""
+        # A tuple is accepted here only because the declared type is the wider one.
+        values = shape(data=contents)
+
+        # Validation returns a list whatever it was handed, so a list is what is held.
+        # That is what lets a mutator append to the contents and pop from them.
+        assert type(values.data) is list
+
+        values.append(contents[0])
+        assert values.pop() == contents[0]
+        assert values == shape(data=contents)
+
     def test_byte_list_setitem_replaces_byte(self) -> None:
         """Byte lists mutate by integer byte value."""
         payload = SmallByteList(data=b"\xde\xad")
