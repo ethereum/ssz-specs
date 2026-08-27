@@ -22,6 +22,7 @@ from ssz import (
     ProgressiveContainer,
     ProgressiveList,
     Root,
+    SSZActiveFieldsError,
     SSZType,
     SSZTypeError,
     SSZValueError,
@@ -701,6 +702,55 @@ class TestGeneralizedIndexPerShape:
         # With position 1 vacant, the second field moves to position 2 and keeps its index.
         assert get_generalized_index(GappedSpine, "first") == 4
         assert get_generalized_index(GappedSpine, "third") == 41
+
+    def test_an_index_follows_a_layout_reassigned_after_the_type_was_declared(self) -> None:
+        """A layout is a class attribute, so it can be rewritten, and the index has to follow."""
+        # Where a field is hashed is not a property of the type.
+        # A type only holds whatever layout it is holding now.
+
+        class Reassigned(ProgressiveContainer):
+            ACTIVE_FIELDS = (1, 0, 1)
+
+            head: Uint16
+            tail: Uint8
+
+        assert get_generalized_index(Reassigned, "head") == 4
+        assert get_generalized_index(Reassigned, "tail") == 41
+
+        # The same two fields, each moved one position along.
+        Reassigned.ACTIVE_FIELDS = (0, 1, 1)
+        assert get_generalized_index(Reassigned, "head") == 40
+        assert get_generalized_index(Reassigned, "tail") == 41
+
+    @pytest.mark.parametrize(
+        "reassigned_layout, expected_counts",
+        [
+            pytest.param(
+                (1, 1, 1), "sets 3 positions, and the struct declares 2", id="position_gained"
+            ),
+            pytest.param((1,), "sets 1 positions, and the struct declares 2", id="position_lost"),
+        ],
+    )
+    def test_a_layout_that_stopped_pairing_with_the_fields_is_refused_by_name(
+        self, reassigned_layout: tuple[int, ...], expected_counts: str
+    ) -> None:
+        """An index is refused wherever a root would be, and for the same reason."""
+        # An index for a value that cannot be rooted is worse than a refusal.
+
+        class Drifted(ProgressiveContainer):
+            ACTIVE_FIELDS = (1, 0, 1)
+
+            head: Uint16
+            tail: Uint8
+
+        Drifted.ACTIVE_FIELDS = reassigned_layout
+        with pytest.raises(
+            SSZActiveFieldsError,
+            match=rf"^Drifted: invalid active fields, the layout {expected_counts}$",
+        ) as exception_info:
+            get_generalized_index(Drifted, "tail")
+        # The refusal carries the layout in force, not the one the declaration approved.
+        assert exception_info.value.active_fields == reassigned_layout
 
     def test_an_empty_path_names_the_root(self) -> None:
         """A path selecting nothing lands on the root, which no proof can address."""
