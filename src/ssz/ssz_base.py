@@ -589,6 +589,11 @@ class SSZCollection[T](SSZModel, Sequence[T]):
         """
         return self.data[index]
 
+    @overload
+    def __setitem__(self, index: int, value: T) -> None: ...
+    @overload
+    def __setitem__(self, index: slice, value: Sequence[T]) -> None: ...
+
     def __setitem__(self, index: int | slice, value: T | Sequence[T]) -> None:
         """Replace the element(s) at the index, validating each new element."""
         self._begin_mutation()

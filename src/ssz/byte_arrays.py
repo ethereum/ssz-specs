@@ -13,7 +13,7 @@ Both flavors serialize as the raw bytes themselves — no length prefix, no deli
 
 from collections.abc import Iterable, Sequence
 from enum import Enum
-from typing import IO, TYPE_CHECKING, Any, ClassVar, NoReturn, Self, override
+from typing import IO, TYPE_CHECKING, Any, ClassVar, NoReturn, Self, cast, overload, override
 
 from pydantic import Field, field_serializer, field_validator
 from pydantic.annotated_handlers import GetCoreSchemaHandler
@@ -409,12 +409,21 @@ class ByteList(SSZCollection[int]):
         else:  # pragma: no cover
             self.data = payload
 
+    @overload
+    def __setitem__(self, index: int, value: int) -> None: ...
+    @overload
+    def __setitem__(self, index: slice, value: Sequence[int]) -> None: ...
+
     @override
     def __setitem__(self, index: int | slice, value: int | Sequence[int]) -> None:
         """Replace the byte or bytes at a position, revalidating the stored payload."""
         self._begin_mutation()
         working = bytearray(self.data)
-        working[index] = value  # ty: ignore[invalid-assignment]
+        # Narrowing the position does not narrow the value, so each branch says which it holds.
+        if isinstance(index, slice):
+            working[index] = cast("Sequence[int]", value)
+        else:
+            working[index] = cast("int", value)
         self._store(working)
 
     def append(self, value: int) -> None:
