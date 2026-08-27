@@ -196,7 +196,9 @@ class BaseUint(int, SSZType):
         expected_length = cls.BYTE_LENGTH
         if len(data) != expected_length:
             raise SSZScopeError(cls.__name__, expected_length, len(data))
-        return cls(int.from_bytes(data, "little"))
+
+        # These bytes decode to a plain integer in range, which is all the constructor tests.
+        return cls._wrap(int.from_bytes(data, "little"))
 
     @override
     def serialize(self, stream: IO[bytes]) -> int:
@@ -226,10 +228,9 @@ class BaseUint(int, SSZType):
         # Ensure the correct number of bytes was read.
         if len(serialized_bytes) != byte_length:
             raise SSZScopeError(cls.__name__, byte_length, len(serialized_bytes))
-        # The width is settled twice over by this point.
-        # Wrapping here avoids the byte-string decoder, which would measure it a third time.
-        # A struct decodes one integer per integer field, so that is a call saved per field.
-        return cls(int.from_bytes(serialized_bytes, "little"))
+        # The width is settled twice over, so a third measure and a retest can only agree.
+        # A struct decodes one integer per integer field, so both are saved per field.
+        return cls._wrap(int.from_bytes(serialized_bytes, "little"))
 
     @classmethod
     def max_value(cls) -> Self:
