@@ -699,6 +699,12 @@ class TestBaseByteListMutation:
         assert str(exception_info.value) == message
         assert payload.data == b"\xde\xad"
 
+    def test_an_input_no_coercion_accepts_is_refused(self) -> None:
+        """The coercion the validator carries out refuses what no branch of it accepts."""
+        with pytest.raises(TypeError) as exception_info:
+            ByteList5(data=cast("Any", 42))
+        assert str(exception_info.value) == "Cannot coerce int to bytes"
+
     def test_popping_the_last_byte_of_an_empty_payload_is_refused(self) -> None:
         """An empty payload has no last byte, so the buffer refuses."""
         payload = ByteList16()
