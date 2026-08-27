@@ -248,10 +248,10 @@ class Boolean(int, SSZType):
 
     def __eq__(self, other: object) -> bool:
         """
-        Strict equality — only another boolean compares; anything else raises.
+        Strict equality.
 
-        Invariant: the bit is the whole of the value, so the hash below is the bit's hash.
-        A raw bool is still refused, which is the point of wrapping the bit at all.
+        - Only another boolean compares.
+        - A raw bool is refused like any other type.
 
         Raises:
             TypeError: If other is not a Boolean.
@@ -265,10 +265,10 @@ class Boolean(int, SSZType):
 
     def __ne__(self, other: object) -> bool:
         """
-        Strict inequality — only another boolean compares; anything else raises.
+        Strict inequality.
 
-        Defined explicitly because the parent class's not-equal would otherwise
-        bypass the strict equality above.
+        - Only another boolean compares.
+        - Defined explicitly because the parent class's not-equal bypasses strict equality.
 
         Raises:
             TypeError: If other is not a Boolean.
@@ -288,11 +288,9 @@ class Boolean(int, SSZType):
         """Return the user-facing form: True or False."""
         return str(bool(self))
 
-    # A boolean hashes as the bit it holds, because equality compares the bit alone.
-    # Defining equality would otherwise clear the inherited hash, so it is spelled out.
-    #
-    # A raw bool now shares a bucket, so a membership test reaches the refusal instead of
-    # answering False from an empty one.
+    # Defining equality clears the inherited hash.
+    # The bit is the whole value, so hashing it matches equality.
+    # A raw bool then shares a bucket, and a membership test reaches the refusal.
     __hash__ = int.__hash__
 
 
