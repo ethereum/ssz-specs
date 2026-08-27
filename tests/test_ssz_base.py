@@ -1039,6 +1039,12 @@ class TestDefaultValue:
         assert Uint16List4() == Uint16List4.default()
         assert SmallByteList() == SmallByteList.default()
 
+    def test_empty_builds_the_default_value(self) -> None:
+        """`empty` builds what `default` builds."""
+        assert Uint16List4.empty() == Uint16List4.default()
+        assert SmallBitList.empty() == SmallBitList.default()
+        assert TwoFieldContainer.empty() == TwoFieldContainer.default()
+
     def test_each_call_builds_a_new_value(self) -> None:
         """Values are mutable, so a default must never be cached and handed out twice."""
         first, second = Uint16List4.default(), Uint16List4.default()
