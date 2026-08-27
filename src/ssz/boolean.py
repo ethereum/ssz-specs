@@ -25,7 +25,7 @@ class Boolean(int, SSZType):
     - Arithmetic and the shifts are refused, a bit being nothing to count with.
     - Counting the set bits of a bitfield therefore runs over plain integers.
     - Bitwise ops (& | ^) reject operands of any other type.
-    - Equality rejects comparisons with anything but another boolean, and hashing agrees.
+    - Every comparison rejects anything but another boolean, and hashing agrees.
 
     Wire format:
 
@@ -387,6 +387,50 @@ class Boolean(int, SSZType):
         if isinstance(other, Boolean):
             return int(self) != int(other)
         self._raise_type_error(other, "!=")
+
+    def __lt__(self, other: Any) -> bool:
+        """
+        Strict less-than, ordering false below true.
+
+        Raises:
+            TypeError: If other is not a Boolean.
+        """
+        if isinstance(other, Boolean):
+            return int(self) < int(other)
+        self._raise_type_error(other, "<")
+
+    def __le__(self, other: Any) -> bool:
+        """
+        Strict less-than-or-equal, ordering false below true.
+
+        Raises:
+            TypeError: If other is not a Boolean.
+        """
+        if isinstance(other, Boolean):
+            return int(self) <= int(other)
+        self._raise_type_error(other, "<=")
+
+    def __gt__(self, other: Any) -> bool:
+        """
+        Strict greater-than, ordering true above false.
+
+        Raises:
+            TypeError: If other is not a Boolean.
+        """
+        if isinstance(other, Boolean):
+            return int(self) > int(other)
+        self._raise_type_error(other, ">")
+
+    def __ge__(self, other: Any) -> bool:
+        """
+        Strict greater-than-or-equal, ordering true above false.
+
+        Raises:
+            TypeError: If other is not a Boolean.
+        """
+        if isinstance(other, Boolean):
+            return int(self) >= int(other)
+        self._raise_type_error(other, ">=")
 
     def __repr__(self) -> str:
         """Return the official form: Boolean(True) or Boolean(False)."""
