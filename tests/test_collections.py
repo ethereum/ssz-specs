@@ -652,11 +652,23 @@ class TestListAccessors:
         assert instance[-1] == Uint8(30)
         assert instance[-3] == Uint8(10)
 
-    def test_slice_returns_sequence(self) -> None:
-        """Slicing returns the underlying list slice of typed elements."""
+    def test_slice_returns_its_own_type(self) -> None:
+        """Slicing returns a shorter value of the same shape."""
         instance = Uint8List4(data=[Uint8(1), Uint8(2), Uint8(3)])
 
-        assert instance[1:3] == [Uint8(2), Uint8(3)]
+        result = instance[1:3]
+
+        assert type(result) is Uint8List4
+        assert list(result) == [Uint8(2), Uint8(3)]
+
+    def test_slice_concatenates_as_its_own_type(self) -> None:
+        """A slice composes with concatenation without naming the type again."""
+        instance = Uint8List4(data=[Uint8(1), Uint8(2), Uint8(3)])
+
+        result = instance[1:] + [Uint8(9)]
+
+        assert type(result) is Uint8List4
+        assert list(result) == [Uint8(2), Uint8(3), Uint8(9)]
 
     def test_elements_returns_mutable_copy(self) -> None:
         """The elements property exposes a mutable list copy of the data."""
@@ -1141,11 +1153,23 @@ class TestProgressiveListAccessors:
         assert instance[-1] == Uint8(30)
         assert instance[-3] == Uint8(10)
 
-    def test_slice_returns_sequence(self) -> None:
-        """Slicing returns the underlying list slice of typed elements."""
+    def test_slice_returns_its_own_type(self) -> None:
+        """Slicing returns a shorter value of the same shape."""
         instance = Uint8ProgressiveList(data=[Uint8(1), Uint8(2), Uint8(3)])
 
-        assert instance[1:3] == [Uint8(2), Uint8(3)]
+        result = instance[1:3]
+
+        assert type(result) is Uint8ProgressiveList
+        assert list(result) == [Uint8(2), Uint8(3)]
+
+    def test_slice_concatenates_as_its_own_type(self) -> None:
+        """A slice composes with concatenation without naming the type again."""
+        instance = Uint8ProgressiveList(data=[Uint8(1), Uint8(2), Uint8(3)])
+
+        result = instance[1:] + [Uint8(9)]
+
+        assert type(result) is Uint8ProgressiveList
+        assert list(result) == [Uint8(2), Uint8(3), Uint8(9)]
 
     def test_elements_returns_mutable_copy(self) -> None:
         """The elements property exposes a mutable list copy of the data."""
