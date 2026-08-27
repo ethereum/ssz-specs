@@ -359,7 +359,6 @@ def get_path_indices(index: int) -> list[int]:
 
 def get_branch_indices(index: int) -> list[int]:
     """Siblings along the path from the given node to the root, which is its proof branch."""
-    _reject_unusable(index)
     return [gindex_sibling(step) for step in get_path_indices(index)]
 
 
@@ -385,8 +384,10 @@ def get_helper_indices(indices: Sequence[int]) -> list[int]:
     branches: set[int] = set()
     paths: set[int] = set()
     for index in indices:
-        branches |= set(get_branch_indices(index))
-        paths |= set(get_path_indices(index))
+        # A branch is the siblings of a path, so one walk upward yields both.
+        path = get_path_indices(index)
+        paths.update(path)
+        branches.update(gindex_sibling(step) for step in path)
     return sorted(branches - paths, reverse=True)
 
 
@@ -410,8 +411,9 @@ def _reject_related(indices: Sequence[int]) -> None:
     if len(seen) != len(indices):
         raise SSZValueError("a generalized index is repeated")
     for index in indices:
-        ancestors = set(get_path_indices(index)) - {index}
-        if ancestors & seen:
+        # A walk upward opens at the index itself, which is no ancestor of its own.
+        # One claimed ancestor is already too many, so the first one ends the search.
+        if any(ancestor in seen for ancestor in get_path_indices(index)[1:]):
             raise SSZValueError(f"{index} lies below another index in the same request")
 
 
@@ -578,7 +580,8 @@ def calculate_multi_merkle_root(
     if len(proof) != len(helpers):
         raise SSZValueError(f"this request needs {len(helpers)} proof nodes, got {len(proof)}")
 
-    nodes = dict(zip(indices, leaves, strict=True)) | dict(zip(helpers, proof, strict=True))
+    nodes = dict(zip(indices, leaves, strict=True))
+    nodes.update(zip(helpers, proof, strict=True))
     # Descending order reaches both children of a pair before their parent.
     pending = sorted(nodes, reverse=True)
     position = 0
