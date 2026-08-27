@@ -1,20 +1,37 @@
 """Tests for the reusable strict base model."""
 
 import pytest
-from pydantic import ValidationError
+from pydantic import ConfigDict, ValidationError
 
 from ssz.base import StrictBaseModel
 
 
 class StrictExample(StrictBaseModel):
-    """A strict model used to exercise the frozen, extra-forbid, and strict constraints."""
+    """A strict model used to exercise the extra-forbid and strict constraints."""
 
     first_value: int
 
 
-def test_strict_model_rejects_attribute_assignment() -> None:
-    """A frozen strict model raises when an attribute is reassigned after construction."""
+class FrozenExample(StrictBaseModel):
+    """A strict model that declares itself frozen, as each SSZ shape does."""
+
+    model_config = ConfigDict(frozen=True)
+
+    first_value: int
+
+
+def test_strict_model_accepts_attribute_assignment() -> None:
+    """The base states no frozen flag, leaving each shape to declare its own."""
     instance = StrictExample(first_value=1)
+
+    instance.first_value = 2
+
+    assert instance.first_value == 2
+
+
+def test_frozen_model_rejects_attribute_assignment() -> None:
+    """A model that declares itself frozen raises when an attribute is reassigned."""
+    instance = FrozenExample(first_value=1)
     with pytest.raises(ValidationError):
         instance.first_value = 2
 

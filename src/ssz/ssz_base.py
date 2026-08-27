@@ -388,6 +388,10 @@ class SSZModel(StrictBaseModel, SSZType):
     MUTABLE: ClassVar[bool] = True
     """Whether instances accept mutation. Set False on a subclass to freeze it."""
 
+    def __hash__(self) -> int:
+        """Hash by Merkle tree root, which is what equality compares."""
+        return hash(self.hash_tree_root())
+
     def _begin_mutation(self) -> None:
         """
         Admit one mutation, refusing it outright on an immutable type.
@@ -500,7 +504,7 @@ class SSZCollection[T](SSZModel, Sequence[T]):
     though runtime validation coerces them exactly as construction does.
     """
 
-    model_config = ConfigDict(frozen=False, validate_assignment=True)
+    model_config = ConfigDict(validate_assignment=True)
 
     data: Sequence[T]
     """The contents, declared with its concrete type and default by each subclass."""

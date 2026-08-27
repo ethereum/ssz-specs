@@ -3,7 +3,7 @@
 from collections.abc import Mapping
 from typing import IO, Any, ClassVar, Final, Self, override
 
-from pydantic import model_validator
+from pydantic import ConfigDict, model_validator
 
 from ssz.bitfields import BitList, BitVector, ProgressiveBitList
 from ssz.boolean import Boolean
@@ -274,6 +274,8 @@ class CompatibleUnion(SSZModel):
 
     They are a class attribute here, as a vector's length and a list's limit are.
     """
+
+    model_config = ConfigDict(frozen=True)
 
     OPTIONS: ClassVar[Mapping[int, type[SSZType]]]
     """Selector to type option, one entry per variant the union admits."""
