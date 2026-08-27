@@ -201,19 +201,34 @@ class Boolean(int, SSZType):
             raise SSZSerializationError(f"Boolean: expected scope of 1, got {scope}")
         return cls.decode_bytes(stream.read(1))
 
-    def _no_arithmetic(self, other: Any) -> NoReturn:
-        """Reject arithmetic on Boolean — use bitwise & | ^ instead."""
-        raise TypeError("Arithmetic operations are not supported for Boolean.")
+    @classmethod
+    def _raise_type_error(cls, other: Any, op_symbol: str) -> NoReturn:
+        """Helper to raise a consistent TypeError."""
+        raise TypeError(
+            f"Unsupported operand type(s) for {op_symbol}: "
+            f"'{cls.__name__}' and '{type(other).__name__}'"
+        )
 
-    __add__ = __radd__ = __sub__ = __rsub__ = _no_arithmetic
+    def __add__(self, other: Any) -> NoReturn:
+        """Forward addition, which no operand is admitted for."""
+        self._raise_type_error(other, "+")
+
+    def __radd__(self, other: Any) -> NoReturn:
+        """Reverse addition, which no operand is admitted for."""
+        self._raise_type_error(other, "+")
+
+    def __sub__(self, other: Any) -> NoReturn:
+        """Forward subtraction, which no operand is admitted for."""
+        self._raise_type_error(other, "-")
+
+    def __rsub__(self, other: Any) -> NoReturn:
+        """Reverse subtraction, which no operand is admitted for."""
+        self._raise_type_error(other, "-")
 
     def __and__(self, other: Any) -> Self:
         """Bitwise AND between two booleans — rejects any other operand."""
         if not isinstance(other, type(self)):
-            raise TypeError(
-                f"Unsupported operand type(s) for &: "
-                f"'{type(self).__name__}' and '{type(other).__name__}'"
-            )
+            self._raise_type_error(other, "&")
         return type(self)(int(self) & int(other))
 
     def __rand__(self, other: Any) -> Self:
@@ -223,10 +238,7 @@ class Boolean(int, SSZType):
     def __or__(self, other: Any) -> Self:
         """Bitwise OR between two booleans — rejects any other operand."""
         if not isinstance(other, type(self)):
-            raise TypeError(
-                f"Unsupported operand type(s) for |: "
-                f"'{type(self).__name__}' and '{type(other).__name__}'"
-            )
+            self._raise_type_error(other, "|")
         return type(self)(int(self) | int(other))
 
     def __ror__(self, other: Any) -> Self:
@@ -236,10 +248,7 @@ class Boolean(int, SSZType):
     def __xor__(self, other: Any) -> Self:
         """Bitwise XOR between two booleans — rejects any other operand."""
         if not isinstance(other, type(self)):
-            raise TypeError(
-                f"Unsupported operand type(s) for ^: "
-                f"'{type(self).__name__}' and '{type(other).__name__}'"
-            )
+            self._raise_type_error(other, "^")
         return type(self)(int(self) ^ int(other))
 
     def __rxor__(self, other: Any) -> Self:
@@ -256,12 +265,9 @@ class Boolean(int, SSZType):
         Raises:
             TypeError: If other is not a Boolean.
         """
-        if not isinstance(other, Boolean):
-            raise TypeError(
-                f"Unsupported operand type(s) for ==: "
-                f"'{type(self).__name__}' and '{type(other).__name__}'"
-            )
-        return int(self) == int(other)
+        if isinstance(other, Boolean):
+            return int(self) == int(other)
+        self._raise_type_error(other, "==")
 
     def __ne__(self, other: object) -> bool:
         """
@@ -273,12 +279,9 @@ class Boolean(int, SSZType):
         Raises:
             TypeError: If other is not a Boolean.
         """
-        if not isinstance(other, Boolean):
-            raise TypeError(
-                f"Unsupported operand type(s) for !=: "
-                f"'{type(self).__name__}' and '{type(other).__name__}'"
-            )
-        return int(self) != int(other)
+        if isinstance(other, Boolean):
+            return int(self) != int(other)
+        self._raise_type_error(other, "!=")
 
     def __repr__(self) -> str:
         """Return the official form: Boolean(True) or Boolean(False)."""
