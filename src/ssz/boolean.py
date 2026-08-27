@@ -31,8 +31,6 @@ class Boolean(int, SSZType):
         false  ->  b"\x00"
     """
 
-    __slots__ = ()
-
     _INTERNED: ClassVar[tuple[Any, ...]] = ()
     """The two values of this class, one shared instance each.
 
