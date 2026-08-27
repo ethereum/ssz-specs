@@ -13,7 +13,7 @@ Both flavors serialize as the raw bytes themselves — no length prefix, no deli
 
 from collections.abc import Iterable, Sequence
 from enum import Enum
-from typing import IO, TYPE_CHECKING, Any, ClassVar, NoReturn, Self, cast, overload, override
+from typing import IO, Any, ClassVar, NoReturn, Self, cast, overload, override
 
 from pydantic import Field, field_serializer, field_validator
 from pydantic.annotated_handlers import GetCoreSchemaHandler
@@ -386,20 +386,14 @@ class ByteList(SSZCollection[int]):
         """
         Store mutated bytes, checking the byte count and nothing else.
 
-        Assigning to the field would re-coerce a payload that is already bytes.
+        The field validates on assignment, so the entry is written directly and marked set.
 
         Raises:
             SSZLimitError: When the mutation leaves more bytes than the limit allows.
         """
         self._validate_length(len(working))
-        payload = bytes(working)
-        # A type checker reads this field through an inherited sequence declaration, so the
-        # assignment spelling is kept for it and the dictionary write for the runtime.
-        if not TYPE_CHECKING:
-            self.__dict__["data"] = payload
-            self.__pydantic_fields_set__.add("data")
-        else:  # pragma: no cover
-            self.data = payload
+        self.__dict__["data"] = bytes(working)
+        self.__pydantic_fields_set__.add("data")
 
     @overload
     def __setitem__(self, index: int, value: int) -> None: ...
