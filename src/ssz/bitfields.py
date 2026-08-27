@@ -399,10 +399,11 @@ class _SSZBitList(SSZCollection[Boolean]):
 
         # Overview
 
-        - The highest set bit in the input is the delimiter.
+        - The highest set bit in the input is the delimiter, and it sits in the final byte.
         - Bits below it are data.
-        - Bits above it are zero padding.
-        - Empty input is invalid (the empty bitlist still encodes as one byte, 0x01).
+        - The rest of that final byte is zero padding, seven bits of it at most.
+        - Whole zero bytes past the delimiter byte are refused, so a value has one encoding.
+        - Empty input is invalid, the empty bitlist still encoding as one byte, 0x01.
 
         # Integer interpretation
 
@@ -412,9 +413,9 @@ class _SSZBitList(SSZCollection[Boolean]):
             byte 1 bit j  ->  integer bit (8 + j)
             byte k bit j  ->  integer bit (8 * k + j)
 
-        For example, data = [0b00000101, 0b00000010]:
+        For example, the two bytes 0b00000101 and 0b00000010:
 
-            int.from_bytes(data, "little")  =  0b1000000101
+            read as one integer  =  0b1000000101
 
             byte 0 bit 0 (=1)  ->  integer bit 0
             byte 0 bit 2 (=1)  ->  integer bit 2
@@ -429,8 +430,9 @@ class _SSZBitList(SSZCollection[Boolean]):
             A bitlist instance with the recovered data bits.
 
         Raises:
-            SSZSerializationError: If the input is empty or contains no 1 bits.
-            SSZValueError: If the recovered bit count exceeds a declared capacity.
+            SSZSerializationError: If the input is empty, holds no 1 bits, or carries zero
+                bytes past the one holding the delimiter.
+            SSZLimitError: If the recovered bit count exceeds a declared capacity.
         """
         # Phase 1: reject empty input.
         #
@@ -438,23 +440,19 @@ class _SSZBitList(SSZCollection[Boolean]):
         if len(data) == 0:
             raise SSZSerializationError(f"{cls.__name__}: cannot decode empty bytes")
 
-        # Phase 2: locate the delimiter — the topmost 1 in the entire byte stream.
+        # Phase 2: locate the delimiter, and require it to sit in the final byte.
         #
-        #   - int.from_bytes(data, "little")   reads the stream as one little-endian integer.
-        #   - bit_length()                     1-indexed position of its highest set bit.
-        #   - bit_length() - 1                 0-indexed delimiter position in the stream.
+        # Read as one little-endian integer, the input holds every bit at its stream position.
+        # Its highest set bit is therefore the delimiter.
         #
-        # Example A: data = [0b00001101]  (encoding of bits [1, 0, 1])
+        # Example: the single byte 0b00001101, the encoding of the three bits [1, 0, 1].
         #
-        #   int.from_bytes(data, "little")  =  13   =  0b00001101
-        #   bit_length()                    =  4
-        #   delimiter_pos                   =  3      ->  num_bits = 3
+        #     bit position :  7 6 5 4  3  2 1 0
+        #     byte 0       :  0 0 0 0 [1] 1 0 1
+        #                              ^ the delimiter, at position 3, so three data bits
         #
-        # Example B: data = [0b11111111, 0b00000001]  (encoding of bits [1] * 8)
-        #
-        #   int.from_bytes(data, "little")  =  511  =  0b111111111
-        #   bit_length()                    =  9
-        #   delimiter_pos                   =  8      ->  num_bits = 8
+        # Example: the bytes 0b11111111 and 0b00000001, the encoding of eight set bits.
+        # Eight data bits fill the first byte whole, so the delimiter spills to position 8.
         packed_integer = int.from_bytes(data, "little")
         if packed_integer == 0:
             raise SSZSerializationError(f"{cls.__name__}: no delimiter bit found")
@@ -469,27 +467,24 @@ class _SSZBitList(SSZCollection[Boolean]):
                 f"{cls.__name__}: non-canonical trailing zero bytes after delimiter"
             )
 
-        # Phase 3: extract data bits below the delimiter and enforce the size limit.
+        # Phase 3: enforce the size limit, then extract the data bits below the delimiter.
         #
         # The delimiter position equals the data bit count.
         # Everything from it upward is dropped, padding included.
         #
-        # Example: data = [0b00001101], num_bits = 3  (delimiter at bit 3)
+        # Example: the single byte 0b00001101, its delimiter at position 3.
         #
         #   byte 0  ->  1, 0, 1, 1, 0, 0, 0, 0
         #                        ^ the delimiter, and the first bit dropped
         #
         # Recovered bits: [1, 0, 1]
         num_bits = delimiter_pos
-        # The count is checked here rather than left to the constructor so that an
-        # over-capacity payload reports its capacity before any bit is materialized.
+        # Checked before the bits are built, so an over-capacity payload is refused cheaply.
         cls._reject_excess_bits(num_bits)
 
-        # Every byte is unpacked whole, and the bits past the wanted count dropped.
-        # Only the final byte holds fewer than eight of them, so at most seven go.
-        #
-        # The two shared values are bound once, not built per bit.
-        # That is what keeps reading a wide bitfield off the wire cheap.
+        # - Every byte is unpacked whole, then the bits past the wanted count dropped.
+        # - One to eight go, the delimiter always among them.
+        # - The two shared values are bound once, not built per bit.
         false, true = Boolean(False), Boolean(True)
         bits = [true if byte >> position & 1 else false for byte in data for position in range(8)]
         del bits[num_bits:]
