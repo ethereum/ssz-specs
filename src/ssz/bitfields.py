@@ -61,6 +61,16 @@ class BitVector(SSZCollection[Boolean]):
     LENGTH: ClassVar[int]
     """Number of bits in the vector."""
 
+    data: Sequence[Boolean] = Field(default_factory=list)
+    """
+    The bits, in position order.
+
+    - Any iterable of bool-like values is accepted on input, lists and tuples included.
+    - Stored as a list once validated.
+    - Indexed writes and assignment to this attribute both validate every bit.
+    - Writing into the sequence in place skips validation entirely.
+    """
+
     @classmethod
     def __pydantic_init_subclass__(cls, **kwargs: Any) -> None:
         """Give the bits their default, which is every bit clear."""
@@ -77,16 +87,6 @@ class BitVector(SSZCollection[Boolean]):
         # - A vector of composite elements cannot take this shortcut.
         cls.model_fields["data"].default_factory = lambda: [shared] * length
         cls.model_rebuild(force=True)
-
-    data: Sequence[Boolean] = Field(default_factory=list)
-    """
-    The bits, in position order.
-
-    - Any iterable of bool-like values is accepted on input, lists and tuples included.
-    - Stored as a list once validated.
-    - Indexed writes and assignment to this attribute both validate every bit.
-    - Writing into the sequence in place skips validation entirely.
-    """
 
     @override
     def _validate_element(self, value: Any) -> Boolean:
