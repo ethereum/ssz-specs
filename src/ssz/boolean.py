@@ -2,12 +2,17 @@
 
 from __future__ import annotations
 
-from typing import IO, Any, NoReturn, Self, TypeAlias, override
+from typing import IO, Any, ClassVar, NoReturn, Self, TypeAlias, override
 
 from pydantic.annotated_handlers import GetCoreSchemaHandler
 from pydantic_core import CoreSchema, core_schema
 
-from ssz.exceptions import SSZSerializationError, SSZTypeMismatch, SSZValueError
+from ssz.exceptions import (
+    SSZSerializationError,
+    SSZTypeError,
+    SSZTypeMismatch,
+    SSZValueError,
+)
 from ssz.ssz_base import SSZType
 
 
@@ -28,9 +33,22 @@ class Boolean(int, SSZType):
 
     __slots__ = ()
 
+    _INTERNED: ClassVar[tuple[Any, ...]] = ()
+    """The two values of this class, one shared instance each.
+
+    A bit is the whole of what one of these values holds.
+    Every holder of a given bit can therefore be handed the same object.
+    """
+
+    def __init_subclass__(cls, **kwargs: Any) -> None:
+        """Build the pair a named boolean hands out, so a subtype comes back as itself."""
+        super().__init_subclass__(**kwargs)
+        # Allocated past this class's own constructor, which reads the pair being built.
+        cls._INTERNED = (int.__new__(cls, 0), int.__new__(cls, 1))
+
     def __new__(cls, value: bool | int = False) -> Self:
         """
-        Construct and validate a new boolean.
+        Return the shared instance of this class holding the given bit.
 
         Only the four values true, false, 0, and 1 are accepted.
 
@@ -50,10 +68,27 @@ class Boolean(int, SSZType):
         #   - value in (0, 1) does value == 0 or value == 1.
         #   - For a Boolean operand, those comparisons hit strict equality and raise.
         #   - int(value) returns a plain int, so == falls back to int equality.
-        if int(value) not in (0, 1):
+        bit = int(value)
+        if bit not in (0, 1):
             raise SSZValueError(f"Boolean value must be 0 or 1, not {value}")
 
-        return super().__new__(cls, value)
+        # The value is 0 or 1 by this point, so it indexes the pair directly.
+        interned: tuple[Self, ...] = cls._INTERNED
+        return interned[bit]
+
+    # A shared instance reaches every holder of that bit.
+    # State attached through one would be readable through all the others.
+    #
+    # A slot declaration cannot close this off.
+    # Any subclass omitting one regains the dictionary this refusal guards.
+    def __setattr__(self, name: str, value: Any) -> NoReturn:
+        """
+        Refuse to attach state to a value.
+
+        Raises:
+            SSZTypeError: Always, because a bit is only the bit it holds.
+        """
+        raise SSZTypeError(f"{type(self).__name__} is immutable")
 
     @classmethod
     def __get_pydantic_core_schema__(
@@ -259,6 +294,10 @@ class Boolean(int, SSZType):
     # answering False from an empty one.
     __hash__ = int.__hash__
 
+
+# A class builds its pair as it is declared, and this one is declared by no such step.
+# Its own pair is therefore built here, as soon as there is a class to build one from.
+Boolean._INTERNED = (int.__new__(Boolean, 0), int.__new__(Boolean, 1))
 
 Bit: TypeAlias = Boolean
 """One bit, a spelling for bitfield elements that the spec itself does not define."""

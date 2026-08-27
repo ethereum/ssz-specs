@@ -390,3 +390,44 @@ class TestShortBooleanSpelling:
         # Importing the name at the top of this module proves it is reachable.
         # Only the export list proves it is public.
         assert "Bit" in ssz.__all__
+
+
+class TestABitCarriesNoState:
+    """A shared instance reaches every holder of that bit, so it accepts no attributes."""
+
+    def test_one_instance_stands_behind_every_holder_of_a_bit(self) -> None:
+        """Two booleans of one bit are one object, there being nothing else to tell apart."""
+        # Invariant: a bit is the whole of the value, so one object serves every holder.
+        #
+        # The two spellings of each bit reach the same object:
+        #
+        #     Boolean(True)   Boolean(1)    ->  one object
+        #     Boolean(False)  Boolean(0)    ->  one object
+        assert Boolean(True) is Boolean(1)
+        assert Boolean(False) is Boolean(0)
+
+    def test_a_named_boolean_hands_out_a_pair_of_its_own(self) -> None:
+        """A subtype comes back as itself, rather than as the type it was declared from."""
+
+        class Flag(Boolean):
+            """A named spelling of the boolean type."""
+
+        # A declaration gives the new type a pair of its own.
+        # Sharing therefore stops at the class boundary rather than reaching across it.
+        #
+        #     Flag     ->  its own false, its own true
+        #     Boolean  ->  the pair it already had
+        assert type(Flag(True)) is Flag
+        assert Flag(True) is Flag(1)
+        assert Flag(True) is not Boolean(True)
+
+    def test_attaching_state_to_a_bit_is_refused(self) -> None:
+        """Setting an attribute would publish it to every other holder of the same bit."""
+        # Invariant: every true in the process is one object.
+        #
+        # An attribute set through one holder would be readable through all of them.
+        # The assignment is therefore refused where it is written.
+        expected_message = "Boolean is immutable"
+        with pytest.raises(SSZTypeError) as exception_info:
+            Boolean(True).note = "mine"  # type: ignore[attr-defined]
+        assert str(exception_info.value) == expected_message

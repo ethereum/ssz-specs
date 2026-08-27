@@ -226,8 +226,10 @@ class BaseUint(int, SSZType):
         # Ensure the correct number of bytes was read.
         if len(serialized_bytes) != byte_length:
             raise SSZScopeError(cls.__name__, byte_length, len(serialized_bytes))
-        # Decode the bytes into a new instance.
-        return cls.decode_bytes(serialized_bytes)
+        # The width is settled twice over by this point.
+        # Wrapping here avoids the byte-string decoder, which would measure it a third time.
+        # A struct decodes one integer per integer field, so that is a call saved per field.
+        return cls(int.from_bytes(serialized_bytes, "little"))
 
     @classmethod
     def max_value(cls) -> Self:

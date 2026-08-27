@@ -111,8 +111,12 @@ class BitVector(SSZCollection[Boolean]):
         if len(bits_input) != cls.LENGTH:
             raise SSZLengthError(cls.__name__, cls.LENGTH, len(bits_input))
 
-        # Wrap each value in Boolean — the constructor rejects anything outside 0 or 1.
-        return [Boolean(bit) for bit in bits_input]
+        # Each value is wrapped as a bit, which refuses anything outside 0 and 1.
+        #
+        # One already of exactly that class is the shared value for its bit.
+        # Wrapping it again would hand back the object it is.
+        # A named spelling is still converted, the test being on the exact class.
+        return [bit if type(bit) is Boolean else Boolean(bit) for bit in bits_input]
 
     @classmethod
     @override
@@ -156,9 +160,17 @@ class BitVector(SSZCollection[Boolean]):
         Returns:
             ceil(N / 8) bytes containing the packed bits.
         """
-        # Build the packed bits as one integer, then split into little-endian bytes.
-        packed_bits = sum(1 << i for i, bit in enumerate(self.data) if bit)
-        return packed_bits.to_bytes(self.get_byte_length(), "little")
+        # Each bit is set in place, in a buffer already the width of the result.
+        #
+        # Accumulating one wide integer instead grows that integer with the data.
+        # Every addition then costs more than the one before it.
+        # Packing a long bitfield that way is quadratic in its bit count.
+        packed = bytearray(self.get_byte_length())
+        # Bit i lives in byte i // 8, at position i % 8 counted from the low end.
+        for position, bit in enumerate(self.data):
+            if bit:
+                packed[position >> 3] |= 1 << (position & 7)
+        return bytes(packed)
 
     @classmethod
     @override
@@ -197,26 +209,22 @@ class BitVector(SSZCollection[Boolean]):
                     f"{cls.__name__}: non-zero padding bits in final byte {data[-1]:#04x}"
                 )
 
-        # Read every bit position out of the byte stream.
+        # Every byte is unpacked whole, and the bits past the wanted count dropped.
+        # Only the final byte holds fewer than eight of them, so at most seven go.
         #
-        # For bit index i:
+        # The two shared values are bound once, not built per bit.
+        # That is what keeps reading a wide bitfield off the wire cheap.
         #
-        #   - data[i // 8]  picks the byte that holds bit i.
-        #   - >> (i % 8)    shifts that byte so bit i is in the LSB.
-        #   - & 1           masks off every other bit.
+        # Example: two bytes holding nine declared bits.
         #
-        # Example: data = [0b00000101, 0b00000001]  (encoding of 9 bits, 2 bytes)
-        #
-        #   i=0:  (data[0] >> 0) & 1  =  0b00000101 & 1  =  1
-        #   i=1:  (data[0] >> 1) & 1  =  0b00000010 & 1  =  0
-        #   i=2:  (data[0] >> 2) & 1  =  0b00000001 & 1  =  1
-        #   i=3:  (data[0] >> 3) & 1  =  0b00000000 & 1  =  0
-        #   ...
-        #   i=7:  (data[0] >> 7) & 1  =  0b00000000 & 1  =  0
-        #   i=8:  (data[1] >> 0) & 1  =  0b00000001 & 1  =  1
-        #
-        # Recovered bits: [1, 0, 1, 0, 0, 0, 0, 0, 1]
-        return cls(data=[Boolean((data[i // 8] >> (i % 8)) & 1) for i in range(cls.LENGTH)])
+        #     data     :  0b00000101   0b00000001
+        #     byte 0   ->  1, 0, 1, 0, 0, 0, 0, 0
+        #     byte 1   ->  1, 0, 0, 0, 0, 0, 0, 0
+        #     declared ->  [1, 0, 1, 0, 0, 0, 0, 0, 1]   the surplus seven dropped
+        false, true = Boolean(False), Boolean(True)
+        bits = [true if byte >> position & 1 else false for byte in data for position in range(8)]
+        del bits[cls.LENGTH :]
+        return cls(data=bits)
 
 
 class _SSZBitList(SSZCollection[Boolean]):
@@ -352,18 +360,25 @@ class _SSZBitList(SSZCollection[Boolean]):
         Returns:
             SSZ bytes containing the data bits followed by the delimiter.
         """
-        # Empty bitlist still needs the delimiter byte.
+        # The encoding carries one bit more than the data: the delimiter past its end.
+        # It therefore takes the bytes that many bits need.
+        #
+        # An empty bitlist is the same rule with no data at all.
+        # Its encoding is the single byte 0x01.
         num_bits = len(self.data)
-        if num_bits == 0:
-            return b"\x01"
-
-        # Pack data bits and the delimiter into one integer.
-        # The trailing 1 sentinel sits at the bit just past the data.
-        # It is what lets the decoder recover the original bit count.
-        # Converting an integer to bytes runs the bit-to-byte split in C.
-        # That avoids a Python loop over every bit.
-        packed_bits = sum(1 << i for i, bit in enumerate(self.data) if bit) | (1 << num_bits)
-        return packed_bits.to_bytes(math.ceil((num_bits + 1) / 8), "little")
+        # Each bit is set in place, in a buffer already the width of the result.
+        #
+        # Accumulating one wide integer instead grows that integer with the data.
+        # Every addition then costs more than the one before it.
+        # Packing a long bitfield that way is quadratic in its bit count.
+        packed = bytearray((num_bits + 8) // 8)
+        # Bit i lives in byte i // 8, at position i % 8 counted from the low end.
+        for position, bit in enumerate(self.data):
+            if bit:
+                packed[position >> 3] |= 1 << (position & 7)
+        # The delimiter closes the sequence at the position one past the last data bit.
+        packed[num_bits >> 3] |= 1 << (num_bits & 7)
+        return bytes(packed)
 
     @classmethod
     @override
@@ -445,17 +460,13 @@ class _SSZBitList(SSZCollection[Boolean]):
 
         # Phase 3: extract data bits below the delimiter and enforce the size limit.
         #
-        # The delimiter position equals the data bit count. For each bit index i:
-        #
-        #   - data[i // 8]  picks the byte that holds bit i.
-        #   - >> (i % 8)    shifts that byte so bit i is in the LSB.
-        #   - & 1           masks off every other bit.
+        # The delimiter position equals the data bit count.
+        # Everything from it upward is dropped, padding included.
         #
         # Example: data = [0b00001101], num_bits = 3  (delimiter at bit 3)
         #
-        #   i=0:  (data[0] >> 0) & 1  =  0b00001101 & 1  =  1
-        #   i=1:  (data[0] >> 1) & 1  =  0b00000110 & 1  =  0
-        #   i=2:  (data[0] >> 2) & 1  =  0b00000011 & 1  =  1
+        #   byte 0  ->  1, 0, 1, 1, 0, 0, 0, 0
+        #                        ^ the delimiter, and the first bit dropped
         #
         # Recovered bits: [1, 0, 1]
         num_bits = delimiter_pos
@@ -463,7 +474,15 @@ class _SSZBitList(SSZCollection[Boolean]):
         # over-capacity payload reports its capacity before any bit is materialized.
         cls._reject_excess_bits(num_bits)
 
-        return cls(data=[Boolean((data[i // 8] >> (i % 8)) & 1) for i in range(num_bits)])
+        # Every byte is unpacked whole, and the bits past the wanted count dropped.
+        # Only the final byte holds fewer than eight of them, so at most seven go.
+        #
+        # The two shared values are bound once, not built per bit.
+        # That is what keeps reading a wide bitfield off the wire cheap.
+        false, true = Boolean(False), Boolean(True)
+        bits = [true if byte >> position & 1 else false for byte in data for position in range(8)]
+        del bits[num_bits:]
+        return cls(data=bits)
 
 
 class BitList(_SSZBitList):
@@ -514,8 +533,12 @@ class BitList(_SSZBitList):
         if len(elements) > cls.LIMIT:
             raise SSZLimitError(cls.__name__, cls.LIMIT, len(elements))
 
-        # Wrap each value in Boolean — the constructor rejects anything outside 0 or 1.
-        return [Boolean(bit) for bit in elements]
+        # Each value is wrapped as a bit, which refuses anything outside 0 and 1.
+        #
+        # One already of exactly that class is the shared value for its bit.
+        # Wrapping it again would hand back the object it is.
+        # A named spelling is still converted, the test being on the exact class.
+        return [bit if type(bit) is Boolean else Boolean(bit) for bit in elements]
 
     @classmethod
     @override
@@ -566,5 +589,9 @@ class ProgressiveBitList(_SSZBitList):
         else:
             raise SSZTypeMismatch("iterable", type(bits_input))
 
-        # Wrap each value in Boolean — the constructor rejects anything outside 0 or 1.
-        return [Boolean(bit) for bit in elements]
+        # Each value is wrapped as a bit, which refuses anything outside 0 and 1.
+        #
+        # One already of exactly that class is the shared value for its bit.
+        # Wrapping it again would hand back the object it is.
+        # A named spelling is still converted, the test being on the exact class.
+        return [bit if type(bit) is Boolean else Boolean(bit) for bit in elements]
