@@ -565,9 +565,14 @@ class _SSZList[T: SSZType](_SSZSequence[T]):
         So neither can be driven to allocate beyond its input.
 
         Raises:
+            SSZDefinitionError: When the shape has not declared what it holds.
             SSZSerializationError: When the budget or any offset is malformed.
             SSZLimitError: When the recovered count exceeds a declared capacity.
         """
+        # The value is built past the validator that asks this on construction.
+        # So the decoder asks it here, and a bound left undeclared is enforced either way.
+        cls._check_declaration()
+
         # A budget is a byte count, and every count the decoder derives from it follows its sign.
         # A negative one divides into a negative element count, which reads as no elements
         # at all, so a malformed input would decode to the empty value.

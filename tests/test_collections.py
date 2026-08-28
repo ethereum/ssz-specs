@@ -1858,6 +1858,52 @@ class TestNegativeListLimit:
         assert str(exception_info.value) == "EmptyList exceeds limit of 0, got 1"
 
 
+class TestDecodeAsksWhatTheShapeDeclares:
+    """A decode enforces the same declarations construction does, and reports them alike."""
+
+    def test_a_list_without_its_bound_refuses_a_payload(self) -> None:
+        """A bound is part of enforcing consensus, so no payload decodes without one."""
+
+        class Unbounded(List[Uint8]):
+            pass
+
+        # Construction already reported it, and ten elements are now reported the same way
+        # rather than becoming a list no declaration bounds.
+        with pytest.raises(SSZTypeError) as exception_info:
+            Unbounded.decode_bytes(b"\x01" * 10)
+
+        assert str(exception_info.value) == "Unbounded must define ELEMENT_TYPE and LIMIT"
+
+    def test_a_list_without_its_bound_refuses_an_empty_payload_too(self) -> None:
+        """The empty payload is a value of the type as well, and the type is not usable."""
+
+        class Unbounded(List[Uint8]):
+            pass
+
+        with pytest.raises(SSZTypeError) as exception_info:
+            Unbounded.decode_bytes(b"")
+
+        assert str(exception_info.value) == "Unbounded must define ELEMENT_TYPE and LIMIT"
+
+    def test_the_bare_list_base_refuses_a_payload(self) -> None:
+        """The unparameterized base declares neither of the two, and names both."""
+        with pytest.raises(SSZTypeError) as exception_info:
+            List.decode_bytes(b"\x01")
+
+        assert str(exception_info.value) == "List must define ELEMENT_TYPE and LIMIT"
+
+    def test_a_progressive_list_without_an_element_type_refuses_a_payload(self) -> None:
+        """The unbounded shape declares no bound, and still needs to know what it holds."""
+
+        class Untyped(ProgressiveList):
+            pass
+
+        with pytest.raises(SSZTypeError) as exception_info:
+            Untyped.decode_bytes(b"\x01")
+
+        assert str(exception_info.value) == "Untyped must define ELEMENT_TYPE"
+
+
 class TestJsonRoundTrip:
     """Whatever a sequence renders to JSON, it reads back in."""
 
