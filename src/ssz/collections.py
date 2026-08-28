@@ -575,6 +575,9 @@ class _SSZList[T: SSZType](_SSZSequence[T]):
             raise SSZSerializationError(f"{cls.__name__}: scope {scope} is negative")
 
         if scope == 0:
+            # An empty payload is a count of zero, and a count is checked whatever it is.
+            # So no way out of this decoder reaches a value whose count was never checked.
+            cls._validate_length(0)
             return cls.model_construct(_fields_set={"data"}, data=[])
 
         # Fixed-size case: the count is the budget divided by the element width.
@@ -633,6 +636,22 @@ class List[T: SSZType](_SSZList[T]):
 
     LIMIT: ClassVar[int | None]
     """Maximum number of elements allowed."""
+
+    @classmethod
+    def __pydantic_init_subclass__(cls, **kwargs: Any) -> None:
+        """
+        Refuse a bound no list can have.
+
+        Raises:
+            SSZValueError: When the declared bound is negative.
+        """
+        super().__pydantic_init_subclass__(**kwargs)
+
+        # A bound counts the elements the list may hold, and no list holds fewer than none.
+        # A negative bound leaves the type with no value at all, the empty one included,
+        # so nothing but a decode could ever produce one.
+        if cls.LIMIT is not None and cls.LIMIT < 0:
+            raise SSZValueError(f"{cls.__name__}: LIMIT must not be negative, got {cls.LIMIT}")
 
     @classmethod
     @override

@@ -1830,6 +1830,34 @@ class TestZeroLengthVector:
         assert str(exception_info.value) == "NegativeVector: LENGTH must be positive, got -1"
 
 
+class TestNegativeListLimit:
+    """A bound counts the elements a list may hold, and no count is below zero."""
+
+    def test_a_negative_limit_is_refused_at_declaration(self) -> None:
+        """A negative bound is refused where it is written, not where it is used."""
+        # A negative bound admits no value at all: the empty list already breaks it, so
+        # the type has no default and no constructor call can succeed.
+        with pytest.raises(SSZValueError) as exception_info:
+
+            class NegativeList(List[Uint8]):
+                LIMIT = -1
+
+        assert str(exception_info.value) == "NegativeList: LIMIT must not be negative, got -1"
+
+    def test_a_limit_of_zero_admits_the_empty_value_and_nothing_else(self) -> None:
+        """A bound of zero is where the line falls: one value, and it holds no elements."""
+
+        class EmptyList(List[Uint8]):
+            LIMIT = 0
+
+        assert EmptyList.decode_bytes(b"") == EmptyList()
+
+        with pytest.raises(SSZValueError) as exception_info:
+            EmptyList.decode_bytes(b"\x01")
+
+        assert str(exception_info.value) == "EmptyList exceeds limit of 0, got 1"
+
+
 class TestJsonRoundTrip:
     """Whatever a sequence renders to JSON, it reads back in."""
 
