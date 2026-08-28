@@ -1858,6 +1858,72 @@ class TestNegativeListLimit:
         assert str(exception_info.value) == "EmptyList exceeds limit of 0, got 1"
 
 
+class TestUnentitledCapacity:
+    """
+    A shape declares the capacity its own count rule reads, and no other.
+
+    A capacity reaches the tree only through the shape that lays it out, while every
+    declared capacity is enforced on construction. So a capacity a shape's tree never
+    reads gives a type that validates as one shape and merkleizes as another, and no
+    such hybrid is defined:
+
+        class PLwithLimit(ProgressiveList[Uint8]):
+            LIMIT = 2
+
+        PLwithLimit(data=[1, 2, 3])   refused, as a bounded list refuses it
+        its roots                     those of the unbounded shape, at every count
+    """
+
+    def test_a_vector_refuses_a_bound(self) -> None:
+        """A vector counts exactly, and a bound would be a second count rule."""
+        with pytest.raises(SSZTypeError) as exception_info:
+
+            class BoundedVector(Vector[Uint8]):
+                LIMIT = 2
+
+        assert str(exception_info.value) == "BoundedVector must define no LIMIT of its own"
+
+    def test_a_vector_refuses_a_bound_beside_its_own_count(self) -> None:
+        """Two count rules can contradict, and a vector's default is the first casualty."""
+        # A bound of 2 under a count of 4 leaves the vector's own default, four zero
+        # elements, breaking the bound. So the type had no value it could build.
+        with pytest.raises(SSZTypeError) as exception_info:
+
+            class BothCounts(Vector[Uint8]):
+                LENGTH = 4
+                LIMIT = 2
+
+        assert str(exception_info.value) == "BothCounts must define no LIMIT of its own"
+
+    def test_a_list_refuses_an_exact_count(self) -> None:
+        """A list holds any count up to its bound, and pinning one exactly is a vector."""
+        with pytest.raises(SSZTypeError) as exception_info:
+
+            class PinnedList(List[Uint8]):
+                LIMIT = 4
+                LENGTH = 2
+
+        assert str(exception_info.value) == "PinnedList must define no LENGTH of its own"
+
+    def test_a_progressive_list_refuses_an_exact_count(self) -> None:
+        """EIP-7916 gives the shape no capacity, an exact count included."""
+        with pytest.raises(SSZTypeError) as exception_info:
+
+            class PinnedProgressiveList(ProgressiveList[Uint8]):
+                LENGTH = 2
+
+        assert str(exception_info.value) == "PinnedProgressiveList must define no LENGTH of its own"
+
+    def test_a_progressive_list_refuses_a_bound(self) -> None:
+        """A bound reads as a bounded list on construction, and never reaches the tree."""
+        with pytest.raises(SSZTypeError) as exception_info:
+
+            class BoundedProgressiveList(ProgressiveList[Uint8]):
+                LIMIT = 2
+
+        assert str(exception_info.value) == "BoundedProgressiveList must define no LIMIT of its own"
+
+
 class TestDecodeAsksWhatTheShapeDeclares:
     """A decode enforces the same declarations construction does, and reports them alike."""
 

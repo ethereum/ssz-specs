@@ -350,12 +350,20 @@ class Vector[T: SSZType](_SSZSequence[T]):
     @classmethod
     def __pydantic_init_subclass__(cls, **kwargs: Any) -> None:
         """
-        Refuse a count no vector can have, then give the elements their default.
+        Refuse a capacity no vector has, then give the elements their default.
 
         Raises:
+            SSZDefinitionError: When the shape declares a bound, which a vector has none of.
             SSZValueError: When the declared length is zero or negative.
         """
         super().__pydantic_init_subclass__(**kwargs)
+
+        # A vector holds its exact count, so a bound on top of it is a second count rule.
+        # The tree is laid out from the exact count alone, so the bound would be enforced
+        # on construction and invisible in the root, and the two rules can contradict:
+        # a bound below the count leaves the vector's own default unbuildable.
+        if cls.LIMIT is not None:
+            raise SSZDefinitionError(cls.__name__, "no LIMIT of its own")
 
         # An abstract layer keeps the empty default it inherits.
         # Building a value from it fails its own declaration check instead.
@@ -645,12 +653,19 @@ class List[T: SSZType](_SSZList[T]):
     @classmethod
     def __pydantic_init_subclass__(cls, **kwargs: Any) -> None:
         """
-        Refuse a bound no list can have.
+        Refuse a bound no list can have, and an exact count that is a vector's rule.
 
         Raises:
+            SSZDefinitionError: When the shape declares an exact count.
             SSZValueError: When the declared bound is negative.
         """
         super().__pydantic_init_subclass__(**kwargs)
+
+        # A list holds any count up to its bound, and pinning one exactly is a vector.
+        # The tree is laid out from the bound, so a pinned count would be enforced on
+        # construction and invisible in the root.
+        if cls.LENGTH is not None:
+            raise SSZDefinitionError(cls.__name__, "no LENGTH of its own")
 
         # A bound counts the elements the list may hold, and no list holds fewer than none.
         # A negative bound leaves the type with no value at all, the empty one included,
@@ -677,3 +692,22 @@ class ProgressiveList[T: SSZType](_SSZList[T]):
 
     It encodes to the same bytes as a bounded list, and only the Merkle trees differ.
     """
+
+    @classmethod
+    def __pydantic_init_subclass__(cls, **kwargs: Any) -> None:
+        """
+        Refuse a capacity, there being no such thing here.
+
+        Raises:
+            SSZDefinitionError: When the shape declares an exact count or a bound.
+        """
+        super().__pydantic_init_subclass__(**kwargs)
+
+        # EIP-7916 gives this shape no capacity, and its tree grows with the value it holds.
+        # A declared count is therefore enforced on construction and absent from the root,
+        # which is a shape the spec does not define: it validates as a bounded list and
+        # merkleizes as an unbounded one, and the two disagree about which values exist.
+        if cls.LENGTH is not None:
+            raise SSZDefinitionError(cls.__name__, "no LENGTH of its own")
+        if cls.LIMIT is not None:
+            raise SSZDefinitionError(cls.__name__, "no LIMIT of its own")
