@@ -19,6 +19,7 @@ from pydantic import Field, field_serializer, field_validator
 from pydantic.annotated_handlers import GetCoreSchemaHandler
 from pydantic_core import core_schema
 
+from ssz.base import wrapping_schema
 from ssz.exceptions import (
     SSZDefinitionError,
     SSZFixedSizeError,
@@ -44,21 +45,7 @@ class _Omitted(Enum):
 
 
 class ByteVector(bytes, SSZType):
-    r"""
-    Fixed-length SSZ byte array with exactly N bytes.
-
-    - Inherits from bytes so the instance is usable wherever a bytes value is expected.
-    - Subclasses pin the byte count by setting the class-level length.
-    - Equality relates a type only to its ancestors and descendants.
-    - Hashing agrees with that relation.
-
-    The spec reads a fixed byte array as a vector of single bytes, so its default is every
-    byte zero.
-
-    For example, Bytes4 wraps four raw bytes and serializes verbatim:
-
-        Bytes4(b"\x01\x02\x03\x04")  ->  wire bytes 01 02 03 04
-    """
+    """Fixed-length SSZ byte array with exactly N bytes."""
 
     LENGTH: ClassVar[int]
     """The exact number of bytes (overridden by subclasses)."""
@@ -86,9 +73,6 @@ class ByteVector(bytes, SSZType):
         #     Bytes4()      ->  00000000        four zero bytes
         #     Bytes4(b"")   ->  length error    zero bytes is a wrong count, not a request
         #     Bytes4(None)  ->  coercion error  a missing value passed by hand is an input
-        #
-        # Repeating a zero byte the declared number of times gives exactly that many, so the
-        # coercion and the count check below have nothing left to settle.
         if value is _Omitted.TOKEN:
             return cls._trusted(b"\x00" * cls.LENGTH)
 
@@ -105,8 +89,10 @@ class ByteVector(bytes, SSZType):
                     coerced_bytes = bytes(value)
                 case _:
                     raise TypeError(f"Cannot coerce {type(value).__name__} to bytes")
+
         if len(coerced_bytes) != cls.LENGTH:
             raise SSZLengthError(cls.__name__, cls.LENGTH, len(coerced_bytes), unit="bytes")
+
         return super().__new__(cls, coerced_bytes)
 
     def __setattr__(self, name: str, value: Any) -> NoReturn:
@@ -123,12 +109,6 @@ class ByteVector(bytes, SSZType):
         """
         Wrap bytes of an already-established length, skipping every check.
 
-        # Safety
-
-        The byte count must follow from how the value was built, never from a caller.
-        A wrong width yields an instance.
-        It merkleizes to a wrong root rather than failing.
-
         Args:
             data: Exactly the declared number of bytes.
 
@@ -139,12 +119,7 @@ class ByteVector(bytes, SSZType):
 
     @classmethod
     def zero(cls) -> Self:
-        """
-        Return a new instance filled with zero bytes, which is also the default.
-
-        A shape with no declared width has no byte count to zero.
-        It reports its declaration error instead.
-        """
+        """Return a new instance filled with zero bytes, which is also the default."""
         return cls()
 
     @classmethod
@@ -207,50 +182,12 @@ class ByteVector(bytes, SSZType):
     def __get_pydantic_core_schema__(
         cls, source_type: Any, handler: GetCoreSchemaHandler
     ) -> core_schema.CoreSchema:
-        """
-        Provide a Pydantic core schema for strict byte-array validation.
-
-        - Already-typed instances pass through.
-        - Plain bytes inputs go through length-checked validation, then get wrapped.
-        - Hex string inputs (with an optional 0x prefix) go through the constructor.
-        - JSON serialization converts the bytes to a 0x-prefixed hex string.
-        """
-        # Shared validator that runs the constructor on a verified input.
-        # The constructor handles bytes, bytearray, hex strings, or iterables of ints.
-        # It also enforces the declared length.
-        from_input_validator = core_schema.no_info_plain_validator_function(cls)
-
-        # Bytes path enforces the exact declared length, then wraps into a typed instance.
-        bytes_path = core_schema.chain_schema(
-            [
-                core_schema.bytes_schema(min_length=cls.LENGTH, max_length=cls.LENGTH),
-                from_input_validator,
-            ]
-        )
-
-        # Hex string path routes any string through the constructor.
-        # The constructor strips an optional 0x prefix, decodes hex, and length-checks.
-        str_path = core_schema.chain_schema(
-            [
-                core_schema.str_schema(),
-                from_input_validator,
-            ]
-        )
-
-        # Final union accepts any branch and serializes back to a 0x-prefixed hex string:
-        #
-        #   - Branch 1: input is already a typed instance, pass through.
-        #   - Branch 2: input is bytes that need length-checking and wrapping.
-        #   - Branch 3: input is a hex string that goes through the constructor.
-        return core_schema.union_schema(
-            [
-                core_schema.is_instance_schema(cls),
-                bytes_path,
-                str_path,
-            ],
-            serialization=core_schema.plain_serializer_function_ser_schema(
-                lambda x: "0x" + x.hex()
-            ),
+        """Provide a Pydantic core schema for strict byte-array validation."""
+        return wrapping_schema(
+            cls,
+            core_schema.bytes_schema(min_length=cls.LENGTH, max_length=cls.LENGTH),
+            core_schema.str_schema(),
+            to_json=lambda instance: "0x" + instance.hex(),
         )
 
     def __repr__(self) -> str:
@@ -265,24 +202,13 @@ class ByteVector(bytes, SSZType):
         - One of the two types must derive from the other.
         - Nothing but a byte array may meet one at all.
 
-        A root is declared a kind of chunk, so it is usable where a chunk is expected:
-
-            x = b"\x11" * 32
-
-            Root(x) == Chunk(x)    ->  True     a root is a kind of chunk
-            Bytes32(x) == Root(x)  ->  refused  siblings, neither derives from the other
-            Bytes32(x) == x        ->  refused  raw bytes are not a byte array at all
-
-        Whenever this returns True the hash agrees, as every Python type must.
-        A container finds a value by its hash before it compares it.
-        Two related types are one value here, so no hash naming the concrete type could keep step.
-
         Args:
             other: The value to compare against.
 
         Raises:
-            TypeError: If other is not a byte array, or is a sibling type rather than an
-                ancestor or a descendant.
+            TypeError:
+                - If other is not a byte array,
+                - If other is a sibling type rather than an ancestor or a descendant.
         """
         # An exact type match answers most calls without consulting the abstract base.
         # The base test guards the other branch, which bytes and object would pass.
@@ -291,8 +217,8 @@ class ByteVector(bytes, SSZType):
             or (isinstance(other, ByteVector) and isinstance(self, type(other)))
         ):
             raise TypeError(
-                f"Unsupported operand type(s) for ==: "
-                f"'{type(self).__name__}' and '{type(other).__name__}'"
+                "Unsupported operand type(s) for ==: "
+                + f"'{type(self).__name__}' and '{type(other).__name__}'"
             )
         return bytes.__eq__(self, other)
 
@@ -300,45 +226,27 @@ class ByteVector(bytes, SSZType):
         """
         Inequality under the same relation as equality.
 
-        Defined explicitly because the parent bytes class has a not-equal of its own that
-        would bypass the type rule.
-
         Raises:
-            TypeError: If other is not a byte array, or is a sibling type rather than an
-                ancestor or a descendant.
+            TypeError:
+                - If other is not a byte array,
+                - If other is a sibling type rather than an ancestor or a descendant.
         """
         if not (
             isinstance(other, type(self))
             or (isinstance(other, ByteVector) and isinstance(self, type(other)))
         ):
             raise TypeError(
-                f"Unsupported operand type(s) for !=: "
-                f"'{type(self).__name__}' and '{type(other).__name__}'"
+                "Unsupported operand type(s) for !=: "
+                + f"'{type(self).__name__}' and '{type(other).__name__}'"
             )
         return bytes.__ne__(self, other)
 
-    # Equality calls a root and a chunk of the same bytes one value, which leaves the
-    # concrete type no room in the hash.
-    # Two types the comparison refuses to relate then share a bucket when their bytes agree,
-    # so a lookup reaches the refusal rather than missing in silence.
-    # Differing bytes give differing hashes, where absent is the right answer either way.
+    # Equality calls a root and a chunk of the same bytes one value, so only the bytes hash.
     __hash__ = bytes.__hash__
 
 
 class ByteList(SSZCollection[int]):
-    r"""
-    Variable-length SSZ byte array with 0 to N bytes.
-
-    - Subclasses pin the maximum byte count by setting the class-level limit.
-    - Serialization writes the raw bytes.
-    - The byte count is recovered from the wrapping context.
-    - Equality relates a type only to its ancestors and descendants.
-    - Hashing agrees with that relation.
-
-    For example, a 4-byte payload under a limit of 10:
-
-        instance.data = b"\xde\xad\xbe\xef"  ->  wire bytes de ad be ef
-    """
+    r"""Variable-length SSZ byte array with 0 to N bytes."""
 
     LIMIT: ClassVar[int]
     """Maximum number of bytes the instance may contain."""
@@ -516,15 +424,13 @@ class ByteList(SSZCollection[int]):
         - Nothing but a byte list may meet one at all.
         - Whenever this returns True the hash agrees.
 
-        Two unrelated limits are refused even when the payloads match, because a payload
-        under one limit is not the same value as under another.
-
         Args:
             other: The value to compare against.
 
         Raises:
-            TypeError: If other is not a byte list, or is a sibling type rather than an
-                ancestor or a descendant.
+            TypeError:
+                - If other is not a byte list,
+                - If other is a sibling type rather than an ancestor or a descendant.
         """
         # An exact type match answers most calls without consulting the abstract base.
         # The base test guards the other branch, which object would pass.
@@ -533,8 +439,8 @@ class ByteList(SSZCollection[int]):
             or (isinstance(other, ByteList) and isinstance(self, type(other)))
         ):
             raise TypeError(
-                f"Unsupported operand type(s) for ==: "
-                f"'{type(self).__name__}' and '{type(other).__name__}'"
+                "Unsupported operand type(s) for ==: "
+                + f"'{type(self).__name__}' and '{type(other).__name__}'"
             )
         return self.data == other.data
 
@@ -545,16 +451,17 @@ class ByteList(SSZCollection[int]):
         Both operators apply the one type rule.
 
         Raises:
-            TypeError: If other is not a byte list, or is a sibling type rather than an
-                ancestor or a descendant.
+            TypeError:
+                - If other is not a byte list,
+                - If other is a sibling type rather than an ancestor or a descendant.
         """
         if not (
             isinstance(other, type(self))
             or (isinstance(other, ByteList) and isinstance(self, type(other)))
         ):
             raise TypeError(
-                f"Unsupported operand type(s) for !=: "
-                f"'{type(self).__name__}' and '{type(other).__name__}'"
+                "Unsupported operand type(s) for !=: "
+                + f"'{type(self).__name__}' and '{type(other).__name__}'"
             )
         return self.data != other.data
 

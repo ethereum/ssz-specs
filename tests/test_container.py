@@ -756,11 +756,11 @@ class TestHexStringValidator:
             ValidationError,
             match=(
                 r"(?s)^1 validation error for OneByte\n"
-                r"  Value error, invalid OneByte hex: "
-                r"OneByte: 1 trailing byte\(s\) after decode "
-                r"\[type=value_error, input_value='abcd', input_type=str\]\n"
-                r"    For further information visit "
-                r"https://errors\.pydantic\.dev/[^/]+/v/value_error\Z"
+                + r"  Value error, invalid OneByte hex: "
+                + r"OneByte: 1 trailing byte\(s\) after decode "
+                + r"\[type=value_error, input_value='abcd', input_type=str\]\n"
+                + r"    For further information visit "
+                + r"https://errors\.pydantic\.dev/[^/]+/v/value_error\Z"
             ),
         ):
             OneByte.model_validate("abcd")
@@ -825,8 +825,8 @@ class TestProgressiveContainerLayoutRules:
         with pytest.raises(
             SSZActiveFieldsError,
             match=(
-                rf"^TooWide: invalid active fields, the layout holds "
-                rf"{position_count} positions, over the limit of 256$"
+                r"^TooWide: invalid active fields, the layout holds "
+                + rf"{position_count} positions, over the limit of 256$"
             ),
         ):
             type("TooWide", (ProgressiveContainer,), {"ACTIVE_FIELDS": active_fields})
@@ -856,7 +856,7 @@ class TestProgressiveContainerLayoutRules:
             SSZActiveFieldsError,
             match=(
                 r"^TooFewFields: invalid active fields, "
-                r"the layout sets 2 positions, and the struct declares 1$"
+                + r"the layout sets 2 positions, and the struct declares 1$"
             ),
         ):
 
@@ -871,7 +871,7 @@ class TestProgressiveContainerLayoutRules:
             SSZActiveFieldsError,
             match=(
                 r"^TooManyFields: invalid active fields, "
-                r"the layout sets 1 positions, and the struct declares 2$"
+                + r"the layout sets 1 positions, and the struct declares 2$"
             ),
         ):
 
@@ -888,7 +888,7 @@ class TestProgressiveContainerLayoutRules:
             SSZActiveFieldsError,
             match=(
                 r"^NoFields: invalid active fields, "
-                r"the layout sets 1 positions, and the struct declares 0$"
+                + r"the layout sets 1 positions, and the struct declares 0$"
             ),
         ):
 
@@ -903,7 +903,7 @@ class TestProgressiveContainerLayoutRules:
             SSZActiveFieldsError,
             match=(
                 r"^BiggerSquare: invalid active fields, "
-                r"the layout sets 2 positions, and the struct declares 3$"
+                + r"the layout sets 2 positions, and the struct declares 3$"
             ),
         ):
 
@@ -1223,7 +1223,7 @@ class TestTheWidthIsStatedRatherThanCounted:
             SSZActiveFieldsError,
             match=(
                 r"^Forgot: invalid active fields, "
-                r"the layout sets 4 positions, and the struct declares 3$"
+                + r"the layout sets 4 positions, and the struct declares 3$"
             ),
         ):
 
@@ -1273,7 +1273,7 @@ class TestRulesLeftWithTheDeclaration:
             SSZActiveFieldsError,
             match=(
                 r"^TooWideBuilt: invalid active fields, "
-                r"the layout holds 257 positions, over the limit of 256$"
+                + r"the layout holds 257 positions, over the limit of 256$"
             ),
         ):
             type(

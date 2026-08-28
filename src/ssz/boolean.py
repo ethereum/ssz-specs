@@ -8,6 +8,7 @@ from typing import IO, Any, ClassVar, NoReturn, Self, TypeAlias, override
 from pydantic.annotated_handlers import GetCoreSchemaHandler
 from pydantic_core import CoreSchema, core_schema
 
+from ssz.base import wrapping_schema
 from ssz.exceptions import (
     SSZSerializationError,
     SSZTypeError,
@@ -97,31 +98,12 @@ class Boolean(int, SSZType):
         """
         Provide a Pydantic core schema that enforces strict boolean validation.
 
-        - Only true or false are accepted as input at the Pydantic layer.
-        - Any other type, int 0 or 1 included, is refused even though the constructor takes it.
+        A field holds a boolean as an instance or as a strict bool.
+        The ints 0 and 1 are refused here, though the constructor takes them.
+
+        JSON carries the value as a plain bool.
         """
-        # Validator that wraps a verified bool into a typed instance.
-        from_bool_validator = core_schema.no_info_plain_validator_function(cls)
-
-        # Validation runs in two steps:
-        #
-        #   - Strict bool validation rejects anything that is not exactly a bool.
-        #   - A plain validator wraps what survives into a typed instance.
-        python_schema = core_schema.chain_schema(
-            [core_schema.bool_schema(strict=True), from_bool_validator]
-        )
-
-        # Final schema accepts either branch and serializes back to a plain bool:
-        #
-        #   - Branch 1: input is already a typed instance, pass through.
-        #   - Branch 2: input is a strict bool that needs wrapping.
-        return core_schema.union_schema(
-            [
-                core_schema.is_instance_schema(cls),
-                python_schema,
-            ],
-            serialization=core_schema.plain_serializer_function_ser_schema(bool),
-        )
+        return wrapping_schema(cls, core_schema.bool_schema(strict=True), to_json=bool)
 
     @classmethod
     @override
@@ -208,7 +190,7 @@ class Boolean(int, SSZType):
         """Helper to raise a consistent TypeError."""
         raise TypeError(
             f"Unsupported operand type(s) for {op_symbol}: "
-            f"'{cls.__name__}' and '{type(other).__name__}'"
+            + f"'{cls.__name__}' and '{type(other).__name__}'"
         )
 
     @classmethod

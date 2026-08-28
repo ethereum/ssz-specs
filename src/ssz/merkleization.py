@@ -741,7 +741,7 @@ def _progressive_container_plan(
     if len(active_positions) != len(field_names):
         raise ValueError(
             f"the layout sets {len(active_positions)} positions, "
-            f"and the struct declares {len(field_names)}"
+            + f"and the struct declares {len(field_names)}"
         )
     # Fields follow the set bits: the n-th field belongs at the n-th set position.
     for position, name in zip(active_positions, field_names, strict=True):

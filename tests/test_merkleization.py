@@ -1823,7 +1823,7 @@ def test_progressive_and_bounded_container_share_bytes_but_not_roots() -> None:
 memo_in_force = pytest.mark.skipif(
     merkleization.PARANOID_ROOTS,
     reason="PARANOID_ROOTS recomputes every remembered root, which is the behaviour "
-    "this test observes the absence of",
+    + "this test observes the absence of",
 )
 """Marks a test that observes the memo being reused, which paranoid mode suspends."""
 

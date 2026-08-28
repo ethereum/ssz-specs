@@ -565,7 +565,7 @@ class TestUintSSZ:
         invalid_scope = byte_length - 1
         expected_message = (
             f"{uint_class.__name__}: invalid scope, "
-            f"expected {byte_length} bytes, got {invalid_scope}"
+            + f"expected {byte_length} bytes, got {invalid_scope}"
         )
         with pytest.raises(SSZSerializationError) as exception_info:
             uint_class.deserialize(stream, scope=invalid_scope)
@@ -662,7 +662,7 @@ class TestForwardArithmeticTypeErrors:
         # Call the dunder method directly so no reflected fallback can intervene.
         expected_message = (
             f"Unsupported operand type(s) for {op_symbol}: "
-            f"'{uint_class.__name__}' and '{type(bad).__name__}'"
+            + f"'{uint_class.__name__}' and '{type(bad).__name__}'"
         )
         with pytest.raises(TypeError) as exception_info:
             getattr(uint_class(5), method)(bad)
@@ -848,8 +848,8 @@ class TestPowShiftStrictOperands:
     def test_pow_rejects_non_uint_exponent(self, uint_class: Type[BaseUint], bad: Any) -> None:
         """Exponentiation rejects any exponent that is a number of another type."""
         expected_message = (
-            f"Unsupported operand type(s) for **: "
-            f"'{uint_class.__name__}' and '{type(bad).__name__}'"
+            "Unsupported operand type(s) for **: "
+            + f"'{uint_class.__name__}' and '{type(bad).__name__}'"
         )
         with pytest.raises(TypeError) as exception_info:
             uint_class(2) ** bad
@@ -860,8 +860,8 @@ class TestPowShiftStrictOperands:
     def test_pow_rejects_non_uint_modulo(self, uint_class: Type[BaseUint], bad: Any) -> None:
         """Three-argument pow rejects any modulo that is a number of another type."""
         expected_message = (
-            f"Unsupported operand type(s) for **: "
-            f"'{uint_class.__name__}' and '{type(bad).__name__}'"
+            "Unsupported operand type(s) for **: "
+            + f"'{uint_class.__name__}' and '{type(bad).__name__}'"
         )
         with pytest.raises(TypeError) as exception_info:
             pow(uint_class(2), uint_class(10), bad)
@@ -872,8 +872,8 @@ class TestPowShiftStrictOperands:
     def test_rpow_rejects_non_uint_base(self, uint_class: Type[BaseUint], bad: Any) -> None:
         """Reverse pow rejects any base that is a number of another type."""
         expected_message = (
-            f"Unsupported operand type(s) for **: "
-            f"'{uint_class.__name__}' and '{type(bad).__name__}'"
+            "Unsupported operand type(s) for **: "
+            + f"'{uint_class.__name__}' and '{type(bad).__name__}'"
         )
         with pytest.raises(TypeError) as exception_info:
             uint_class(3).__rpow__(bad)
@@ -884,8 +884,8 @@ class TestPowShiftStrictOperands:
     def test_rpow_rejects_non_uint_modulo(self, uint_class: Type[BaseUint], bad: Any) -> None:
         """Three-argument reverse pow rejects any modulo that is a number of another type."""
         expected_message = (
-            f"Unsupported operand type(s) for **: "
-            f"'{uint_class.__name__}' and '{type(bad).__name__}'"
+            "Unsupported operand type(s) for **: "
+            + f"'{uint_class.__name__}' and '{type(bad).__name__}'"
         )
         with pytest.raises(TypeError) as exception_info:
             uint_class(10).__rpow__(uint_class(2), bad)
@@ -896,8 +896,8 @@ class TestPowShiftStrictOperands:
     def test_lshift_rejects_non_uint(self, uint_class: Type[BaseUint], bad: Any) -> None:
         """Left shift rejects any shift amount that is a number of another type."""
         expected_message = (
-            f"Unsupported operand type(s) for <<: "
-            f"'{uint_class.__name__}' and '{type(bad).__name__}'"
+            "Unsupported operand type(s) for <<: "
+            + f"'{uint_class.__name__}' and '{type(bad).__name__}'"
         )
         with pytest.raises(TypeError) as exception_info:
             uint_class(1) << bad
@@ -908,8 +908,8 @@ class TestPowShiftStrictOperands:
     def test_rshift_rejects_non_uint(self, uint_class: Type[BaseUint], bad: Any) -> None:
         """Right shift rejects any shift amount that is a number of another type."""
         expected_message = (
-            f"Unsupported operand type(s) for >>: "
-            f"'{uint_class.__name__}' and '{type(bad).__name__}'"
+            "Unsupported operand type(s) for >>: "
+            + f"'{uint_class.__name__}' and '{type(bad).__name__}'"
         )
         with pytest.raises(TypeError) as exception_info:
             uint_class(8) >> bad
@@ -934,8 +934,8 @@ class TestDivmodEdgeCases:
     ) -> None:
         """Forward divmod raises TypeError when the divisor is a number no relation admits."""
         expected_message = (
-            f"Unsupported operand type(s) for divmod: "
-            f"'{uint_class.__name__}' and '{type(bad).__name__}'"
+            "Unsupported operand type(s) for divmod: "
+            + f"'{uint_class.__name__}' and '{type(bad).__name__}'"
         )
         with pytest.raises(TypeError) as exception_info:
             divmod(uint_class(10), bad)
@@ -998,8 +998,8 @@ class TestReverseShiftOperators:
     def test_rlshift_rejects_non_uint(self, uint_class: Type[BaseUint], bad: Any) -> None:
         """Reverse left shift rejects any operand that is a number of another type."""
         expected_message = (
-            f"Unsupported operand type(s) for <<: "
-            f"'{uint_class.__name__}' and '{type(bad).__name__}'"
+            "Unsupported operand type(s) for <<: "
+            + f"'{uint_class.__name__}' and '{type(bad).__name__}'"
         )
         with pytest.raises(TypeError) as exception_info:
             uint_class(2).__rlshift__(bad)
@@ -1020,8 +1020,8 @@ class TestReverseShiftOperators:
     def test_rrshift_rejects_non_uint(self, uint_class: Type[BaseUint], bad: Any) -> None:
         """Reverse right shift rejects any operand that is a number of another type."""
         expected_message = (
-            f"Unsupported operand type(s) for >>: "
-            f"'{uint_class.__name__}' and '{type(bad).__name__}'"
+            "Unsupported operand type(s) for >>: "
+            + f"'{uint_class.__name__}' and '{type(bad).__name__}'"
         )
         with pytest.raises(TypeError) as exception_info:
             uint_class(2).__rrshift__(bad)
@@ -1054,8 +1054,8 @@ class TestComparisonTypeErrors:
     def test_le_rejects_an_unrelated_operand(self, uint_class: Type[BaseUint], bad: Any) -> None:
         """Less-than-or-equal raises TypeError for anything but a uint or an int."""
         expected_message = (
-            f"Unsupported operand type(s) for <=: "
-            f"'{uint_class.__name__}' and '{type(bad).__name__}'"
+            "Unsupported operand type(s) for <=: "
+            + f"'{uint_class.__name__}' and '{type(bad).__name__}'"
         )
         with pytest.raises(TypeError) as exception_info:
             uint_class(5).__le__(bad)

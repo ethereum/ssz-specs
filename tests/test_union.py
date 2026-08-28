@@ -186,8 +186,8 @@ class TestOptionDeclaration:
         with pytest.raises(
             SSZUnionOptionsError,
             match=(
-                rf"^OutOfRange: invalid union options, "
-                rf"selector {selector} falls outside 1 through 127$"
+                r"^OutOfRange: invalid union options, "
+                + rf"selector {selector} falls outside 1 through 127$"
             ),
         ):
             type("OutOfRange", (CompatibleUnion,), {"OPTIONS": {selector: Square}})

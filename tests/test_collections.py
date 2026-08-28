@@ -760,7 +760,7 @@ class TestVectorSerialization:
                 Uint8Vector48,
                 tuple(range(48)),
                 "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f"
-                "202122232425262728292a2b2c2d2e2f",
+                + "202122232425262728292a2b2c2d2e2f",
             ),
             (
                 Uint8Vector96,
@@ -769,8 +769,8 @@ class TestVectorSerialization:
                     for i in range(96)
                 ),
                 "0100000000000000000000000000000000000000000000000000000000000000"
-                "0200000000000000000000000000000000000000000000000000000000000000"
-                "03000000000000000000000000000000000000000000000000000000000000ff",
+                + "0200000000000000000000000000000000000000000000000000000000000000"
+                + "03000000000000000000000000000000000000000000000000000000000000ff",
             ),
             (
                 FixedContainerVector2,
@@ -897,8 +897,8 @@ class TestListSerialization:
                 ),
                 (
                     "bbaa000000000000000000000000000000000000000000000000000000000000"
-                    "adc0000000000000000000000000000000000000000000000000000000000000"
-                    "ffee000000000000000000000000000000000000000000000000000000000000"
+                    + "adc0000000000000000000000000000000000000000000000000000000000000"
+                    + "ffee000000000000000000000000000000000000000000000000000000000000"
                 ),
             ),
             (
@@ -955,8 +955,8 @@ class TestListSerialization:
         with pytest.raises(SSZSerializationError) as exception_info:
             VariableContainerList2.decode_bytes(b"\x00\x00\x00")
         assert (
-            str(exception_info.value) == "VariableContainerList2: scope 3 too small, "
-            "expected at least 4"
+            str(exception_info.value)
+            == "VariableContainerList2: scope 3 too small, " + "expected at least 4"
         )
 
     def test_variable_size_list_rejects_first_offset_past_scope(self) -> None:
@@ -1364,7 +1364,7 @@ class TestProgressiveListSerialization:
 
         assert encoded.hex() == (
             "bbaa000000000000000000000000000000000000000000000000000000000000"
-            "adc0000000000000000000000000000000000000000000000000000000000000"
+            + "adc0000000000000000000000000000000000000000000000000000000000000"
         )
         assert Bytes32ProgressiveList.decode_bytes(encoded) == instance
 
@@ -1496,8 +1496,9 @@ class TestProgressiveListSerialization:
         with pytest.raises(SSZSerializationError) as exception_info:
             VariableContainerProgressiveList.decode_bytes(bytes.fromhex("00000000aabbccdd"))
         assert (
-            str(exception_info.value) == "VariableContainerProgressiveList: first offset 0 "
-            "is below the table's own width of 4"
+            str(exception_info.value)
+            == "VariableContainerProgressiveList: first offset 0 "
+            + "is below the table's own width of 4"
         )
 
     def test_variable_size_list_rejects_non_monotonic_offsets(self) -> None:

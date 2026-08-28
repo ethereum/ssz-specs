@@ -374,5 +374,5 @@ class ProgressiveContainer(_SSZContainer):
                 name,
                 layout,
                 f"the layout sets {active_count} positions, "
-                f"and the struct declares {len(cls.model_fields)}",
+                + f"and the struct declares {len(cls.model_fields)}",
             )

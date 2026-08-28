@@ -24,7 +24,7 @@ from ssz.union import CompatibleUnion
 memo_in_force = pytest.mark.skipif(
     merkleization.PARANOID_ROOTS,
     reason="PARANOID_ROOTS recomputes every remembered root, which is the behaviour "
-    "these tests observe the absence of",
+    + "these tests observe the absence of",
 )
 """Marks a test that observes the memo being reused, which paranoid mode suspends."""
 
