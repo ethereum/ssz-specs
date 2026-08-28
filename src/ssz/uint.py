@@ -8,6 +8,7 @@ from typing import IO, Any, ClassVar, NoReturn, Self, SupportsInt, TypeAlias, ov
 from pydantic.annotated_handlers import GetCoreSchemaHandler
 from pydantic_core import core_schema
 
+from ssz.base import wrapping_schema
 from ssz.exceptions import (
     SSZRangeError,
     SSZScopeError,
@@ -142,27 +143,18 @@ class BaseUint(int, SSZType):
     def __get_pydantic_core_schema__(
         cls, source_type: Any, handler: GetCoreSchemaHandler
     ) -> core_schema.CoreSchema:
-        """Hook into Pydantic's validation system."""
-        # A plain validator wraps a pre-validated int into a typed instance.
-        from_int_validator = core_schema.no_info_plain_validator_function(cls)
-        # Strict int validation enforces the unsigned range before construction.
-        #
-        # The lt bound is exclusive, so a value equal to 2**BITS is rejected.
-        python_schema = core_schema.chain_schema(
-            [core_schema.int_schema(ge=0, lt=2**cls.BITS, strict=True), from_int_validator]
-        )
-        # Existing instances bypass validation.
-        #
-        # Raw values flow through the strict chain instead.
-        return core_schema.union_schema(
-            [
-                # Case 1: The value is already the correct type.
-                core_schema.is_instance_schema(cls),
-                # Case 2: The value needs to be parsed and validated.
-                python_schema,
-            ],
-            # Round-trip to JSON drops the subtype back to a plain int.
-            serialization=core_schema.plain_serializer_function_ser_schema(int),
+        """
+        Hook into Pydantic's validation system.
+
+        A field holds a uint as an instance or as a strict int within the unsigned range.
+        The bound is exclusive, so a value equal to 2**BITS is refused.
+
+        JSON carries the value as a plain int.
+        """
+        return wrapping_schema(
+            cls,
+            core_schema.int_schema(ge=0, lt=2**cls.BITS, strict=True),
+            to_json=int,
         )
 
     @classmethod
@@ -240,7 +232,7 @@ class BaseUint(int, SSZType):
         """Helper to raise a consistent TypeError."""
         raise TypeError(
             f"Unsupported operand type(s) for {op_symbol}: "
-            f"'{cls.__name__}' and '{type(other).__name__}'"
+            + f"'{cls.__name__}' and '{type(other).__name__}'"
         )
 
     @classmethod

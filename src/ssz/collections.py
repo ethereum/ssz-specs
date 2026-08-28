@@ -612,7 +612,7 @@ class _SSZList[T: SSZType](_SSZSequence[T]):
         if scope < BYTES_PER_LENGTH_OFFSET:
             raise SSZSerializationError(
                 f"{cls.__name__}: scope {scope} too small, "
-                f"expected at least {BYTES_PER_LENGTH_OFFSET}"
+                + f"expected at least {BYTES_PER_LENGTH_OFFSET}"
             )
         first_offset = cls._read_offsets(stream, 1)[0]
 
@@ -620,12 +620,12 @@ class _SSZList[T: SSZType](_SSZSequence[T]):
         if first_offset < BYTES_PER_LENGTH_OFFSET:
             raise SSZSerializationError(
                 f"{cls.__name__}: first offset {first_offset} is below "
-                f"the table's own width of {BYTES_PER_LENGTH_OFFSET}"
+                + f"the table's own width of {BYTES_PER_LENGTH_OFFSET}"
             )
         if first_offset % BYTES_PER_LENGTH_OFFSET != 0:
             raise SSZSerializationError(
                 f"{cls.__name__}: first offset {first_offset} is not a multiple "
-                f"of {BYTES_PER_LENGTH_OFFSET}"
+                + f"of {BYTES_PER_LENGTH_OFFSET}"
             )
         if first_offset > scope:
             raise SSZSerializationError(
