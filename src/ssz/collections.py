@@ -30,7 +30,7 @@ from collections.abc import Mapping, Sequence
 from itertools import pairwise
 from typing import IO, Any, ClassVar, Self, cast, overload, override
 
-from pydantic import Field, ValidationError, field_serializer, field_validator
+from pydantic import Field, field_serializer, field_validator
 
 from ssz.byte_arrays import ByteVector
 from ssz.exceptions import (
@@ -73,14 +73,7 @@ class _SSZSequence[T: SSZType](SSZCollection[T], ABC):
 
     @classmethod
     def __pydantic_init_subclass__(cls, **kwargs: Any) -> None:
-        """
-        Read the element type from the generic parameter, then classify it.
-
-        The bracketed type sits on a base, or on the type itself when inline:
-
-            class Uint16Vector2(Vector[Uint16])   ->  found on the parent
-            ProgressiveList[Uint16]               ->  found on the type itself
-        """
+        """Read the element type from the generic parameter, then classify it."""
         super().__pydantic_init_subclass__(**kwargs)
 
         # A shape naming its element type by hand has nothing left to infer.
@@ -115,9 +108,6 @@ class _SSZSequence[T: SSZType](SSZCollection[T], ABC):
     def _check_declaration(cls) -> None:
         """
         Refuse a shape that has not declared what it needs to hold a value.
-
-        Not checked at declaration time.
-        A layer may bind the element type and leave the count to the shape below.
 
         Raises:
             SSZDefinitionError: When the element type was never declared.
@@ -193,7 +183,9 @@ class _SSZSequence[T: SSZType](SSZCollection[T], ABC):
                 and issubclass(element_type, ByteVector)
             ):
                 return element_type(value)
-        except (SSZError, ValidationError, TypeError, ValueError) as exception:
+
+        # A pydantic refusal arrives as a ValueError.
+        except (SSZError, TypeError, ValueError) as exception:
             raise SSZTypeMismatch(
                 element_type.__name__, element_class, detail=str(exception)
             ) from exception
@@ -263,8 +255,9 @@ class _SSZSequence[T: SSZType](SSZCollection[T], ABC):
         So a table cannot be read from without having been checked.
 
         Raises:
-            SSZSerializationError: When an offset is above the one after it.
-            SSZSerializationError: When the last offset runs past the budget.
+            SSZSerializationError:
+                - When an offset is above the one after it.
+                - When the last offset runs past the budget.
         """
         boundaries = [*offsets, scope]
 
@@ -500,9 +493,6 @@ class _SSZList[T: SSZType](_SSZSequence[T]):
         """
         Remove and return the last element.
 
-        Removing one can never breach a capacity.
-        No shape offering this pins a length, so the count has nothing to check.
-
         Raises:
             IndexError: When the sequence is empty.
         """
@@ -516,15 +506,7 @@ class _SSZList[T: SSZType](_SSZSequence[T]):
 
     @override
     def __getitem__(self, index: int | slice) -> T | Self:
-        """
-        Read the element or elements at a position, a range giving this same type.
-
-        A range of these shapes is a shorter value of the same shape.
-        Answering with one keeps a range where it started:
-
-            queue[1:] + [item]        concatenates as the shape, not as a list
-            state.queue = queue[1:]   assigns without naming the type again
-        """
+        """Read the element or elements at a position, a range giving this same type."""
         # A range goes through the constructor.
         # So a bounded list still refuses one that would overflow it.
         if isinstance(index, slice):
@@ -641,19 +623,7 @@ class _SSZList[T: SSZType](_SSZSequence[T]):
 
 
 class List[T: SSZType](_SSZList[T]):
-    """
-    Variable-length SSZ sequence holding zero to LIMIT elements of one type.
-
-    The hash tree root mixes in the element count alongside the chunked data.
-
-    A capacity reaches the root only through the width of the tree it bounds.
-    That width is the next power of two at or above the capacity in chunks.
-    Two capacities rounding to the same width root the same contents identically.
-    Eight-byte elements pack four to a chunk, so a capacity of three roots as four.
-
-    Subclasses declare their limit in the class body.
-    The element type comes from the generic parameter.
-    """
+    """Variable-length SSZ sequence holding zero to LIMIT elements of one type."""
 
     LIMIT: ClassVar[int | None]
     """Maximum number of elements allowed."""
@@ -676,17 +646,4 @@ class ProgressiveList[T: SSZType](_SSZList[T]):
     Variable-length SSZ sequence with no capacity, per EIP-7916.
 
     It encodes to the same bytes as a bounded list, and only the Merkle trees differ.
-
-    A bounded list pads its tree to the depth its limit needs.
-    One eight-byte element under a 1024-element limit spans 256 chunks.
-    That costs 8 hashes rather than 1, and this shape grows with the data instead:
-
-    - A short list hashes through a shallow tree.
-    - An element keeps its position however many follow it, so proofs survive growth.
-    - No capacity is guessed up front, so none can be outgrown or redefined later.
-
-    The element type is the only declaration this shape needs.
-    That is why its body holds nothing else, and why it is usable inline:
-
-        ProgressiveList[Uint16](data=[1, 2, 3])
     """
