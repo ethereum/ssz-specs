@@ -607,7 +607,7 @@ def _layout_bytelist(value: ByteList) -> MerkleLayout:
     # That is also the element count here.
     return MerkleLayout.packing(
         _pack_bytes(serialized_bytes),
-        limit=math.ceil(type(value).LIMIT / BYTES_PER_CHUNK),
+        limit=math.ceil(type(value).declared_limit() / BYTES_PER_CHUNK),
         mixin=length_word(len(serialized_bytes)),
     )
 
@@ -615,7 +615,7 @@ def _layout_bytelist(value: ByteList) -> MerkleLayout:
 @merkle_layout.register
 def _layout_bitvector(value: BitVector) -> MerkleLayout:
     return MerkleLayout.packing(
-        _pack_bits(value.data), limit=math.ceil(type(value).LENGTH / BITS_PER_CHUNK)
+        _pack_bits(value.data), limit=math.ceil(type(value).declared_length() / BITS_PER_CHUNK)
     )
 
 
@@ -623,7 +623,7 @@ def _layout_bitvector(value: BitVector) -> MerkleLayout:
 def _layout_bitlist(value: BitList) -> MerkleLayout:
     return MerkleLayout.packing(
         _pack_bits(value.data),
-        limit=math.ceil(type(value).LIMIT / BITS_PER_CHUNK),
+        limit=math.ceil(type(value).declared_limit() / BITS_PER_CHUNK),
         mixin=length_word(len(value.data)),
     )
 
@@ -636,10 +636,11 @@ def _layout_progressive_bitlist(value: ProgressiveBitList) -> MerkleLayout:
     )
 
 
+# Registered by annotation, and singledispatch needs a class, not a subscripted generic.
 @merkle_layout.register
 def _layout_vector(value: Vector) -> MerkleLayout:
     cls = type(value)
-    element_type, length = cls.ELEMENT_TYPE, cls.LENGTH
+    element_type, length = cls.ELEMENT_TYPE, cls.declared_length()
     if issubclass(element_type, (BaseUint, Boolean)):
         # Basic elements pack their serialized bytes into a single byte stream before chunking.
         element_size = element_type.get_byte_length()
@@ -654,7 +655,7 @@ def _layout_vector(value: Vector) -> MerkleLayout:
 @merkle_layout.register
 def _layout_list(value: List) -> MerkleLayout:
     cls = type(value)
-    element_type, limit = cls.ELEMENT_TYPE, cls.LIMIT
+    element_type, limit = cls.ELEMENT_TYPE, cls.declared_limit()
     mixin = length_word(len(value))
     if issubclass(element_type, (BaseUint, Boolean)):
         element_size = element_type.get_byte_length()
@@ -827,7 +828,7 @@ def _witness_packed(value: ByteList | BitVector | BitList | ProgressiveBitList) 
 
 @cache
 def _element_witness_rule(
-    cls: type[Vector | List | ProgressiveList],
+    cls: type[Vector[SSZType] | List[SSZType] | ProgressiveList[SSZType]],
 ) -> Callable[..., object] | None:
     """
     The rule that witnesses one element of this sequence, or None if the elements need none.
@@ -854,7 +855,9 @@ def _element_witness_rule(
 @_root_witness.register(Vector)
 @_root_witness.register(List)
 @_root_witness.register(ProgressiveList)
-def _witness_sequence(value: Vector | List | ProgressiveList) -> object:
+def _witness_sequence(
+    value: Vector[SSZType] | List[SSZType] | ProgressiveList[SSZType],
+) -> object:
     """A sequence of composites carries its elements' witnesses, since each can mutate."""
     element_rule = _element_witness_rule(type(value))
     if element_rule is None:

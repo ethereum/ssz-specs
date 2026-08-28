@@ -55,10 +55,10 @@ class BitVector(SSZCollection[Boolean]):
     Built from nothing, a bitvector holds every bit clear.
     """
 
-    LENGTH: ClassVar[int]
+    LENGTH: ClassVar[int | None]
     """Number of bits in the vector."""
 
-    data: Sequence[Boolean] = Field(default_factory=list)
+    data: Sequence[Boolean] = Field(default_factory=list[Boolean])
     """
     The bits, in position order.
 
@@ -131,7 +131,7 @@ class BitVector(SSZCollection[Boolean]):
     @override
     def get_byte_length(cls) -> int:
         """Return the number of bytes needed to pack the bits."""
-        return math.ceil(cls.LENGTH / 8)
+        return math.ceil(cls.declared_length() / 8)
 
     @override
     def serialize(self, stream: IO[bytes]) -> int:
@@ -206,7 +206,7 @@ class BitVector(SSZCollection[Boolean]):
         # SSZ requires those padding bits to be zero so the encoding is canonical.
         # Without this check, 0b00011111 and 0b11111111 both decode to a 5-bit
         # vector of all ones.
-        if trailing_bit_count := cls.LENGTH % 8:
+        if trailing_bit_count := cls.declared_length() % 8:
             if data[-1] >> trailing_bit_count:
                 raise SSZValueError(
                     f"{cls.__name__}: non-zero padding bits in final byte {data[-1]:#04x}"
@@ -250,7 +250,7 @@ class _SSZBitList(SSZCollection[Boolean]):
     - The Merkle tree shape, which lives in the merkleization module.
     """
 
-    data: Sequence[Boolean] = Field(default_factory=list)
+    data: Sequence[Boolean] = Field(default_factory=list[Boolean])
     """
     The bits, in position order.
 
@@ -548,7 +548,7 @@ class BitList(_SSZBitList):
         [1, 0, 1, 0, 0, 0, 0, 0] ->  0b00000101
     """
 
-    LIMIT: ClassVar[int]
+    LIMIT: ClassVar[int | None]
     """Maximum number of bits allowed."""
 
     @classmethod

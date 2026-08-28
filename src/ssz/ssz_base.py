@@ -7,6 +7,8 @@ from copy import copy as shallow_copy
 from typing import IO, TYPE_CHECKING, Any, ClassVar, Final, Self, cast, final, overload, override
 
 from pydantic import ConfigDict, Field
+from pydantic.annotated_handlers import GetCoreSchemaHandler
+from pydantic_core import core_schema
 
 from ssz.base import StrictBaseModel
 from ssz.exceptions import (
@@ -63,12 +65,31 @@ class SSZType(ABC):
     """
 
     LENGTH: ClassVar[int | None] = None
-    """Exact element count, or None where the shape declares none.
-
-    A shape that pins its count overrides this with an integer and narrows the annotation."""
+    """Exact element count, or None where the shape declares none."""
 
     LIMIT: ClassVar[int | None] = None
     """Maximum element count, read the same way: None means no count, never a count of zero."""
+
+    @classmethod
+    def __get_pydantic_core_schema__(
+        cls, source_type: Any, handler: GetCoreSchemaHandler
+    ) -> core_schema.CoreSchema:
+        """Accept any SSZ value by membership, which is all an abstract field can check."""
+        return core_schema.is_instance_schema(cls)
+
+    @classmethod
+    def declared_length(cls) -> int:
+        """The exact element count this shape pins, or a definition error where it pins none."""
+        if cls.LENGTH is None:
+            raise SSZDefinitionError(cls.__name__, "LENGTH")
+        return cls.LENGTH
+
+    @classmethod
+    def declared_limit(cls) -> int:
+        """The element count this shape bounds, or a definition error where it bounds none."""
+        if cls.LIMIT is None:
+            raise SSZDefinitionError(cls.__name__, "LIMIT")
+        return cls.LIMIT
 
     def __init_subclass__(cls, **kwargs: Any) -> None:
         """
@@ -365,7 +386,7 @@ class SSZType(ABC):
         return instance
 
 
-class SSZModel(StrictBaseModel, SSZType):
+class SSZModel(StrictBaseModel, SSZType, ABC):
     """
     Pydantic-backed SSZ base used by containers, lists, vectors, and bitfields.
 
@@ -490,7 +511,7 @@ class SSZModel(StrictBaseModel, SSZType):
         return f"{cls_name}({' '.join(field_strs)})"
 
 
-class SSZCollection[T](SSZModel, Sequence[T]):
+class SSZCollection[T](SSZModel, Sequence[T], ABC):
     """
     Pydantic-backed SSZ base for collections that wrap their contents in one data field.
 

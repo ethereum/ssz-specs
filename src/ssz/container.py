@@ -156,17 +156,31 @@ class _SSZContainer(SSZModel):
         """
         super().__pydantic_init_subclass__(**kwargs)
 
-        for field in cls.model_fields.values():
+        field_types: list[tuple[str, type[SSZType]]] = []
+        for name, field in cls.model_fields.items():
+            declared = field.annotation
+
+            # A field declared as anything but an SSZ type has neither an encoding nor a root.
+            if not (isinstance(declared, type) and issubclass(declared, SSZType)):
+                # A declared class names itself; anything else is named by what it is.
+                raise SSZTypeMismatch(
+                    f"an SSZ type for {cls.__name__}.{name}",
+                    declared if isinstance(declared, type) else type(declared),
+                )
+
             if field.default_factory is None and field.default is PydanticUndefined:
-                field.default_factory = field.annotation
+                field.default_factory = declared
+            field_types.append((name, declared))
+
         cls.model_rebuild(force=True)
-        cls._FIELD_TYPES = tuple((name, f.annotation) for name, f in cls.model_fields.items())
+
+        cls._FIELD_TYPES = tuple(field_types)
 
     @classmethod
     @override
     def is_fixed_size(cls) -> bool:
         """True only when every field is fixed-size."""
-        return all(f.annotation.is_fixed_size() for f in cls.model_fields.values())
+        return all(field_type.is_fixed_size() for _, field_type in cls._FIELD_TYPES)
 
     @classmethod
     @override
@@ -180,7 +194,7 @@ class _SSZContainer(SSZModel):
         # A variable-size field has no width to give, so asking for one is the check.
         # Checking first would walk every declared type twice, and again at every nesting.
         try:
-            return sum(f.annotation.get_byte_length() for f in cls.model_fields.values())
+            return sum(field_type.get_byte_length() for _, field_type in cls._FIELD_TYPES)
         except SSZFixedSizeError as variable_field:
             raise SSZFixedSizeError(cls.__name__, "container") from variable_field
 

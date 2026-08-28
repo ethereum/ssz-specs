@@ -25,6 +25,7 @@ Three variable-size bodies of widths 5, 3 and 7 encode to 27 bytes:
 """
 
 import io
+from abc import ABC
 from collections.abc import Mapping, Sequence
 from itertools import pairwise
 from typing import IO, Any, ClassVar, Self, cast, overload, override
@@ -41,17 +42,22 @@ from ssz.exceptions import (
     SSZTypeMismatch,
     SSZValueError,
 )
-from ssz.ssz_base import BYTES_PER_LENGTH_OFFSET, SSZCollection, SSZModel, SSZType
+from ssz.ssz_base import (
+    BYTES_PER_LENGTH_OFFSET,
+    SSZCollection,
+    SSZModel,
+    SSZType,
+)
 from ssz.uint import Uint32
 
 
-class _SSZSequence[T: SSZType](SSZCollection[T]):
+class _SSZSequence[T: SSZType](SSZCollection[T], ABC):
     """
     Shared scaffolding for the three SSZ sequence shapes.
 
-    All of them store their elements in one field.
-    All of them share one input rule, one count rule, and one coercion rule.
-    All of them share the offset-table reader and writer.
+    - All of them store their elements in one field.
+    - All of them share one input rule, one count rule, and one coercion rule.
+    - All of them share the offset-table reader and writer.
 
     The element type is inferred from the generic parameter, once per subclass.
     """
@@ -60,15 +66,9 @@ class _SSZSequence[T: SSZType](SSZCollection[T]):
     """SSZ type of every element, inferred from the generic parameter."""
 
     IMMUTABLE_ELEMENTS: ClassVar[bool] = False
-    """
-    Whether one element object may stand in every position and in every copy.
+    """Whether elements are immutable, so one object can be shared across positions and copies."""
 
-    Uints, booleans and fixed byte arrays all subclass an immutable builtin.
-    Nothing written through one position can reach another.
-    """
-
-    # A fresh list per instance: the spec's default is empty, and the contents mutate.
-    data: Sequence[T] = Field(default_factory=list)
+    data: Sequence[T] = Field(default_factory=list[T])
     """The elements, stored as a list once validated."""
 
     @classmethod
@@ -351,7 +351,7 @@ class Vector[T: SSZType](_SSZSequence[T]):
     A range of a vector is a plain sequence, holding too few elements to be one.
     """
 
-    LENGTH: ClassVar[int]
+    LENGTH: ClassVar[int | None]
     """Exact number of elements, fixed at the type level."""
 
     @classmethod
@@ -418,7 +418,7 @@ class Vector[T: SSZType](_SSZSequence[T]):
         """
         # A variable-size element has no width to give, so asking for one is the check.
         try:
-            return cls.ELEMENT_TYPE.get_byte_length() * cls.LENGTH
+            return cls.ELEMENT_TYPE.get_byte_length() * cls.declared_length()
         except SSZFixedSizeError as variable_element:
             raise SSZFixedSizeError(cls.__name__, "vector") from variable_element
 
@@ -442,26 +442,26 @@ class Vector[T: SSZType](_SSZSequence[T]):
         # Fixed-size case: the budget is the element width times the count, exactly.
         if cls.is_fixed_size():
             element_byte_length = cls.ELEMENT_TYPE.get_byte_length()
-            expected_total = element_byte_length * cls.LENGTH
+            expected_total = element_byte_length * cls.declared_length()
             if scope != expected_total:
                 raise SSZScopeError(cls.__name__, expected_total, scope)
             return cls.model_construct(
                 _fields_set={"data"},
                 data=[
                     cls.ELEMENT_TYPE.deserialize(stream, element_byte_length)
-                    for _ in range(cls.LENGTH)
+                    for _ in range(cls.declared_length())
                 ],
             )
 
         # Variable-size case: the count is known, so the table's width is known too.
-        expected_first = cls.LENGTH * BYTES_PER_LENGTH_OFFSET
+        expected_first = cls.declared_length() * BYTES_PER_LENGTH_OFFSET
         if scope < expected_first:
             raise SSZSerializationError(
                 f"{cls.__name__}: scope {scope} too small, expected at least {expected_first}"
             )
 
         # The declared length is positive, so there is always a first offset to read.
-        offsets = cls._read_offsets(stream, cls.LENGTH)
+        offsets = cls._read_offsets(stream, cls.declared_length())
 
         # The first body starts right after the table.
         # Any other value leaves a gap or an overlap, so one value could encode twice.
@@ -655,7 +655,7 @@ class List[T: SSZType](_SSZList[T]):
     The element type comes from the generic parameter.
     """
 
-    LIMIT: ClassVar[int]
+    LIMIT: ClassVar[int | None]
     """Maximum number of elements allowed."""
 
     @classmethod

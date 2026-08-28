@@ -635,6 +635,29 @@ class TestErrors:
     """Spec-compliance error paths for malformed inputs."""
 
     @pytest.mark.parametrize(
+        ("declared", "type_name"),
+        [
+            pytest.param(int, "int", id="builtin"),
+            pytest.param(str, "str", id="another_builtin"),
+            pytest.param(list[Uint8], "GenericAlias", id="not_a_class_at_all"),
+        ],
+    )
+    def test_a_field_declared_as_something_other_than_an_ssz_type_is_refused(
+        self, declared: type, type_name: str
+    ) -> None:
+        """A field with no SSZ rules is refused where it is written, not where it is read."""
+        with pytest.raises(SSZTypeMismatch) as exception_info:
+            type(ssz.Container)(
+                "BadField",
+                (ssz.Container,),
+                {"__annotations__": {"slot": Uint64, "extra": declared}},
+            )
+
+        assert (
+            str(exception_info.value) == f"Expected an SSZ type for BadField.extra, got {type_name}"
+        )
+
+    @pytest.mark.parametrize(
         ("bad_offset", "expected_message"),
         [
             pytest.param(11, "Mixed: first offset 11 != fixed-part end 20", id="below_fixed_end"),

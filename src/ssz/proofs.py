@@ -149,17 +149,21 @@ def chunk_count(ssz_type: type[SSZType]) -> int:
     if issubclass(ssz_type, (BaseUint, Boolean)):
         return 1
     if issubclass(ssz_type, BitVector):
-        return math.ceil(ssz_type.LENGTH / BITS_PER_CHUNK)
+        return math.ceil(ssz_type.declared_length() / BITS_PER_CHUNK)
     if issubclass(ssz_type, BitList):
-        return math.ceil(ssz_type.LIMIT / BITS_PER_CHUNK)
+        return math.ceil(ssz_type.declared_limit() / BITS_PER_CHUNK)
     if issubclass(ssz_type, ByteVector):
-        return math.ceil(ssz_type.LENGTH / BYTES_PER_CHUNK)
+        return math.ceil(ssz_type.declared_length() / BYTES_PER_CHUNK)
     if issubclass(ssz_type, ByteList):
-        return math.ceil(ssz_type.LIMIT / BYTES_PER_CHUNK)
+        return math.ceil(ssz_type.declared_limit() / BYTES_PER_CHUNK)
     if issubclass(ssz_type, Vector):
-        return math.ceil(ssz_type.LENGTH * item_length(ssz_type.ELEMENT_TYPE) / BYTES_PER_CHUNK)
+        return math.ceil(
+            ssz_type.declared_length() * item_length(ssz_type.ELEMENT_TYPE) / BYTES_PER_CHUNK
+        )
     if issubclass(ssz_type, List):
-        return math.ceil(ssz_type.LIMIT * item_length(ssz_type.ELEMENT_TYPE) / BYTES_PER_CHUNK)
+        return math.ceil(
+            ssz_type.declared_limit() * item_length(ssz_type.ELEMENT_TYPE) / BYTES_PER_CHUNK
+        )
     if issubclass(ssz_type, Container):
         return len(_field_names(ssz_type))
     # A progressive shape grows without bound.
@@ -176,10 +180,10 @@ def element_type(ssz_type: type[SSZType], step: PathStep) -> type[SSZType]:
         SSZValueError: When a container has no field of that name.
     """
     if issubclass(ssz_type, (Container, ProgressiveContainer)):
-        field = ssz_type.model_fields.get(str(step))
-        if field is None:
-            raise SSZValueError(f"{ssz_type.__name__} has no field named {step!r}")
-        return field.annotation
+        for name, field_type in ssz_type._FIELD_TYPES:
+            if name == str(step):
+                return field_type
+        raise SSZValueError(f"{ssz_type.__name__} has no field named {step!r}")
     if issubclass(ssz_type, (BitVector, BitList, ProgressiveBitList)):
         return Boolean
     if issubclass(ssz_type, (ByteVector, ByteList)):
