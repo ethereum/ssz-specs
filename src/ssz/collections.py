@@ -568,6 +568,12 @@ class _SSZList[T: SSZType](_SSZSequence[T]):
             SSZSerializationError: When the budget or any offset is malformed.
             SSZLimitError: When the recovered count exceeds a declared capacity.
         """
+        # A budget is a byte count, and every count the decoder derives from it follows its sign.
+        # A negative one divides into a negative element count, which reads as no elements
+        # at all, so a malformed input would decode to the empty value.
+        if scope < 0:
+            raise SSZSerializationError(f"{cls.__name__}: scope {scope} is negative")
+
         if scope == 0:
             return cls.model_construct(_fields_set={"data"}, data=[])
 

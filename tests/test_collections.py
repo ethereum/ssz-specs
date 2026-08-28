@@ -1909,3 +1909,43 @@ class TestTruncatedOffsetTable:
         assert (
             str(exception_info.value) == "VariableContainerProgressiveList: expected 8 bytes, got 0"
         )
+
+
+class TestNegativeScope:
+    """A byte budget below zero describes no payload, and no shape decodes one."""
+
+    def test_a_list_refuses_a_budget_below_zero(self) -> None:
+        """A negative budget over fixed-size elements is refused rather than read as empty."""
+        # Fixed-size elements recover their count by dividing the budget by the stride.
+        # A budget of -4 divides into -4 elements, and iterating that many yields none,
+        # so the input would decode to the empty list while consuming nothing.
+        stream = io.BytesIO(b"\x01\x02\x03\x04")
+        with pytest.raises(SSZSerializationError) as exception_info:
+            Uint8List4.deserialize(stream, -4)
+
+        assert str(exception_info.value) == "Uint8List4: scope -4 is negative"
+        assert stream.tell() == 0
+
+    def test_a_progressive_list_refuses_a_budget_below_zero(self) -> None:
+        """The unbounded shape refuses it on the same grounds, holding no capacity to trip."""
+        with pytest.raises(SSZSerializationError) as exception_info:
+            Uint8ProgressiveList.deserialize(io.BytesIO(b"\x01"), -1)
+
+        assert str(exception_info.value) == "Uint8ProgressiveList: scope -1 is negative"
+
+    def test_a_vector_refuses_a_budget_below_zero(self) -> None:
+        """A vector needs an exact width, and no width is negative."""
+        with pytest.raises(SSZSerializationError) as exception_info:
+            Uint8Vector4.deserialize(io.BytesIO(b"\x01\x02\x03\x04"), -4)
+
+        assert str(exception_info.value) == "Uint8Vector4: expected 4 bytes, got -4"
+
+    def test_a_variable_size_vector_refuses_a_budget_below_zero(self) -> None:
+        """A table of its own width does not fit in a negative budget either."""
+        with pytest.raises(SSZSerializationError) as exception_info:
+            VariableContainerVector2.deserialize(io.BytesIO(b"\x08\x00\x00\x00"), -8)
+
+        assert (
+            str(exception_info.value)
+            == "VariableContainerVector2: scope -8 too small, expected at least 8"
+        )
