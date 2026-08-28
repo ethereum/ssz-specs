@@ -35,30 +35,15 @@ def wrapping_schema(
 
     - An instance takes a branch of its own, reaching the field untouched.
     - Every other accepted form is checked, then handed to the constructor.
-
-    # Why the gate is a schema rather than the constructor alone
-
-    The constructor accepts more than a field should.
-    It refuses with an SSZ error, which pydantic does not recognize, so a bad field would
-    escape model construction naming neither the field nor the model.
-
-    # Why an instance skips the constructor
-
-    A field may hold a subclass of what it declares.
-    Narrowing one back to the declared class would refuse a value that was already right.
-
-    Args:
-        cls: The SSZ type, called on whatever a raw branch admits.
-        accepted: The raw forms a field may hold this type as, besides an instance of it.
-        to_json: Turns an instance into its JSON form.
-
-    Returns:
-        A schema admitting an instance or an accepted form, and refusing the rest.
     """
-    # One validator, shared by every raw branch, running the constructor on what it admits.
+    # The constructor accepts more than a field should.
+    # It refuses with an SSZ error, which pydantic does not recognize.
+    # Gating on the accepted forms first keeps every refusal a validation error.
     wrap = core_schema.no_info_plain_validator_function(cls)
     return core_schema.union_schema(
-        # An instance is listed first, so the common case settles before any coercion.
+        # An instance is listed first, and reaches the field without meeting the constructor.
+        # A field may hold a subclass of what it declares.
+        # The constructor would narrow one back, refusing a value that was already right.
         [
             core_schema.is_instance_schema(cls),
             *(core_schema.chain_schema([raw, wrap]) for raw in accepted),
