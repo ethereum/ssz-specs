@@ -19,7 +19,6 @@ class StrictBaseModel(BaseModel):
 
     model_config = ConfigDict(
         validate_default=True,
-        arbitrary_types_allowed=True,
         extra="forbid",
         strict=True,
     )

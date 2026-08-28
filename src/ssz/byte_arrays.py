@@ -47,7 +47,7 @@ class _Omitted(Enum):
 class ByteVector(bytes, SSZType):
     """Fixed-length SSZ byte array with exactly N bytes."""
 
-    LENGTH: ClassVar[int]
+    LENGTH: ClassVar[int | None]
     """The exact number of bytes (overridden by subclasses)."""
 
     def __new__(
@@ -132,7 +132,7 @@ class ByteVector(bytes, SSZType):
     @override
     def get_byte_length(cls) -> int:
         """Return the declared byte length."""
-        return cls.LENGTH
+        return cls.declared_length()
 
     @override
     def serialize(self, stream: IO[bytes]) -> int:
@@ -159,8 +159,9 @@ class ByteVector(bytes, SSZType):
                 - When scope does not equal the declared width.
                 - When the stream ends before delivering scope bytes.
         """
-        if scope != cls.LENGTH:
-            raise SSZScopeError(cls.__name__, cls.LENGTH, scope)
+        length = cls.declared_length()
+        if scope != length:
+            raise SSZScopeError(cls.__name__, length, scope)
         serialized_bytes = stream.read(scope)
         if len(serialized_bytes) != scope:
             raise SSZScopeError(cls.__name__, scope, len(serialized_bytes))
@@ -248,7 +249,7 @@ class ByteVector(bytes, SSZType):
 class ByteList(SSZCollection[int]):
     r"""Variable-length SSZ byte array with 0 to N bytes."""
 
-    LIMIT: ClassVar[int]
+    LIMIT: ClassVar[int | None]
     """Maximum number of bytes the instance may contain."""
 
     data: bytes = Field(default=b"")
@@ -381,8 +382,9 @@ class ByteList(SSZCollection[int]):
         """
         if scope < 0:
             raise SSZSerializationError(f"{cls.__name__}: negative scope")
-        if scope > cls.LIMIT:
-            raise SSZLimitError(cls.__name__, cls.LIMIT, scope)
+        limit = cls.declared_limit()
+        if scope > limit:
+            raise SSZLimitError(cls.__name__, limit, scope)
         serialized_bytes = stream.read(scope)
         if len(serialized_bytes) != scope:
             raise SSZScopeError(cls.__name__, scope, len(serialized_bytes))

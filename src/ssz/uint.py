@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from numbers import Number
+from types import NotImplementedType
 from typing import IO, Any, ClassVar, NoReturn, Self, SupportsInt, TypeAlias, overload, override
 
 from pydantic.annotated_handlers import GetCoreSchemaHandler
@@ -236,7 +237,7 @@ class BaseUint(int, SSZType):
         )
 
     @classmethod
-    def _resolve_type(cls, other: Any, op_symbol: str) -> type[Self]:
+    def _resolve_type(cls, other: Any, op_symbol: str) -> type[Self] | NotImplementedType:
         """
         Decide which type an operation between two different types produces.
 

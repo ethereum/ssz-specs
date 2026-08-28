@@ -31,6 +31,7 @@ from ssz.exceptions import (
     SSZValueError,
 )
 from ssz.merkleization import ZERO_ROOT, Root, hash_tree_root
+from ssz.proofs import chunk_count
 from ssz.ssz_base import SSZCollection, SSZType
 from ssz.uint import BaseUint
 from ssz.union import CompatibleUnion
@@ -1611,6 +1612,34 @@ class TestDeclaredCapacity:
         with pytest.raises(SSZError) as exception_info:
             Late.of(1, 2, 3, 4, 5)
         assert str(exception_info.value) == "Late exceeds limit of 4, got 5"
+
+    def test_an_exact_count_never_declared_is_reported_where_it_is_read(self) -> None:
+        """An absent count is a definition error, not arithmetic against None."""
+
+        class NoLength(ByteVector):
+            pass
+
+        with pytest.raises(SSZDefinitionError) as exception_info:
+            NoLength.declared_length()
+        assert str(exception_info.value) == "NoLength must define LENGTH"
+
+        # A fixed byte array's width is its count, so callers of the width land here too.
+        with pytest.raises(SSZDefinitionError):
+            NoLength.get_byte_length()
+
+    def test_an_upper_bound_never_declared_is_reported_where_it_is_read(self) -> None:
+        """An absent bound reads the same way, through the callers that size a tree from it."""
+
+        class NoLimit(List[Uint16]):
+            pass
+
+        with pytest.raises(SSZDefinitionError) as exception_info:
+            NoLimit.declared_limit()
+        assert str(exception_info.value) == "NoLimit must define LIMIT"
+
+        # A proof sizes the tree from the bound, and reaches the same report.
+        with pytest.raises(SSZDefinitionError):
+            chunk_count(NoLimit)
 
 
 class TestFinalHashTreeRoot:

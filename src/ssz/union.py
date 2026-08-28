@@ -116,10 +116,8 @@ def _fields_by_position(
     # Layout (1, 0, 1) puts the first field at 0 and the second at 2.
     set_positions = (i for i, bit in enumerate(ssz_type.ACTIVE_FIELDS) if bit)
     return {
-        position: (name, field.annotation)
-        for position, (name, field) in zip(
-            set_positions, ssz_type.model_fields.items(), strict=True
-        )
+        position: (name, field_type)
+        for position, (name, field_type) in zip(set_positions, ssz_type._FIELD_TYPES, strict=True)
     }
 
 
@@ -198,9 +196,9 @@ def is_compatible(left: type[SSZType], right: type[SSZType]) -> bool:
             and issubclass(right, Container)
             and list(left.model_fields) == list(right.model_fields)
             and all(
-                is_compatible(left_field.annotation, right_field.annotation)
-                for left_field, right_field in zip(
-                    left.model_fields.values(), right.model_fields.values(), strict=True
+                is_compatible(left_type, right_type)
+                for (_, left_type), (_, right_type) in zip(
+                    left._FIELD_TYPES, right._FIELD_TYPES, strict=True
                 )
             )
         )
