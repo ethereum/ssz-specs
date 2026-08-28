@@ -540,6 +540,7 @@ def test_compatible_union_decode_failure_trailing_byte(ssz_test: SSZTestFiller) 
     ----
     - decoding is rejected.
     - the reason is that a canonical encoding maps to exactly one value.
+    - the rest of the budget belongs to the option, so the option reports the surplus.
     """
     ssz_test(
         type_name="SampleShape",
@@ -550,7 +551,7 @@ def test_compatible_union_decode_failure_trailing_byte(ssz_test: SSZTestFiller) 
         raw_bytes="0x0134124200",
         expected_rejection=ExpectedRejection(
             reason=RejectionReason.DECODE_ERROR,
-            exact_message="SampleShape: 1 trailing byte(s) after decode",
+            exact_message="SampleSquare: expected 3 bytes, got 4",
         ),
     )
 

@@ -700,9 +700,48 @@ class TestErrors:
 
     def test_trailing_bytes_raises(self) -> None:
         """An input one byte longer than the canonical encoding is rejected."""
+        # A struct of fixed-size fields spans its own width, so the spare byte is refused
+        # by the struct itself rather than left over at the end of the input.
         with pytest.raises(SSZSerializationError) as exc_info:
             TwoUint64.decode_bytes(b"\x00" * 17)
-        assert exc_info.value.args[0] == "TwoUint64: 1 trailing byte(s) after decode"
+        assert exc_info.value.args[0] == "TwoUint64: expected 16 bytes, got 17"
+
+
+class TestFixedSizeStructSpansItsOwnWidth:
+    """
+    A struct of fixed-size fields is read at exactly its own width, and no other.
+
+    The budget comes from whoever handed the window down, and a caller reading a table of
+    offsets reads the next span from wherever this one stopped. So a budget wider than the
+    width is two faults at once: one value would have two encodings, and every span after
+    this one would be read from the wrong position.
+    """
+
+    def test_a_wider_budget_is_refused(self) -> None:
+        """A surplus byte inside the window is not something the caller can see."""
+        # The whole input is there to be read, so the budget itself is what fails, and the
+        # 16 bytes read out of the 17 promised would otherwise have gone unremarked.
+        stream = io.BytesIO(b"\x00" * 17)
+        with pytest.raises(SSZSerializationError) as exception_info:
+            TwoUint64.deserialize(stream, 17)
+
+        assert exception_info.value.args[0] == "TwoUint64: expected 16 bytes, got 17"
+
+    def test_a_narrower_budget_is_refused(self) -> None:
+        """A budget under the width names no value of this shape either."""
+        # The stream holds the full 16 bytes, so the shortfall is in the budget alone.
+        stream = io.BytesIO(b"\x00" * 16)
+        with pytest.raises(SSZSerializationError) as exception_info:
+            TwoUint64.deserialize(stream, 15)
+
+        assert exception_info.value.args[0] == "TwoUint64: expected 16 bytes, got 15"
+
+    def test_the_exact_width_decodes(self) -> None:
+        """The one budget that is the width decodes, and consumes all of it."""
+        stream = io.BytesIO(b"\x00" * 16)
+
+        assert TwoUint64.deserialize(stream, 16) == TwoUint64.default()
+        assert stream.tell() == 16
 
 
 class TestFromHex:
@@ -771,7 +810,8 @@ class TestHexStringValidator:
 
     def test_wrong_length_hex_raises_with_class_name(self) -> None:
         """Hex with too many bytes raises a validation error tagged by the class name."""
-        # 2 hex bytes ("abcd") cannot fit a 1-byte container; trailing bytes trigger the error.
+        # 2 hex bytes ("abcd") cannot fit a 1-byte container, and the struct spans its own
+        # width exactly, so the wider payload is what triggers the error.
         #
         # The trailing docs URL embeds the installed pydantic version, so it is anchored
         # with a regex that pins every stable character and generalizes only the version.
@@ -780,7 +820,7 @@ class TestHexStringValidator:
             match=(
                 r"(?s)^1 validation error for OneByte\n"
                 + r"  Value error, invalid OneByte hex: "
-                + r"OneByte: 1 trailing byte\(s\) after decode "
+                + r"OneByte: expected 1 bytes, got 2 "
                 + r"\[type=value_error, input_value='abcd', input_type=str\]\n"
                 + r"    For further information visit "
                 + r"https://errors\.pydantic\.dev/[^/]+/v/value_error\Z"
@@ -1600,9 +1640,11 @@ class TestProgressiveContainerDecodeErrors:
 
     def test_trailing_bytes_raise(self) -> None:
         """An input one byte longer than the canonical encoding is rejected."""
+        # Both struct shapes span the width of their fixed part, so the spare byte is
+        # refused by the struct itself rather than left over at the end of the input.
         with pytest.raises(SSZSerializationError) as exception_info:
             Square.decode_bytes(bytes.fromhex("34125600"))
-        assert exception_info.value.args[0] == "Square: 1 trailing byte(s) after decode"
+        assert exception_info.value.args[0] == "Square: expected 3 bytes, got 4"
 
     @pytest.mark.parametrize(
         "bad_offset",

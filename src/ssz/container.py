@@ -22,6 +22,7 @@ from ssz.exceptions import (
     SSZDefinitionError,
     SSZError,
     SSZFixedSizeError,
+    SSZScopeError,
     SSZSerializationError,
     SSZTypeMismatch,
     SSZValueError,
@@ -240,6 +241,15 @@ class _SSZContainer(SSZModel):
                 bytes_read += BYTES_PER_LENGTH_OFFSET
 
         if not variable_fields:
+            # With no tail, the fixed part just read is the whole encoding, so the budget
+            # is its width and nothing more.
+            #
+            # A wider budget would leave bytes unread inside the window handed down, which
+            # is two things at once: two payloads decoding to one value, and, where the
+            # window came from an offset table, every span after this one read from the
+            # position this field stopped at rather than the offset that names it.
+            if scope != bytes_read:
+                raise SSZScopeError(cls.__name__, bytes_read, scope)
             return cls(**fields)
 
         # Duplicated from the collection decoder on purpose, so each error names its field.

@@ -507,7 +507,7 @@ def test_progressive_container_decode_failure_trailing_byte(ssz_test: SSZTestFil
     Then
     ----
     - decoding is rejected.
-    - the reason is that a canonical encoding maps to exactly one value.
+    - the reason is that a shape of fixed-size fields spans exactly its own width.
     """
     ssz_test(
         type_name="SampleSquare",
@@ -515,7 +515,7 @@ def test_progressive_container_decode_failure_trailing_byte(ssz_test: SSZTestFil
         raw_bytes="0x34125600",
         expected_rejection=ExpectedRejection(
             reason=RejectionReason.DECODE_ERROR,
-            exact_message="SampleSquare: 1 trailing byte(s) after decode",
+            exact_message="SampleSquare: expected 3 bytes, got 4",
         ),
     )
 
