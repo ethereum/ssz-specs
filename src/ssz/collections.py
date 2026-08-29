@@ -251,6 +251,8 @@ class _SSZSequence[T: SSZType](SSZCollection[T], ABC):
         A pair that decreases is a body of negative width.
         The pair closed by the budget is a body reaching past the input.
 
+        Each span is read from where the last stopped, so a short body shifts every later span.
+
         This is the only place that reads bodies.
         So a table cannot be read from without having been checked.
 
@@ -350,12 +352,17 @@ class Vector[T: SSZType](_SSZSequence[T]):
     @classmethod
     def __pydantic_init_subclass__(cls, **kwargs: Any) -> None:
         """
-        Refuse a count no vector can have, then give the elements their default.
+        Refuse a capacity no vector has, then give the elements their default.
 
         Raises:
+            SSZDefinitionError: When the shape declares a bound, which a vector has none of.
             SSZValueError: When the declared length is zero or negative.
         """
         super().__pydantic_init_subclass__(**kwargs)
+
+        # The count is pinned, so a bound is a second count rule the tree never reads.
+        if cls.LIMIT is not None:
+            raise SSZDefinitionError(cls.__name__, "no LIMIT of its own")
 
         # An abstract layer keeps the empty default it inherits.
         # Building a value from it fails its own declaration check instead.
@@ -565,10 +572,20 @@ class _SSZList[T: SSZType](_SSZSequence[T]):
         So neither can be driven to allocate beyond its input.
 
         Raises:
+            SSZDefinitionError: When the shape has not declared what it holds.
             SSZSerializationError: When the budget or any offset is malformed.
             SSZLimitError: When the recovered count exceeds a declared capacity.
         """
+        # A decode is built past the validator that asks this, so the decoder asks it.
+        cls._check_declaration()
+
+        # A negative budget divides into a negative count, which reads as no elements at all.
+        if scope < 0:
+            raise SSZSerializationError(f"{cls.__name__}: scope {scope} is negative")
+
         if scope == 0:
+            # A count of zero is still a count, so no exit here returns an unchecked one.
+            cls._validate_length(0)
             return cls.model_construct(_fields_set={"data"}, data=[])
 
         # Fixed-size case: the count is the budget divided by the element width.
@@ -629,6 +646,19 @@ class List[T: SSZType](_SSZList[T]):
     """Maximum number of elements allowed."""
 
     @classmethod
+    def __pydantic_init_subclass__(cls, **kwargs: Any) -> None:
+        """Refuse a bound no list can have, and an exact count that is a vector's rule."""
+        super().__pydantic_init_subclass__(**kwargs)
+
+        # A pinned count is a vector's rule, and the tree here is laid out from the bound.
+        if cls.LENGTH is not None:
+            raise SSZDefinitionError(cls.__name__, "no LENGTH of its own")
+
+        # A bound below zero leaves the type no value at all, the empty one included.
+        if cls.LIMIT is not None and cls.LIMIT < 0:
+            raise SSZValueError(f"{cls.__name__}: LIMIT must not be negative, got {cls.LIMIT}")
+
+    @classmethod
     @override
     def _check_declaration(cls) -> None:
         """
@@ -647,3 +677,14 @@ class ProgressiveList[T: SSZType](_SSZList[T]):
 
     It encodes to the same bytes as a bounded list, and only the Merkle trees differ.
     """
+
+    @classmethod
+    def __pydantic_init_subclass__(cls, **kwargs: Any) -> None:
+        """Refuse a capacity, there being no such thing here."""
+        super().__pydantic_init_subclass__(**kwargs)
+
+        # EIP-7916 gives this shape no capacity, and its tree grows with what it holds.
+        if cls.LENGTH is not None:
+            raise SSZDefinitionError(cls.__name__, "no LENGTH of its own")
+        if cls.LIMIT is not None:
+            raise SSZDefinitionError(cls.__name__, "no LIMIT of its own")

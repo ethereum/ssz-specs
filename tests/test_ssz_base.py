@@ -2,7 +2,7 @@
 
 from collections.abc import Callable
 from decimal import Decimal
-from typing import Any, cast
+from typing import IO, Any, cast
 
 import pytest
 from pydantic import ValidationError
@@ -27,6 +27,7 @@ from ssz.exceptions import (
     SSZDefaultError,
     SSZDefinitionError,
     SSZError,
+    SSZSerializationError,
     SSZTypeError,
     SSZValueError,
 )
@@ -265,6 +266,39 @@ class TestSSZTypeEncodeDecode:
         """Encoding then decoding must recover the original object."""
         original = TwoFieldContainer(x=Uint8(255), y=Uint16(1000))
         assert TwoFieldContainer.decode_bytes(original.encode_bytes()) == original
+
+    def test_a_value_that_leaves_bytes_behind_is_refused(self) -> None:
+        """One canonical encoding per value, which takes the whole input to decode."""
+
+        # A type that under-reads its budget, which none of this library's own types do.
+        class OneByteOfMany(SSZType):
+            """A type that reads one byte and leaves the rest of its budget unread."""
+
+            @classmethod
+            def is_fixed_size(cls) -> bool:
+                """Variable-size, so no caller derives a width to hand it."""
+                return False
+
+            @classmethod
+            def get_byte_length(cls) -> int:
+                """No fixed width to give."""
+                raise SSZTypeError("OneByteOfMany has no fixed byte length")
+
+            def serialize(self, stream: IO[bytes]) -> int:
+                """Write the one byte this type stands for."""
+                return stream.write(b"\x00")
+
+            @classmethod
+            def deserialize(cls, stream: IO[bytes], scope: int) -> "OneByteOfMany":
+                """Read one byte, whatever the budget was."""
+                stream.read(1)
+                return cls()
+
+        # The outermost decode compares what was read against what was given.
+        with pytest.raises(SSZSerializationError) as exception_info:
+            OneByteOfMany.decode_bytes(b"\x00\xff")
+
+        assert str(exception_info.value) == "OneByteOfMany: 1 trailing byte(s) after decode"
 
 
 class TestSSZCollectionIteration:

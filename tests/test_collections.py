@@ -1830,6 +1830,130 @@ class TestZeroLengthVector:
         assert str(exception_info.value) == "NegativeVector: LENGTH must be positive, got -1"
 
 
+class TestNegativeListLimit:
+    """A bound counts the elements a list may hold, and no count is below zero."""
+
+    def test_a_negative_limit_is_refused_at_declaration(self) -> None:
+        """A negative bound is refused where it is written, not where it is used."""
+        # A negative bound admits no value at all, the empty list included.
+        with pytest.raises(SSZValueError) as exception_info:
+
+            class NegativeList(List[Uint8]):
+                LIMIT = -1
+
+        assert str(exception_info.value) == "NegativeList: LIMIT must not be negative, got -1"
+
+    def test_a_limit_of_zero_admits_the_empty_value_and_nothing_else(self) -> None:
+        """A bound of zero is where the line falls: one value, and it holds no elements."""
+
+        class EmptyList(List[Uint8]):
+            LIMIT = 0
+
+        assert EmptyList.decode_bytes(b"") == EmptyList()
+
+        with pytest.raises(SSZValueError) as exception_info:
+            EmptyList.decode_bytes(b"\x01")
+
+        assert str(exception_info.value) == "EmptyList exceeds limit of 0, got 1"
+
+
+class TestUnentitledCapacity:
+    """A shape declares the capacity its own count rule reads, and no other."""
+
+    def test_a_vector_refuses_a_bound(self) -> None:
+        """A vector counts exactly, and a bound would be a second count rule."""
+        with pytest.raises(SSZTypeError) as exception_info:
+
+            class BoundedVector(Vector[Uint8]):
+                LIMIT = 2
+
+        assert str(exception_info.value) == "BoundedVector must define no LIMIT of its own"
+
+    def test_a_vector_refuses_a_bound_beside_its_own_count(self) -> None:
+        """Two count rules can contradict, and a vector's default is the first casualty."""
+        # A bound of 2 under a count of 4 leaves the vector's own default unbuildable.
+        with pytest.raises(SSZTypeError) as exception_info:
+
+            class BothCounts(Vector[Uint8]):
+                LENGTH = 4
+                LIMIT = 2
+
+        assert str(exception_info.value) == "BothCounts must define no LIMIT of its own"
+
+    def test_a_list_refuses_an_exact_count(self) -> None:
+        """A list holds any count up to its bound, and pinning one exactly is a vector."""
+        with pytest.raises(SSZTypeError) as exception_info:
+
+            class PinnedList(List[Uint8]):
+                LIMIT = 4
+                LENGTH = 2
+
+        assert str(exception_info.value) == "PinnedList must define no LENGTH of its own"
+
+    def test_a_progressive_list_refuses_an_exact_count(self) -> None:
+        """EIP-7916 gives the shape no capacity, an exact count included."""
+        with pytest.raises(SSZTypeError) as exception_info:
+
+            class PinnedProgressiveList(ProgressiveList[Uint8]):
+                LENGTH = 2
+
+        assert str(exception_info.value) == "PinnedProgressiveList must define no LENGTH of its own"
+
+    def test_a_progressive_list_refuses_a_bound(self) -> None:
+        """A bound reads as a bounded list on construction, and never reaches the tree."""
+        with pytest.raises(SSZTypeError) as exception_info:
+
+            class BoundedProgressiveList(ProgressiveList[Uint8]):
+                LIMIT = 2
+
+        assert str(exception_info.value) == "BoundedProgressiveList must define no LIMIT of its own"
+
+
+class TestDecodeAsksWhatTheShapeDeclares:
+    """A decode enforces the same declarations construction does, and reports them alike."""
+
+    def test_a_list_without_its_bound_refuses_a_payload(self) -> None:
+        """A bound is part of enforcing consensus, so no payload decodes without one."""
+
+        class Unbounded(List[Uint8]):
+            pass
+
+        # A decode reports the missing bound the way construction already does.
+        with pytest.raises(SSZTypeError) as exception_info:
+            Unbounded.decode_bytes(b"\x01" * 10)
+
+        assert str(exception_info.value) == "Unbounded must define ELEMENT_TYPE and LIMIT"
+
+    def test_a_list_without_its_bound_refuses_an_empty_payload_too(self) -> None:
+        """The empty payload is a value of the type as well, and the type is not usable."""
+
+        class Unbounded(List[Uint8]):
+            pass
+
+        with pytest.raises(SSZTypeError) as exception_info:
+            Unbounded.decode_bytes(b"")
+
+        assert str(exception_info.value) == "Unbounded must define ELEMENT_TYPE and LIMIT"
+
+    def test_the_bare_list_base_refuses_a_payload(self) -> None:
+        """The unparameterized base declares neither of the two, and names both."""
+        with pytest.raises(SSZTypeError) as exception_info:
+            List.decode_bytes(b"\x01")
+
+        assert str(exception_info.value) == "List must define ELEMENT_TYPE and LIMIT"
+
+    def test_a_progressive_list_without_an_element_type_refuses_a_payload(self) -> None:
+        """The unbounded shape declares no bound, and still needs to know what it holds."""
+
+        class Untyped(ProgressiveList):
+            pass
+
+        with pytest.raises(SSZTypeError) as exception_info:
+            Untyped.decode_bytes(b"\x01")
+
+        assert str(exception_info.value) == "Untyped must define ELEMENT_TYPE"
+
+
 class TestJsonRoundTrip:
     """Whatever a sequence renders to JSON, it reads back in."""
 
@@ -1908,4 +2032,42 @@ class TestTruncatedOffsetTable:
 
         assert (
             str(exception_info.value) == "VariableContainerProgressiveList: expected 8 bytes, got 0"
+        )
+
+
+class TestNegativeScope:
+    """A byte budget below zero describes no payload, and no shape decodes one."""
+
+    def test_a_list_refuses_a_budget_below_zero(self) -> None:
+        """A negative budget over fixed-size elements is refused rather than read as empty."""
+        # A negative budget divides into a negative count, which reads as no elements at all.
+        stream = io.BytesIO(b"\x01\x02\x03\x04")
+        with pytest.raises(SSZSerializationError) as exception_info:
+            Uint8List4.deserialize(stream, -4)
+
+        assert str(exception_info.value) == "Uint8List4: scope -4 is negative"
+        assert stream.tell() == 0
+
+    def test_a_progressive_list_refuses_a_budget_below_zero(self) -> None:
+        """The unbounded shape refuses it on the same grounds, holding no capacity to trip."""
+        with pytest.raises(SSZSerializationError) as exception_info:
+            Uint8ProgressiveList.deserialize(io.BytesIO(b"\x01"), -1)
+
+        assert str(exception_info.value) == "Uint8ProgressiveList: scope -1 is negative"
+
+    def test_a_vector_refuses_a_budget_below_zero(self) -> None:
+        """A vector needs an exact width, and no width is negative."""
+        with pytest.raises(SSZSerializationError) as exception_info:
+            Uint8Vector4.deserialize(io.BytesIO(b"\x01\x02\x03\x04"), -4)
+
+        assert str(exception_info.value) == "Uint8Vector4: expected 4 bytes, got -4"
+
+    def test_a_variable_size_vector_refuses_a_budget_below_zero(self) -> None:
+        """A table of its own width does not fit in a negative budget either."""
+        with pytest.raises(SSZSerializationError) as exception_info:
+            VariableContainerVector2.deserialize(io.BytesIO(b"\x08\x00\x00\x00"), -8)
+
+        assert (
+            str(exception_info.value)
+            == "VariableContainerVector2: scope -8 too small, expected at least 8"
         )
