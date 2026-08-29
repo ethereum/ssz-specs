@@ -553,8 +553,7 @@ class TestDeserialization:
 
     def test_trailing_bytes_are_rejected(self) -> None:
         """One canonical encoding per value, so a spare byte after the payload is noise."""
-        # The rest of the budget belongs to the option, so the option is what refuses a
-        # budget wider than the payload it encodes to.
+        # The rest of the budget belongs to the option, so the option refuses a wide one.
         with pytest.raises(SSZSerializationError) as exception_info:
             Shape.decode_bytes(bytes.fromhex("0134124200"))
         assert exception_info.value.args[0] == "Square: expected 3 bytes, got 4"

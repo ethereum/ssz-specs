@@ -270,10 +270,7 @@ class TestSSZTypeEncodeDecode:
     def test_a_value_that_leaves_bytes_behind_is_refused(self) -> None:
         """One canonical encoding per value, which takes the whole input to decode."""
 
-        # Every type here reads its whole budget, and each refuses a budget wider than the
-        # value needs, so a payload of the wrong width is caught by the type it is handed to.
-        # This one reads a single byte of whatever it is given, which is what a type that
-        # does not hold up its end looks like from the outside.
+        # A type that under-reads its budget, which none of this library's own types do.
         class OneByteOfMany(SSZType):
             """A type that reads one byte and leaves the rest of its budget unread."""
 
@@ -297,8 +294,7 @@ class TestSSZTypeEncodeDecode:
                 stream.read(1)
                 return cls()
 
-        # The outermost decode compares what was read against what was given, so the
-        # guarantee holds for a type defined outside this library too.
+        # The outermost decode compares what was read against what was given.
         with pytest.raises(SSZSerializationError) as exception_info:
             OneByteOfMany.decode_bytes(b"\x00\xff")
 

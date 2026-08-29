@@ -700,8 +700,7 @@ class TestErrors:
 
     def test_trailing_bytes_raises(self) -> None:
         """An input one byte longer than the canonical encoding is rejected."""
-        # A struct of fixed-size fields spans its own width, so the spare byte is refused
-        # by the struct itself rather than left over at the end of the input.
+        # A struct of fixed-size fields spans its own width, so it refuses the spare byte.
         with pytest.raises(SSZSerializationError) as exc_info:
             TwoUint64.decode_bytes(b"\x00" * 17)
         assert exc_info.value.args[0] == "TwoUint64: expected 16 bytes, got 17"
@@ -719,8 +718,7 @@ class TestFixedSizeStructSpansItsOwnWidth:
 
     def test_a_wider_budget_is_refused(self) -> None:
         """A surplus byte inside the window is not something the caller can see."""
-        # The whole input is there to be read, so the budget itself is what fails, and the
-        # 16 bytes read out of the 17 promised would otherwise have gone unremarked.
+        # The whole input is there to be read, so the budget itself is what fails.
         stream = io.BytesIO(b"\x00" * 17)
         with pytest.raises(SSZSerializationError) as exception_info:
             TwoUint64.deserialize(stream, 17)
@@ -810,11 +808,8 @@ class TestHexStringValidator:
 
     def test_wrong_length_hex_raises_with_class_name(self) -> None:
         """Hex with too many bytes raises a validation error tagged by the class name."""
-        # 2 hex bytes ("abcd") cannot fit a 1-byte container, and the struct spans its own
-        # width exactly, so the wider payload is what triggers the error.
-        #
-        # The trailing docs URL embeds the installed pydantic version, so it is anchored
-        # with a regex that pins every stable character and generalizes only the version.
+        # Two hex bytes cannot fit a 1-byte container, which spans its own width exactly.
+        # The docs URL embeds the installed pydantic version, so the regex generalizes it.
         with pytest.raises(
             ValidationError,
             match=(
@@ -1640,8 +1635,7 @@ class TestProgressiveContainerDecodeErrors:
 
     def test_trailing_bytes_raise(self) -> None:
         """An input one byte longer than the canonical encoding is rejected."""
-        # Both struct shapes span the width of their fixed part, so the spare byte is
-        # refused by the struct itself rather than left over at the end of the input.
+        # Both shapes span the width of their fixed part, so each refuses the spare byte.
         with pytest.raises(SSZSerializationError) as exception_info:
             Square.decode_bytes(bytes.fromhex("34125600"))
         assert exception_info.value.args[0] == "Square: expected 3 bytes, got 4"

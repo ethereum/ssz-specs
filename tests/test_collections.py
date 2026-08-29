@@ -1835,8 +1835,7 @@ class TestNegativeListLimit:
 
     def test_a_negative_limit_is_refused_at_declaration(self) -> None:
         """A negative bound is refused where it is written, not where it is used."""
-        # A negative bound admits no value at all: the empty list already breaks it, so
-        # the type has no default and no constructor call can succeed.
+        # A negative bound admits no value at all, the empty list included.
         with pytest.raises(SSZValueError) as exception_info:
 
             class NegativeList(List[Uint8]):
@@ -1885,8 +1884,7 @@ class TestUnentitledCapacity:
 
     def test_a_vector_refuses_a_bound_beside_its_own_count(self) -> None:
         """Two count rules can contradict, and a vector's default is the first casualty."""
-        # A bound of 2 under a count of 4 leaves the vector's own default, four zero
-        # elements, breaking the bound. So the type had no value it could build.
+        # A bound of 2 under a count of 4 leaves the vector's own default unbuildable.
         with pytest.raises(SSZTypeError) as exception_info:
 
             class BothCounts(Vector[Uint8]):
@@ -1933,8 +1931,7 @@ class TestDecodeAsksWhatTheShapeDeclares:
         class Unbounded(List[Uint8]):
             pass
 
-        # Construction already reported it, and ten elements are now reported the same way
-        # rather than becoming a list no declaration bounds.
+        # A decode reports the missing bound the way construction already does.
         with pytest.raises(SSZTypeError) as exception_info:
             Unbounded.decode_bytes(b"\x01" * 10)
 
@@ -2056,9 +2053,7 @@ class TestNegativeScope:
 
     def test_a_list_refuses_a_budget_below_zero(self) -> None:
         """A negative budget over fixed-size elements is refused rather than read as empty."""
-        # Fixed-size elements recover their count by dividing the budget by the stride.
-        # A budget of -4 divides into -4 elements, and iterating that many yields none,
-        # so the input would decode to the empty list while consuming nothing.
+        # A negative budget divides into a negative count, which reads as no elements at all.
         stream = io.BytesIO(b"\x01\x02\x03\x04")
         with pytest.raises(SSZSerializationError) as exception_info:
             Uint8List4.deserialize(stream, -4)
