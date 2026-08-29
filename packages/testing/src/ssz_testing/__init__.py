@@ -2,13 +2,13 @@
 
 from collections.abc import Callable
 
+from ssz.exceptions import ValueFault
 from ssz_testing.fixtures import (
     FIXTURE_FORMATS,
     ExpectedRejection,
     SSZFixture,
     SSZTest,
 )
-from ssz_testing.rejection import RejectionReason
 
 SSZTestFiller = Callable[..., SSZFixture]
 """Type of the ssz_test fixture: builds, generates, and collects an SSZ vector."""
@@ -16,8 +16,8 @@ SSZTestFiller = Callable[..., SSZFixture]
 __all__ = [
     "FIXTURE_FORMATS",
     "ExpectedRejection",
-    "RejectionReason",
     "SSZFixture",
     "SSZTest",
     "SSZTestFiller",
+    "ValueFault",
 ]
