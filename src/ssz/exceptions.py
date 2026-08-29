@@ -1,137 +1,142 @@
-"""
-Typed exception hierarchy for the SSZ type system.
+"""The two ways SSZ refuses something, and the closed catalogue of reasons for each."""
 
-Every raise site passes structured data, never a pre-formatted string.
-Each constructor owns one message format, so a given failure mode reads
-identically everywhere it occurs, and its fields stay machine-readable.
-"""
-
-from __future__ import annotations
-
-from collections.abc import Sequence
+from enum import Enum
+from typing import Any
 
 
-class SSZError(Exception):
-    """Base class for every SSZ error."""
+class TypeFault(Enum):
+    """Every way an SSZ type is unusable as declared, or as asked."""
+
+    WRONG_TYPE = "expected {expected}, got {got}"
+    UNDECLARED = "{type} must declare {requirement}"
+    NOT_AN_SSZ_TYPE = "{type}.{field} must be an SSZ type, got {got}"
+    NOT_AN_INTEGER = "{type}.{field} must be a plain integer, got {got}"
+    OWN_ROOT = "{type} declares a hash_tree_root of its own"
+    IMMUTABLE = "{type} is immutable"
+    NO_DEFAULT = "{type} has no default value"
+    NO_MERKLE_LAYOUT = "{type} has no Merkle layout"
+    NOT_FIXED_SIZE = "{type} is a variable-size {kind}, and has no one byte length"
+
+    VECTOR_EMPTY = "a vector holds at least one element, got a length of {length}"
+    NOT_ENTITLED = "{type} declares a {capacity} its shape has none of"
+    LIMIT_NEGATIVE = "a bound counts the elements a shape may hold, and {limit} is not a count"
+
+    LAYOUT_NOT_BITS = "a field layout holds only 0 and 1"
+    LAYOUT_WIDTH = "a field layout holds at least one position, got {width}"
+    LAYOUT_WIDTH_TYPE = "a field layout width is a plain integer, got {got}"
+    LAYOUT_GAP_TYPE = "a field layout position is a plain integer, got {got}"
+    LAYOUT_TRAILING_GAP = "a field layout ends on a field, not on a gap"
+    LAYOUT_TOO_WIDE = "a field layout holds {width} positions, over the limit of {limit}"
+    LAYOUT_FIELD_COUNT = "the layout sets {active} positions, and the struct declares {declared}"
+    LAYOUT_GAP_OUTSIDE = "gap {gap} falls outside a layout of {width} positions"
+    LAYOUT_GAPS_UNORDERED = "gaps {gaps} are not in ascending order"
+
+    UNION_EMPTY = "a union declares at least one option"
+    UNION_NOT_A_MAP = "a union declares a selector-to-type map, got {got}"
+    UNION_SELECTOR_TYPE = "selector {selector!r} is not a plain integer"
+    UNION_SELECTOR_RANGE = "selector {selector} falls outside {low} through {high}"
+    UNION_OPTION_TYPE = "option {selector} is not an SSZ type"
+    UNION_INCOMPATIBLE = "options {selector} and {other} merkleize differently"
+
+    NO_PARTS = "{type} has no parts to address"
+    NO_MIXIN = "{type} mixes in no {word}"
+    NO_CHUNK_COUNT = "{type} has no bounded chunk count"
+    NOT_STEPPABLE = "{type} cannot be stepped into"
 
 
-class SSZTypeError(SSZError):
-    """A Python value or an SSZ type definition is unusable as given."""
+class ValueFault(Enum):
+    """Every way a value, or a byte string, fails to be one an SSZ type admits."""
+
+    RANGE = "{value} is out of range for {type} [0, {max}]"
+    NOT_A_BIT = "a boolean is 0 or 1, got {value}"
+    COUNT = "{type} holds exactly {expected} {unit}, got {actual}"
+    LIMIT = "{type} holds at most {limit} {unit}, got {actual}"
+    NOT_HEX = "{type} reads a string as hex digits, and this one holds something else"
+
+    SCOPE = "{type} spans {expected} bytes, and the budget is {actual}"
+    SCOPE_TOO_SMALL = "{type} needs at least {expected} bytes, and the budget is {actual}"
+    SCOPE_NEGATIVE = "a budget of {scope} is not a byte count"
+    SCOPE_UNDIVIDED = "a budget of {scope} does not divide by an element width of {width}"
+    TRUNCATED = "{type} needs {expected} bytes, the input holds {actual}"
+    TRAILING_BYTES = "{leftover} byte(s) past the end of the value"
+
+    FIRST_OFFSET = "the first offset is {actual}, and the fixed part ends at {expected}"
+    OFFSET_UNORDERED = "offset {offset} is above the offset after it, {next}"
+    OFFSET_PAST_SCOPE = "offset {offset} runs past the budget of {scope}"
+    OFFSET_UNALIGNED = "the first offset {offset} is not a multiple of {width}"
+    OFFSET_BELOW_TABLE = "the first offset {offset} is below the table's own width of {width}"
+
+    EMPTY_ENCODING = "an empty input encodes no value"
+    NO_DELIMITER = "the encoding sets no delimiter bit"
+    TRAILING_ZEROS = "zero bytes past the delimiter give one value a second encoding"
+    PADDING_BITS = "the final byte {byte} sets a padding bit"
+
+    NO_SELECTOR = "a budget of {scope} holds no selector"
+    UNKNOWN_SELECTOR = "selector {selector} names no option of {type}"
+
+    NO_SUCH_FIELD = "{type} has no field named {step}"
+    NO_SUCH_OPTION = "{type} has no option with selector {step}"
+    NOT_A_GINDEX = "{index} is not a generalized index"
+    ROOT_HAS_NO_BRANCH = "the root has no proof branch of its own"
+    REPEATED_INDEX = "a generalized index is repeated"
+    NESTED_INDEX = "{index} lies below another index in the same request"
+    EMPTY_REQUEST = "a request holds at least one index"
+    BRANCH_LENGTH = "a branch for index {index} holds {expected} nodes, got {actual}"
+    LEAF_COUNT = "{expected} indices need as many leaves, got {actual}"
+    PROOF_LENGTH = "this request needs {expected} proof nodes, got {actual}"
+
+    PATH_INTO_MIXIN = "the path descends into the mixed-in word of {type}"
+    PATH_INTO_PACKED = "the path descends into the packed data of {type}"
+    PATH_INTO_GAP = "the path descends into an empty position of {type}"
+    PATH_PAST_SPINE = "the path lies past the end of the progressive spine of {type}"
+
+    MERKLEIZE_LIMIT = "{count} chunks exceed a limit of {limit}"
+    NEGATIVE_LENGTH = "a mixed-in length is not negative, got {length}"
+    SELECTOR_BYTE = "selector {selector} does not fit one byte"
 
 
-class SSZValueError(SSZError):
-    """A well-typed value falls outside the range SSZ permits."""
+class _Fields(dict[str, Any]):
+    """The fields a raise site passed, naming any the template asked for and it left out."""
+
+    def __missing__(self, key: str) -> str:
+        """Report the gap in place of the value, so building a message never itself raises."""
+        return f"<no {key}>"
 
 
-class SSZSerializationError(SSZError):
-    """SSZ bytes could not be produced, or could not be parsed."""
+class SSZError[FaultT: (TypeFault, ValueFault)](Exception):
+    """Base for every SSZ refusal, drawing on the catalogue its subclass fixes."""
+
+    def __init__(self, fault: FaultT, /, **fields: Any) -> None:
+        """Render the fault's one sentence, and open an empty path for it to collect."""
+        self.fault = fault
+        """The catalogue member this refusal names, whose name is its stable tag."""
+
+        self.fields: dict[str, Any] = fields
+        """The values the raise site passed, for a reader that wants them apart."""
+
+        self.loc: tuple[str | int, ...] = ()
+        """Path from the value the caller passed down to the one that refused."""
+
+        self.message = fault.value.format_map(_Fields(fields))
+        """The rendered sentence, with no path in front of it."""
+
+        super().__init__(self.message)
+
+    def at(self, step: str | int) -> None:
+        """Record one step of the path this error is travelling up, outermost step first."""
+        self.loc = (step, *self.loc)
+
+    def __str__(self) -> str:
+        """The sentence, behind the path it came from wherever there is one."""
+        if not self.loc:
+            return self.message
+        path = "".join(f"[{step}]" if isinstance(step, int) else f".{step}" for step in self.loc)
+        return f"{path.removeprefix('.')}: {self.message}"
 
 
-class SSZTypeMismatch(SSZTypeError):  # noqa: N818
-    """A value has the wrong Python type for the target SSZ type."""
-
-    def __init__(self, expected: str, got: type, detail: str | None = None) -> None:
-        """Record the expected phrasing, the offending type, and any coercion detail."""
-        self.expected = expected
-        self.got = got
-        self.detail = detail
-        message = f"Expected {expected}, got {got.__name__}"
-        # Element coercion attaches the inner failure that triggered it.
-        if detail is not None:
-            message = f"{message}: {detail}"
-        super().__init__(message)
+class SSZTypeError(SSZError[TypeFault], TypeError):
+    """An SSZ type cannot do what was asked of it, or was declared in a way it cannot be."""
 
 
-class SSZDefinitionError(SSZTypeError):
-    """An SSZ subclass declares its attributes in a way its base cannot operate on."""
-
-    def __init__(self, type_name: str, requirement: str) -> None:
-        """Record the type and what its declaration failed to satisfy."""
-        self.type_name = type_name
-        self.requirement = requirement
-        super().__init__(f"{type_name} must define {requirement}")
-
-
-class SSZActiveFieldsError(SSZTypeError):
-    """A progressive container declares a field layout the spec does not permit."""
-
-    def __init__(self, type_name: str, active_fields: Sequence[int], reason: str) -> None:
-        """Record the type, the layout it declared, and the rule that layout breaks."""
-        self.type_name = type_name
-        self.active_fields = tuple(active_fields)
-        self.reason = reason
-        super().__init__(f"{type_name}: invalid active fields, {reason}")
-
-
-class SSZUnionOptionsError(SSZTypeError):
-    """A union declares options the spec forbids, or holds one it never declared."""
-
-    def __init__(self, type_name: str, reason: str) -> None:
-        """Record the union and the rule its options break."""
-        self.type_name = type_name
-        self.reason = reason
-        super().__init__(f"{type_name}: invalid union options, {reason}")
-
-
-class SSZDefaultError(SSZTypeError):
-    """A default was requested from a type the spec gives none."""
-
-    def __init__(self, type_name: str) -> None:
-        """Record the type that has no default."""
-        self.type_name = type_name
-        super().__init__(f"{type_name} has no default value")
-
-
-class SSZFixedSizeError(SSZTypeError):
-    """A fixed byte length was requested from a variable-size type."""
-
-    def __init__(self, type_name: str, kind: str) -> None:
-        """Record the type and the variable-size kind that has no fixed length."""
-        self.type_name = type_name
-        self.kind = kind
-        super().__init__(f"{type_name}: variable-size {kind} has no fixed byte length")
-
-
-class SSZLimitError(SSZValueError):
-    """An element or byte count exceeds the type's declared upper bound."""
-
-    def __init__(self, type_name: str, limit: int, actual: int) -> None:
-        """Record the type, its declared upper bound, and the count that exceeded it."""
-        self.type_name = type_name
-        self.limit = limit
-        self.actual = actual
-        super().__init__(f"{type_name} exceeds limit of {limit}, got {actual}")
-
-
-class SSZLengthError(SSZValueError):
-    """A fixed-size type received a count other than the one it requires."""
-
-    def __init__(self, type_name: str, expected: int, actual: int, unit: str = "elements") -> None:
-        """Record the type, the required count, the actual count, and the unit."""
-        self.type_name = type_name
-        self.expected = expected
-        self.actual = actual
-        self.unit = unit
-        super().__init__(f"{type_name} requires exactly {expected} {unit}, got {actual}")
-
-
-class SSZRangeError(SSZValueError):
-    """An integer falls outside the inclusive range a uint type can hold."""
-
-    def __init__(self, type_name: str, value: int, max_value: int) -> None:
-        """Record the type, the out-of-range value, and the inclusive upper bound."""
-        self.type_name = type_name
-        self.value = value
-        self.max_value = max_value
-        super().__init__(f"{value} out of range for {type_name} [0, {max_value}]")
-
-
-class SSZScopeError(SSZSerializationError):
-    """The byte budget for a value does not match the length it needs."""
-
-    def __init__(self, type_name: str, expected: int, actual: int) -> None:
-        """Record the type, the byte count it needs, and the byte budget it got."""
-        self.type_name = type_name
-        self.expected = expected
-        self.actual = actual
-        super().__init__(f"{type_name}: expected {expected} bytes, got {actual}")
+class SSZValueError(SSZError[ValueFault], ValueError):
+    """A value, or a byte string, is not one this SSZ type admits."""

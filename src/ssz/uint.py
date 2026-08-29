@@ -10,13 +10,7 @@ from pydantic.annotated_handlers import GetCoreSchemaHandler
 from pydantic_core import core_schema
 
 from ssz.base import wrapping_schema
-from ssz.exceptions import (
-    SSZRangeError,
-    SSZScopeError,
-    SSZSerializationError,
-    SSZTypeError,
-    SSZTypeMismatch,
-)
+from ssz.exceptions import SSZTypeError, SSZValueError, TypeFault, ValueFault
 from ssz.ssz_base import SSZType
 
 INTERN_BELOW = 256
@@ -85,7 +79,7 @@ class BaseUint(int, SSZType):
             return cls._wrap(value)
         # Bool subclasses int, so reject it explicitly before the value check.
         if not isinstance(value, int) or isinstance(value, bool):
-            raise SSZTypeMismatch("int", type(value))
+            raise SSZTypeError(TypeFault.WRONG_TYPE, expected="int", got=type(value).__name__)
         # Invariant: the range check downstream compares against plain int bounds.
         #
         # Python gives an int subclass reflected priority over a plain left operand, so an
@@ -124,7 +118,7 @@ class BaseUint(int, SSZType):
                 return interned[value]
         elif value <= cls.MAX_VALUE:
             return int.__new__(cls, value)
-        raise SSZRangeError(cls.__name__, value, cls.MAX_VALUE)
+        raise SSZValueError(ValueFault.RANGE, value=value, type=cls.__name__, max=cls.MAX_VALUE)
 
     def __setattr__(self, name: str, value: Any) -> NoReturn:
         """
@@ -138,7 +132,7 @@ class BaseUint(int, SSZType):
         Raises:
             SSZTypeError: Always, because a count is only the number it holds.
         """
-        raise SSZTypeError(f"{type(self).__name__} is immutable")
+        raise SSZTypeError(TypeFault.IMMUTABLE, type=type(self).__name__)
 
     @classmethod
     def __get_pydantic_core_schema__(
@@ -176,11 +170,16 @@ class BaseUint(int, SSZType):
         Deserialize from little-endian bytes.
 
         Raises:
-            SSZSerializationError: If the byte string has the wrong length.
+            SSZValueError: If the byte string has the wrong length.
         """
         expected_length = cls.BYTE_LENGTH
         if len(data) != expected_length:
-            raise SSZScopeError(cls.__name__, expected_length, len(data))
+            raise SSZValueError(
+                ValueFault.TRUNCATED,
+                type=cls.__name__,
+                expected=expected_length,
+                actual=len(data),
+            )
 
         # These bytes decode to a plain integer in range, which is all the constructor tests.
         return cls._wrap(int.from_bytes(data, "little"))
@@ -201,18 +200,23 @@ class BaseUint(int, SSZType):
         Read little-endian bytes from a stream within a fixed scope.
 
         Raises:
-            SSZSerializationError: If the scope mismatches, or the stream ends early.
+            SSZValueError: If the scope mismatches, or the stream ends early.
         """
         byte_length = cls.BYTE_LENGTH
         if scope != byte_length:
-            raise SSZSerializationError(
-                f"{cls.__name__}: invalid scope, expected {byte_length} bytes, got {scope}"
+            raise SSZValueError(
+                ValueFault.SCOPE, type=cls.__name__, expected=byte_length, actual=scope
             )
         # Read the required number of bytes from the stream.
         serialized_bytes = stream.read(byte_length)
         # Ensure the correct number of bytes was read.
         if len(serialized_bytes) != byte_length:
-            raise SSZScopeError(cls.__name__, byte_length, len(serialized_bytes))
+            raise SSZValueError(
+                ValueFault.TRUNCATED,
+                type=cls.__name__,
+                expected=byte_length,
+                actual=len(serialized_bytes),
+            )
         # The width is settled twice over, so a third measure and a retest can only agree.
         # A struct decodes one integer per integer field, so both are saved per field.
         return cls._wrap(int.from_bytes(serialized_bytes, "little"))

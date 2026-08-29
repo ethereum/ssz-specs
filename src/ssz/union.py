@@ -10,13 +10,7 @@ from ssz.boolean import Boolean
 from ssz.byte_arrays import ByteList, ByteVector
 from ssz.collections import List, ProgressiveList, Vector
 from ssz.container import Container, ProgressiveContainer
-from ssz.exceptions import (
-    SSZDefaultError,
-    SSZDefinitionError,
-    SSZSerializationError,
-    SSZTypeMismatch,
-    SSZUnionOptionsError,
-)
+from ssz.exceptions import SSZError, SSZTypeError, SSZValueError, TypeFault, ValueFault
 from ssz.ssz_base import SSZModel, SSZType
 from ssz.uint import BaseUint, Uint8
 
@@ -297,34 +291,34 @@ class CompatibleUnion(SSZModel):
 
         # Merkleization proves every option shares one shape, so the set must be known.
         if not hasattr(cls, "OPTIONS"):
-            raise SSZDefinitionError(cls.__name__, "OPTIONS")
-
-        name = cls.__name__
+            raise SSZTypeError(TypeFault.UNDECLARED, type=cls.__name__, requirement="OPTIONS")
 
         # A union with no option admits no value at all.
         if not cls.OPTIONS:
-            raise SSZUnionOptionsError(name, "the options are empty")
+            raise SSZTypeError(TypeFault.UNION_EMPTY)
 
         # A sequence of types would read its own entries as selectors.
         if not isinstance(cls.OPTIONS, Mapping):
-            raise SSZUnionOptionsError(name, "the options are not a selector-to-type map")
+            raise SSZTypeError(TypeFault.UNION_NOT_A_MAP, got=type(cls.OPTIONS).__name__)
 
         for selector, option in cls.OPTIONS.items():
             # A selector is a plain int, and a typed one compares strictly against the bounds.
             if type(selector) is not int:
-                raise SSZUnionOptionsError(name, f"selector {selector!r} is not a plain int")
+                raise SSZTypeError(TypeFault.UNION_SELECTOR_TYPE, selector=selector)
 
             # Zero is reserved against incomplete initialization.
             # Selectors 128 and above have the high bit set, held back for a later extension.
             if not MIN_SELECTOR <= selector <= MAX_SELECTOR:
-                raise SSZUnionOptionsError(
-                    name,
-                    f"selector {selector} falls outside {MIN_SELECTOR} through {MAX_SELECTOR}",
+                raise SSZTypeError(
+                    TypeFault.UNION_SELECTOR_RANGE,
+                    selector=selector,
+                    low=MIN_SELECTOR,
+                    high=MAX_SELECTOR,
                 )
 
             # An option is a type this library can serialize, not any Python class.
             if not (isinstance(option, type) and issubclass(option, SSZType)):
-                raise SSZUnionOptionsError(name, f"option {selector} is not an SSZ type")
+                raise SSZTypeError(TypeFault.UNION_OPTION_TYPE, selector=selector)
 
         # Every pair is checked, not every option against the first.
         # A proof reads whichever option a value turns out to hold, so a clash between
@@ -333,9 +327,8 @@ class CompatibleUnion(SSZModel):
         for index, (selector, option) in enumerate(options):
             for other_selector, other in options[index + 1 :]:
                 if not is_compatible(option, other):
-                    raise SSZUnionOptionsError(
-                        name,
-                        f"options {selector} and {other_selector} merkleize differently",
+                    raise SSZTypeError(
+                        TypeFault.UNION_INCOMPATIBLE, selector=selector, other=other_selector
                     )
 
     @model_validator(mode="before")
@@ -353,7 +346,7 @@ class CompatibleUnion(SSZModel):
         # An empty input is the only way to ask for a default, and this type has none.
         # Selector zero is reserved, so no option could be named as the default one.
         if raw_input == {}:
-            raise SSZDefaultError(cls.__name__)
+            raise SSZTypeError(TypeFault.NO_DEFAULT, type=cls.__name__)
         return raw_input
 
     @model_validator(mode="after")
@@ -362,17 +355,22 @@ class CompatibleUnion(SSZModel):
         Check that the value holds the option its selector names.
 
         Raises:
-            SSZTypeError: When the selector names no option, or the value is another type.
+            SSZValueError: When the selector names no option.
+            SSZTypeError: When the value is a type other than the one the selector names.
         """
         # A value is built field by field, so its selector may name nothing at all.
         option = type(self).OPTIONS.get(int(self.selector))
         if option is None:
-            raise SSZUnionOptionsError(
-                type(self).__name__, f"selector {int(self.selector)} names no option"
+            raise SSZValueError(
+                ValueFault.UNKNOWN_SELECTOR,
+                selector=int(self.selector),
+                type=type(self).__name__,
             )
         # A reader picks the tree shape from the selector, so the value must be that option.
         if not isinstance(self.data, option):
-            raise SSZTypeMismatch(option.__name__, type(self.data))
+            raise SSZTypeError(
+                TypeFault.WRONG_TYPE, expected=option.__name__, got=type(self.data).__name__
+            )
         return self
 
     KIND = "compatible union"
@@ -398,20 +396,24 @@ class CompatibleUnion(SSZModel):
         A parser therefore sees the tree shape ahead of the data, nested options included.
 
         Raises:
-            SSZSerializationError: When the budget holds no selector.
-            SSZTypeError: When the selector names no option.
+            SSZValueError: When the budget holds no selector, or the selector names no option.
         """
         # The selector is one byte, so a budget under one cannot hold even that.
         if scope < Uint8.get_byte_length():
-            raise SSZSerializationError(f"{cls.__name__}: scope {scope} holds no selector")
+            raise SSZValueError(ValueFault.NO_SELECTOR, scope=scope)
 
         selector = Uint8.deserialize(stream, Uint8.get_byte_length())
         option = cls.OPTIONS.get(int(selector))
         if option is None:
-            raise SSZUnionOptionsError(cls.__name__, f"selector {int(selector)} names no option")
+            raise SSZValueError(
+                ValueFault.UNKNOWN_SELECTOR, selector=int(selector), type=cls.__name__
+            )
 
         # The rest of the budget belongs to the option, whatever its own shape.
-        return cls(
-            selector=selector,
-            data=option.deserialize(stream, scope - Uint8.get_byte_length()),
-        )
+        # A refusal inside it names the selector it was read under, as a path step.
+        try:
+            data = option.deserialize(stream, scope - Uint8.get_byte_length())
+        except SSZError as error:
+            error.at(int(selector))
+            raise
+        return cls(selector=selector, data=data)

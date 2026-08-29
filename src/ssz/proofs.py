@@ -10,7 +10,7 @@ from ssz.boolean import Boolean
 from ssz.byte_arrays import ByteList, ByteVector
 from ssz.collections import List, ProgressiveList, Vector
 from ssz.container import Container, ProgressiveContainer
-from ssz.exceptions import SSZActiveFieldsError, SSZTypeError, SSZValueError
+from ssz.exceptions import SSZTypeError, SSZValueError, TypeFault, ValueFault
 from ssz.merkleization import (
     BITS_PER_CHUNK,
     BYTES_PER_CHUNK,
@@ -168,7 +168,7 @@ def chunk_count(ssz_type: type[SSZType]) -> int:
         return len(_field_names(ssz_type))
     # A progressive shape grows without bound.
     # It therefore has no leaf count to report.
-    raise SSZTypeError(f"{ssz_type.__name__} has no bounded chunk count")
+    raise SSZTypeError(TypeFault.NO_CHUNK_COUNT, type=ssz_type.__name__)
 
 
 def element_type(ssz_type: type[SSZType], step: PathStep) -> type[SSZType]:
@@ -183,7 +183,7 @@ def element_type(ssz_type: type[SSZType], step: PathStep) -> type[SSZType]:
         for name, field_type in ssz_type._FIELD_TYPES:
             if name == str(step):
                 return field_type
-        raise SSZValueError(f"{ssz_type.__name__} has no field named {step!r}")
+        raise SSZValueError(ValueFault.NO_SUCH_FIELD, type=ssz_type.__name__, step=step)
     if issubclass(ssz_type, (BitVector, BitList, ProgressiveBitList)):
         return Boolean
     if issubclass(ssz_type, (ByteVector, ByteList)):
@@ -191,7 +191,7 @@ def element_type(ssz_type: type[SSZType], step: PathStep) -> type[SSZType]:
         return Uint8
     if issubclass(ssz_type, (Vector, List, ProgressiveList)):
         return ssz_type.ELEMENT_TYPE
-    raise SSZTypeError(f"{ssz_type.__name__} cannot be stepped into")
+    raise SSZTypeError(TypeFault.NOT_STEPPABLE, type=ssz_type.__name__)
 
 
 def chunk_position(ssz_type: type[SSZType], step: PathStep) -> tuple[int, int, int]:
@@ -213,7 +213,7 @@ def chunk_position(ssz_type: type[SSZType], step: PathStep) -> tuple[int, int, i
     if issubclass(ssz_type, (Container, ProgressiveContainer)):
         names = _field_names(ssz_type)
         if str(step) not in names:
-            raise SSZValueError(f"{ssz_type.__name__} has no field named {step!r}")
+            raise SSZValueError(ValueFault.NO_SUCH_FIELD, type=ssz_type.__name__, step=step)
         return names.index(str(step)), 0, item_length(element_type(ssz_type, step))
     if issubclass(ssz_type, (BitVector, BitList, ProgressiveBitList)):
         # One bit occupies no whole byte.
@@ -238,17 +238,13 @@ def _field_layout_position(ssz_type: type[ProgressiveContainer], step: PathStep)
 
     Raises:
         SSZValueError: When the container has no field of that name.
-        SSZActiveFieldsError: When the layout and the fields no longer pair up one to one.
+        SSZTypeError: When the layout and the fields no longer pair up one to one.
     """
     names = _field_names(ssz_type)
     if str(step) not in names:
-        raise SSZValueError(f"{ssz_type.__name__} has no field named {step!r}")
+        raise SSZValueError(ValueFault.NO_SUCH_FIELD, type=ssz_type.__name__, step=step)
     # A layout is declared as bits and never coerced, so a list of them arrives as one.
-    layout = tuple(ssz_type.ACTIVE_FIELDS)
-    try:
-        positions, _ = _progressive_container_plan(layout, names)
-    except ValueError as mismatch:
-        raise SSZActiveFieldsError(ssz_type.__name__, layout, str(mismatch)) from mismatch
+    positions, _ = _progressive_container_plan(tuple(ssz_type.ACTIVE_FIELDS), names)
     return positions.index(str(step))
 
 
@@ -278,6 +274,7 @@ def get_generalized_index(ssz_type: type[SSZType], *path: PathStep) -> int:
             - When a step descends into a basic value, which has no parts.
             - When a reserved word is used on a type that mixes in no such word.
             - When a progressive container's layout and fields no longer pair up one to one.
+            - When a step descends into a type with nothing to step into.
         SSZValueError: When a container has no field of the given name.
     """
     index = 1
@@ -285,29 +282,29 @@ def get_generalized_index(ssz_type: type[SSZType], *path: PathStep) -> int:
     for step in path:
         # A basic value is one leaf with nothing inside it.
         if issubclass(current, (BaseUint, Boolean)):
-            raise SSZTypeError(f"{current.__name__} has no parts to address")
+            raise SSZTypeError(TypeFault.NO_PARTS, type=current.__name__)
 
         if step == LENGTH_KEY:
             if not issubclass(
                 current, (List, ByteList, BitList, ProgressiveList, ProgressiveBitList)
             ):
-                raise SSZTypeError(f"{current.__name__} mixes in no element count")
+                raise SSZTypeError(TypeFault.NO_MIXIN, type=current.__name__, word="element count")
             return gindex_child(index, right_side=True)
 
         if step == ACTIVE_FIELDS_KEY:
             if not issubclass(current, ProgressiveContainer):
-                raise SSZTypeError(f"{current.__name__} mixes in no field layout")
+                raise SSZTypeError(TypeFault.NO_MIXIN, type=current.__name__, word="field layout")
             return gindex_child(index, right_side=True)
 
         if step == SELECTOR_KEY:
             if not issubclass(current, CompatibleUnion):
-                raise SSZTypeError(f"{current.__name__} mixes in no type selector")
+                raise SSZTypeError(TypeFault.NO_MIXIN, type=current.__name__, word="type selector")
             return gindex_child(index, right_side=True)
 
         if issubclass(current, CompatibleUnion):
             option = current.OPTIONS.get(int(step))
             if option is None:
-                raise SSZValueError(f"{current.__name__} has no option with selector {step!r}")
+                raise SSZValueError(ValueFault.NO_SUCH_OPTION, type=current.__name__, step=step)
             # Every option shares the left child.
             # That is what keeps a field common to several options at one position.
             index = gindex_child(index, right_side=False)
@@ -347,9 +344,9 @@ def _reject_unusable(index: int) -> None:
             - When the index is below the root, naming no node at all.
     """
     if index < 1:
-        raise SSZValueError(f"{index} is not a generalized index")
+        raise SSZValueError(ValueFault.NOT_A_GINDEX, index=index)
     if index == 1:
-        raise SSZValueError("the root has no proof branch of its own")
+        raise SSZValueError(ValueFault.ROOT_HAS_NO_BRANCH)
 
 
 def get_path_indices(index: int) -> list[int]:
@@ -413,12 +410,12 @@ def _reject_related(indices: Sequence[int]) -> None:
     """
     seen = set(indices)
     if len(seen) != len(indices):
-        raise SSZValueError("a generalized index is repeated")
+        raise SSZValueError(ValueFault.REPEATED_INDEX)
     for index in indices:
         # A walk upward opens at the index itself, which is no ancestor of its own.
         # One claimed ancestor is already too many, so the first one ends the search.
         if any(ancestor in seen for ancestor in get_path_indices(index)[1:]):
-            raise SSZValueError(f"{index} lies below another index in the same request")
+            raise SSZValueError(ValueFault.NESTED_INDEX, index=index)
 
 
 def node_root(value: object, index: int) -> Root:
@@ -447,7 +444,7 @@ def node_root(value: object, index: int) -> Root:
             - When the index lies past the end of a progressive spine.
     """
     if index < 1:
-        raise SSZValueError(f"{index} is not a generalized index")
+        raise SSZValueError(ValueFault.NOT_A_GINDEX, index=index)
     if index == 1:
         return hash_tree_root(value)
 
@@ -460,7 +457,7 @@ def node_root(value: object, index: int) -> Root:
         depth -= 1
         if gindex_bit(index, depth):
             if depth:
-                raise SSZValueError(f"the path descends into {name}'s mixed-in word")
+                raise SSZValueError(ValueFault.PATH_INTO_MIXIN, type=name)
             # Invariant: a mixed-in word is exactly one chunk wide.
             return Root._trusted(layout.mixin)
 
@@ -476,18 +473,17 @@ def node_root(value: object, index: int) -> Root:
         #     ProgressiveList[Uint64] holding two elements  ->  chunk 0 is a node, chunk 5 is not
         #
         # The exit between them is exempt, because a closed spine's terminator is a node.
-        spine_closed = f"the path lies past the end of {name}'s progressive spine"
         capacity = 1
         while depth and gindex_bit(index, depth - 1):
             if leaves_from >= layout.leaf_count:
-                raise SSZValueError(spine_closed)
+                raise SSZValueError(ValueFault.PATH_PAST_SPINE, type=name)
             leaves_from, capacity, depth = leaves_from + capacity, capacity * 4, depth - 1
         if depth == 0:
             # The index names a spine node, whose root covers every leaf still to come.
             return merkleize_progressive(layout.chunks(leaves_from), capacity)
         # The index turns left instead, into the bounded subtree holding this level.
         if leaves_from >= layout.leaf_count:
-            raise SSZValueError(spine_closed)
+            raise SSZValueError(ValueFault.PATH_PAST_SPINE, type=name)
         depth -= 1
 
     width = _next_pow2(capacity)
@@ -504,9 +500,9 @@ def node_root(value: object, index: int) -> Root:
     depth -= tree_depth
     leaf = leaves_from + ((index >> depth) & ((1 << tree_depth) - 1))
     if layout.nested is None:
-        raise SSZValueError(f"the path descends into the packed data of {name}")
+        raise SSZValueError(ValueFault.PATH_INTO_PACKED, type=name)
     if leaf >= layout.leaf_count or layout.nested[leaf] is None:
-        raise SSZValueError(f"the path descends into an empty position of {name}")
+        raise SSZValueError(ValueFault.PATH_INTO_GAP, type=name)
     return node_root(layout.nested[leaf], (1 << depth) | (index & ((1 << depth) - 1)))
 
 
@@ -545,7 +541,9 @@ def calculate_merkle_root(leaf: Chunk, proof: Sequence[Chunk], index: int) -> Ro
     """
     depth = gindex_length(index)
     if len(proof) != depth:
-        raise SSZValueError(f"a branch for index {index} holds {depth} nodes, got {len(proof)}")
+        raise SSZValueError(
+            ValueFault.BRANCH_LENGTH, index=index, expected=depth, actual=len(proof)
+        )
     node = leaf
     for level, sibling in enumerate(proof):
         node = _hash_pair(sibling, node) if gindex_bit(index, level) else _hash_pair(node, sibling)
@@ -577,12 +575,12 @@ def calculate_multi_merkle_root(
             - When the indices are repeated or lie on one another's paths.
     """
     if not indices:
-        raise SSZValueError("a request holds at least one index")
+        raise SSZValueError(ValueFault.EMPTY_REQUEST)
     if len(leaves) != len(indices):
-        raise SSZValueError(f"{len(indices)} indices need as many leaves, got {len(leaves)}")
+        raise SSZValueError(ValueFault.LEAF_COUNT, expected=len(indices), actual=len(leaves))
     helpers = get_helper_indices(indices)
     if len(proof) != len(helpers):
-        raise SSZValueError(f"this request needs {len(helpers)} proof nodes, got {len(proof)}")
+        raise SSZValueError(ValueFault.PROOF_LENGTH, expected=len(helpers), actual=len(proof))
 
     nodes = dict(zip(indices, leaves, strict=True))
     nodes.update(zip(helpers, proof, strict=True))

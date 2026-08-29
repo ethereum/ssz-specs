@@ -11,15 +11,7 @@ from pydantic.annotated_handlers import GetCoreSchemaHandler
 from pydantic_core import core_schema
 
 from ssz.base import StrictBaseModel
-from ssz.exceptions import (
-    SSZDefinitionError,
-    SSZFixedSizeError,
-    SSZLengthError,
-    SSZLimitError,
-    SSZSerializationError,
-    SSZTypeError,
-    SSZTypeMismatch,
-)
+from ssz.exceptions import SSZTypeError, SSZValueError, TypeFault, ValueFault
 
 if TYPE_CHECKING:
     # The name is wanted for one annotation, which is never evaluated.
@@ -71,12 +63,11 @@ class SSZType(ABC):
     LIMIT: ClassVar[int | None] = None
     """Maximum element count, read the same way: None means no count, never a count of zero."""
 
-    KIND: ClassVar[str] = "type"
-    """How a shape names itself where it is asked for a width it does not have.
+    UNIT: ClassVar[str] = "elements"
+    """What this shape counts, where a refusal reports a count it would not admit."""
 
-    The type's own name does not say which rule refused: a container is named for what it
-    holds, and a vector loses its width only through its elements. A shape that always has
-    a width never raises, and keeps the bare word."""
+    KIND: ClassVar[str] = "type"
+    """How a shape names itself where it is asked for a width it does not have."""
 
     @classmethod
     def __get_pydantic_core_schema__(
@@ -89,14 +80,14 @@ class SSZType(ABC):
     def declared_length(cls) -> int:
         """The exact element count this shape pins, or a definition error where it pins none."""
         if cls.LENGTH is None:
-            raise SSZDefinitionError(cls.__name__, "LENGTH")
+            raise SSZTypeError(TypeFault.UNDECLARED, type=cls.__name__, requirement="LENGTH")
         return cls.LENGTH
 
     @classmethod
     def declared_limit(cls) -> int:
         """The element count this shape bounds, or a definition error where it bounds none."""
         if cls.LIMIT is None:
-            raise SSZDefinitionError(cls.__name__, "LIMIT")
+            raise SSZTypeError(TypeFault.UNDECLARED, type=cls.__name__, requirement="LIMIT")
         return cls.LIMIT
 
     def __init_subclass__(cls, **kwargs: Any) -> None:
@@ -146,9 +137,9 @@ class SSZType(ABC):
         A field shadows the method on every instance, and a mixin wins the lookup ahead of it.
 
         Raises:
-            SSZTypeMismatch: When a declared capacity is not an integer.
-            SSZTypeMismatch: When a declared capacity is a boolean, which counts nothing.
-            SSZDefinitionError: When a type declares a hash_tree_root of its own.
+            SSZTypeError: When a declared capacity is not an integer.
+            SSZTypeError: When a declared capacity is a boolean, which counts nothing.
+            SSZTypeError: When a type declares a hash_tree_root of its own.
         """
         super().__init_subclass__(**kwargs)
 
@@ -162,7 +153,7 @@ class SSZType(ABC):
             cls.hash_tree_root is not SSZType.hash_tree_root
             or "hash_tree_root" in cls.__annotations__
         ):
-            raise SSZDefinitionError(cls.__name__, "no hash_tree_root of its own")
+            raise SSZTypeError(TypeFault.OWN_ROOT, type=cls.__name__)
 
         for name in _CAPACITY_NAMES:
             # Only a capacity this class declares itself.
@@ -183,7 +174,12 @@ class SSZType(ABC):
             # A boolean of this library's own is left to narrow, because every integer
             # here already accepts one in place of 0 or 1.
             if not isinstance(declared, int) or isinstance(declared, bool):
-                raise SSZTypeMismatch(f"an integer count for {cls.__name__}.{name}", type(declared))
+                raise SSZTypeError(
+                    TypeFault.NOT_AN_INTEGER,
+                    type=cls.__name__,
+                    field=name,
+                    got=type(declared).__name__,
+                )
 
             # Every integer type narrows the same way, whatever width it declares.
             setattr(cls, name, int(declared))
@@ -228,11 +224,11 @@ class SSZType(ABC):
             The constant byte width every instance encodes to.
 
         Raises:
-            SSZFixedSizeError: When the type is variable-size, so it has no width to give.
+            SSZTypeError: When the type is variable-size, so it has no width to give.
         """
         width = cls.fixed_size()
         if width is None:
-            raise SSZFixedSizeError(cls.__name__, cls.KIND)
+            raise SSZTypeError(TypeFault.NOT_FIXED_SIZE, type=cls.__name__, kind=cls.KIND)
         return width
 
     @abstractmethod
@@ -402,7 +398,7 @@ class SSZType(ABC):
             A new instance reconstructed from the input.
 
         Raises:
-            SSZSerializationError: If the input carries bytes past the decoded value.
+            SSZValueError: If the input carries bytes past the decoded value.
         """
         stream = io.BytesIO(data)
         instance = cls.deserialize(stream, len(data))
@@ -412,7 +408,7 @@ class SSZType(ABC):
         # Any unread bytes mean the input either over-allocated or carries noise.
         leftover = len(data) - stream.tell()
         if leftover:
-            raise SSZSerializationError(f"{cls.__name__}: {leftover} trailing byte(s) after decode")
+            raise SSZValueError(ValueFault.TRAILING_BYTES, leftover=leftover)
         return instance
 
 
@@ -473,7 +469,7 @@ class SSZModel(StrictBaseModel, SSZType, ABC):
             SSZTypeError: When the type declares itself immutable.
         """
         if not type(self).MUTABLE:
-            raise SSZTypeError(f"{type(self).__name__} is immutable")
+            raise SSZTypeError(TypeFault.IMMUTABLE, type=type(self).__name__)
         # Written past this class's own __setattr__, which is the door itself.
         object.__setattr__(self, "_version", self._version + 1)
 
@@ -701,15 +697,19 @@ class SSZCollection[T](SSZModel, Sequence[T], ABC):
         The count rule is applied to the returned sequence by the caller.
 
         Raises:
-            SSZTypeMismatch: When the input is a string, bytes, or non-iterable.
+            SSZTypeError: When the input is a string, bytes, or non-iterable.
         """
         if isinstance(raw_input, (list, tuple)):
             return raw_input
         if isinstance(raw_input, (str, bytes, bytearray)):
-            raise SSZTypeMismatch(cls._input_expectation(), type(raw_input))
+            raise SSZTypeError(
+                TypeFault.WRONG_TYPE,
+                expected=cls._input_expectation(),
+                got=type(raw_input).__name__,
+            )
         if hasattr(raw_input, "__iter__"):
             return list(raw_input)
-        raise SSZTypeMismatch("iterable", type(raw_input))
+        raise SSZTypeError(TypeFault.WRONG_TYPE, expected="iterable", got=type(raw_input).__name__)
 
     @classmethod
     def _validate_element(cls, value: Any) -> Any:
@@ -731,10 +731,22 @@ class SSZCollection[T](SSZModel, Sequence[T], ABC):
         covers every collection, and no shape needs a count check of its own.
 
         Raises:
-            SSZLengthError: When a pinned count is not met exactly.
-            SSZLimitError: When a bounded count is exceeded.
+            SSZValueError: When a pinned count is not met exactly.
+            SSZValueError: When a bounded count is exceeded.
         """
         if cls.LENGTH is not None and length != cls.LENGTH:
-            raise SSZLengthError(cls.__name__, cls.LENGTH, length)
+            raise SSZValueError(
+                ValueFault.COUNT,
+                type=cls.__name__,
+                expected=cls.LENGTH,
+                actual=length,
+                unit=cls.UNIT,
+            )
         if cls.LIMIT is not None and length > cls.LIMIT:
-            raise SSZLimitError(cls.__name__, cls.LIMIT, length)
+            raise SSZValueError(
+                ValueFault.LIMIT,
+                type=cls.__name__,
+                limit=cls.LIMIT,
+                actual=length,
+                unit=cls.UNIT,
+            )

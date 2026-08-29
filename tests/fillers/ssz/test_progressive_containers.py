@@ -515,7 +515,7 @@ def test_progressive_container_decode_failure_trailing_byte(ssz_test: SSZTestFil
         raw_bytes="0x34125600",
         expected_rejection=ExpectedRejection(
             reason=RejectionReason.DECODE_ERROR,
-            exact_message="SampleSquare: expected 3 bytes, got 4",
+            exact_message="SampleSquare spans 3 bytes, and the budget is 4",
         ),
     )
 
@@ -544,6 +544,6 @@ def test_progressive_container_decode_failure_first_offset(ssz_test: SSZTestFill
         raw_bytes="0x07000000000000000d000000",
         expected_rejection=ExpectedRejection(
             reason=RejectionReason.DECODE_ERROR,
-            exact_message="SampleBoundedListField: first offset 13 != fixed-part end 12",
+            exact_message="the first offset is 13, and the fixed part ends at 12",
         ),
     )

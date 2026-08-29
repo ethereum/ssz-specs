@@ -22,7 +22,6 @@ from ssz import (
     ProgressiveContainer,
     ProgressiveList,
     Root,
-    SSZActiveFieldsError,
     SSZType,
     SSZTypeError,
     SSZValueError,
@@ -561,7 +560,7 @@ class TestElementType:
     )
     def test_an_unknown_field_name_is_refused(self, ssz_type: type[SSZType], name: str) -> None:
         """A name no field carries is an error rather than a silent miss."""
-        with pytest.raises(SSZValueError, match=rf"^{name} has no field named 'nope'$"):
+        with pytest.raises(SSZValueError, match=rf"^{name} has no field named nope$"):
             element_type(ssz_type, "nope")
 
 
@@ -630,7 +629,7 @@ class TestChunkPosition:
     )
     def test_an_unknown_field_name_is_refused(self, ssz_type: type[SSZType], name: str) -> None:
         """A name no field carries has no position to report."""
-        with pytest.raises(SSZValueError, match=rf"^{name} has no field named 'nope'$"):
+        with pytest.raises(SSZValueError, match=rf"^{name} has no field named nope$"):
             chunk_position(ssz_type, "nope")
 
 
@@ -745,12 +744,12 @@ class TestGeneralizedIndexPerShape:
 
         Drifted.ACTIVE_FIELDS = reassigned_layout
         with pytest.raises(
-            SSZActiveFieldsError,
-            match=rf"^Drifted: invalid active fields, the layout {expected_counts}$",
+            SSZTypeError,
+            match=rf"^the layout {expected_counts}$",
         ) as exception_info:
             get_generalized_index(Drifted, "tail")
         # The refusal carries the layout in force, not the one the declaration approved.
-        assert exception_info.value.active_fields == reassigned_layout
+        assert exception_info.value.fields["layout"] == reassigned_layout
 
     def test_an_empty_path_names_the_root(self) -> None:
         """A path selecting nothing lands on the root, which no proof can address."""
@@ -830,9 +829,9 @@ class TestReservedPathSteps:
 
     def test_an_unknown_field_name_is_refused(self) -> None:
         """A step naming no field selects nothing, on either struct shape."""
-        with pytest.raises(SSZValueError, match=r"^Quad has no field named 'nope'$"):
+        with pytest.raises(SSZValueError, match=r"^Quad has no field named nope$"):
             get_generalized_index(Quad, "nope")
-        with pytest.raises(SSZValueError, match=r"^Spine has no field named 'nope'$"):
+        with pytest.raises(SSZValueError, match=r"^Spine has no field named nope$"):
             get_generalized_index(Spine, "nope")
 
 
@@ -1162,19 +1161,19 @@ class TestNodeRootRefusals:
             pytest.param(
                 SPARSE_LIST,
                 6,
-                "the path descends into Uint64List8's mixed-in word",
+                "the path descends into the mixed-in word of Uint64List8",
                 id="below_an_element_count",
             ),
             pytest.param(
                 SPINE_VALUE,
                 6,
-                "the path descends into Spine's mixed-in word",
+                "the path descends into the mixed-in word of Spine",
                 id="below_a_field_layout",
             ),
             pytest.param(
                 SHAPE_VALUE,
                 6,
-                "the path descends into Shape's mixed-in word",
+                "the path descends into the mixed-in word of Shape",
                 id="below_a_type_selector",
             ),
             pytest.param(
@@ -1200,7 +1199,7 @@ class TestNodeRootRefusals:
             pytest.param(
                 SHORT_PROGRESSIVE,
                 352,
-                "the path lies past the end of Uint64ProgressiveList's progressive spine",
+                "the path lies past the end of the progressive spine of Uint64ProgressiveList",
                 id="slot_in_an_unopened_level",
             ),
             # The spine closes with a zero leaf.
@@ -1208,7 +1207,7 @@ class TestNodeRootRefusals:
             pytest.param(
                 SHORT_PROGRESSIVE,
                 10,
-                "the path lies past the end of Uint64ProgressiveList's progressive spine",
+                "the path lies past the end of the progressive spine of Uint64ProgressiveList",
                 id="below_the_spine_terminator",
             ),
         ],
@@ -1222,7 +1221,7 @@ class TestNodeRootRefusals:
         """A value outside SSZ merkleizes into nothing.
         No index of it names a node.
         """
-        with pytest.raises(SSZTypeError, match=r"^hash_tree_root: unsupported value type float$"):
+        with pytest.raises(SSZTypeError, match=r"^float has no Merkle layout$"):
             node_root(3.14, 2)
 
     def test_a_branch_for_an_unusable_index_is_refused(self) -> None:

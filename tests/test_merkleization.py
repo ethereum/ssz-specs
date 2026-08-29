@@ -13,7 +13,6 @@ from ssz import (
     ByteVector,
     Chunk,
     Root,
-    SSZActiveFieldsError,
     SSZType,
     SSZTypeError,
     SSZValueError,
@@ -240,7 +239,7 @@ def test_merkleize_error_on_exceeding_limit() -> None:
     """Raises when the chunk count exceeds the limit."""
     with pytest.raises(SSZValueError) as exception_info:
         merkleize(sample_chunks[0:5], limit=4)
-    assert str(exception_info.value) == "merkleize: input exceeds limit"
+    assert str(exception_info.value) == "5 chunks exceed a limit of 4"
 
 
 # Chunk counts and capacities for an all-zero payload, at the shapes where the closed
@@ -1883,12 +1882,12 @@ def test_a_layout_that_stopped_pairing_with_the_fields_is_refused_by_name(
 
     Drifted.ACTIVE_FIELDS = reassigned_layout
     with pytest.raises(
-        SSZActiveFieldsError,
-        match=rf"^Drifted: invalid active fields, the layout {expected_counts}$",
+        SSZTypeError,
+        match=rf"^the layout {expected_counts}$",
     ) as exception_info:
         hash_tree_root(Drifted(head=Uint16(1), tail=Uint8(2)))
     # The refusal carries the layout in force, not the one the declaration approved.
-    assert exception_info.value.active_fields == reassigned_layout
+    assert exception_info.value.fields["layout"] == reassigned_layout
 
 
 def test_a_layout_and_its_field_names_settle_the_positions_by_themselves() -> None:
@@ -1997,9 +1996,7 @@ def test_hash_tree_root_unsupported_type_raises(unsupported_value: object) -> No
     """The dispatch fallback rejects values without a registered handler."""
     with pytest.raises(SSZTypeError) as exception_info:
         hash_tree_root(unsupported_value)
-    assert str(exception_info.value) == (
-        f"hash_tree_root: unsupported value type {type(unsupported_value).__name__}"
-    )
+    assert str(exception_info.value) == (f"{type(unsupported_value).__name__} has no Merkle layout")
 
 
 def test_hash_tree_root_is_deterministic() -> None:

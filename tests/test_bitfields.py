@@ -9,7 +9,7 @@ from pydantic import BaseModel, ValidationError
 
 from ssz.bitfields import BitList, BitVector, ProgressiveBitList
 from ssz.boolean import Boolean
-from ssz.exceptions import SSZSerializationError, SSZTypeError, SSZValueError
+from ssz.exceptions import SSZTypeError, SSZValueError
 
 # Errors that may be raised either directly or wrapped by Pydantic at construction time.
 ValueOrValidationError = (SSZValueError, ValidationError)
@@ -74,7 +74,7 @@ class TestBitVector:
         """Direct instantiation of the abstract base raises SSZTypeError."""
         with pytest.raises(SSZTypeError) as exception_info:
             BitVector(data=[])
-        assert str(exception_info.value) == "BitVector must define LENGTH"
+        assert str(exception_info.value) == "BitVector must declare LENGTH"
 
     def test_instantiation_success(self) -> None:
         """Instantiation succeeds with exactly LENGTH boolean items."""
@@ -104,11 +104,11 @@ class TestBitVector:
         self, bits: list[Boolean], expected_element_count: int
     ) -> None:
         """Wrong-length input raises with the exact element count in the message."""
-        with pytest.raises(ValueOrValidationError) as exception_info:
+        # A refusal inside a field validator is a ValueError, which pydantic collects.
+        with pytest.raises(ValidationError) as exception_info:
             BitVector4(data=bits)
-        assert (
-            str(exception_info.value)
-            == f"BitVector4 requires exactly 4 elements, got {expected_element_count}"
+        assert f"BitVector4 holds exactly 4 elements, got {expected_element_count}" in str(
+            exception_info.value
         )
 
     def test_pydantic_validation_accepts_valid_list(self) -> None:
@@ -180,7 +180,7 @@ class TestBitList:
         """Direct instantiation of the abstract base raises SSZTypeError."""
         with pytest.raises(SSZTypeError) as exception_info:
             BitList(data=[])
-        assert str(exception_info.value) == "BitList must define LIMIT"
+        assert str(exception_info.value) == "BitList must declare LIMIT"
 
     def test_instantiation_success(self) -> None:
         """Instantiation succeeds with any number of items up to LIMIT."""
@@ -211,7 +211,7 @@ class TestBitList:
         """Non-iterable input raises SSZTypeError naming the offending type."""
         with pytest.raises((SSZTypeError, ValidationError)) as exception_info:
             BitList8(data=non_iterable)
-        assert str(exception_info.value) == f"Expected iterable, got {type_name}"
+        assert str(exception_info.value) == f"expected iterable, got {type_name}"
 
     @pytest.mark.parametrize("rejected", ["0101", b"\x00\x01"])
     def test_instantiation_from_str_or_bytes_raises(self, rejected: Any) -> None:
@@ -219,7 +219,7 @@ class TestBitList:
         type_name = type(rejected).__name__
         with pytest.raises((SSZTypeError, ValidationError)) as exception_info:
             BitList8(data=rejected)
-        assert str(exception_info.value) == f"Expected iterable, got {type_name}"
+        assert str(exception_info.value) == f"expected iterable, got {type_name}"
 
     def test_instantiation_over_limit_raises_error(self) -> None:
         """Input exceeding LIMIT raises with the exact size in the message."""
@@ -227,9 +227,9 @@ class TestBitList:
         class BitList4(BitList):
             LIMIT = 4
 
-        with pytest.raises(ValueOrValidationError) as exception_info:
+        with pytest.raises(ValidationError) as exception_info:
             BitList4(data=[Boolean(bit) for bit in [True, False, True, False, True]])
-        assert str(exception_info.value) == "BitList4 exceeds limit of 4, got 5"
+        assert "BitList4 holds at most 4 elements, got 5" in str(exception_info.value)
 
     def test_pydantic_validation_accepts_valid_list(self) -> None:
         """Pydantic validation accepts a valid list of booleans."""
@@ -320,9 +320,9 @@ class TestBitList:
             LIMIT = 4
 
         bitlist = BitList4(data=[Boolean(True), Boolean(False), Boolean(True)])
-        with pytest.raises(ValueOrValidationError) as exception_info:
+        with pytest.raises(ValidationError) as exception_info:
             _ = bitlist + [Boolean(False), Boolean(True)]
-        assert str(exception_info.value) == "BitList4 exceeds limit of 4, got 5"
+        assert "BitList4 holds at most 4 elements, got 5" in str(exception_info.value)
 
 
 class TestProgressiveBitList:
@@ -372,7 +372,7 @@ class TestProgressiveBitList:
         """Non-iterable input raises SSZTypeError naming the offending type."""
         with pytest.raises((SSZTypeError, ValidationError)) as exception_info:
             ProgressiveBitList(data=non_iterable)
-        assert str(exception_info.value) == f"Expected iterable, got {type_name}"
+        assert str(exception_info.value) == f"expected iterable, got {type_name}"
 
     @pytest.mark.parametrize("rejected", ["0101", b"\x00\x01"])
     def test_instantiation_from_str_or_bytes_raises(self, rejected: Any) -> None:
@@ -380,7 +380,7 @@ class TestProgressiveBitList:
         type_name = type(rejected).__name__
         with pytest.raises((SSZTypeError, ValidationError)) as exception_info:
             ProgressiveBitList(data=rejected)
-        assert str(exception_info.value) == f"Expected iterable, got {type_name}"
+        assert str(exception_info.value) == f"expected iterable, got {type_name}"
 
     def test_pydantic_validation_accepts_any_bit_count(self) -> None:
         """Pydantic validation accepts a bit list of any width."""
@@ -504,7 +504,7 @@ class TestProgressiveBitList:
             ProgressiveBitList.get_byte_length()
         assert (
             str(exception_info.value)
-            == "ProgressiveBitList: variable-size bitlist has no fixed byte length"
+            == "ProgressiveBitList is a variable-size bitlist, and has no one byte length"
         )
 
     @pytest.mark.parametrize(
@@ -548,31 +548,31 @@ class TestProgressiveBitList:
 
     def test_decode_empty_bytes(self) -> None:
         """Decoding rejects an empty byte sequence — the empty bitlist still costs a byte."""
-        with pytest.raises(SSZSerializationError) as exception_info:
+        with pytest.raises(SSZValueError) as exception_info:
             ProgressiveBitList.decode_bytes(b"")
-        assert str(exception_info.value) == "ProgressiveBitList: cannot decode empty bytes"
+        assert str(exception_info.value) == "an empty input encodes no value"
 
     def test_decode_all_zero_bytes(self) -> None:
         """Decoding rejects input with no 1 bits — there is no delimiter to locate."""
-        with pytest.raises(SSZSerializationError) as exception_info:
+        with pytest.raises(SSZValueError) as exception_info:
             ProgressiveBitList.decode_bytes(b"\x00")
-        assert str(exception_info.value) == "ProgressiveBitList: no delimiter bit found"
+        assert str(exception_info.value) == "the encoding sets no delimiter bit"
 
     def test_decode_rejects_non_canonical_trailing_zero_byte(self) -> None:
         """Decoding rejects a trailing zero byte after the delimiter byte."""
-        with pytest.raises(SSZSerializationError) as exception_info:
+        with pytest.raises(SSZValueError) as exception_info:
             ProgressiveBitList.decode_bytes(b"\x0d\x00")
         assert (
             str(exception_info.value)
-            == "ProgressiveBitList: non-canonical trailing zero bytes after delimiter"
+            == "zero bytes past the delimiter give one value a second encoding"
         )
 
     def test_deserialize_premature_end(self) -> None:
         """Deserializing rejects a stream that ends before the declared scope."""
         stream = io.BytesIO(b"\xff")
-        with pytest.raises(SSZSerializationError) as exception_info:
+        with pytest.raises(SSZValueError) as exception_info:
             ProgressiveBitList.deserialize(stream, scope=2)
-        assert str(exception_info.value) == "ProgressiveBitList: expected 2 bytes, got 1"
+        assert str(exception_info.value) == "ProgressiveBitList needs 2 bytes, the input holds 1"
 
     def test_bytes_match_the_bounded_bitlist_encoding(self) -> None:
         """The wire format matches a bounded bitlist of the same bits, delimiter included."""
@@ -608,7 +608,8 @@ class TestBitfieldSSZ:
         with pytest.raises(SSZTypeError) as exception_info:
             BitList10.get_byte_length()
         assert (
-            str(exception_info.value) == "BitList10: variable-size bitlist has no fixed byte length"
+            str(exception_info.value)
+            == "BitList10 is a variable-size bitlist, and has no one byte length"
         )
 
     @pytest.mark.parametrize(
@@ -690,7 +691,7 @@ class TestBitfieldSSZ:
 
         with pytest.raises(SSZValueError) as exception_info:
             BitVector8.decode_bytes(b"\x01\x02")
-        assert str(exception_info.value) == "BitVector8: expected 1 bytes, got 2"
+        assert str(exception_info.value) == "BitVector8 needs 1 bytes, the input holds 2"
 
     def test_bitvector_decode_rejects_non_zero_padding_bits(self) -> None:
         """BitVector.decode_bytes rejects a final byte with set bits above the data bits."""
@@ -702,7 +703,7 @@ class TestBitfieldSSZ:
         # 0b11111111 sets them, so it is a non-canonical encoding of [1] * 5.
         with pytest.raises(SSZValueError) as exception_info:
             BitVector5.decode_bytes(b"\xff")
-        assert str(exception_info.value) == "BitVector5: non-zero padding bits in final byte 0xff"
+        assert str(exception_info.value) == "the final byte 0xff sets a padding bit"
 
     def test_bitvector_decode_canonical_with_zero_padding_bits(self) -> None:
         """BitVector.decode_bytes accepts the canonical encoding with zero padding bits."""
@@ -720,9 +721,9 @@ class TestBitfieldSSZ:
             LENGTH = 8
 
         stream = io.BytesIO(b"\xff")
-        with pytest.raises(SSZSerializationError) as exception_info:
+        with pytest.raises(SSZValueError) as exception_info:
             BitVector8.deserialize(stream, scope=2)
-        assert str(exception_info.value) == "BitVector8: expected 1 bytes, got 2"
+        assert str(exception_info.value) == "BitVector8 spans 1 bytes, and the budget is 2"
 
     def test_bitvector_deserialize_premature_end(self) -> None:
         """BitVector.deserialize rejects a stream that ends before the declared scope."""
@@ -731,9 +732,9 @@ class TestBitfieldSSZ:
             LENGTH = 16
 
         stream = io.BytesIO(b"\xff")
-        with pytest.raises(SSZSerializationError) as exception_info:
+        with pytest.raises(SSZValueError) as exception_info:
             BitVector16.deserialize(stream, scope=2)
-        assert str(exception_info.value) == "BitVector16: expected 2 bytes, got 1"
+        assert str(exception_info.value) == "BitVector16 needs 2 bytes, the input holds 1"
 
     def test_bitlist_decode_empty_bytes(self) -> None:
         """BitList.decode_bytes rejects an empty byte sequence."""
@@ -741,9 +742,9 @@ class TestBitfieldSSZ:
         class BitList8(BitList):
             LIMIT = 8
 
-        with pytest.raises(SSZSerializationError) as exception_info:
+        with pytest.raises(SSZValueError) as exception_info:
             BitList8.decode_bytes(b"")
-        assert str(exception_info.value) == "BitList8: cannot decode empty bytes"
+        assert str(exception_info.value) == "an empty input encodes no value"
 
     def test_bitlist_decode_all_zero_bytes(self) -> None:
         """BitList.decode_bytes rejects non-empty input with no 1 bits — no delimiter to locate."""
@@ -751,9 +752,9 @@ class TestBitfieldSSZ:
         class BitList8(BitList):
             LIMIT = 8
 
-        with pytest.raises(SSZSerializationError) as exception_info:
+        with pytest.raises(SSZValueError) as exception_info:
             BitList8.decode_bytes(b"\x00")
-        assert str(exception_info.value) == "BitList8: no delimiter bit found"
+        assert str(exception_info.value) == "the encoding sets no delimiter bit"
 
     def test_bitlist_decode_rejects_non_canonical_trailing_zero_byte(self) -> None:
         """BitList.decode_bytes rejects a trailing zero byte after the delimiter byte."""
@@ -763,11 +764,11 @@ class TestBitfieldSSZ:
 
         # Byte 0x0d encodes bits [1, 0, 1] with the delimiter at bit 3.
         # Appending a zero byte leaves the delimiter in byte 0, not the final byte.
-        with pytest.raises(SSZSerializationError) as exception_info:
+        with pytest.raises(SSZValueError) as exception_info:
             BitList8.decode_bytes(b"\x0d\x00")
         assert (
             str(exception_info.value)
-            == "BitList8: non-canonical trailing zero bytes after delimiter"
+            == "zero bytes past the delimiter give one value a second encoding"
         )
 
     def test_bitlist_decode_canonical_encoding_round_trips(self) -> None:
@@ -789,7 +790,7 @@ class TestBitfieldSSZ:
         # Bytes [0xFF, 0xFF, 0x01] mean 16 data bits + delimiter at bit 16 — > LIMIT=8.
         with pytest.raises(SSZValueError) as exception_info:
             BitList8.decode_bytes(b"\xff\xff\x01")
-        assert str(exception_info.value) == "BitList8 exceeds limit of 8, got 16"
+        assert str(exception_info.value) == "BitList8 holds at most 8 elements, got 16"
 
     def test_bitlist_deserialize_premature_end(self) -> None:
         """BitList.deserialize rejects a stream that ends before the declared scope."""
@@ -798,9 +799,9 @@ class TestBitfieldSSZ:
             LIMIT = 16
 
         stream = io.BytesIO(b"\xff")
-        with pytest.raises(SSZSerializationError) as exception_info:
+        with pytest.raises(SSZValueError) as exception_info:
             BitList16.deserialize(stream, scope=2)
-        assert str(exception_info.value) == "BitList16: expected 2 bytes, got 1"
+        assert str(exception_info.value) == "BitList16 needs 2 bytes, the input holds 1"
 
 
 class TestBitfieldDefaults:
@@ -813,9 +814,9 @@ class TestBitfieldDefaults:
 
     def test_bitvector_empty_input_stays_a_length_error(self) -> None:
         """Zero bits is a count mismatch against LENGTH, never a request for the default."""
-        with pytest.raises(ValueOrValidationError) as exception_info:
+        with pytest.raises(ValidationError) as exception_info:
             BitVector4(data=[])
-        assert str(exception_info.value) == "BitVector4 requires exactly 4 elements, got 0"
+        assert "BitVector4 holds exactly 4 elements, got 0" in str(exception_info.value)
 
     def test_bitvector_data_is_no_longer_a_required_field(self) -> None:
         """The bits carry a default, so Pydantic itself reports them as optional."""
@@ -824,9 +825,9 @@ class TestBitfieldDefaults:
     @pytest.mark.parametrize(
         "bitvector_type, expected_message",
         [
-            pytest.param(BitVector, "BitVector must define LENGTH", id="the_base_itself"),
+            pytest.param(BitVector, "BitVector must declare LENGTH", id="the_base_itself"),
             pytest.param(
-                LengthlessBitVector, "LengthlessBitVector must define LENGTH", id="a_subclass"
+                LengthlessBitVector, "LengthlessBitVector must declare LENGTH", id="a_subclass"
             ),
         ],
     )
@@ -945,4 +946,4 @@ class TestBitVectorInputShapes:
         with pytest.raises((SSZTypeError, ValidationError)) as exception_info:
             BitVector4(data=rejected)
 
-        assert str(exception_info.value) == f"Expected iterable, got {type_name}"
+        assert str(exception_info.value) == f"expected iterable, got {type_name}"

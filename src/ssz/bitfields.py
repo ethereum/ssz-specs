@@ -26,12 +26,7 @@ from typing import (
 from pydantic import Field, field_validator
 
 from ssz.boolean import Boolean
-from ssz.exceptions import (
-    SSZDefinitionError,
-    SSZScopeError,
-    SSZSerializationError,
-    SSZValueError,
-)
+from ssz.exceptions import SSZTypeError, SSZValueError, TypeFault, ValueFault
 from ssz.ssz_base import SSZCollection
 
 
@@ -97,11 +92,11 @@ class BitVector(SSZCollection[Boolean]):
         Enforce the exact bit count and coerce every input into a boolean.
 
         Raises:
-            SSZDefinitionError: When the bit count was never declared.
+            SSZTypeError: When the bit count was never declared.
         """
         # A shape that never declared its bit count cannot judge any input.
         if cls.LENGTH is None:
-            raise SSZDefinitionError(cls.__name__, "LENGTH")
+            raise SSZTypeError(TypeFault.UNDECLARED, type=cls.__name__, requirement="LENGTH")
 
         # Materialize a length-checkable sequence, refusing strings and non-iterables.
         #
@@ -139,10 +134,17 @@ class BitVector(SSZCollection[Boolean]):
         """Read SSZ bytes from a stream and return an instance."""
         expected_byte_count = cls.get_byte_length()
         if scope != expected_byte_count:
-            raise SSZScopeError(cls.__name__, expected_byte_count, scope)
+            raise SSZValueError(
+                ValueFault.SCOPE, type=cls.__name__, expected=expected_byte_count, actual=scope
+            )
         serialized_bytes = stream.read(scope)
         if len(serialized_bytes) != scope:
-            raise SSZScopeError(cls.__name__, scope, len(serialized_bytes))
+            raise SSZValueError(
+                ValueFault.TRUNCATED,
+                type=cls.__name__,
+                expected=scope,
+                actual=len(serialized_bytes),
+            )
         return cls.decode_bytes(serialized_bytes)
 
     @override
@@ -191,7 +193,10 @@ class BitVector(SSZCollection[Boolean]):
         expected_byte_count = cls.get_byte_length()
         if len(data) != expected_byte_count:
             raise SSZValueError(
-                f"{cls.__name__}: expected {expected_byte_count} bytes, got {len(data)}"
+                ValueFault.TRUNCATED,
+                type=cls.__name__,
+                expected=expected_byte_count,
+                actual=len(data),
             )
 
         # When the bit count is not a multiple of 8, the last byte holds padding
@@ -201,9 +206,7 @@ class BitVector(SSZCollection[Boolean]):
         # vector of all ones.
         if trailing_bit_count := cls.declared_length() % 8:
             if data[-1] >> trailing_bit_count:
-                raise SSZValueError(
-                    f"{cls.__name__}: non-zero padding bits in final byte {data[-1]:#04x}"
-                )
+                raise SSZValueError(ValueFault.PADDING_BITS, byte=f"{data[-1]:#04x}")
 
         # Every byte is unpacked whole, and the bits past the wanted count dropped.
         # Only the final byte holds fewer than eight of them, so at most seven go.
@@ -270,7 +273,7 @@ class _SSZBitList(SSZCollection[Boolean]):
         A progressive bitlist declares none, so every count it is handed is valid.
 
         Raises:
-            SSZDefinitionError: When a bounded shape never declared its limit.
+            SSZTypeError: When a bounded shape never declared its limit.
         """
         # A bounded shape needs its limit before it can judge any input.
         # An undeclared limit cannot be told apart from the absence of one.
@@ -361,7 +364,12 @@ class _SSZBitList(SSZCollection[Boolean]):
         """Read SSZ bytes from a stream and return an instance."""
         serialized_bytes = stream.read(scope)
         if len(serialized_bytes) != scope:
-            raise SSZScopeError(cls.__name__, scope, len(serialized_bytes))
+            raise SSZValueError(
+                ValueFault.TRUNCATED,
+                type=cls.__name__,
+                expected=scope,
+                actual=len(serialized_bytes),
+            )
         return cls.decode_bytes(serialized_bytes)
 
     @override
@@ -450,15 +458,14 @@ class _SSZBitList(SSZCollection[Boolean]):
             A bitlist instance with the recovered data bits.
 
         Raises:
-            SSZSerializationError: If the input is empty, holds no 1 bits, or carries zero
-                bytes past the one holding the delimiter.
-            SSZLimitError: If the recovered bit count exceeds a declared capacity.
+            SSZValueError: If the input is empty, holds no 1 bits, carries zero bytes past
+                the one holding the delimiter, or recovers more bits than a declared capacity.
         """
         # Phase 1: reject empty input.
         #
         # The empty bitlist still encodes to one byte (0x01).
         if len(data) == 0:
-            raise SSZSerializationError(f"{cls.__name__}: cannot decode empty bytes")
+            raise SSZValueError(ValueFault.EMPTY_ENCODING)
 
         # Phase 2: locate the delimiter, and require it to sit in the final byte.
         #
@@ -475,7 +482,7 @@ class _SSZBitList(SSZCollection[Boolean]):
         # Eight data bits fill the first byte whole, so the delimiter spills to position 8.
         packed_integer = int.from_bytes(data, "little")
         if packed_integer == 0:
-            raise SSZSerializationError(f"{cls.__name__}: no delimiter bit found")
+            raise SSZValueError(ValueFault.NO_DELIMITER)
         delimiter_pos = packed_integer.bit_length() - 1
 
         # The delimiter must sit in the final byte of the input.
@@ -483,9 +490,7 @@ class _SSZBitList(SSZCollection[Boolean]):
         # So a canonical encoding and one with extra zero bytes decode the same.
         # Rejecting the padded form keeps a single valid encoding per value.
         if delimiter_pos // 8 != len(data) - 1:
-            raise SSZSerializationError(
-                f"{cls.__name__}: non-canonical trailing zero bytes after delimiter"
-            )
+            raise SSZValueError(ValueFault.TRAILING_ZEROS)
 
         # Phase 3: enforce the size limit, then extract the data bits below the delimiter.
         #
@@ -542,10 +547,10 @@ class BitList(_SSZBitList):
         A bounded bitlist needs the limit it enforces.
 
         Raises:
-            SSZDefinitionError: When the limit was never declared.
+            SSZTypeError: When the limit was never declared.
         """
         if cls.LIMIT is None:
-            raise SSZDefinitionError(cls.__name__, "LIMIT")
+            raise SSZTypeError(TypeFault.UNDECLARED, type=cls.__name__, requirement="LIMIT")
 
 
 class ProgressiveBitList(_SSZBitList):

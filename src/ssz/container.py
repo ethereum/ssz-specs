@@ -17,15 +17,7 @@ from pydantic import ConfigDict, model_validator
 from pydantic.functional_validators import ModelWrapValidatorHandler
 from pydantic_core import PydanticUndefined
 
-from ssz.exceptions import (
-    SSZActiveFieldsError,
-    SSZDefinitionError,
-    SSZError,
-    SSZScopeError,
-    SSZSerializationError,
-    SSZTypeMismatch,
-    SSZValueError,
-)
+from ssz.exceptions import SSZError, SSZTypeError, SSZValueError, TypeFault, ValueFault
 from ssz.ssz_base import BYTES_PER_LENGTH_OFFSET, SSZModel, SSZType
 from ssz.uint import Uint32
 
@@ -49,33 +41,32 @@ def active_fields(width: int, gaps: tuple[int, ...] = ()) -> tuple[int, ...]:
         One bit per position, set where a field sits.
 
     Raises:
-        SSZTypeMismatch: When the width or a gap is not a plain integer.
-        SSZValueError:
-            - When the width is below one.
-            - When the gaps are unordered, repeated, or outside the width.
+        SSZTypeError: When the width or a gap is not a plain integer.
+        SSZTypeError: When the width is below one.
+        SSZTypeError: When the gaps are unordered, repeated, or outside the width.
     """
     # A boolean passes for an integer wherever the host language looks, so it is refused by name.
     if not isinstance(width, int) or isinstance(width, bool):
-        raise SSZTypeMismatch("an integer width", type(width))
+        raise SSZTypeError(TypeFault.LAYOUT_WIDTH_TYPE, got=type(width).__name__)
 
     # Uints of unequal width refuse to compare, so the range check below runs on plain integers.
     width = int(width)
     if width < 1:
-        raise SSZValueError(f"a layout holds at least one position, got a width of {width}")
+        raise SSZTypeError(TypeFault.LAYOUT_WIDTH, width=width)
 
     positions: list[int] = []
     for gap in gaps:
         if not isinstance(gap, int) or isinstance(gap, bool):
-            raise SSZTypeMismatch("an integer position", type(gap))
+            raise SSZTypeError(TypeFault.LAYOUT_GAP_TYPE, got=type(gap).__name__)
         position = int(gap)
         # A position outside the width would vanish, leaving no gap where one was written.
         if not 0 <= position < width:
-            raise SSZValueError(f"gap {position} falls outside a layout of {width} positions")
+            raise SSZTypeError(TypeFault.LAYOUT_GAP_OUTSIDE, gap=position, width=width)
         positions.append(position)
 
     # Two gaps at one position leave one hole, and a fixed order makes every layout read alike.
     if any(later <= earlier for earlier, later in pairwise(positions)):
-        raise SSZValueError(f"gaps {tuple(positions)} are not in ascending order")
+        raise SSZTypeError(TypeFault.LAYOUT_GAPS_UNORDERED, gaps=tuple(positions))
 
     gap_positions = frozenset(positions)
     return tuple(0 if position in gap_positions else 1 for position in range(width))
@@ -108,10 +99,7 @@ class _SSZContainer(SSZModel):
         - Hex strings accept an optional 0x prefix.
         """
         if isinstance(value, str):
-            try:
-                return cls.from_hex(value)
-            except SSZError as exception:
-                raise ValueError(f"invalid {cls.__name__} hex: {exception}") from exception
+            return cls.from_hex(value)
         return handler(value)
 
     @classmethod
@@ -138,9 +126,12 @@ class _SSZContainer(SSZModel):
             # A field declared as anything but an SSZ type has neither an encoding nor a root.
             if not (isinstance(declared, type) and issubclass(declared, SSZType)):
                 # A declared class names itself; anything else is named by what it is.
-                raise SSZTypeMismatch(
-                    f"an SSZ type for {cls.__name__}.{name}",
-                    declared if isinstance(declared, type) else type(declared),
+                named = declared if isinstance(declared, type) else type(declared)
+                raise SSZTypeError(
+                    TypeFault.NOT_AN_SSZ_TYPE,
+                    type=cls.__name__,
+                    field=name,
+                    got=named.__name__,
                 )
 
             if field.default_factory is None and field.default is PydanticUndefined:
@@ -198,29 +189,33 @@ class _SSZContainer(SSZModel):
 
         # Phase 1: each slot is either the field itself or an offset to its tail payload.
         for name, field_type in cls._FIELD_TYPES:
-            if field_type.is_fixed_size():
-                width = field_type.get_byte_length()
-                fields[name] = field_type.deserialize(stream, width)
-                bytes_read += width
-            else:
-                offset = int(Uint32.deserialize(stream, BYTES_PER_LENGTH_OFFSET))
-                variable_fields.append((name, field_type, offset))
-                bytes_read += BYTES_PER_LENGTH_OFFSET
+            try:
+                if field_type.is_fixed_size():
+                    width = field_type.get_byte_length()
+                    fields[name] = field_type.deserialize(stream, width)
+                    bytes_read += width
+                else:
+                    offset = int(Uint32.deserialize(stream, BYTES_PER_LENGTH_OFFSET))
+                    variable_fields.append((name, field_type, offset))
+                    bytes_read += BYTES_PER_LENGTH_OFFSET
+            except SSZError as error:
+                error.at(name)
+                raise
 
         if not variable_fields:
             # With no tail, the fixed part just read is the whole encoding.
             # A wider budget would leave bytes unread inside the window handed down.
             if scope != bytes_read:
-                raise SSZScopeError(cls.__name__, bytes_read, scope)
+                raise SSZValueError(
+                    ValueFault.SCOPE, type=cls.__name__, expected=bytes_read, actual=scope
+                )
             return cls(**fields)
 
-        # Duplicated from the collection decoder on purpose, so each error names its field.
-        # The first offset must land on the end of the fixed part.
+        # The first offset lands on the end of the fixed part, which a struct measures itself.
         # Any other value leaves a gap or an overlap, giving one value two encodings.
         if variable_fields[0][2] != bytes_read:
-            first_offset = variable_fields[0][2]
-            raise SSZSerializationError(
-                f"{cls.__name__}: first offset {first_offset} != fixed-part end {bytes_read}"
+            raise SSZValueError(
+                ValueFault.FIRST_OFFSET, actual=variable_fields[0][2], expected=bytes_read
             )
 
         # Phase 2: each variable payload spans from its offset to the next.
@@ -230,17 +225,30 @@ class _SSZContainer(SSZModel):
             variable_fields, pairwise(boundaries), strict=True
         ):
             if end < start:
-                raise SSZSerializationError(
-                    f"{cls.__name__}.{name}: non-monotonic offsets ({start} > {end})"
-                )
-            fields[name] = field_type.deserialize(stream, end - start)
+                unordered = SSZValueError(ValueFault.OFFSET_UNORDERED, offset=start, next=end)
+                unordered.at(name)
+                raise unordered
+            try:
+                fields[name] = field_type.deserialize(stream, end - start)
+            except SSZError as error:
+                error.at(name)
+                raise
 
         return cls(**fields)
 
     @classmethod
     def from_hex(cls, value: str) -> Self:
-        """Decode from a hex string with an optional 0x prefix."""
-        return cls.decode_bytes(bytes.fromhex(value.removeprefix("0x")))
+        """
+        Decode from a hex string with an optional 0x prefix.
+
+        Raises:
+            SSZValueError: When the string holds something other than hex digits.
+        """
+        try:
+            data = bytes.fromhex(value.removeprefix("0x"))
+        except ValueError as not_hex:
+            raise SSZValueError(ValueFault.NOT_HEX, type=cls.__name__) from not_hex
+        return cls.decode_bytes(data)
 
 
 class Container(_SSZContainer):
@@ -271,44 +279,44 @@ class ProgressiveContainer(_SSZContainer):
         Enforce the layout rules of EIP-7495 on every declared shape.
 
         Raises:
-            SSZDefinitionError: When no layout is declared.
-            SSZActiveFieldsError: When a declared layout breaks one of those rules.
+            SSZTypeError: When no layout is declared, or a declared one breaks a rule.
         """
         super().__pydantic_init_subclass__(**kwargs)
 
         # Merkleization places each field by its position, so a shape needs a layout.
         if not hasattr(cls, "ACTIVE_FIELDS"):
-            raise SSZDefinitionError(cls.__name__, "ACTIVE_FIELDS")
+            raise SSZTypeError(TypeFault.UNDECLARED, type=cls.__name__, requirement="ACTIVE_FIELDS")
 
         # Every shape is checked, since a restated layout that disagrees would drop a field.
-        layout, name = cls.ACTIVE_FIELDS, cls.__name__
+        # The layout rides along on each refusal, which is the one thing none of them prints.
+        layout = cls.ACTIVE_FIELDS
 
         # A layout is bits and nothing else: the string "100" would read as three set positions.
         if any(bit not in (0, 1) for bit in layout):
-            raise SSZActiveFieldsError(name, layout, "a position holds neither 0 nor 1")
+            raise SSZTypeError(TypeFault.LAYOUT_NOT_BITS, layout=layout)
 
         # An empty layout encodes to zero bytes, and a list of those has no recoverable count.
         if not layout:
-            raise SSZActiveFieldsError(name, layout, "the layout is empty")
+            raise SSZTypeError(TypeFault.LAYOUT_WIDTH, width=len(layout), layout=layout)
 
         # A trailing gap is a second spelling of one shape: (1, 1, 0) and (1, 1) root alike.
         if not layout[-1]:
-            raise SSZActiveFieldsError(name, layout, "the layout ends in a gap")
+            raise SSZTypeError(TypeFault.LAYOUT_TRAILING_GAP, layout=layout)
 
         # The whole layout is mixed into the root as one 32-byte word.
         if len(layout) > MAX_ACTIVE_FIELDS:
-            raise SSZActiveFieldsError(
-                name,
-                layout,
-                f"the layout holds {len(layout)} positions, over the limit of {MAX_ACTIVE_FIELDS}",
+            raise SSZTypeError(
+                TypeFault.LAYOUT_TOO_WIDE,
+                width=len(layout),
+                limit=MAX_ACTIVE_FIELDS,
+                layout=layout,
             )
 
         # One field per set position, in declaration order.
-        active_count = sum(layout)
-        if len(cls.model_fields) != active_count:
-            raise SSZActiveFieldsError(
-                name,
-                layout,
-                f"the layout sets {active_count} positions, "
-                + f"and the struct declares {len(cls.model_fields)}",
+        if len(cls.model_fields) != sum(layout):
+            raise SSZTypeError(
+                TypeFault.LAYOUT_FIELD_COUNT,
+                active=sum(layout),
+                declared=len(cls.model_fields),
+                layout=layout,
             )

@@ -16,7 +16,7 @@ from ssz.boolean import Boolean
 from ssz.byte_arrays import ByteList, ByteVector
 from ssz.collections import List, ProgressiveList, Vector
 from ssz.container import Container, ProgressiveContainer
-from ssz.exceptions import SSZActiveFieldsError, SSZTypeError, SSZValueError
+from ssz.exceptions import SSZTypeError, SSZValueError, TypeFault, ValueFault
 from ssz.ssz_base import SSZModel, SSZType
 from ssz.uint import BaseUint
 from ssz.union import CompatibleUnion
@@ -149,7 +149,7 @@ def merkleize(chunks: Sequence[bytes], limit: int | None = None) -> Root:
     if limit is None:
         width = _next_pow2(chunk_count)
     elif limit < chunk_count:
-        raise SSZValueError("merkleize: input exceeds limit")
+        raise SSZValueError(ValueFault.MERKLEIZE_LIMIT, count=chunk_count, limit=limit)
     else:
         width = _next_pow2(limit)
     # A one-leaf tree has no parent to hash: the leaf is the root.
@@ -303,7 +303,7 @@ def length_word(length: int) -> Chunk:
         SSZValueError: If the length is negative.
     """
     if length < 0:
-        raise SSZValueError("length must be non-negative")
+        raise SSZValueError(ValueFault.NEGATIVE_LENGTH, length=length)
     # Invariant: to_bytes yields exactly the requested width, or raises OverflowError.
     return Chunk._trusted(length.to_bytes(BYTES_PER_CHUNK, "little"))
 
@@ -336,7 +336,7 @@ def selector_word(selector: int) -> Chunk:
         SSZValueError: If the selector does not fit one byte.
     """
     if not 0 <= selector <= 0xFF:
-        raise SSZValueError(f"selector {selector} does not fit one byte")
+        raise SSZValueError(ValueFault.SELECTOR_BYTE, selector=selector)
     # Invariant: to_bytes yields exactly the requested width, or raises OverflowError.
     return Chunk._trusted(selector.to_bytes(BYTES_PER_CHUNK, "little"))
 
@@ -578,7 +578,7 @@ def merkle_layout(value: object) -> MerkleLayout:
     Raises:
         SSZTypeError: If the value's type has no registered handler.
     """
-    raise SSZTypeError(f"hash_tree_root: unsupported value type {type(value).__name__}")
+    raise SSZTypeError(TypeFault.NO_MERKLE_LAYOUT, type=type(value).__name__)
 
 
 @merkle_layout.register(BaseUint)
@@ -690,11 +690,7 @@ def _layout_progressive_container(value: ProgressiveContainer) -> MerkleLayout:
     # A cleared bit keeps its zero leaf, the gap that holds every other field still.
     cls = type(value)
     # A layout is declared as bits and never coerced, so a list of them arrives as one.
-    layout = tuple(cls.ACTIVE_FIELDS)
-    try:
-        names, word = _progressive_container_plan(layout, _field_names(cls))
-    except ValueError as mismatch:
-        raise SSZActiveFieldsError(cls.__name__, layout, str(mismatch)) from mismatch
+    names, word = _progressive_container_plan(tuple(cls.ACTIVE_FIELDS), _field_names(cls))
     return MerkleLayout.nesting(
         [None if name is None else getattr(value, name) for name in names],
         limit=None,
@@ -733,16 +729,19 @@ def _progressive_container_plan(
     The names beside it are rebuilt per root for the same reason.
 
     Raises:
-        ValueError: If the layout and the fields do not pair up one to one. The caller
-            names the type, which no plan depends on and so none is keyed by.
+        SSZTypeError: If the layout and the fields do not pair up one to one. It names no
+            type, no plan being keyed by one, and carries the layout that broke instead.
     """
     positions: list[str | None] = [None] * len(active_fields)
     active_positions = [position for position, bit in enumerate(active_fields) if bit]
     # The declaration checks this pairing too, and a reassigned layout arrives unchecked.
+    # So the layout rides along, since the declared one is no longer the one in force.
     if len(active_positions) != len(field_names):
-        raise ValueError(
-            f"the layout sets {len(active_positions)} positions, "
-            + f"and the struct declares {len(field_names)}"
+        raise SSZTypeError(
+            TypeFault.LAYOUT_FIELD_COUNT,
+            active=len(active_positions),
+            declared=len(field_names),
+            layout=active_fields,
         )
     # Fields follow the set bits: the n-th field belongs at the n-th set position.
     for position, name in zip(active_positions, field_names, strict=True):

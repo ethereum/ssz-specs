@@ -506,7 +506,7 @@ def test_plain_bytes_root_through_the_function_and_carry_no_method() -> None:
 )
 def test_an_unsupported_value_still_reports_the_free_function_error(unsupported: object) -> None:
     """A type with no registered handler keeps the message it has always raised."""
-    expected = f"hash_tree_root: unsupported value type {type(unsupported).__name__}"
+    expected = f"{type(unsupported).__name__} has no Merkle layout"
     with pytest.raises(SSZTypeError, match=rf"^{expected}$"):
         hash_tree_root(unsupported)
 
