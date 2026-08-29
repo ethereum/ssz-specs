@@ -251,8 +251,7 @@ class _SSZSequence[T: SSZType](SSZCollection[T], ABC):
         A pair that decreases is a body of negative width.
         The pair closed by the budget is a body reaching past the input.
 
-        Each span is read from where the last one stopped, so a body that consumes less
-        shifts every later span.
+        Each span is read from where the last stopped, so a short body shifts every later span.
 
         This is the only place that reads bodies.
         So a table cannot be read from without having been checked.
