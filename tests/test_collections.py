@@ -1858,20 +1858,7 @@ class TestNegativeListLimit:
 
 
 class TestUnentitledCapacity:
-    """
-    A shape declares the capacity its own count rule reads, and no other.
-
-    A capacity reaches the tree only through the shape that lays it out, while every
-    declared capacity is enforced on construction. So a capacity a shape's tree never
-    reads gives a type that validates as one shape and merkleizes as another, and no
-    such hybrid is defined:
-
-        class PLwithLimit(ProgressiveList[Uint8]):
-            LIMIT = 2
-
-        PLwithLimit(data=[1, 2, 3])   refused, as a bounded list refuses it
-        its roots                     those of the unbounded shape, at every count
-    """
+    """A shape declares the capacity its own count rule reads, and no other."""
 
     def test_a_vector_refuses_a_bound(self) -> None:
         """A vector counts exactly, and a bound would be a second count rule."""

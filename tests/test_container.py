@@ -707,14 +707,7 @@ class TestErrors:
 
 
 class TestFixedSizeStructSpansItsOwnWidth:
-    """
-    A struct of fixed-size fields is read at exactly its own width, and no other.
-
-    The budget comes from whoever handed the window down, and a caller reading a table of
-    offsets reads the next span from wherever this one stopped. So a budget wider than the
-    width is two faults at once: one value would have two encodings, and every span after
-    this one would be read from the wrong position.
-    """
+    """A struct of fixed-size fields is read at exactly its own width, and no other."""
 
     def test_a_wider_budget_is_refused(self) -> None:
         """A surplus byte inside the window is not something the caller can see."""
