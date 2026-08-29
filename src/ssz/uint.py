@@ -160,14 +160,8 @@ class BaseUint(int, SSZType):
 
     @classmethod
     @override
-    def is_fixed_size(cls) -> bool:
-        """All unsigned integer types are fixed-size."""
-        return True
-
-    @classmethod
-    @override
-    def get_byte_length(cls) -> int:
-        """Byte length derived from the bit width."""
+    def fixed_size(cls) -> int:
+        """The width the declared bit count settles, whatever value an instance holds."""
         return cls.BYTE_LENGTH
 
     @override

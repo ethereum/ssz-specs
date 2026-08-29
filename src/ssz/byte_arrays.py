@@ -22,7 +22,6 @@ from pydantic_core import core_schema
 from ssz.base import wrapping_schema
 from ssz.exceptions import (
     SSZDefinitionError,
-    SSZFixedSizeError,
     SSZLengthError,
     SSZLimitError,
     SSZScopeError,
@@ -124,14 +123,8 @@ class ByteVector(bytes, SSZType):
 
     @classmethod
     @override
-    def is_fixed_size(cls) -> bool:
-        """Always fixed-size by definition."""
-        return True
-
-    @classmethod
-    @override
-    def get_byte_length(cls) -> int:
-        """Return the declared byte length."""
+    def fixed_size(cls) -> int:
+        """The declared byte count, which is the width by definition."""
         return cls.declared_length()
 
     @override
@@ -336,22 +329,13 @@ class ByteList(SSZCollection[int]):
         self._store(working)
         return last
 
-    @classmethod
-    @override
-    def is_fixed_size(cls) -> bool:
-        """Variable-size by definition — the byte count depends on the value."""
-        return False
+    KIND = "byte list"
 
     @classmethod
     @override
-    def get_byte_length(cls) -> int:
-        """
-        Variable-size types have no fixed byte length.
-
-        Raises:
-            SSZTypeError: Always — call this only on fixed-size types.
-        """
-        raise SSZFixedSizeError(cls.__name__, "byte list")
+    def fixed_size(cls) -> None:
+        """No width by definition — the byte count depends on the value."""
+        return None
 
     @override
     def serialize(self, stream: IO[bytes]) -> int:

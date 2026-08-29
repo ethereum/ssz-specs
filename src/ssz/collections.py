@@ -36,7 +36,6 @@ from ssz.byte_arrays import ByteVector
 from ssz.exceptions import (
     SSZDefinitionError,
     SSZError,
-    SSZFixedSizeError,
     SSZScopeError,
     SSZSerializationError,
     SSZTypeMismatch,
@@ -401,26 +400,14 @@ class Vector[T: SSZType](_SSZSequence[T]):
         if not hasattr(cls, "ELEMENT_TYPE") or cls.LENGTH is None:
             raise SSZDefinitionError(cls.__name__, "ELEMENT_TYPE and LENGTH")
 
-    @classmethod
-    @override
-    def is_fixed_size(cls) -> bool:
-        """A vector is fixed-size if and only if its elements are fixed-size."""
-        return cls.ELEMENT_TYPE.is_fixed_size()
+    KIND = "vector"
 
     @classmethod
     @override
-    def get_byte_length(cls) -> int:
-        """
-        Return the element width times the element count.
-
-        Raises:
-            SSZTypeError: When the element type is variable-size.
-        """
-        # A variable-size element has no width to give, so asking for one is the check.
-        try:
-            return cls.ELEMENT_TYPE.get_byte_length() * cls.declared_length()
-        except SSZFixedSizeError as variable_element:
-            raise SSZFixedSizeError(cls.__name__, "vector") from variable_element
+    def fixed_size(cls) -> int | None:
+        """The element width once per position, and no width at all where an element has none."""
+        element_width = cls.ELEMENT_TYPE.fixed_size()
+        return None if element_width is None else element_width * cls.declared_length()
 
     @override
     def serialize(self, stream: IO[bytes]) -> int:
@@ -535,22 +522,13 @@ class _SSZList[T: SSZType](_SSZSequence[T]):
         # Built through the constructor, so a bounded list still rejects an overflow.
         return type(self)(data=new_data)
 
-    @classmethod
-    @override
-    def is_fixed_size(cls) -> bool:
-        """Never fixed-size: the element count varies from one instance to the next."""
-        return False
+    KIND = "list"
 
     @classmethod
     @override
-    def get_byte_length(cls) -> int:
-        """
-        Variable-size types have no fixed byte length.
-
-        Raises:
-            SSZTypeError: Always — call this only on fixed-size types.
-        """
-        raise SSZFixedSizeError(cls.__name__, "list")
+    def fixed_size(cls) -> None:
+        """No width: the element count varies from one instance to the next."""
+        return None
 
     @override
     def serialize(self, stream: IO[bytes]) -> int:

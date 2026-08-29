@@ -13,6 +13,7 @@ from pydantic_core import core_schema
 from ssz.base import StrictBaseModel
 from ssz.exceptions import (
     SSZDefinitionError,
+    SSZFixedSizeError,
     SSZLengthError,
     SSZLimitError,
     SSZSerializationError,
@@ -69,6 +70,13 @@ class SSZType(ABC):
 
     LIMIT: ClassVar[int | None] = None
     """Maximum element count, read the same way: None means no count, never a count of zero."""
+
+    KIND: ClassVar[str] = "type"
+    """How a shape names itself where it is asked for a width it does not have.
+
+    The type's own name does not say which rule refused: a container is named for what it
+    holds, and a vector loses its width only through its elements. A shape that always has
+    a width never raises, and keeps the bare word."""
 
     @classmethod
     def __get_pydantic_core_schema__(
@@ -182,28 +190,50 @@ class SSZType(ABC):
 
     @classmethod
     @abstractmethod
-    def is_fixed_size(cls) -> bool:
+    def fixed_size(cls) -> int | None:
         """
-        Whether every instance encodes to the same number of bytes.
+        Bytes every instance encodes to, or None where that count varies.
+
+        A shape states its width here and nowhere else. Both questions below are read off
+        this one answer, so neither can drift from the other, and having a width is a value
+        to test rather than an error to catch.
 
         Returns:
-            True for fixed-size types, False for variable-size.
+            The width every instance shares, or None for a variable-size shape.
         """
         ...
 
     @classmethod
-    @abstractmethod
+    def is_fixed_size(cls) -> bool:
+        """
+        Whether every instance encodes to the same number of bytes.
+
+        The wire format branches on this: a fixed-size value sits inline, and a
+        variable-size one is reached through an offset.
+
+        Returns:
+            True for fixed-size types, False for variable-size.
+        """
+        return cls.fixed_size() is not None
+
+    @classmethod
     def get_byte_length(cls) -> int:
         """
         Fixed encoded byte length of this type.
+
+        The spelling for a caller that has already established the shape is fixed-size,
+        and would otherwise carry a None it knows cannot arrive.
 
         Returns:
             The constant byte width every instance encodes to.
 
         Raises:
-            SSZTypeError: If the type is variable-size.
+            SSZFixedSizeError: When the type is variable-size, so it has no width to give.
         """
-        ...
+        width = cls.fixed_size()
+        if width is None:
+            raise SSZFixedSizeError(cls.__name__, cls.KIND)
+        return width
 
     @abstractmethod
     def serialize(self, stream: IO[bytes]) -> int:

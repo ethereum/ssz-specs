@@ -107,14 +107,8 @@ class Boolean(int, SSZType):
 
     @classmethod
     @override
-    def is_fixed_size(cls) -> bool:
-        """Always fixed-size — every boolean encodes to one byte."""
-        return True
-
-    @classmethod
-    @override
-    def get_byte_length(cls) -> int:
-        """Return the byte length of the encoded form."""
+    def fixed_size(cls) -> int:
+        """One byte, for either of the two values."""
         return 1
 
     @override

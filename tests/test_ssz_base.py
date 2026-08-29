@@ -27,6 +27,7 @@ from ssz.exceptions import (
     SSZDefaultError,
     SSZDefinitionError,
     SSZError,
+    SSZFixedSizeError,
     SSZSerializationError,
     SSZTypeError,
     SSZValueError,
@@ -46,6 +47,12 @@ class Uint16List4(List[Uint16]):
 
 class Uint16Vector2(Vector[Uint16]):
     """A vector of exactly 2 Uint16 values."""
+
+    LENGTH = 2
+
+
+class Uint16ListVector2(Vector[Uint16List4]):
+    """A vector of two lists, whose elements leave it with no width of its own."""
 
     LENGTH = 2
 
@@ -275,14 +282,9 @@ class TestSSZTypeEncodeDecode:
             """A type that reads one byte and leaves the rest of its budget unread."""
 
             @classmethod
-            def is_fixed_size(cls) -> bool:
-                """Variable-size, so no caller derives a width to hand it."""
-                return False
-
-            @classmethod
-            def get_byte_length(cls) -> int:
-                """No fixed width to give."""
-                raise SSZTypeError("OneByteOfMany has no fixed byte length")
+            def fixed_size(cls) -> None:
+                """No width, so no caller derives one to hand it."""
+                return None
 
             def serialize(self, stream: IO[bytes]) -> int:
                 """Write the one byte this type stands for."""
@@ -1674,6 +1676,63 @@ class TestDeclaredCapacity:
         # A proof sizes the tree from the bound, and reaches the same report.
         with pytest.raises(SSZDefinitionError):
             chunk_count(NoLimit)
+
+
+class TestFixedSize:
+    """
+    Tests that one stated width answers every question asked about a shape's size.
+
+    A shape states its width in one place, and both spellings that ask for it read that
+    one answer. So a shape reporting a width can always give it, and one reporting none
+    refuses every caller alike.
+
+    A refusal names the shape, because the type's own name does not say which rule
+    refused: a container is named for what it holds, and a vector loses its width only
+    through its elements.
+    """
+
+    @pytest.mark.parametrize(
+        "declared_type, width",
+        [
+            pytest.param(Uint64, 8, id="uint"),
+            pytest.param(Boolean, 1, id="boolean"),
+            pytest.param(TypedLengthBytes, 4, id="fixed_byte_array"),
+            pytest.param(SmallBitVector, 1, id="bitvector"),
+            pytest.param(Uint16Vector2, 4, id="vector"),
+            pytest.param(TwoFieldContainer, 3, id="container"),
+        ],
+    )
+    def test_a_shape_with_a_width_answers_both_spellings_with_it(
+        self, declared_type: type[SSZType], width: int
+    ) -> None:
+        """The stated width settles both questions, so neither can drift from it."""
+        assert declared_type.fixed_size() == width
+        assert declared_type.is_fixed_size() is True
+        assert declared_type.get_byte_length() == width
+
+    @pytest.mark.parametrize(
+        "declared_type, kind",
+        [
+            pytest.param(Uint16List4, "list", id="list"),
+            pytest.param(Uint16ProgressiveList, "list", id="progressive_list"),
+            pytest.param(Uint16ListVector2, "vector", id="vector"),
+            pytest.param(SmallBitList, "bitlist", id="bitlist"),
+            pytest.param(SmallByteList, "byte list", id="byte_list"),
+            pytest.param(ThreeFieldContainer, "container", id="container"),
+            pytest.param(SmallUnion, "compatible union", id="compatible_union"),
+        ],
+    )
+    def test_a_shape_without_a_width_names_itself_where_one_is_demanded(
+        self, declared_type: type[SSZType], kind: str
+    ) -> None:
+        """Every family that can lack a width names itself, none falling back on the bare word."""
+        assert declared_type.fixed_size() is None
+        assert declared_type.is_fixed_size() is False
+        with pytest.raises(SSZFixedSizeError) as exception_info:
+            declared_type.get_byte_length()
+        assert str(exception_info.value) == (
+            f"{declared_type.__name__}: variable-size {kind} has no fixed byte length"
+        )
 
 
 class TestFinalHashTreeRoot:

@@ -21,7 +21,6 @@ from ssz.exceptions import (
     SSZActiveFieldsError,
     SSZDefinitionError,
     SSZError,
-    SSZFixedSizeError,
     SSZScopeError,
     SSZSerializationError,
     SSZTypeMismatch,
@@ -96,6 +95,9 @@ class _SSZContainer(SSZModel):
     _LEADING_WIDTH: ClassVar[int] = 0
     """Bytes the leading part spans, which is where the first variable payload begins."""
 
+    _FIXED_SIZE: ClassVar[int | None] = 0
+    """Width of the whole struct, or None where a field leaves it without one."""
+
     @model_validator(mode="wrap")
     @classmethod
     def _accept_hex_string(cls, value: Any, handler: ModelWrapValidatorHandler[Self]) -> Self:
@@ -115,8 +117,9 @@ class _SSZContainer(SSZModel):
     @classmethod
     def __pydantic_init_subclass__(cls, **kwargs: Any) -> None:
         """
-        Give every field the default of its own type, so a struct needs no arguments.
+        Settle what the declaration fixes: the field types, their defaults, and the total width.
 
+        Every field gets the default of its own type, so a struct needs no arguments.
         Each default is built on the omission, so two fields never alias one mutable value.
 
         A field whose type has no default raises when left out, and the struct inherits that.
@@ -128,6 +131,7 @@ class _SSZContainer(SSZModel):
         field_types: list[tuple[str, type[SSZType]]] = []
         leading_slots: list[tuple[str, bool]] = []
         leading_width = 0
+        total_width: int | None = 0
         for name, field in cls.model_fields.items():
             declared = field.annotation
 
@@ -143,39 +147,27 @@ class _SSZContainer(SSZModel):
                 field.default_factory = declared
             field_types.append((name, declared))
 
-            # Asking a declared type this per encode would walk its whole subtree again.
-            inline = declared.is_fixed_size()
+            # One width answers both: the slot the field takes, and the struct's own span.
+            width = declared.fixed_size()
+            inline = width is not None
             leading_slots.append((name, inline))
-            leading_width += declared.get_byte_length() if inline else BYTES_PER_LENGTH_OFFSET
+            leading_width += width if inline else BYTES_PER_LENGTH_OFFSET
+            total_width = None if width is None or total_width is None else total_width + width
 
         cls.model_rebuild(force=True)
 
         cls._FIELD_TYPES = tuple(field_types)
         cls._LEADING_SLOTS = tuple(leading_slots)
         cls._LEADING_WIDTH = leading_width
+        cls._FIXED_SIZE = total_width
+
+    KIND = "container"
 
     @classmethod
     @override
-    def is_fixed_size(cls) -> bool:
-        """True only when every field is fixed-size."""
-        return all(field_type.is_fixed_size() for _, field_type in cls._FIELD_TYPES)
-
-    @classmethod
-    @override
-    def get_byte_length(cls) -> int:
-        """
-        Sum of field widths.
-
-        Raises:
-            SSZFixedSizeError: When any field is variable-size, so the struct has no width.
-        """
-        # A variable-size field has no width to give, so asking for one is the check.
-        #
-        # Checking first would walk every declared type twice, and again at every nesting.
-        try:
-            return sum(field_type.get_byte_length() for _, field_type in cls._FIELD_TYPES)
-        except SSZFixedSizeError as variable_field:
-            raise SSZFixedSizeError(cls.__name__, "container") from variable_field
+    def fixed_size(cls) -> int | None:
+        """The sum settled at declaration, since no field can join a struct afterwards."""
+        return cls._FIXED_SIZE
 
     @override
     def serialize(self, stream: IO[bytes]) -> int:

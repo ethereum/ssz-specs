@@ -13,7 +13,6 @@ from ssz.container import Container, ProgressiveContainer
 from ssz.exceptions import (
     SSZDefaultError,
     SSZDefinitionError,
-    SSZFixedSizeError,
     SSZSerializationError,
     SSZTypeMismatch,
     SSZUnionOptionsError,
@@ -376,22 +375,13 @@ class CompatibleUnion(SSZModel):
             raise SSZTypeMismatch(option.__name__, type(self.data))
         return self
 
-    @classmethod
-    @override
-    def is_fixed_size(cls) -> bool:
-        """Never fixed-size, even where every option shares one width."""
-        return False
+    KIND = "compatible union"
 
     @classmethod
     @override
-    def get_byte_length(cls) -> int:
-        """
-        Variable-size types have no fixed byte length.
-
-        Raises:
-            SSZTypeError: Always — call this only on fixed-size types.
-        """
-        raise SSZFixedSizeError(cls.__name__, "compatible union")
+    def fixed_size(cls) -> None:
+        """No width, even where every option shares one: the selector is read per value."""
+        return None
 
     @override
     def serialize(self, stream: IO[bytes]) -> int:

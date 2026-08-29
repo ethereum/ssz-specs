@@ -28,7 +28,6 @@ from pydantic import Field, field_validator
 from ssz.boolean import Boolean
 from ssz.exceptions import (
     SSZDefinitionError,
-    SSZFixedSizeError,
     SSZScopeError,
     SSZSerializationError,
     SSZValueError,
@@ -123,14 +122,8 @@ class BitVector(SSZCollection[Boolean]):
 
     @classmethod
     @override
-    def is_fixed_size(cls) -> bool:
-        """Always fixed-size by definition."""
-        return True
-
-    @classmethod
-    @override
-    def get_byte_length(cls) -> int:
-        """Return the number of bytes needed to pack the bits."""
+    def fixed_size(cls) -> int:
+        """The bytes the declared bits pack into."""
         return math.ceil(cls.declared_length() / 8)
 
     @override
@@ -347,22 +340,13 @@ class _SSZBitList(SSZCollection[Boolean]):
                 return NotImplemented
         return type(self)(data=new_data)
 
-    @classmethod
-    @override
-    def is_fixed_size(cls) -> bool:
-        """Variable-size by definition — the bit count varies from one instance to the next."""
-        return False
+    KIND = "bitlist"
 
     @classmethod
     @override
-    def get_byte_length(cls) -> int:
-        """
-        Variable-size types have no fixed byte length.
-
-        Raises:
-            SSZTypeError: Always — call this only on fixed-size types.
-        """
-        raise SSZFixedSizeError(cls.__name__, "bitlist")
+    def fixed_size(cls) -> None:
+        """No width by definition — the bit count varies from one instance to the next."""
+        return None
 
     @override
     def serialize(self, stream: IO[bytes]) -> int:

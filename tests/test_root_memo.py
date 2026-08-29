@@ -152,11 +152,7 @@ class Unmerkleizable(SSZModel):
     x: Uint64
 
     @classmethod
-    def is_fixed_size(cls) -> bool:
-        return True
-
-    @classmethod
-    def get_byte_length(cls) -> int:
+    def fixed_size(cls) -> int:
         return 8
 
     def serialize(self, stream: IO[bytes]) -> int:
