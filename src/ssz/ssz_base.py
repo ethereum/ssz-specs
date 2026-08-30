@@ -104,10 +104,21 @@ class SSZType(ABC):
         integer, whatever the declaration was written at.
 
         A capacity that is not an integer at all is refused here as well.
-        Declaration is the only place that refusal can be useful:
+
+        So is one below zero.
+
+        Declaration is the only place either refusal can be useful:
 
             LIMIT = 4.7   ->  refused, rather than resolving to a chunk count nobody wrote
             LIMIT = "4"   ->  refused, rather than reporting a wrong element count later
+            LIMIT = -1    ->  refused, rather than bounding a shape no value can satisfy
+
+        The floor of zero is stated once, for every shape that declares a capacity at all.
+
+        A shape with a higher floor of its own states that one where it is declared:
+
+        - a vector holds at least one element,
+        - a bound of zero admits the empty value and nothing else.
 
         # Refusing a root of its own
 
@@ -139,6 +150,7 @@ class SSZType(ABC):
         Raises:
             SSZTypeError: When a declared capacity is not an integer.
             SSZTypeError: When a declared capacity is a boolean, which counts nothing.
+            SSZTypeError: When a declared capacity is below zero, which counts nothing either.
             SSZTypeError: When a type declares a hash_tree_root of its own.
         """
         super().__init_subclass__(**kwargs)
@@ -161,28 +173,36 @@ class SSZType(ABC):
             if name not in cls.__dict__:
                 continue
 
-            # A plain integer is the common case.
+            # A plain integer is the common case, needing no narrowing at all.
             # Recognizing it costs one identity check, once per type declared.
             declared = cls.__dict__[name]
-            if type(declared) is int:
-                continue
+            if type(declared) is not int:
+                # A boolean is a flag rather than a count.
+                # Narrowing one would make a nonsensical declaration a capacity of 1.
+                #
+                # A boolean of this library's own narrows, every integer here taking one.
+                if not isinstance(declared, int) or isinstance(declared, bool):
+                    raise SSZTypeError(
+                        TypeFault.NOT_AN_INTEGER,
+                        type=cls.__name__,
+                        field=name,
+                        got=type(declared).__name__,
+                    )
 
-            # A boolean is a flag rather than a count.
-            # Narrowing one would turn a nonsensical declaration into a capacity of 1,
-            # which is worse than refusing it.
+                # Every integer type narrows the same way, whatever width it declares.
+                declared = int(declared)
+                setattr(cls, name, declared)
+
+            # A capacity counts what a shape holds.
+            # Nothing is held a negative number of times.
             #
-            # A boolean of this library's own is left to narrow, because every integer
-            # here already accepts one in place of 0 or 1.
-            if not isinstance(declared, int) or isinstance(declared, bool):
+            # Below zero admits no value at all, the empty one included.
+            #
+            # A shape with a higher floor of its own states that one where it is declared.
+            if declared < 0:
                 raise SSZTypeError(
-                    TypeFault.NOT_AN_INTEGER,
-                    type=cls.__name__,
-                    field=name,
-                    got=type(declared).__name__,
+                    TypeFault.CAPACITY_NEGATIVE, type=cls.__name__, field=name, got=declared
                 )
-
-            # Every integer type narrows the same way, whatever width it declares.
-            setattr(cls, name, int(declared))
 
     @classmethod
     @abstractmethod

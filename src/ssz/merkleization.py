@@ -144,6 +144,12 @@ def merkleize(chunks: Sequence[bytes], limit: int | None = None) -> Root:
     else:
         width = _next_pow2(limit)
     # A one-leaf tree has no parent to hash: the leaf is the root.
+    #
+    # Invariant: a chunk is exactly the chunk width, which the caller states.
+    #
+    # Every other root below is a digest, and so 32 bytes whatever it was folded from.
+    #
+    # This one is handed back rather than hashed, so the caller's own width reaches it.
     if width == 1:
         return Root._trusted(chunks[0])
 

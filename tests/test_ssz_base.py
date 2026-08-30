@@ -1371,6 +1371,48 @@ class TestDeclaredCapacity:
         # So no value of that type was ever constructible, in this test or anywhere else.
         assert "Bad" not in locals()
 
+    @pytest.mark.parametrize(
+        "base, capacity",
+        [
+            pytest.param(Vector[Uint8], "LENGTH", id="vector"),
+            pytest.param(List[Uint8], "LIMIT", id="list"),
+            pytest.param(BitVector, "LENGTH", id="bitvector"),
+            pytest.param(BitList, "LIMIT", id="bitlist"),
+            pytest.param(ByteVector, "LENGTH", id="bytevector"),
+            pytest.param(ByteList, "LIMIT", id="bytelist"),
+        ],
+    )
+    def test_a_capacity_below_zero_is_refused_by_every_shape(
+        self, base: type[SSZType], capacity: str
+    ) -> None:
+        """A count of how much a shape holds has a floor of zero, whatever the shape is."""
+        # A capacity of -1 admits no value at all, the empty one included.
+        #
+        # The type it declares is therefore one no instance can ever satisfy.
+        #
+        # That is a fact about the declaration, so nothing below builds a value to reach it.
+        with pytest.raises(SSZTypeError) as exception_info:
+            type("Below", (base,), {capacity: -1})
+
+        assert str(exception_info.value) == (
+            f"Below.{capacity} counts what a shape holds, and -1 is not a count"
+        )
+
+    def test_a_capacity_below_zero_cannot_split_the_two_constructors(self) -> None:
+        """A refused declaration is what keeps a default and an explicit value in step."""
+        # A fixed byte array builds its default by repeating the zero byte.
+        # Repetition reads a negative count as zero.
+        # The width check below it compares against the declared -1 instead:
+        #
+        #     default   ->  b"\x00" * -1  ->  b""      accepted, as the declared width
+        #     explicit  ->  b""           ->  refused, against a width of -1
+        #
+        # Both hold no bytes, and one is admitted while the other is not.
+        with pytest.raises(SSZTypeError):
+
+            class Split(ByteVector):
+                LENGTH = -1
+
     def test_a_fractional_capacity_is_refused(self) -> None:
         """A capacity between two whole numbers has no reading that is safe to guess."""
         with pytest.raises(SSZTypeError) as exception_info:

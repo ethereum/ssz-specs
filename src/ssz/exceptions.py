@@ -11,6 +11,7 @@ class TypeFault(Enum):
     UNDECLARED = "{type} must declare {requirement}"
     NOT_AN_SSZ_TYPE = "{type}.{field} must be an SSZ type, got {got}"
     NOT_AN_INTEGER = "{type}.{field} must be a plain integer, got {got}"
+    CAPACITY_NEGATIVE = "{type}.{field} counts what a shape holds, and {got} is not a count"
     OWN_ROOT = "{type} declares a hash_tree_root of its own"
     IMMUTABLE = "{type} is immutable"
     NO_DEFAULT = "{type} has no default value"
@@ -19,7 +20,6 @@ class TypeFault(Enum):
 
     VECTOR_EMPTY = "a vector holds at least one element, got a length of {length}"
     NOT_ENTITLED = "{type} declares a {capacity} its shape has none of"
-    LIMIT_NEGATIVE = "a bound counts the elements a shape may hold, and {limit} is not a count"
 
     LAYOUT_NOT_BITS = "a field layout holds only 0 and 1"
     LAYOUT_WIDTH = "a field layout holds at least one position, got {width}"

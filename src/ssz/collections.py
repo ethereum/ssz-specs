@@ -382,7 +382,12 @@ class Vector[T: SSZType](_SSZSequence[T]):
 
         # The spec writes a vector as Vector[type, N] with N > 0.
         # A vector of no elements has no offset table to read a body from.
-        if cls.LENGTH < 1:
+        #
+        # Zero is the only count left to refuse here.
+        #
+        # A negative one is not a count at all.
+        # Every shape refuses that where the type is declared.
+        if cls.LENGTH == 0:
             raise SSZTypeError(TypeFault.VECTOR_EMPTY, length=cls.LENGTH)
 
         element_type, length = cls.ELEMENT_TYPE, cls.LENGTH
@@ -636,16 +641,12 @@ class List[T: SSZType](_SSZList[T]):
 
     @classmethod
     def __pydantic_init_subclass__(cls, **kwargs: Any) -> None:
-        """Refuse a bound no list can have, and an exact count that is a vector's rule."""
+        """Refuse an exact count, which is a vector's rule and not a bound."""
         super().__pydantic_init_subclass__(**kwargs)
 
         # A pinned count is a vector's rule, and the tree here is laid out from the bound.
         if cls.LENGTH is not None:
             raise SSZTypeError(TypeFault.NOT_ENTITLED, type=cls.__name__, capacity="LENGTH")
-
-        # A bound below zero leaves the type no value at all, the empty one included.
-        if cls.LIMIT is not None and cls.LIMIT < 0:
-            raise SSZTypeError(TypeFault.LIMIT_NEGATIVE, limit=cls.LIMIT)
 
     @classmethod
     @override

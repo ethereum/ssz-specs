@@ -134,6 +134,18 @@ class ByteVector(bytes, SSZType):
         """
         Wrap bytes of an already-established length, skipping every check.
 
+        This is package-internal.
+
+        Every caller inside the package states, where it calls, what established the width:
+
+        - a digest is 32 bytes by construction,
+        - a fixed-width conversion is the width it was asked for,
+        - anything else is pinned by a guard directly above.
+
+        A caller outside that contract gets an instance whose width contradicts its own type.
+
+        Nothing downstream reads the width again, so the contradiction is never reported.
+
         Args:
             data: Exactly the declared number of bytes.
 

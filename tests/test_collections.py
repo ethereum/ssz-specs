@@ -1784,14 +1784,19 @@ class TestZeroLengthVector:
         assert str(exception_info.value) == "a vector holds at least one element, got a length of 0"
 
     def test_negative_length_is_refused_at_declaration(self) -> None:
-        """A negative count is refused the same way, and for the same reason."""
+        """A negative count is refused a step earlier, as no count at all."""
+        # Zero is a count, and this shape is the one with no use for it.
+        #
+        # Below zero counts nothing at all, so every shape refuses it alike.
+        #
+        # The refusal therefore names the capacity rather than the shape.
         with pytest.raises(SSZTypeError) as exception_info:
 
             class NegativeVector(Vector[Uint8]):
                 LENGTH = -1
 
         assert str(exception_info.value) == (
-            "a vector holds at least one element, got a length of -1"
+            "NegativeVector.LENGTH counts what a shape holds, and -1 is not a count"
         )
 
 
@@ -1808,7 +1813,7 @@ class TestNegativeListLimit:
 
         assert (
             str(exception_info.value)
-            == "a bound counts the elements a shape may hold, and -1 is not a count"
+            == "NegativeList.LIMIT counts what a shape holds, and -1 is not a count"
         )
 
     def test_a_limit_of_zero_admits_the_empty_value_and_nothing_else(self) -> None:
