@@ -1,0 +1,88 @@
+"""Unit tests for what the package itself publishes: its exports and its module map."""
+
+from __future__ import annotations
+
+import ast
+import pathlib
+import re
+
+import pytest
+
+import ssz
+
+# The map in the package docstring, one module per indented line.
+MAP_ENTRIES = re.findall(r"^    (\w+) {2,}\S", ssz.__doc__ or "", re.MULTILINE)
+
+# The directory the package ships from, taken from where its own modules were loaded.
+PACKAGE = pathlib.Path(next(iter(ssz.__path__)))
+
+# Every module that ships, which is what the map must account for.
+SHIPPED = sorted(path.stem for path in PACKAGE.glob("*.py") if path.stem != "__init__")
+
+
+def test_the_map_lists_every_module_that_ships() -> None:
+    """A module added without a line in the map leaves a reader nowhere to find it."""
+    assert sorted(MAP_ENTRIES) == SHIPPED
+
+
+def test_the_map_names_nothing_that_does_not_ship() -> None:
+    """A line left behind by a deleted module sends a reader to a file that is gone."""
+    assert set(MAP_ENTRIES) <= set(SHIPPED)
+
+
+def test_the_map_runs_in_dependency_order() -> None:
+    """
+    The map is a reading order, so nothing may appear before what it is built on.
+
+    An alphabetical listing inverts a third of these pairs.
+    """
+    position = {name: index for index, name in enumerate(MAP_ENTRIES)}
+    for name in MAP_ENTRIES:
+        tree = ast.parse((PACKAGE / f"{name}.py").read_text())
+        for node in tree.body:
+            if not isinstance(node, ast.ImportFrom) or not node.module:
+                continue
+            if not node.module.startswith("ssz."):
+                continue
+            dependency = node.module.split(".", 1)[1]
+            if dependency in position:
+                assert position[dependency] < position[name], (
+                    f"{name} is listed before {dependency}, which it imports"
+                )
+
+
+@pytest.mark.parametrize(
+    "name",
+    [
+        # The constants and functions the specification's merkleization section names.
+        "BYTES_PER_CHUNK",
+        "BITS_PER_CHUNK",
+        "merkleize",
+        "mix_in_length",
+        "mix_in_selector",
+        "hash_tree_root",
+        "chunk_count",
+        # The progressive shapes, from EIP-7916 and EIP-7495.
+        "merkleize_progressive",
+        "mix_in_active_fields",
+    ],
+)
+def test_the_words_the_spec_merkleizes_with_are_exported(name: str) -> None:
+    """
+    A reader looking up a name from the specification must find it on the package.
+
+    A name reachable only by knowing which module holds it cannot be looked up at all.
+    """
+    assert name in ssz.__all__
+    assert hasattr(ssz, name)
+
+
+def test_every_exported_name_resolves() -> None:
+    """An export that names nothing breaks a star-import rather than one lookup."""
+    for name in ssz.__all__:
+        assert hasattr(ssz, name), name
+
+
+def test_the_exports_are_sorted() -> None:
+    """A sorted list is the one order two people adding a name will not conflict over."""
+    assert list(ssz.__all__) == sorted(ssz.__all__)
