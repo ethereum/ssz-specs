@@ -334,6 +334,8 @@ class Vector[T: SSZType](_SSZSequence[T]):
     LENGTH: ClassVar[int | None]
     """Exact number of elements, fixed at the type level."""
 
+    KIND = "vector"
+
     @classmethod
     def __pydantic_init_subclass__(cls, **kwargs: Any) -> None:
         """
@@ -392,8 +394,6 @@ class Vector[T: SSZType](_SSZSequence[T]):
             raise SSZTypeError(
                 TypeFault.UNDECLARED, type=cls.__name__, requirement="ELEMENT_TYPE and LENGTH"
             )
-
-    KIND = "vector"
 
     @classmethod
     @override
@@ -461,6 +461,8 @@ class _SSZList[T: SSZType](_SSZSequence[T]):
     - The Merkle tree shape, which lives in the merkleization module.
     """
 
+    KIND = "list"
+
     def append(self, value: T) -> None:
         """
         Add one element at the end, coerced as construction coerces one.
@@ -513,8 +515,6 @@ class _SSZList[T: SSZType](_SSZSequence[T]):
 
         # Built through the constructor, so a bounded list still rejects an overflow.
         return type(self)(data=new_data)
-
-    KIND = "list"
 
     @classmethod
     @override
