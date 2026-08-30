@@ -94,6 +94,7 @@ class ValueFault(Enum):
     PATH_PAST_SPINE = "the path lies past the end of the progressive spine of {type}"
 
     MERKLEIZE_LIMIT = "{count} chunks exceed a limit of {limit}"
+    STALE_ROOT = "stale remembered root for {type}"
     NEGATIVE_LENGTH = "a mixed-in length is not negative, got {length}"
     SELECTOR_BYTE = "selector {selector} does not fit one byte"
 

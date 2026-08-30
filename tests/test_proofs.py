@@ -59,7 +59,9 @@ from ssz import (
     verify_merkle_multiproof,
     verify_merkle_proof,
 )
-from ssz.merkleization import hash_tree_root, merkle_layout, merkleize
+from ssz.layout import merkle_layout
+from ssz.roots import hash_tree_root
+from ssz.trees import merkleize
 
 
 def h(left: bytes, right: bytes) -> Root:

@@ -27,7 +27,7 @@ from ssz import (
     Vector,
 )
 from ssz.exceptions import SSZTypeError, SSZValueError
-from ssz.merkleization import hash_tree_root
+from ssz.roots import hash_tree_root
 from ssz.uint import BaseUint
 
 ALL_UINT_TYPES = (Uint8, Uint16, Uint32, Uint64, Uint128, Uint256)

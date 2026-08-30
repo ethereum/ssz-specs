@@ -8,23 +8,23 @@ from typing import IO, Self, cast
 
 import pytest
 
-from ssz import merkleization
+from ssz import roots
 from ssz.bitfields import BitList
 from ssz.boolean import Boolean
 from ssz.byte_arrays import ByteList, ByteVector
 from ssz.collections import List, ProgressiveList, Vector
 from ssz.container import Container, ProgressiveContainer
-from ssz.exceptions import SSZTypeError
-from ssz.merkleization import _root_witness, hash_tree_root
+from ssz.exceptions import SSZTypeError, SSZValueError
 from ssz.paths import get_generalized_index
 from ssz.proofs import build_proof, node_root
+from ssz.roots import _root_witness, hash_tree_root
 from ssz.ssz_base import SSZModel
 from ssz.uint import Uint8, Uint64
 from ssz.union import CompatibleUnion
 from ssz.verification import verify_merkle_proof
 
 memo_in_force = pytest.mark.skipif(
-    merkleization.PARANOID_ROOTS,
+    roots.PARANOID_ROOTS,
     reason="PARANOID_ROOTS recomputes every remembered root, which is the behaviour "
     + "these tests observe the absence of",
 )
@@ -526,7 +526,7 @@ class TestParanoidRoots:
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """The same mutation sequence, with every hit checked against a recomputation."""
-        monkeypatch.setattr(merkleization, "PARANOID_ROOTS", True)
+        monkeypatch.setattr(roots, "PARANOID_ROOTS", True)
         state = a_state()
         assert hash_tree_root(state) == round_trip_root(state)
         for name, mutate in MUTATIONS:
@@ -546,8 +546,8 @@ class TestParanoidRoots:
         # Reaching past that is the point of this test: it is the write no mutator sees.
         cast("list[Uint64]", balances.data)[0] = Uint64(99)
 
-        monkeypatch.setattr(merkleization, "PARANOID_ROOTS", True)
-        with pytest.raises(AssertionError, match="stale remembered root for Balances"):
+        monkeypatch.setattr(roots, "PARANOID_ROOTS", True)
+        with pytest.raises(SSZValueError, match="stale remembered root for Balances"):
             balances.hash_tree_root()
 
 

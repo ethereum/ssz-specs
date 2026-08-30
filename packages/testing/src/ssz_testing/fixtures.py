@@ -11,7 +11,7 @@ from pydantic.alias_generators import to_camel
 
 from ssz.boolean import Boolean
 from ssz.exceptions import SSZError, ValueFault
-from ssz.merkleization import hash_tree_root
+from ssz.roots import hash_tree_root
 from ssz.ssz_base import SSZModel, SSZType
 from ssz_testing.hex_codec import from_hex, to_hex
 

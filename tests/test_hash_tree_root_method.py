@@ -40,13 +40,8 @@ from ssz import (
     Vector,
     hash_tree_root,
 )
-from ssz.merkleization import (
-    merkleize,
-    merkleize_progressive,
-    mix_in_active_fields,
-    mix_in_length,
-    mix_in_selector,
-)
+from ssz.mixins import mix_in_active_fields, mix_in_length, mix_in_selector
+from ssz.trees import merkleize, merkleize_progressive
 
 
 def pad(payload: bytes) -> Root:

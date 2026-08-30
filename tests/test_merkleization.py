@@ -22,25 +22,17 @@ from ssz import (
     Uint64,
     Uint128,
     Uint256,
-    merkleization,
+    roots,
 )
 from ssz.bitfields import BitList, BitVector, ProgressiveBitList
 from ssz.boolean import Boolean
+from ssz.chunks import BYTES_PER_CHUNK, next_pow2
 from ssz.collections import List, ProgressiveList, Vector
 from ssz.container import Container, ProgressiveContainer
-from ssz.merkleization import (
-    BYTES_PER_CHUNK,
-    _next_pow2,
-    _pack_basic_elements,
-    _pack_bytes,
-    hash_tree_root,
-    merkle_layout,
-    merkleize,
-    merkleize_progressive,
-    mix_in_active_fields,
-    mix_in_length,
-    mix_in_selector,
-)
+from ssz.layout import _pack_basic_elements, _pack_bytes, merkle_layout
+from ssz.mixins import mix_in_active_fields, mix_in_length, mix_in_selector
+from ssz.roots import hash_tree_root, layout_chunks
+from ssz.trees import merkleize, merkleize_progressive
 from ssz.uint import BaseUint
 from ssz.union import CompatibleUnion
 
@@ -103,7 +95,7 @@ def naive_merkleize_progressive(chunks: Sequence[Chunk], num_leaves: int = 1) ->
     if len(chunks) == 0:
         return ZERO_ROOT
     return h(
-        perfect_tree_root(chunks[:num_leaves], _next_pow2(num_leaves)),
+        perfect_tree_root(chunks[:num_leaves], next_pow2(num_leaves)),
         naive_merkleize_progressive(chunks[num_leaves:], num_leaves * 4),
     )
 
@@ -169,7 +161,7 @@ PROGRESSIVE_CHUNK_COUNTS = [0, 1, 2, 4, 5, 6, 20, 21, 22, 84, 85, 86]
 )
 def test_next_pow2(x: int, expected: int) -> None:
     """Returns the smallest power of two at or above the input, with 1 for 0 and 1."""
-    assert _next_pow2(x) == expected
+    assert next_pow2(x) == expected
 
 
 def test_merkleize_empty_no_limit() -> None:
@@ -241,6 +233,15 @@ def test_merkleize_error_on_exceeding_limit() -> None:
     assert str(exception_info.value) == "5 chunks exceed a limit of 4"
 
 
+@pytest.mark.parametrize("limit", [-1, -64])
+def test_merkleize_refuses_a_capacity_that_is_no_capacity(limit: int) -> None:
+    """A negative bound counts no leaves, and an empty input does not excuse it."""
+    # Rounding a negative bound up lands on a one-leaf tree, which is a root for a
+    # capacity the caller never asked for.
+    with pytest.raises(SSZValueError, match=rf"^0 chunks exceed a limit of {limit}$"):
+        merkleize([], limit=limit)
+
+
 # Chunk counts and capacities for an all-zero payload.
 # These are the shapes where the closed form for a zero tree and the layer walk agree.
 #
@@ -268,7 +269,7 @@ def test_merkleize_all_zero_payload_is_the_tree_a_walk_over_it_builds(
     """Zero data under zero padding roots where hashing every layer of it lands."""
     zero_chunks = [ZERO_ROOT] * chunk_count
     # The capacity sets the width, and its absence leaves the data to set it.
-    width = _next_pow2(chunk_count if limit is None else limit)
+    width = next_pow2(chunk_count if limit is None else limit)
     assert merkleize(zero_chunks, limit=limit) == perfect_tree_root(zero_chunks, width)
 
 
@@ -290,6 +291,49 @@ def test_merkleize_a_payload_zero_but_for_one_chunk_is_not_a_zero_tree(
     assert merkleize(chunks, limit=8) == perfect_tree_root(chunks, 8)
     # A zero prefix is not a zero payload, wherever the data that follows it sits.
     assert merkleize(chunks, limit=8) != Z[3]
+
+
+@pytest.mark.parametrize(
+    "limit",
+    [
+        pytest.param(None, id="no_limit"),
+        pytest.param(1, id="one_leaf"),
+        pytest.param(2, id="two_leaves"),
+        pytest.param(3, id="an_odd_capacity"),
+        pytest.param(4, id="a_full_level"),
+        pytest.param(5, id="one_past_a_level"),
+        pytest.param(8, id="eight_leaves"),
+        pytest.param(16, id="sixteen_leaves"),
+        pytest.param(64, id="sixty_four_leaves"),
+        pytest.param(1024, id="a_wide_capacity"),
+    ],
+)
+def test_merkleize_lands_where_a_layer_walk_lands_at_every_count(limit: int | None) -> None:
+    """
+    Every shape a shortcut can fire on roots where hashing each layer by hand roots.
+
+    Three payloads, chosen so that each shortcut is reached and left:
+
+        distinct chunks   no shortcut fires, and the layer walk runs to the top
+        one repeated      the uniform level collapses, wherever it spans its data tree
+        all zero          the closed form answers without walking at all
+
+    The oracle materializes every padding leaf and hashes every layer, so it shares no
+    step with the shortcuts it stands against.
+    A shortcut that ever disagreed with it would be a wrong root, which is a chain split.
+    """
+    highest = 33 if limit is None else limit
+    for count in range(highest + 1):
+        payloads = {
+            "distinct": [Chunk(i.to_bytes(32, "little")) for i in range(count)],
+            "repeated": [sample_chunks[1]] * count,
+            "zero": [ZERO_ROOT] * count,
+        }
+        width = next_pow2(count if limit is None else limit)
+        for name, payload in payloads.items():
+            assert merkleize(payload, limit=limit) == perfect_tree_root(payload, width), (
+                f"{name} payload of {count} chunks under a capacity of {limit}"
+            )
 
 
 def test_mix_in_length() -> None:
@@ -1818,7 +1862,7 @@ def test_progressive_and_bounded_container_share_bytes_but_not_roots() -> None:
 
 
 memo_in_force = pytest.mark.skipif(
-    merkleization.PARANOID_ROOTS,
+    roots.PARANOID_ROOTS,
     reason="PARANOID_ROOTS recomputes every remembered root, which is the behaviour "
     + "this test observes the absence of",
 )
@@ -1958,6 +2002,66 @@ def test_a_layout_rewritten_under_a_rooted_value_leaves_a_stale_root() -> None:
     assert hash_tree_root(Restaled(head=Uint16(0x1234), tail=Uint8(0x56))) == correct
 
 
+@memo_in_force
+def test_a_capacity_rewritten_under_a_rooted_value_leaves_a_stale_root() -> None:
+    """
+    The same limitation as the layout above, on the other input a type contributes.
+
+    A capacity sets the width of the tree, so rewriting it moves the root exactly as
+    rewriting a layout does.
+    The witness holds neither, so a value rooted before the rewrite keeps answering with
+    the tree it no longer has:
+
+        Restaled bounded at 4  ->  a two-level tree
+        rewritten to 64        ->  a six-level tree, for values built afterwards
+
+    Pinned here so the two halves of one limitation are documented together.
+    """
+
+    class Restaled(List[Uint64]):
+        LIMIT = 4
+
+    value = Restaled(data=(Uint64(1), Uint64(2)))
+    remembered = hash_tree_root(value)
+
+    Restaled.LIMIT = 64
+    correct = hash_tree_root(Restaled(data=(Uint64(1), Uint64(2))))
+    assert hash_tree_root(value) == remembered != correct
+
+
+@memo_in_force
+def test_a_leaf_typed_slot_holding_a_value_with_an_interior_leaves_a_stale_root() -> None:
+    """
+    The residual risk in dropping leaf fields from the witness, pinned rather than hidden.
+
+    A witness skips the fields whose declared type is an immutable leaf, since eight of
+    them on each of sixty-four validators would cost five hundred reads for nothing.
+    That rests on a slot holding what it declares, which validation guarantees and
+    unvalidated construction does not:
+
+        declared  state_root: Bytes32   ->  skipped, having no interior to change
+        actual    a container           ->  an interior the witness never looks at
+
+    So a mutation inside such a value moves the root and never reaches the witness.
+    A value built the ordinary way cannot reach this, the declared type being enforced.
+    """
+
+    class Inner(Container):
+        x: Uint64
+
+    class Header(Container):
+        slot: Uint64
+        state_root: Bytes32
+
+    inner = Inner(x=Uint64(1))
+    value = Header.model_construct(slot=Uint64(9), state_root=inner)
+    remembered = hash_tree_root(value)
+
+    inner.x = Uint64(2)
+    correct = hash_tree_root(Header.model_construct(slot=Uint64(9), state_root=Inner(x=Uint64(2))))
+    assert hash_tree_root(value) == remembered != correct
+
+
 def test_paranoid_roots_catches_a_root_left_behind_by_a_rewritten_layout(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -1973,8 +2077,8 @@ def test_paranoid_roots_catches_a_root_left_behind_by_a_rewritten_layout(
     hash_tree_root(value)
 
     Repinned.ACTIVE_FIELDS = (0, 1, 1)
-    monkeypatch.setattr(merkleization, "PARANOID_ROOTS", True)
-    with pytest.raises(AssertionError, match=r"^stale remembered root for Repinned$"):
+    monkeypatch.setattr(roots, "PARANOID_ROOTS", True)
+    with pytest.raises(SSZValueError, match=r"^stale remembered root for Repinned$"):
         hash_tree_root(value)
 
 
@@ -2357,7 +2461,7 @@ def test_layout_of_a_container_takes_one_leaf_per_field() -> None:
     assert layout.limit == 2
     assert layout.mixin is None
     assert layout.leaf_count == 2
-    assert layout.chunks() == [pad(b"\x01\x00"), pad(b"\x02\x00")]
+    assert layout_chunks(layout) == [pad(b"\x01\x00"), pad(b"\x02\x00")]
 
 
 def test_layout_of_a_bounded_list_packs_its_elements_and_mixes_the_count_in() -> None:
@@ -2388,7 +2492,7 @@ def test_layout_of_a_progressive_container_keeps_a_leaf_for_every_position() -> 
     # No declared capacity bounds it.
     assert layout.limit is None
     assert layout.mixin == active_fields_word((1, 0, 1))
-    assert layout.chunks() == [pad(b"\x34\x12"), ZERO_ROOT, pad(b"\x56")]
+    assert layout_chunks(layout) == [pad(b"\x34\x12"), ZERO_ROOT, pad(b"\x56")]
 
 
 def test_a_layout_roots_only_the_leaves_a_range_asks_for() -> None:
@@ -2396,9 +2500,9 @@ def test_a_layout_roots_only_the_leaves_a_range_asks_for() -> None:
     value = ChunkVector3(data=(sample_chunks[0], sample_chunks[1], sample_chunks[2]))
     layout = merkle_layout(value)
     assert layout.leaf_count == 3
-    assert layout.chunks(1, 3) == [sample_chunks[1], sample_chunks[2]]
+    assert layout_chunks(layout, 1, 3) == [sample_chunks[1], sample_chunks[2]]
     # A range starting past the last leaf is empty rather than an error.
-    assert layout.chunks(3) == []
+    assert layout_chunks(layout, 3) == []
 
 
 class GappedRunProgressive(ProgressiveContainer):
@@ -2426,7 +2530,7 @@ def test_a_vector_of_one_repeated_value_roots_that_value_at_every_position() -> 
     assert layout.nested is not None
     assert all(element is fingerprint for element in layout.nested)
     leaf = hash_tree_root(fingerprint)
-    assert layout.chunks() == [leaf] * 4
+    assert layout_chunks(layout) == [leaf] * 4
     assert hash_tree_root(uniform) == perfect_tree_root([leaf] * 4, 4)
     # Four equal values that are not one value reach the very same tree, leaf for leaf.
     distinct = Bytes48Vector4(data=[Bytes48(b"\x03" * 48) for _ in range(4)])
@@ -2442,7 +2546,7 @@ def test_a_repeat_broken_in_the_middle_roots_every_position_on_its_own() -> None
     # The ends are one value, so the whole range is walked as a run of one.
     assert layout.nested is not None and layout.nested[0] is layout.nested[2] is first
     # A chunk is its own root, so the leaves are the elements verbatim.
-    assert layout.chunks() == [first, middle, first]
+    assert layout_chunks(layout) == [first, middle, first]
     assert hash_tree_root(value) == perfect_tree_root([first, middle, first], 4)
 
 
@@ -2453,7 +2557,7 @@ def test_a_progressive_layout_holding_one_value_twice_keeps_its_gaps_zero() -> N
     layout = merkle_layout(value)
     assert layout.nested == (fingerprint, None, None, None, fingerprint)
     expected_leaves = [fingerprint, ZERO_ROOT, ZERO_ROOT, ZERO_ROOT, fingerprint]
-    assert layout.chunks() == expected_leaves
+    assert layout_chunks(layout) == expected_leaves
     assert hash_tree_root(value) == expected_progressive_container_root(
         expected_leaves, GappedRunProgressive.ACTIVE_FIELDS
     )
@@ -2534,7 +2638,7 @@ class MyBytes48(Bytes48):
 def root_the_long_way(value: object) -> Root:
     """Root a value by the general path alone, with no short circuit in front of it."""
     layout = merkle_layout(value)
-    chunks = layout.chunks()
+    chunks = layout_chunks(layout)
     if layout.limit is None:
         root = merkleize_progressive(chunks)
     else:

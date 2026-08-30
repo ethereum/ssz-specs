@@ -3,6 +3,7 @@
 from collections.abc import Sequence
 from hashlib import sha256
 
+from ssz.chunks import Chunk, Root
 from ssz.exceptions import SSZValueError, ValueFault
 from ssz.gindex import (
     get_helper_indices,
@@ -11,7 +12,6 @@ from ssz.gindex import (
     gindex_parent,
     gindex_sibling,
 )
-from ssz.merkleization import Chunk, Root
 
 
 def _hash_pair(left: bytes, right: bytes) -> Root:
