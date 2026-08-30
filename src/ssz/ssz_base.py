@@ -109,7 +109,7 @@ class SSZType(ABC):
 
     @classmethod
     def __get_pydantic_core_schema__(
-        cls, source_type: Any, handler: GetCoreSchemaHandler
+        cls, source_type: Any, handler: GetCoreSchemaHandler, /
     ) -> core_schema.CoreSchema:
         """Accept any SSZ value by membership, which is all an abstract field can check."""
         return core_schema.is_instance_schema(cls)

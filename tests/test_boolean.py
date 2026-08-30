@@ -23,7 +23,7 @@ class BooleanModel(BaseModel):
 @pytest.mark.parametrize("valid_value", [True, False])
 def test_pydantic_validation_accepts_valid_bool(valid_value: bool) -> None:
     """Tests that Pydantic validation correctly accepts a valid boolean."""
-    instance = BooleanModel(value=valid_value)  # type: ignore[arg-type]
+    instance = BooleanModel(value=valid_value)
     assert isinstance(instance.value, Boolean)
     assert instance.value == Boolean(valid_value)
 
@@ -44,7 +44,7 @@ def test_pydantic_accepts_existing_boolean_instance() -> None:
 
 def test_pydantic_serializes_boolean_to_plain_bool() -> None:
     """Pydantic serializes Boolean back to a plain bool for JSON output."""
-    serialized = BooleanModel(value=True).model_dump()  # type: ignore[arg-type]
+    serialized = BooleanModel(value=True).model_dump()
     assert serialized == {"value": True}
     assert type(serialized["value"]) is bool
 
@@ -603,5 +603,6 @@ class TestABitCarriesNoState:
         # The assignment is therefore refused where it is written.
         expected_message = "Boolean is immutable"
         with pytest.raises(SSZTypeError) as exception_info:
-            Boolean(True).note = "mine"  # type: ignore[attr-defined]
+            # __setattr__ never returns, which ty reads as a write that cannot stand.
+            Boolean(True).note = "mine"  # ty: ignore[invalid-assignment]
         assert str(exception_info.value) == expected_message

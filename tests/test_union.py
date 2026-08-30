@@ -303,7 +303,8 @@ class TestConstruction:
         """A union declares itself frozen, so neither half changes after construction."""
         value = ScalarUnion(selector=Uint8(1), data=Uint8(7))
         with pytest.raises(ValidationError):
-            value.selector = Uint8(1)
+            # A frozen field reads as read-only, and the write refused here is the test.
+            value.selector = Uint8(1)  # ty: ignore[invalid-assignment]
 
     def test_a_value_holds_its_selector_and_its_data(self) -> None:
         """Construction keeps both halves exactly as given."""
@@ -353,7 +354,8 @@ class TestConstruction:
         """The selector and the payload are fixed at construction, as for every SSZ type."""
         value = Shape(selector=Uint8(1), data=SQUARE)
         with pytest.raises(Exception, match=r"frozen"):
-            value.selector = Uint8(2)
+            # A frozen field reads as read-only, and the write refused here is the test.
+            value.selector = Uint8(2)  # ty: ignore[invalid-assignment]
 
 
 class TestNoDefaultValue:

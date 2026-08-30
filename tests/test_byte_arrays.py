@@ -261,8 +261,11 @@ class TestBaseBytesEqualityFollowsInheritance:
     def test_a_sibling_probe_of_a_dict_raises_rather_than_missing_silently(self) -> None:
         """The reported bug: a dict keyed by one type used to answer absent for the other."""
         payload = b"\x11" * 32
+        # The dict is keyed by 32-byte arrays, which both types are: the probe is well typed.
+        # What it must not do is answer, since the two types hold the same payload.
+        keyed_by_byte_array: dict[ByteVector, int] = {Bytes32(payload): 1}
         with pytest.raises(TypeError):
-            _ = {Bytes32(payload): 1}[Bytes32Sibling(payload)]
+            _ = keyed_by_byte_array[Bytes32Sibling(payload)]
 
     def test_equality_and_hashing_never_disagree(self) -> None:
         """Over every pair of the three 32-byte types at two payloads, equal implies one hash."""
@@ -360,13 +363,15 @@ class TestAByteArrayCarriesNoState:
         """Setting an attribute would reach every other name for the same value."""
         expected_message = "Bytes32 is immutable"
         with pytest.raises(SSZTypeError) as exception_info:
-            Bytes32(b"\x01" * 32).note = "mine"  # type: ignore[attr-defined]
+            # __setattr__ never returns, which ty reads as a write that cannot stand.
+            Bytes32(b"\x01" * 32).note = "mine"  # ty: ignore[invalid-assignment]
         assert str(exception_info.value) == expected_message
 
     def test_a_subclass_is_refused_under_its_own_name(self) -> None:
         """The refusal names the type the value was built as, not the one declaring it."""
         with pytest.raises(SSZTypeError, match=r"^Bytes32Sub is immutable$"):
-            Bytes32Sub(b"\x01" * 32).note = "mine"  # type: ignore[attr-defined]
+            # __setattr__ never returns, which ty reads as a write that cannot stand.
+            Bytes32Sub(b"\x01" * 32).note = "mine"  # ty: ignore[invalid-assignment]
 
     def test_a_deep_copy_cannot_be_written_through_to_the_original(self) -> None:
         """The duplicate promised by copy is this same object, and it stays unwritable."""
@@ -375,7 +380,8 @@ class TestAByteArrayCarriesNoState:
         # The premise: an immutable shape answers a copy with itself.
         assert duplicate is original
         with pytest.raises(SSZTypeError, match=r"^Bytes32 is immutable$"):
-            duplicate.note = "mine"  # type: ignore[attr-defined]
+            # __setattr__ never returns, which ty reads as a write that cannot stand.
+            duplicate.note = "mine"  # ty: ignore[invalid-assignment]
 
 
 class TestBaseBytesSSZ:

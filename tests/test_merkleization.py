@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Iterable, Sequence
 from hashlib import sha256
+from typing import ClassVar
 
 import pytest
 
@@ -1917,7 +1918,8 @@ def test_a_layout_that_stopped_pairing_with_the_fields_is_refused_by_name(
     # Pairing them off regardless would hash a field at a position no declaration gave it.
 
     class Drifted(ProgressiveContainer):
-        ACTIVE_FIELDS = (1, 0, 1)
+        # Declared as the base declares it, so a layout of any width can be put back.
+        ACTIVE_FIELDS: ClassVar[tuple[int, ...]] = (1, 0, 1)
 
         head: Uint16
         tail: Uint8

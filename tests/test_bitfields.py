@@ -87,7 +87,7 @@ class TestBitVector:
     def test_instantiation_from_generator(self) -> None:
         """Fixed-length type materializes a generator into a tuple before validation."""
         bit_generator = (Boolean(bit) for bit in [True, False, True, False])
-        instance = BitVector4(data=bit_generator)  # type: ignore[arg-type]
+        instance = BitVector4(data=bit_generator)
         assert len(instance) == 4
 
     @pytest.mark.parametrize(
@@ -114,7 +114,7 @@ class TestBitVector:
     def test_pydantic_validation_accepts_valid_list(self) -> None:
         """Pydantic validation accepts a valid list of booleans."""
         bits = [Boolean(True), Boolean(False), Boolean(True), Boolean(False)]
-        instance = BitVector4Model(value={"data": bits})  # type: ignore[arg-type]
+        instance = BitVector4Model(value={"data": bits})
         assert isinstance(instance.value, BitVector4)
         assert instance.value == BitVector4(data=bits)
 
@@ -194,7 +194,7 @@ class TestBitList:
     def test_instantiation_from_generator(self) -> None:
         """Variable-length type materializes a generator into a list before validation."""
         bit_generator = (Boolean(bit) for bit in [True, False, True])
-        instance = BitList8(data=bit_generator)  # type: ignore[arg-type]
+        instance = BitList8(data=bit_generator)
         assert len(instance) == 3
 
     @pytest.mark.parametrize(
@@ -234,7 +234,7 @@ class TestBitList:
     def test_pydantic_validation_accepts_valid_list(self) -> None:
         """Pydantic validation accepts a valid list of booleans."""
         bits = [Boolean(True), Boolean(False), Boolean(True), Boolean(False)]
-        instance = BitList8Model(value={"data": bits})  # type: ignore[arg-type]
+        instance = BitList8Model(value={"data": bits})
         assert isinstance(instance.value, BitList8)
         assert len(instance.value) == 4
 
@@ -242,7 +242,7 @@ class TestBitList:
         """Pydantic validation rejects lists exceeding the limit."""
         invalid_value = {"data": [Boolean(True)] * 9}
         with pytest.raises(ValueOrValidationError):
-            BitList8Model(value=invalid_value)  # type: ignore[arg-type]
+            BitList8Model(value=invalid_value)
 
     def test_get_item_int(self) -> None:
         """Indexing by int returns the Boolean at that position."""
@@ -343,7 +343,7 @@ class TestProgressiveBitList:
     def test_instantiation_from_generator(self) -> None:
         """A generator is materialized into a list before validation."""
         bit_generator = (Boolean(bit) for bit in [True, False, True])
-        instance = ProgressiveBitList(data=bit_generator)  # type: ignore[arg-type]
+        instance = ProgressiveBitList(data=bit_generator)
 
         assert len(instance) == 3
 
@@ -384,7 +384,7 @@ class TestProgressiveBitList:
 
     def test_pydantic_validation_accepts_any_bit_count(self) -> None:
         """Pydantic validation accepts a bit list of any width."""
-        instance = ProgressiveBitListModel(value={"data": [Boolean(True)] * 300})  # type: ignore[arg-type]
+        instance = ProgressiveBitListModel(value={"data": [Boolean(True)] * 300})
 
         assert isinstance(instance.value, ProgressiveBitList)
         assert len(instance.value) == 300
