@@ -39,6 +39,7 @@ class TypeFault(Enum):
     UNION_INCOMPATIBLE = "options {selector} and {other} merkleize differently"
 
     NO_PARTS = "{type} has no parts to address"
+    NO_PARTS_MIXIN = "the {word} of {type} has no parts to address"
     NO_MIXIN = "{type} mixes in no {word}"
     NO_CHUNK_COUNT = "{type} has no bounded chunk count"
     NOT_STEPPABLE = "{type} cannot be stepped into"
@@ -76,6 +77,8 @@ class ValueFault(Enum):
 
     NO_SUCH_FIELD = "{type} has no field named {step}"
     NO_SUCH_OPTION = "{type} has no option with selector {step}"
+    NO_SUCH_POSITION = "{type} has no position {step}"
+    NOT_A_POSITION = "a position is a plain integer, got {step!r}"
     NOT_A_GINDEX = "{index} is not a generalized index"
     ROOT_HAS_NO_BRANCH = "the root has no proof branch of its own"
     REPEATED_INDEX = "a generalized index is repeated"

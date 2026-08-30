@@ -16,10 +16,12 @@ from ssz.collections import List, ProgressiveList, Vector
 from ssz.container import Container, ProgressiveContainer
 from ssz.exceptions import SSZTypeError
 from ssz.merkleization import _root_witness, hash_tree_root
-from ssz.proofs import build_proof, get_generalized_index, node_root, verify_merkle_proof
+from ssz.paths import get_generalized_index
+from ssz.proofs import build_proof, node_root
 from ssz.ssz_base import SSZModel
 from ssz.uint import Uint8, Uint64
 from ssz.union import CompatibleUnion
+from ssz.verification import verify_merkle_proof
 
 memo_in_force = pytest.mark.skipif(
     merkleization.PARANOID_ROOTS,

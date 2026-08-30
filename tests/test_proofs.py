@@ -8,6 +8,9 @@ from typing import Any, cast
 import pytest
 
 from ssz import (
+    ACTIVE_FIELDS_KEY,
+    LENGTH_KEY,
+    SELECTOR_KEY,
     ZERO_ROOT,
     BitList,
     BitVector,
@@ -18,6 +21,7 @@ from ssz import (
     CompatibleUnion,
     Container,
     List,
+    PathStep,
     ProgressiveBitList,
     ProgressiveContainer,
     ProgressiveList,
@@ -30,6 +34,8 @@ from ssz import (
     Uint64,
     Vector,
     active_fields,
+    build_multiproof,
+    build_proof,
     calculate_merkle_root,
     calculate_multi_merkle_root,
     chunk_count,
@@ -39,27 +45,21 @@ from ssz import (
     get_generalized_index,
     get_helper_indices,
     get_path_indices,
-    item_length,
-    verify_merkle_multiproof,
-    verify_merkle_proof,
-)
-from ssz.merkleization import hash_tree_root, merkleize
-from ssz.proofs import (
-    ACTIVE_FIELDS_KEY,
-    LENGTH_KEY,
-    SELECTOR_KEY,
-    PathStep,
-    _progressive_chunk_gindex,
-    build_multiproof,
-    build_proof,
+    gindex_below,
     gindex_bit,
     gindex_child,
     gindex_concat,
     gindex_length,
     gindex_parent,
+    gindex_rebase,
     gindex_sibling,
+    item_length,
     node_root,
+    progressive_chunk_gindex,
+    verify_merkle_multiproof,
+    verify_merkle_proof,
 )
+from ssz.merkleization import hash_tree_root, merkle_layout, merkleize
 
 
 def h(left: bytes, right: bytes) -> Root:
@@ -421,6 +421,47 @@ class TestGindexArithmetic:
                 call(index)
 
 
+class TestGindexRebasing:
+    """Splicing an index into a larger tree, and reading it back out again."""
+
+    @pytest.mark.parametrize(
+        "index, depth, expected",
+        [
+            # Depth 0 keeps no turn at all, whatever the index above it was.
+            pytest.param(40, 0, 0, id="no_turns"),
+            # 40 is 0b101000, so its bottom three turns are 0b000.
+            pytest.param(40, 3, 0, id="three_turns_all_left"),
+            # 43 is 0b101011, so its bottom three turns are 0b011.
+            pytest.param(43, 3, 3, id="three_turns_mixed"),
+        ],
+    )
+    def test_the_bottom_turns_drop_everything_above_them(
+        self, index: int, depth: int, expected: int
+    ) -> None:
+        """The turns below a depth are the index with its higher bits masked away."""
+        assert gindex_below(index, depth) == expected
+
+    @pytest.mark.parametrize(
+        "outer, inner",
+        [
+            pytest.param(2, 24, id="spine_level_two"),
+            pytest.param(2, 2, id="spine_level_one"),
+            pytest.param(5, 105, id="deep_outer_and_inner"),
+            pytest.param(1, 7, id="outer_is_the_root"),
+        ],
+    )
+    def test_rebasing_undoes_splicing(self, outer: int, inner: int) -> None:
+        """
+        An index spliced into a larger tree reads back as itself at its own depth.
+
+            outer 2, inner 24  ->  40, and 40 read back at the depth of 24  ->  24
+
+        This is what lets a walk hand the rest of an index to the subtree it lands in.
+        """
+        depth = gindex_length(inner)
+        assert gindex_rebase(gindex_concat(outer, inner), depth) == inner
+
+
 class TestProgressiveSpine:
     """Positions on the right-leaning spine a progressive shape merkleizes into."""
 
@@ -440,14 +481,14 @@ class TestProgressiveSpine:
     )
     def test_a_chunk_sits_where_the_spine_puts_it(self, chunk: int, expected_index: int) -> None:
         """Positions are counted from the root above the spine, not from the spine itself."""
-        assert _progressive_chunk_gindex(chunk) == expected_index
+        assert progressive_chunk_gindex(chunk) == expected_index
 
     def test_a_chunk_keeps_its_index_whatever_follows_it(self) -> None:
         """A position follows from the chunk alone, which is what makes appending harmless."""
         # Level 3 spans chunks 5 through 20.
         # Both ends keep their index once level 4 opens below them.
-        assert _progressive_chunk_gindex(5) == 352
-        assert _progressive_chunk_gindex(20) == 367
+        assert progressive_chunk_gindex(5) == 352
+        assert progressive_chunk_gindex(20) == 367
 
 
 class TestChunkCount:
@@ -484,7 +525,6 @@ class TestChunkCount:
             pytest.param(Uint64ProgressiveList, "Uint64ProgressiveList", id="progressive_list"),
             pytest.param(ProgressiveBitList, "ProgressiveBitList", id="progressive_bitlist"),
             pytest.param(Spine, "Spine", id="progressive_container"),
-            pytest.param(Shape, "Shape", id="compatible_union"),
         ],
     )
     def test_a_progressive_shape_has_no_bounded_count(
@@ -493,6 +533,44 @@ class TestChunkCount:
         """A tree that grows with its data has no leaf count to report."""
         with pytest.raises(SSZTypeError, match=rf"^{name} has no bounded chunk count$"):
             chunk_count(ssz_type)
+
+    def test_a_union_holds_the_one_leaf_its_option_roots_to(self) -> None:
+        """
+        A union wraps its option rather than adding a level of its own.
+
+            Shape  ->  option root  +  selector word mixed in
+
+        The tree below the mixed-in word is that single root, so the count is 1.
+        """
+        assert chunk_count(Shape) == 1
+
+    @pytest.mark.parametrize(
+        "value",
+        [
+            pytest.param(Uint64(7), id="basic"),
+            pytest.param(Uint64List8(data=(Uint64(1), Uint64(2))), id="packed_list"),
+            pytest.param(Uint64Vector8(data=tuple(Uint64(n) for n in range(8))), id="vector"),
+            pytest.param(Bitlist512(data=(Boolean(True),)), id="bitlist"),
+            pytest.param(Bytes64(bytes(64)), id="fixed_bytes"),
+            pytest.param(
+                Quad(p=Uint64(1), q=Uint64(2), r=Uint64(3), z=Pair(a=Uint64(4), b=Uint64(5))),
+                id="container",
+            ),
+            pytest.param(
+                Shape(selector=Uint8(1), data=Square(side=Uint16(2), color=Uint8(3))),
+                id="union",
+            ),
+        ],
+    )
+    def test_a_declaration_and_a_value_agree_on_the_width_of_the_tree(self, value: Any) -> None:
+        """
+        The count read off a type and the capacity a value merkleizes into are one number.
+
+        A published index is worked out from the declaration alone, before any value exists.
+        A root is worked out from the value.
+        A proof only lands where the two agree.
+        """
+        assert chunk_count(type(value)) == merkle_layout(value).limit
 
 
 class TestItemLength:
@@ -631,6 +709,86 @@ class TestChunkPosition:
         """A name no field carries has no position to report."""
         with pytest.raises(SSZValueError, match=rf"^{name} has no field named nope$"):
             chunk_position(ssz_type, "nope")
+
+    def test_a_progressive_container_field_reports_its_layout_position(self) -> None:
+        """
+        A field of a progressive container sits where the layout puts it, not at its ordinal.
+
+            GappedSpine layout (1, 0, 1)  ->  first at 0, position 1 vacant, third at 2
+
+        The ordinal would send a caller to position 1, a vacancy that resolves rather than refuses.
+        """
+        assert chunk_position(GappedSpine, "first") == (0, 0, 8)
+        assert chunk_position(GappedSpine, "third") == (2, 0, 8)
+        assert get_generalized_index(GappedSpine, "third") == progressive_chunk_gindex(2)
+
+
+class TestPositionsOutsideTheShape:
+    """Element positions no shape holds, which must be refused rather than resolved."""
+
+    @pytest.mark.parametrize(
+        "ssz_type, name, step",
+        [
+            # A negative position on a shape that mixes in a count lands on the count itself.
+            pytest.param(Uint64List8, "Uint64List8", -1, id="list_minus_one"),
+            pytest.param(Bitlist512, "Bitlist512", -1, id="bitlist_minus_one"),
+            pytest.param(Uint64ProgressiveList, "Uint64ProgressiveList", -1, id="progressive"),
+            # A negative position on a fixed shape lands on the root, or above it.
+            pytest.param(Uint64Vector8, "Uint64Vector8", -1, id="vector_minus_one"),
+            pytest.param(Uint64Vector8, "Uint64Vector8", -5, id="vector_minus_five"),
+            # A position past the declared capacity lands on a node outside the shape.
+            pytest.param(Uint64List8, "Uint64List8", 8, id="list_at_the_limit"),
+            pytest.param(Uint64List8, "Uint64List8", 1000, id="list_far_past_the_limit"),
+            pytest.param(Uint64Vector8, "Uint64Vector8", 8, id="vector_at_the_length"),
+            pytest.param(Bitvector512, "Bitvector512", 512, id="bitvector_at_the_length"),
+        ],
+    )
+    def test_a_position_the_shape_does_not_declare_is_refused(
+        self, ssz_type: type[SSZType], name: str, step: int
+    ) -> None:
+        """
+        A position outside the shape resolves to a real node, which is worse than none.
+
+        Unchecked, the arithmetic runs on any integer and lands somewhere meaningful:
+
+            element -1 of a list    ->  index 3, the mixed-in element count
+            element -1 of a vector  ->  index 1, the root itself
+            element -5 of a vector  ->  index 0, which names no node at all
+
+        A caller reading a position off the wire, or working one out as a length minus one
+        on an empty collection, would be handed a proof of a node it never asked about.
+        """
+        with pytest.raises(SSZValueError, match=rf"^{name} has no position {step}$"):
+            get_generalized_index(ssz_type, step)
+        with pytest.raises(SSZValueError, match=rf"^{name} has no position {step}$"):
+            chunk_position(ssz_type, step)
+
+    def test_a_progressive_shape_admits_a_position_past_its_data(self) -> None:
+        """A shape that grows with its data declares no capacity to fall outside of."""
+        # The spine runs on without end, so only a negative position is refused.
+        assert get_generalized_index(Uint64ProgressiveList, 10_000) > 0
+
+    @pytest.mark.parametrize(
+        "step",
+        [
+            pytest.param("nope", id="a_word"),
+            pytest.param("3", id="a_digit_as_text"),
+            pytest.param(True, id="a_boolean"),
+        ],
+    )
+    def test_a_position_that_is_not_a_plain_integer_is_refused(self, step: Any) -> None:
+        """
+        A position is counted, so anything that merely converts to a number is refused.
+
+        A boolean converts to 0 or 1 in Python and is a nonsense position everywhere else.
+        """
+        with pytest.raises(SSZValueError, match=r"^a position is a plain integer, got "):
+            get_generalized_index(Uint64List8, step)
+
+    def test_a_union_selector_that_is_not_a_plain_integer_is_refused(self) -> None:
+        """A selector names an option, and only an integer names one."""
+        with pytest.raises(SSZValueError, match=r"^a position is a plain integer, got "):
+            get_generalized_index(Shape, "1")
 
 
 class TestGeneralizedIndexPerShape:
@@ -827,6 +985,45 @@ class TestReservedPathSteps:
         with pytest.raises(SSZTypeError, match=r"^Uint64 has no parts to address$"):
             get_generalized_index(Quad, "p", 0)
 
+    @pytest.mark.parametrize(
+        "ssz_type, step, message",
+        [
+            pytest.param(
+                Uint64List8,
+                LENGTH_KEY,
+                "the element count of Uint64List8 has no parts to address",
+                id="count",
+            ),
+            pytest.param(
+                Spine,
+                ACTIVE_FIELDS_KEY,
+                "the field layout of Spine has no parts to address",
+                id="layout",
+            ),
+            pytest.param(
+                Shape,
+                SELECTOR_KEY,
+                "the type selector of Shape has no parts to address",
+                id="selector",
+            ),
+        ],
+    )
+    def test_a_path_carrying_on_past_a_reserved_word_is_refused(
+        self, ssz_type: type[SSZType], step: PathStep, message: str
+    ) -> None:
+        """
+        A mixed-in word is one leaf, so a path that names it has nowhere left to go.
+
+        Dropping the extra steps silently would answer a different question than was asked:
+
+            get_generalized_index(Uint64List8, "__len__", "anything", 7)  ->  3
+
+        which is the index of the count, not of whatever the caller went on to name.
+        """
+        for tail in (("anything",), (0,), ("anything", 7, "x")):
+            with pytest.raises(SSZTypeError, match=rf"^{message}$"):
+                get_generalized_index(ssz_type, step, *tail)
+
     def test_an_unknown_field_name_is_refused(self) -> None:
         """A step naming no field selects nothing, on either struct shape."""
         with pytest.raises(SSZValueError, match=r"^Quad has no field named nope$"):
@@ -925,6 +1122,13 @@ class TestMultiproofHelperIndices:
             SSZValueError, match=r"^8 lies below another index in the same request$"
         ):
             get_helper_indices(indices)
+
+    def test_a_request_holding_no_index_is_refused(self) -> None:
+        """A request that claims nothing checks nothing, at both ends of the proof."""
+        with pytest.raises(SSZValueError, match=r"^a request holds at least one index$"):
+            get_helper_indices([])
+        with pytest.raises(SSZValueError, match=r"^a request holds at least one index$"):
+            build_multiproof(Uint64List8(data=(Uint64(1),)), [])
 
 
 class TestSingleProofVerification:
