@@ -154,8 +154,8 @@ class TestBitVector:
         # A trailing range answers as a list of the bits it spans.
         assert vec[-2:] == [Boolean(True), Boolean(False)]
 
-        # Answering by position and by length is all the host language needs to walk a
-        # sequence backwards.
+        # Answering by position and by length is all the host language needs.
+        # Those two are what it walks a sequence backwards with.
         # A bitvector is therefore reversible without declaring anything further.
         assert list(reversed(vec)) == list(bits_of(0, 1, 0, 1))
 
@@ -272,8 +272,8 @@ class TestBitList:
 
         # The five further bits the capacity allows for are not part of the value.
         # They appear only as padding inside the Merkle tree.
-        # Neither the position just past the last bit nor the one just before the first
-        # therefore addresses anything.
+        # The position just past the last bit therefore addresses nothing.
+        # Neither does the one just before the first.
         with pytest.raises(IndexError):
             _ = bitlist[3]
         with pytest.raises(IndexError):
@@ -835,8 +835,9 @@ class TestBitfieldDefaults:
         self, bitvector_type: type[BitVector], expected_message: str
     ) -> None:
         """No bit count means no bits to clear, so the declaration error comes first."""
-        # The default is injected only once a length is declared, so a shape without one
-        # keeps the inherited empty default and trips its own check on the way through.
+        # The default is injected only once a length is declared.
+        # A shape without one keeps the inherited empty default.
+        # It trips its own declaration check on the way through.
         with pytest.raises(SSZTypeError) as exception_info:
             bitvector_type()
         assert str(exception_info.value) == expected_message
@@ -937,11 +938,11 @@ class TestBitVectorInputShapes:
     @pytest.mark.parametrize("rejected", ["0101", b"\x01\x00\x01\x00", bytearray(b"\x01\x00")])
     def test_instantiation_from_str_or_bytes_raises(self, rejected: Any) -> None:
         """Strings and byte buffers are iterable, but their items are not bits."""
-        # Iterating four bytes yields four ints, so bytes would silently pass for bits
-        # and a byte count would be read as a bit count.
+        # Iterating four bytes yields four ints.
+        # Bytes would silently pass for bits and a byte count would be read as a bit count.
         #
-        # The bounded and progressive bitlists refuse these already, so refusing them
-        # here is what makes one question have one answer across the three shapes.
+        # The bounded and progressive bitlists refuse these already.
+        # Refusing them here is what makes one question have one answer across the three shapes.
         type_name = type(rejected).__name__
         with pytest.raises((SSZTypeError, ValidationError)) as exception_info:
             BitVector4(data=rejected)

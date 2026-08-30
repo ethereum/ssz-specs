@@ -269,8 +269,9 @@ FAMILY_ROOTS = [
         h(Root(bytes(range(32))), pad(b"\x20")),
         id="byte_vector_33_two_chunks",
     ),
-    # A chunk and a root are the library's own 32-byte arrays, and inherit the method
-    # from the byte-array base. Each is exactly one chunk, so each roots to its own bytes.
+    # A chunk and a root are the library's own 32-byte arrays.
+    # Both inherit the method from the byte-array base.
+    # Each is exactly one chunk, so each roots to its own bytes.
     pytest.param(Chunk(bytes(range(32))), Root(bytes(range(32))), id="chunk"),
     pytest.param(Root(bytes(range(32))), Root(bytes(range(32))), id="root"),
     pytest.param(ZERO_ROOT, ZERO_ROOT, id="zero_root"),

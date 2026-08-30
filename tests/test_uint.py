@@ -741,8 +741,8 @@ class TestANonNumberIsDeclined:
     @pytest.mark.parametrize("bad", ["2", None])
     def test_the_host_language_reports_what_both_sides_decline(self, bad: Any) -> None:
         """With nobody left to answer, Python raises the TypeError any other type would."""
-        # Lower case where this library's own message is capitalised, because the message
-        # here is the interpreter's.
+        # Lower case where this library's own message is capitalised.
+        # The message here is the interpreter's.
         with pytest.raises(TypeError, match="^unsupported operand type"):
             _ = Uint64(1) + bad
 
@@ -1445,8 +1445,8 @@ class TestOpaqueByteSpelling:
 
     def test_the_unbounded_byte_list_shape(self) -> None:
         """The spec's unbounded byte list is a progressive list of the opaque spelling."""
-        # An inline parameterization over one name resolves to the class the other name
-        # parameterizes too.
+        # An inline parameterization over one name resolves to a single class.
+        # The other name parameterizes to that same class.
         # The named subclass is what gives two classes to compare.
         assert OpaqueByteProgressiveList is not ProgressiveList[Uint8]
 
@@ -1494,8 +1494,7 @@ class TestOpaqueByteSpelling:
         )
 
         # The spec asks for the bare string "0x11223344" from a byte collection.
-        # Each collection instead comes out as an object, keyed by the field holding its
-        # elements.
+        # Each collection instead comes out as an object, keyed by the field holding its elements.
         # Those elements are decimal numbers rather than hex.
         assert (
             OpaqueByteVector4.of(0x11, 0x22, 0x33, 0x44).model_dump_json()

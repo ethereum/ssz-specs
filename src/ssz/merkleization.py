@@ -154,8 +154,8 @@ def merkleize(chunks: Sequence[bytes], limit: int | None = None) -> Root:
         return Root._trusted(chunks[0])
 
     # Zero data under zero padding is a zero tree, at any width.
-    # The fold below fires only from a level spanning its data tree, so a count short of a power
-    # of two hashes its way up to one.
+    # The fold below fires only from a level spanning its data tree.
+    # A count short of a power of two hashes its way up to one first.
     # The first chunk rules out anything that starts with data, before the join copies it all.
     if bytes(chunks[0]) == _ZERO_CHUNK and b"".join(chunks) == _ZERO_CHUNK * chunk_count:
         return _zero_tree_root(width)
@@ -858,8 +858,8 @@ def _witness_sequence(
     element_rule = _element_witness_rule(type(value))
     if element_rule is None:
         return (value._version, len(value.data))
-    # Mapped rather than looped: a comprehension would capture the rule in a cell, and
-    # building that cell would cost every packed sequence above, which reads no rule at all.
+    # Mapped rather than looped, because a comprehension would capture the rule in a cell.
+    # Building that cell would cost every packed sequence above, which reads no rule at all.
     return (value._version, tuple(map(element_rule, value.data)))
 
 
@@ -918,8 +918,8 @@ def hash_tree_root(value: object) -> Root:
     # Invariant: the layout states this rule too, for the proof machinery to walk.
     # A test pins the two against each other for every type.
     #
-    # The plain checks come first because a negative check against the abstract base
-    # costs more than the root it decides.
+    # The plain checks come first, a negative check against the abstract base being dearer.
+    # It would cost more than the root it decides.
     # A leaf needs no memo either.
     # It cannot go stale, having nowhere to keep one.
     if isinstance(value, int):

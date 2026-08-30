@@ -202,8 +202,9 @@ class TestOptionDeclaration:
 
     def test_a_typed_selector_key_is_rejected(self) -> None:
         """The spec writes the range with a uint, but a key here stays a plain int."""
-        # A typed uint compares strictly against a plain int, so a typed key would fail
-        # the range check with a bare type error instead of the union's own message.
+        # A typed uint compares strictly against a plain int.
+        # A typed key would fail the range check with a bare type error.
+        # The union's own message would never be reached.
         with pytest.raises(
             SSZTypeError,
             match=r"^selector Uint8\(1\) is not a plain integer$",
@@ -290,9 +291,10 @@ class TestConstruction:
 
     def test_a_value_shows_both_halves(self) -> None:
         """A union reads as its two named fields, not as the contents of the option."""
-        # A collection wraps its contents in a field named data, and a union names its
-        # payload field the same way. Only the base class separates the two shapes,
-        # so a union holding a basic value would otherwise be read as a sequence of it.
+        # A collection wraps its contents in a field named data.
+        # A union names its payload field the same way.
+        # Only the base class separates the two shapes.
+        # A union holding a basic value would otherwise be read as a sequence of it.
         value = ScalarUnion(selector=Uint8(1), data=Uint8(7))
         assert repr(value) == "ScalarUnion(selector=Uint8(1) data=Uint8(7))"
         assert len(value) == 2
@@ -403,8 +405,8 @@ class TestSizing:
         assert Circle.is_fixed_size() is True
         assert Square.get_byte_length() == 3
         assert Circle.get_byte_length() == 3
-        # A parser cannot know the payload width before it has read the selector, so the
-        # surrounding container has to reach the union through an offset regardless.
+        # A parser cannot know the payload width before it has read the selector.
+        # The surrounding container has to reach the union through an offset regardless.
         assert Shape.is_fixed_size() is False
 
     def test_a_union_over_variable_options_is_variable_size_too(self) -> None:

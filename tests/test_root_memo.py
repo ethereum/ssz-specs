@@ -214,8 +214,8 @@ MUTATIONS: list[tuple[str, object]] = [
             Validator(pubkey=Bytes48(b"\x04" * 48))  # ty: ignore[missing-argument]
         ),
     ),
-    # The same trap one shape further out: the element mutated is itself a sequence, so
-    # the rule that witnesses it is the sequence rule again, one level down.
+    # The same trap one shape further out: the element mutated is itself a sequence.
+    # The rule that witnesses it is the sequence rule again, one level down.
     ("list of lists element in place", lambda s: s.ledger[0].__setitem__(0, Uint64(9))),
     ("list of byte lists element in place", lambda s: s.blobs[0].append(0x01)),
     # A vector of composites: fixed length, so only its elements can move.
@@ -372,8 +372,8 @@ def test_two_sequence_classes_over_one_element_class_both_follow_a_shared_elemen
         Validator(pubkey=Bytes48(b"\x0c" * 48)),  # ty: ignore[missing-argument]
     )
     listed_before, fixed_before = listed.hash_tree_root(), fixed.hash_tree_root()
-    # Two shapes over one element class root differently, so neither check stands in for
-    # the other below.
+    # Two shapes over one element class root differently.
+    # Neither check stands in for the other below.
     assert listed_before != fixed_before
 
     validator.effective_balance = Uint64(5)
@@ -540,8 +540,8 @@ class TestParanoidRoots:
         """
         balances = Balances.of(Uint64(1), Uint64(2))
         balances.hash_tree_root()
-        # A cast, because the declared contents are a read-only sequence. Reaching past
-        # that is the point of this test: it is the write no mutator sees.
+        # A cast, because the declared contents are a read-only sequence.
+        # Reaching past that is the point of this test: it is the write no mutator sees.
         cast("list[Uint64]", balances.data)[0] = Uint64(99)
 
         monkeypatch.setattr(merkleization, "PARANOID_ROOTS", True)

@@ -158,8 +158,8 @@ class SSZType(ABC):
         # Reading the resolved attribute covers every way a type can answer for itself:
         # a method of its own, a property, or one inherited from outside this type system.
         #
-        # A field of that name shadows the method on each instance rather than on the class,
-        # which leaves the resolved attribute looking untouched.
+        # A field of that name shadows the method on each instance, not on the class.
+        # That leaves the resolved attribute looking untouched.
         # So the annotations this class declares are read as well.
         if (
             cls.hash_tree_root is not SSZType.hash_tree_root
@@ -448,9 +448,10 @@ class SSZModel(StrictBaseModel, SSZType, ABC):
     """
 
     if TYPE_CHECKING:
-        # Declared for the type checker only. Writing these as annotations in the class
-        # body would make Pydantic read them as private attributes, which is the shape
-        # the slots above exist to avoid. This block never runs, so nothing is declared.
+        # Declared for the type checker only.
+        # Annotating these in the class body would make Pydantic read them as private.
+        # That is the shape the slots above exist to avoid.
+        # This block never runs, so nothing is declared.
         _version: ClassVar[int]
         _root_memo: ClassVar["tuple[object, Root] | None"]
 
@@ -483,11 +484,10 @@ class SSZModel(StrictBaseModel, SSZType, ABC):
         # Written past this class's own __setattr__, which is the door itself.
         object.__setattr__(self, "_version", self._version + 1)
 
-    # Hidden from type checkers: a visible __setattr__ typed to accept Any
-    # would exempt every field assignment from static checking against the
-    # declared field types.
-    # A visible fallback returning Any would make
-    # every misspelled attribute resolve instead of being reported.
+    # Both are hidden from type checkers.
+    # A visible setter typed to accept Any would exempt every field assignment.
+    # Each would go unchecked against the field type it was declared at.
+    # A visible fallback returning Any would resolve every misspelled attribute.
     if not TYPE_CHECKING:  # pragma: no cover
 
         def __setattr__(self, name: str, value: Any) -> None:
@@ -497,8 +497,8 @@ class SSZModel(StrictBaseModel, SSZType, ABC):
 
         def __getattr__(self, name: str) -> Any:
             """Fill a cache slot on first read, leaving every other name to Pydantic."""
-            # An unset slot raises before this method is reached, so the common case of
-            # a slot already filled never gets here at all.
+            # An unset slot raises before this method is reached.
+            # A slot already filled, the common case, never gets here at all.
             if name in _COLD_CACHE:
                 cold = _COLD_CACHE[name]
                 object.__setattr__(self, name, cold)

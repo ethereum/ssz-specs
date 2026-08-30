@@ -305,8 +305,8 @@ VECTOR_OF_BASICS = Uint64Vector8(data=tuple(Uint64(position) for position in ran
 VECTOR_OF_COMPOSITES = PairVector4(data=(PAIR, PAIR, PAIR, PAIR))
 
 # The same four positions with one element of their own at position 2.
-# The ends are one value and the middle is not, so the elements are neither all one value
-# nor all distinct, and a proof reads them a range at a time.
+# The ends are one value and the middle is not.
+# The elements are neither all one value nor all distinct, and a proof reads them a range at a time.
 ODD_ONE_OUT = Pair(a=Uint64(6), b=Uint64(7))
 VECTOR_WITH_A_REPEAT = PairVector4(data=(PAIR, PAIR, ODD_ONE_OUT, PAIR))
 
@@ -767,8 +767,8 @@ class TestPublishedLightClientIndices:
             pytest.param(AltairState, ("f20", "root"), 105, id="finalized_root"),
             pytest.param(AltairState, ("f22",), 54, id="current_sync_committee"),
             pytest.param(AltairState, ("f23",), 55, id="next_sync_committee"),
-            # A 46-position layout puts position 20 at the end of the third spine level,
-            # index 367, whose second subfield is index 735.
+            # A 46-position layout puts position 20 at the end of the third spine level.
+            # That is index 367, whose second subfield is index 735.
             pytest.param(GloasState, ("f20", "root"), 735, id="finalized_root_progressive"),
             # Positions 22 and 23 open the fourth spine level at index 2944.
             pytest.param(GloasState, ("f22",), 2945, id="current_sync_committee_progressive"),
@@ -919,8 +919,8 @@ class TestMultiproofHelperIndices:
         #     rebuilt at 4:  from the children the request already fixes
         #     -> the root matches whatever 8 was said to hold
         #
-        # Accepting the pair therefore lets an attacker claim any value at the deeper index
-        # and still pass verification.
+        # Accepting the pair lets an attacker claim any value at the deeper index.
+        # The forged claim still passes verification.
         with pytest.raises(
             SSZValueError, match=r"^8 lies below another index in the same request$"
         ):
@@ -994,8 +994,8 @@ class TestSingleProofVerification:
     def test_a_branch_of_the_wrong_length_is_refused(self) -> None:
         """A branch is checked against the depth of the index before any hashing happens."""
         # A depth-three index needs three nodes.
-        # A shorter branch would otherwise stop partway up and compare a node against
-        # the root it never reached.
+        # A shorter branch would otherwise stop partway up the tree.
+        # It would compare a node against the root it never reached.
         with pytest.raises(SSZValueError, match=r"^a branch for index 15 holds 3 nodes, got 2$"):
             calculate_merkle_root(ZERO_ROOT, [ZERO_ROOT, ZERO_ROOT], 15)
 
@@ -1057,8 +1057,8 @@ class TestMultiproofVerification:
 
     def test_a_request_for_nothing_is_refused(self) -> None:
         """A request holding no index claims nothing to verify."""
-        # An empty request would otherwise fall through the pairing loop and reach for a
-        # root that was never built.
+        # An empty request would otherwise fall through the pairing loop.
+        # It would then reach for a root that was never built.
         with pytest.raises(SSZValueError, match=r"^a request holds at least one index$"):
             calculate_multi_merkle_root([], [], [])
 

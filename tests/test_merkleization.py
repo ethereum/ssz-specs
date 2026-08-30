@@ -138,8 +138,8 @@ def expected_progressive_container_root(
 
 # Chunk counts straddling every progressive level boundary.
 #
-# A level opens only once every level before it is full, so the cumulative
-# capacities are 1, 5, 21, and 85 chunks:
+# A level opens only once every level before it is full.
+# The cumulative capacities are 1, 5, 21, and 85 chunks:
 #
 #     level   width   chunks added   chunks total
 #     1       1       1              1
@@ -241,12 +241,12 @@ def test_merkleize_error_on_exceeding_limit() -> None:
     assert str(exception_info.value) == "5 chunks exceed a limit of 4"
 
 
-# Chunk counts and capacities for an all-zero payload, at the shapes where the closed
-# form for a zero tree and the layer walk over one have to agree.
+# Chunk counts and capacities for an all-zero payload.
+# These are the shapes where the closed form for a zero tree and the layer walk agree.
 #
-# A uniform level collapses only where it spans its own data tree, so a level short of
-# that — a count below the capacity, or a count that is no power of two — is the shape no
-# collapse reaches and the walk had to hash out node by node.
+# A uniform level collapses only where it spans its own data tree.
+# A count below the capacity, or one that is no power of two, falls short of that.
+# No collapse reaches such a shape, and the walk had to hash it out node by node.
 ALL_ZERO_SHAPES = [
     pytest.param(1, None, id="one_chunk_no_limit"),
     pytest.param(2, None, id="full_level_no_limit"),
@@ -569,8 +569,9 @@ def test_merkleize_progressive_over_an_all_zero_payload_matches_the_definition(
     chunk_count: int,
 ) -> None:
     """A spine of zero levels is still the spine the definition builds, level by level."""
-    # Every level of this payload is all zero, so each subtree root has a closed form and
-    # none of them is walked. The spine above them has to come out unchanged regardless.
+    # Every level of this payload is all zero.
+    # Each subtree root has a closed form and none of them is walked.
+    # The spine above them has to come out unchanged regardless.
     zero_chunks = [ZERO_ROOT] * chunk_count
     assert merkleize_progressive(zero_chunks) == naive_merkleize_progressive(zero_chunks)
 
@@ -578,8 +579,8 @@ def test_merkleize_progressive_over_an_all_zero_payload_matches_the_definition(
 def test_merkleize_progressive_accepts_a_wider_starting_level() -> None:
     """A caller-supplied starting width places the first chunks in a wider subtree."""
     chunks = chunk_run(6)
-    # Starting at width 4 skips the width-1 level entirely: chunks 0..3 fill the
-    # first subtree and chunks 4..5 open the next one at width 16.
+    # Starting at width 4 skips the width-1 level entirely.
+    # Chunks 0..3 fill the first subtree and chunks 4..5 open the next one at width 16.
     assert merkleize_progressive(chunks, num_leaves=4) == h(
         perfect_tree_root(chunks[0:4], 4),
         h(perfect_tree_root(chunks[4:6], 16), Z[0]),
@@ -1279,8 +1280,8 @@ def test_hash_tree_root_list_composite_elements() -> None:
 
 def test_hash_tree_root_progressive_list_empty() -> None:
     """An empty progressive list mixes a zero count into the plain zero terminator."""
-    # The data root is the terminator itself, and a zero count encodes to a zero chunk,
-    # so the result is h(0, 0) — reached through the mix-in, never through tree padding.
+    # The data root is the terminator itself, and a zero count encodes to a zero chunk.
+    # The result is h(0, 0) — reached through the mix-in, never through tree padding.
     assert hash_tree_root(Uint8ProgressiveList(data=[])) == h(ZERO_ROOT, pad(b"\x00"))
     assert hash_tree_root(Uint8ProgressiveList(data=[])) == Z[1]
 
@@ -1428,8 +1429,8 @@ def test_progressive_and_bounded_list_share_bytes_but_not_roots() -> None:
     """The two list shapes serialize identically and merkleize differently."""
     elements = [Uint16(1), Uint16(2), Uint16(3)]
     progressive = Uint16ProgressiveList(data=elements)
-    # A 1024-element limit pads its tree out to 64 chunks, where the progressive
-    # tree stops at the single chunk the data actually needs.
+    # A 1024-element limit pads its tree out to 64 chunks.
+    # There the progressive tree stops at the single chunk the data actually needs.
     bounded = Uint16List1024(data=elements)
     assert progressive.encode_bytes() == bounded.encode_bytes()
     assert hash_tree_root(progressive) != hash_tree_root(bounded)
@@ -1808,8 +1809,9 @@ def test_progressive_and_bounded_container_share_bytes_but_not_roots() -> None:
     bounded = ThreeByteContainer(A=Uint8(1), B=Uint8(2), C=Uint8(3))
     leaves = [pad(b"\x01"), pad(b"\x02"), pad(b"\x03")]
     assert progressive.encode_bytes() == bounded.encode_bytes()
-    # The bounded shape hashes a width-four tree; the progressive shape hashes a spine
-    # of three leaves and mixes its layout in on top.
+    # The bounded shape hashes a width-four tree.
+    # The progressive shape hashes a spine of three leaves.
+    # It mixes its layout in on top of that.
     assert hash_tree_root(bounded) == h(h(leaves[0], leaves[1]), h(leaves[2], Z[0]))
     assert hash_tree_root(progressive) == h(naive_merkleize_progressive(leaves), pad(b"\x07"))
     assert hash_tree_root(bounded) != hash_tree_root(progressive)
@@ -1832,8 +1834,8 @@ LEADING_GAP_LEAVES = [ZERO_ROOT, pad(b"\x34\x12"), pad(b"\x56")]
 
 def test_a_root_follows_a_layout_reassigned_after_the_type_was_declared() -> None:
     """A layout is a class attribute, so it can be rewritten, and the root has to follow."""
-    # The layout decides where each field is hashed and the word mixed in on top. Neither
-    # is a property of the type: a type only holds whatever layout it is holding now.
+    # The layout decides where each field is hashed and the word mixed in on top.
+    # Neither is a property of the type: a type only holds whatever layout it is holding now.
 
     class Reassigned(ProgressiveContainer):
         ACTIVE_FIELDS = (1, 0, 1)
@@ -1888,8 +1890,9 @@ def test_a_layout_that_stopped_pairing_with_the_fields_is_refused_by_name(
 
 def test_a_layout_and_its_field_names_settle_the_positions_by_themselves() -> None:
     """Two shapes agreeing on both root alike; two agreeing on the name alone do not."""
-    # A root is the field positions and the layout word. A type name enters neither, so
-    # two shapes over one layout and one field list are meant to reach one root.
+    # A root is the field positions and the layout word.
+    # A type name enters neither.
+    # Two shapes over one layout and one field list are meant to reach one root.
 
     class LeftShape(ProgressiveContainer):
         ACTIVE_FIELDS = (1, 0, 1)
@@ -2313,8 +2316,9 @@ def test_two_unrelated_defaults_reach_one_root_by_two_different_paths() -> None:
 
 def test_default_root_of_a_container_of_byte_arrays() -> None:
     """A roster's default: four zeroed fingerprints in a vector, then one zeroed one."""
-    # Each 48-byte default roots to h(0, 0); the vector hashes four of those into a
-    # width-four tree, and the container hashes that against the combined one's root.
+    # Each 48-byte default roots to h(0, 0).
+    # The vector hashes four of those into a width-four tree.
+    # The container hashes that against the combined one's root.
     fingerprint_root = h(ZERO_ROOT, ZERO_ROOT)
     fingerprints_root = h(
         h(fingerprint_root, fingerprint_root), h(fingerprint_root, fingerprint_root)
@@ -2329,8 +2333,9 @@ def test_default_root_of_a_container_of_byte_arrays() -> None:
 
 def test_default_root_of_a_progressive_container_with_a_gap() -> None:
     """A gapped layout's default: three zero leaves, and the layout word mixed in."""
-    # Every field default roots to the zero chunk whatever its width, so the leaves are
-    # indistinguishable from the gap's own zero leaf. Only the layout word separates them.
+    # Every field default roots to the zero chunk whatever its width.
+    # The leaves are indistinguishable from the gap's own zero leaf.
+    # Only the layout word separates them.
     assert GappedProgressive.ACTIVE_FIELDS == (1, 0, 1)
     assert hash_tree_root(GappedProgressive.default()) == expected_progressive_container_root(
         [ZERO_ROOT, ZERO_ROOT, ZERO_ROOT], [1, 0, 1]
@@ -2627,8 +2632,8 @@ def test_packing_basic_elements_agrees_with_encoding_each_one(
 ) -> None:
     """Batched packing is the per-element encoding, chunk for chunk."""
     span = element_type.MAX_VALUE if issubclass(element_type, BaseUint) else 1
-    # Zero, one and the maximum are forced to the front, so a wide type is never packed
-    # only at values a narrow one also holds.
+    # Zero, one and the maximum are forced to the front.
+    # A wide type is never packed only at values a narrow one also holds.
     elements = [element_type((index * 7919) % (span + 1)) for index in range(count)]
     elements[:3] = [element_type(0), element_type(1), element_type(span)][:count]
 

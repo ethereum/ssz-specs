@@ -82,13 +82,13 @@ class BaseUint(int, SSZType):
             raise SSZTypeError(TypeFault.WRONG_TYPE, expected="int", got=type(value).__name__)
         # Invariant: the range check downstream compares against plain int bounds.
         #
-        # Python gives an int subclass reflected priority over a plain left operand, so an
-        # input of a subclass sends the lower-bound check into that class's own operator:
+        # Python gives an int subclass reflected priority over a plain left operand.
+        # An input of a subclass sends the lower-bound check into that class's operator:
         #
         #     0 <= input  ->  type(input).__ge__(input, 0)
         #
-        # A uint answers that correctly, because the relation rule admits a bare int. An
-        # arbitrary int subclass need not: it is free to refuse a plain int and raise.
+        # A uint answers that correctly, because the relation rule admits a bare int.
+        # An arbitrary int subclass need not: it is free to refuse a plain int and raise.
         # Narrowing keeps the comparison on the base integer type whatever the input is.
         return cls._wrap(int(value))
 
@@ -400,8 +400,8 @@ class BaseUint(int, SSZType):
             cls = cls._resolve_type(value, "**")
             if cls is NotImplemented:
                 return NotImplemented
-        # The modulus resolves against the type the exponent already settled on, so a
-        # unit picked up from the exponent is not thrown away by a bare base and modulus.
+        # The modulus resolves against the type the exponent already settled on.
+        # A unit picked up from the exponent survives a bare base and modulus that way.
         if mod is not None and type(mod) is not cls:
             cls = cls._resolve_type(mod, "**")
             if cls is NotImplemented:
@@ -518,10 +518,12 @@ class BaseUint(int, SSZType):
                 return NotImplemented
         return cls._wrap(int.__rshift__(other, self))
 
-    # A comparison answers with a bool, so which of the two types is more derived does not
-    # matter. Only the relation does, and the resolved type is dropped on the floor. That
-    # is also why none of the six binds it to a local: the same-type path stays two type
-    # calls and a branch, exactly as it was before the rule was widened.
+    # A comparison answers with a bool.
+    # Which of the two types is more derived therefore does not matter.
+    # Only the relation does, and the resolved type is dropped on the floor.
+    #
+    # That is also why none of the six binds it to a local.
+    # The same-type path stays two type calls and a branch, as it was before.
 
     def __eq__(self, other: object) -> bool:
         """Equality."""
@@ -567,16 +569,18 @@ class BaseUint(int, SSZType):
         """Informal representation matches the underlying value."""
         return str(int(self))
 
-    # A uint hashes as the integer it holds. Equality relates a type to the types derived
-    # from it, and admits a bare integer, so the value is all the hash can depend on.
+    # A uint hashes as the integer it holds.
+    # Equality relates a type to the types derived from it, and admits a bare integer.
+    # The value is therefore all the hash can depend on.
     #
-    # A hash never decides equality, so naming the type in one cannot make a comparison
-    # stricter. It would only break the rule that equal values hash equally.
+    # A hash never decides equality, so naming the type in one cannot make it stricter.
+    # It would only break the rule that equal values hash equally.
     #
-    # What this changes is where a mismatched value lands. A bare 5 now shares a bucket
-    # with Uint64(5), so a lookup of a bare 5 reaches __eq__ and raises the TypeError the
-    # type means to raise, where the former type-mixing hash sent the probe to an empty
-    # bucket and answered "absent" without ever consulting the comparison.
+    # What this changes is where a mismatched value lands.
+    # A bare 5 now shares a bucket with Uint64(5).
+    # A lookup of a bare 5 therefore reaches the comparison, which raises as it means to.
+    # A type-mixing hash sent that probe to an empty bucket instead.
+    # It answered "absent" without ever consulting the comparison.
     __hash__ = int.__hash__
 
     def __index__(self) -> int:

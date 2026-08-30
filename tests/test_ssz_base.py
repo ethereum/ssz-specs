@@ -453,8 +453,8 @@ class TestSSZCollectionMutation:
 
     def test_base_collection_leaves_element_validation_abstract(self) -> None:
         """The shared base defers single-element validation to each family."""
-        # The rule depends on the declared element type, never on the value holding it,
-        # so the base declares it as a classmethod and each family fills it in.
+        # The rule depends on the declared element type, never on the value holding it.
+        # The base declares it as a classmethod and each family fills it in.
         with pytest.raises(NotImplementedError):
             SSZCollection._validate_element(1)
 
@@ -537,8 +537,8 @@ class TestSliceWriteCount:
         contents_before = list(collection)
 
         # A step of 2 across 2 or 4 positions spans 1 or 2 of them.
-        # Given any other number of elements, the host language refuses the write itself,
-        # and the declared capacity never comes into it: the count cannot have changed.
+        # Given any other number of elements, the host language refuses the write itself.
+        # The declared capacity never comes into it: the count cannot have changed.
         #
         # So the error is the one a plain list raises, not a length or a capacity error.
         with pytest.raises(ValueError) as exception_info:
@@ -733,8 +733,8 @@ class TestSSZCollectionNegativeIndex:
         """A byte list rejects an out-of-range byte, but not with one of this library's errors."""
         payload = SmallByteList(data=b"\xde\xad\xbe")
         # A byte list stores a raw byte string.
-        # The range check on a single byte is therefore the one the host language already
-        # performs, and 256 fails it before any SSZ rule runs.
+        # The range check on a single byte is therefore the one the host language already performs.
+        # 256 fails it before any SSZ rule runs.
         #
         # This library's errors do not derive from the host language's value error.
         # A caller catching only SSZ errors will therefore miss this one.
@@ -1038,8 +1038,8 @@ class TestSSZMutabilityFlag:
         assert hash(value) != before
         assert TwoFieldContainer(x=Uint8(1), y=Uint16(2)) not in lookup
         # Looking the mutated value up again is not asserted, and cannot be.
-        # A dict compares the key it lands on by identity before it compares the hash,
-        # so a probe that reaches this entry's slot answers found however the root moved.
+        # A dict compares the key it lands on by identity before it compares the hash.
+        # A probe that reaches this entry's slot answers found however the root moved.
         assert next(iter(lookup)) is value
 
 
@@ -1110,8 +1110,8 @@ class TestDefaultValue:
 
     def test_is_zero_compares_against_the_runtime_type(self) -> None:
         """The comparison uses the type of the value, so a subtype meets its own default."""
-        # A TypedUint16 and a Uint16 never compare at all, so reading the declared type
-        # rather than the runtime one would raise here instead of answering.
+        # A TypedUint16 and a Uint16 never compare at all.
+        # Reading the declared type rather than the runtime one would raise here.
         assert TypedUint16(0).is_zero() is True
         assert TypedUint16(1).is_zero() is False
 
@@ -1148,8 +1148,8 @@ class TestSSZCollectionOf:
         self, collection_type: type[SSZCollection[Any]], expected_length: int
     ) -> None:
         """No argument here means zero elements, which is a count, not a missing input."""
-        # This factory always states the elements, so stating none of them is a count of
-        # zero. Only construction with no argument at all asks for the default.
+        # This factory always states the elements, so stating none of them is a count of zero.
+        # Only construction with no argument at all asks for the default.
         type_name = collection_type.__name__
         with pytest.raises(ValidationError) as exception_info:
             collection_type.of()
@@ -1284,9 +1284,10 @@ class TestDeclaredCapacity:
         # No shape declares both kinds of count, and most declare neither.
         # The one it does not declare is the None every type inherits.
         #
-        # This is what lets a length check read both names as plain attributes. Asking for
-        # a name that might be absent is the expensive spelling: a missing class attribute
-        # raises inside the interpreter, and a default only hides the raise.
+        # This is what lets a length check read both names as plain attributes.
+        # Asking for a name that might be absent is the expensive spelling.
+        # A missing class attribute raises inside the interpreter.
+        # A default only hides that raise.
         assert getattr(declared_type, absent_name) is None
         if declared_name:
             assert getattr(declared_type, declared_name) == 4
@@ -1354,8 +1355,7 @@ class TestDeclaredCapacity:
         self, rejected: Any, rejected_type_name: str
     ) -> None:
         """A capacity is checked as the type is built, not when the type is first used."""
-        # The message names both the type and the attribute, because at this point both
-        # are known.
+        # The message names both the type and the attribute, because at this point both are known.
         #
         # Nothing inside this block builds a value.
         # So reaching the failure needs no use of the type at all.
@@ -1627,8 +1627,8 @@ class TestDeclaredCapacity:
         # It leaves the count for a concrete type below it to state.
         # Inventing a count here would make such a layer instantiable by accident.
         #
-        # An undeclared capacity reads as None, which is not a count and is never taken
-        # for one. So the layer states nothing, and building a value of it still fails.
+        # An undeclared capacity reads as None, which is not a count and is never taken for one.
+        # So the layer states nothing, and building a value of it still fails.
         assert "LIMIT" not in Intermediate.__dict__
         assert Intermediate.LIMIT is None
         with pytest.raises(SSZTypeError) as exception_info:
@@ -1661,8 +1661,8 @@ class TestDeclaredCapacity:
         #     Late.LIMIT = Uint64(4) ->  untouched, because nothing declares it here
         #
         # This library never assigns a capacity this way.
-        # Closing the gap would mean hooking attribute assignment on two unrelated
-        # metaclasses, to guard a mutation the library itself never performs.
+        # Closing the gap would mean hooking attribute assignment on two metaclasses.
+        # That would guard a mutation the library itself never performs.
         # So this is a limitation of where the check sits, not a behaviour to depend on.
         class Late(List[Uint8]):
             LIMIT = 4
@@ -1670,9 +1670,9 @@ class TestDeclaredCapacity:
         Late.LIMIT = Uint64(4)
         assert type(Late.LIMIT) is Uint64
 
-        # The mis-set capacity then goes unremarked, because the internal comparison it
-        # feeds is a uint against the plain int returned by len, and those two types are
-        # related by inheritance. The comparison answers correctly:
+        # The mis-set capacity then goes unremarked.
+        # The internal comparison it feeds is a uint against the plain int len returns.
+        # Those two types are related by inheritance, so the comparison answers correctly:
         #
         #     len(data) > Uint64(4)  ->  2 > 4  ->  False
         #
@@ -1793,8 +1793,8 @@ class TestFinalHashTreeRoot:
     def test_the_method_is_marked_final(self) -> None:
         """The static half of the guard, stated where the runtime half is."""
         # typing.final records itself on the function it decorates.
-        # The runtime check below cannot stand in for it: a type checker reads the
-        # decorator, and reads nothing at all from __init_subclass__.
+        # The runtime check below cannot stand in for it.
+        # A type checker reads the decorator, and reads nothing at all from __init_subclass__.
         assert getattr(SSZType.hash_tree_root, "__final__", False) is True
 
     def test_a_uint_subclass_declaring_its_own_root_method_is_refused(self) -> None:
@@ -1839,8 +1839,8 @@ class TestFinalHashTreeRoot:
         __init_subclass__, which that metaclass still runs, so one check covers both
         construction paths rather than one per family.
         """
-        # Built through the family's own metaclass, so Pydantic's class machinery runs
-        # exactly as a class statement would run it.
+        # Built through the family's own metaclass.
+        # Pydantic's class machinery runs exactly as a class statement would run it.
         with pytest.raises(SSZTypeError) as exception_info:
             type(base)("Bad", (base,), {"hash_tree_root": lambda self: ZERO_ROOT})
 
@@ -1865,9 +1865,9 @@ class TestFinalHashTreeRoot:
 
         payload = b"\xab" * 32
         assert Fingerprint(payload).is_all_ones() is False
-        # The inherited method is the one that answers, and it answers as the free
-        # function does for the base type: a 32-byte array is one chunk, so it roots
-        # to its own bytes.
+        # The inherited method is the one that answers.
+        # It answers as the free function does for the base type.
+        # A 32-byte array is one chunk, so it roots to its own bytes.
         assert Fingerprint(payload).hash_tree_root() == hash_tree_root(Root(payload))
         assert Fingerprint(payload).hash_tree_root() == Root(payload)
 
@@ -1882,11 +1882,10 @@ class TestFinalHashTreeRoot:
         #
         #     Late.hash_tree_root = something     ->  untouched, nothing declares it here
         #
-        # This library never assigns a method this way, and a type checker already
-        # refuses the assignment because the method it replaces is final.
-        # Closing the gap at runtime would mean hooking attribute assignment on two
-        # unrelated metaclasses. So this is a limitation of where the check sits,
-        # not a behaviour to depend on.
+        # This library never assigns a method this way.
+        # A type checker already refuses the assignment because the method it replaces is final.
+        # Closing the gap at runtime would mean hooking assignment on two metaclasses.
+        # So this is a limitation of where the check sits, not a behaviour to depend on.
         class Late(Boolean):
             """A subclass that declares nothing, and so passes the guard."""
 
@@ -1900,8 +1899,8 @@ class TestFinalHashTreeRoot:
     def test_a_root_method_reached_through_a_plain_mixin_is_refused(self) -> None:
         """A root inherited from outside this type system is refused as well."""
 
-        # A base outside this type system never appears in the class body being created,
-        # and it wins the lookup because it precedes the SSZ base in attribute order:
+        # A base outside this type system never appears in the class body being created.
+        # It wins the lookup because it precedes the SSZ base in attribute order:
         #
         #     class Fast(Mixin, Pair)   ->  Fast.hash_tree_root is Mixin's, not the base's
         #
@@ -1925,14 +1924,14 @@ class TestFinalHashTreeRoot:
         """A field of that name is refused, because it shadows the method on every instance."""
 
         # A field is declared as an annotation, and leaves nothing on the class itself.
-        # The resolved attribute therefore still looks untouched, while every instance
-        # answers with the field:
+        # The resolved attribute therefore still looks untouched.
+        # Every instance answers with the field:
         #
         #     Odd(hash_tree_root=7).hash_tree_root    ->  the field, 7
         #     Odd(hash_tree_root=7).hash_tree_root()  ->  not callable
         #
-        # A container also hashes itself by its own root, so the shadowed name would
-        # break hashing rather than merely occupy it.
+        # A container also hashes itself by its own root.
+        # The shadowed name would break hashing rather than merely occupy it.
         with pytest.raises(SSZTypeError) as exception_info:
 
             class Odd(Container):

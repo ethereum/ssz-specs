@@ -528,8 +528,8 @@ class TestZeroWidthFixedField:
     def test_a_field_of_no_width_occupies_no_slot_and_reads_back_as_itself(self) -> None:
         """Zero is a width a fixed field can have, and the only one that is also falsy."""
         # Fixed part: a (1) + nothing (0) + the offset for b (4) + c (1) = 6 bytes.
-        # A decoder that read the zero-width field as an offset instead would spend four
-        # bytes of the fixed part on it and reject the offset that follows.
+        # A decoder reading the zero-width field as an offset would spend four bytes on it.
+        # It would then reject the offset that follows.
         original = HoldsANothingField(
             a=Uint8(1), nothing=EmptyContainer(), b=Uint16List4(data=[Uint16(2)]), c=Uint8(3)
         )
@@ -831,8 +831,8 @@ class TestProgressiveContainerLayoutRules:
 
     def test_empty_layout_rejected(self) -> None:
         """A layout with no positions admits no field and is rejected outright."""
-        # A container with no field serializes to nothing, which would leave the
-        # element count of a list of them unrecoverable from the wire bytes.
+        # A container with no field serializes to nothing.
+        # That would leave the element count of a list of them unrecoverable from the wire bytes.
         with pytest.raises(
             SSZTypeError,
             match=r"^a field layout holds at least one position, got 0$",
@@ -852,8 +852,9 @@ class TestProgressiveContainerLayoutRules:
     )
     def test_layout_ending_in_a_gap_rejected(self, active_fields: Sequence[int]) -> None:
         """A trailing gap is a second spelling of one layout, so it is illegal."""
-        # The mixed-in word ignores a high zero bit, and at some widths the leaf tree
-        # ignores the extra position too, which would give two layouts one root.
+        # The mixed-in word ignores a high zero bit.
+        # At some widths the leaf tree ignores the extra position too.
+        # Two layouts would reach one root that way.
         with pytest.raises(
             SSZTypeError,
             match=r"^a field layout ends on a field, not on a gap$",
@@ -887,8 +888,9 @@ class TestProgressiveContainerLayoutRules:
 
     def test_shape_declared_without_a_layout_rejected(self) -> None:
         """A struct that skips the factory has no layout, so it cannot be merkleized."""
-        # Every layout comes from the factory. Inheriting the base alone leaves none,
-        # and a struct with no layout has no position to merkleize its fields at.
+        # Every layout comes from the factory.
+        # Inheriting the base alone leaves none.
+        # A struct with no layout has no position to merkleize its fields at.
         with pytest.raises(
             SSZTypeError,
             match=r"^NoLayout must declare ACTIVE_FIELDS$",
@@ -982,8 +984,8 @@ class TestProgressiveContainerLayoutMetadata:
         self, layout: object, case_id: str
     ) -> None:
         """A layout is bits, so any other value is a typo rather than a value to coerce."""
-        # A layout written as the string "101" would otherwise read as three set
-        # positions, since every character of it is truthy.
+        # A layout written as the string "101" would otherwise read as three set positions.
+        # Every character of it is truthy.
         with pytest.raises(
             SSZTypeError,
             match=r"^a field layout holds only 0 and 1$",
@@ -1362,8 +1364,8 @@ class TestAWideLayout:
 
     def test_the_wide_shape_hashes_each_field_at_its_own_position(self) -> None:
         """Thirty fields land on the thirty set positions, and the two gaps hold zero."""
-        # Every field takes a distinct value, so a field hashed one position off
-        # changes the root instead of colliding with its neighbour.
+        # Every field takes a distinct value.
+        # A field hashed one position off changes the root instead of colliding with its neighbour.
         value = WideForkEvolvedState(
             **{name: Uint64(n) for n, name in enumerate(WideForkEvolvedState.model_fields, 1)}
         )
@@ -1386,8 +1388,8 @@ class TestAWideLayout:
     def test_a_gap_written_at_the_wrong_position_is_a_different_shape(self) -> None:
         """A misplaced gap keeps every count agreeing, and moves the fields under it."""
         # This is the mistake the declaration rules cannot catch.
-        # Thirty-two positions and thirty fields hold either way, so the shape is
-        # accepted, and only the root says the two are not the same type.
+        # Thirty-two positions and thirty fields hold either way.
+        # The shape is accepted, and only the root says the two are not the same type.
         misplaced = MisplacedGapState.ACTIVE_FIELDS
         intended = WideForkEvolvedState.ACTIVE_FIELDS
         assert len(misplaced) == len(intended)
@@ -1416,8 +1418,8 @@ class TestALayoutWrittenWithTypedNumbers:
 
     def test_a_typed_position_still_opens_its_vacancy(self) -> None:
         """A position counts as the plain number it names, not as a value of its own type."""
-        # A typed position hashes and compares as the number it holds, so the membership
-        # test that decides the vacancy finds it.
+        # A typed position hashes and compares as the number it holds.
+        # The membership test that decides the vacancy finds it.
         assert Uint8(1) in frozenset({1})
         assert active_fields(width=3, gaps=(Uint8(1),)) == (1, 0, 1)
 
@@ -1693,8 +1695,8 @@ class TestContainerDefaults:
 
     def test_a_partly_named_struct_fills_the_fields_left_out(self) -> None:
         """Naming one field leaves every other at its own default rather than failing."""
-        # A type checker reads the declared field list, not the defaults this library
-        # attaches to it, so it reports the fields left out as missing arguments.
+        # A type checker reads the declared field list, not the defaults attached to it.
+        # It reports the fields left out as missing arguments.
         value = TwoUint64(a=Uint64(3))  # ty: ignore[missing-argument]
         assert value.a == Uint64(3)
         assert value.b == Uint64(0)

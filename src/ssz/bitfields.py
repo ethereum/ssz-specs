@@ -199,11 +199,10 @@ class BitVector(SSZCollection[Boolean]):
                 actual=len(data),
             )
 
-        # When the bit count is not a multiple of 8, the last byte holds padding
-        # bits above the highest data bit.
+        # A bit count that is not a multiple of 8 leaves the last byte part padding.
+        # Those padding bits sit above the highest data bit.
         # SSZ requires those padding bits to be zero so the encoding is canonical.
-        # Without this check, 0b00011111 and 0b11111111 both decode to a 5-bit
-        # vector of all ones.
+        # Without this check, 0b00011111 and 0b11111111 both decode to a 5-bit vector of all ones.
         if trailing_bit_count := cls.declared_length() % 8:
             if data[-1] >> trailing_bit_count:
                 raise SSZValueError(ValueFault.PADDING_BITS, byte=f"{data[-1]:#04x}")
