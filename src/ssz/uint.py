@@ -18,16 +18,7 @@ INTERN_BELOW = 256
 
 
 class BaseUint(int, SSZType):
-    """
-    Base class for fixed-width unsigned integer types.
-
-    Every binary operator applies one operand rule.
-    Two uints may meet only when inheritance relates them, a bare integer meets any of
-    them, and nothing else meets any of them.
-    A number the rule turns away is refused outright.
-    Anything else is declined instead, so a list multiplied by a uint still repeats itself.
-    Every result is range-checked against the width the rule picked.
-    """
+    """Base class for fixed-width unsigned integer types."""
 
     BITS: ClassVar[int]
     """The number of bits in the integer (overridden by subclasses)."""
@@ -42,21 +33,14 @@ class BaseUint(int, SSZType):
     """Shared instances of this class, indexed by the value each one holds."""
 
     _INTERN_LEN: ClassVar[int] = 0
-    """How many entries the shared table holds, kept apart so a wrap measures nothing."""
+    """How many entries the shared table holds."""
 
     def __init_subclass__(cls, **kwargs: Any) -> None:
-        """
-        Cache the per-width constants so hot paths never recompute them.
-
-        ``BITS`` is fixed for each concrete width, so its derived bound and byte
-        length are hoisted to class attributes here instead of being recomputed
-        (an expensive ``2**BITS``) on every construction and arithmetic result.
-        """
+        """Cache the per-width constants so hot paths never recompute them."""
         super().__init_subclass__(**kwargs)
         cls.MAX_VALUE = 2**cls.BITS - 1
         cls.BYTE_LENGTH = cls.BITS // 8
         # One table per class, so a named subtype comes back as itself.
-        # The clamp keeps the table inside the width, so it holds nothing out of range.
         cls._INTERNED = tuple(
             int.__new__(cls, n) for n in range(min(INTERN_BELOW, cls.MAX_VALUE + 1))
         )
@@ -74,22 +58,13 @@ class BaseUint(int, SSZType):
             SSZTypeError: If value is not an int. Bool, string, and float are rejected.
             SSZValueError: If value is outside [0, 2**BITS - 1].
         """
-        # An exact int match settles both guards below: a bool is a subclass, not int itself.
+        # An exact int needs neither guard below.
         if type(value) is int:
             return cls._wrap(value)
         # Bool subclasses int, so reject it explicitly before the value check.
         if not isinstance(value, int) or isinstance(value, bool):
             raise SSZTypeError(TypeFault.WRONG_TYPE, expected="int", got=type(value).__name__)
-        # Invariant: the range check downstream compares against plain int bounds.
-        #
-        # Python gives an int subclass reflected priority over a plain left operand.
-        # An input of a subclass sends the lower-bound check into that class's operator:
-        #
-        #     0 <= input  ->  type(input).__ge__(input, 0)
-        #
-        # A uint answers that correctly, because the relation rule admits a bare int.
-        # An arbitrary int subclass need not: it is free to refuse a plain int and raise.
-        # Narrowing keeps the comparison on the base integer type whatever the input is.
+        # Narrowing keeps the bound check below off an arbitrary subclass's own operators.
         return cls._wrap(int(value))
 
     @classmethod
@@ -97,20 +72,11 @@ class BaseUint(int, SSZType):
         """
         Range-check an integer and wrap it into a typed instance.
 
-        This is the shared fast path for construction and for arithmetic results.
-
-        - The input has to be a plain integer, neither a bool nor a subclass instance.
-        - An arbitrary int subclass may refuse a plain int operand in a comparison, so the
-          caller narrows the value before it reaches the bound check here.
-        - The type guards the public constructor applies are skipped here.
-        - A value the shared table covers is returned from it, already in range.
-        - The bound is read from the cached class attribute rather than recomputed.
-        - Allocation goes directly through the base integer type.
+        The caller has already narrowed the value to a plain int, so no type guard runs here.
 
         Raises:
             SSZValueError: If value is outside [0, 2**BITS - 1].
         """
-        # Testing the table first lets a larger value reach its own bound in one comparison.
         if value < cls._INTERN_LEN:
             # A negative index would read from the end of the table instead of refusing.
             if value >= 0:
@@ -124,10 +90,7 @@ class BaseUint(int, SSZType):
         """
         Refuse to attach state to a value.
 
-        - A shared instance reaches every holder of that value.
-        - State attached through one would be readable through all the others.
-        - A slot declaration cannot close this off.
-        - Any subclass omitting one regains the dictionary this refusal guards.
+        Instances are shared, so state attached through one would be readable through all.
 
         Raises:
             SSZTypeError: Always, because a count is only the number it holds.
@@ -142,9 +105,6 @@ class BaseUint(int, SSZType):
         Hook into Pydantic's validation system.
 
         A field holds a uint as an instance or as a strict int within the unsigned range.
-        The bound is exclusive, so a value equal to 2**BITS is refused.
-
-        JSON carries the value as a plain int.
         """
         return wrapping_schema(
             cls,
@@ -181,16 +141,13 @@ class BaseUint(int, SSZType):
                 actual=len(data),
             )
 
-        # These bytes decode to a plain integer in range, which is all the constructor tests.
         return cls._wrap(int.from_bytes(data, "little"))
 
     @override
     def serialize(self, stream: IO[bytes]) -> int:
         """Write little-endian bytes to a stream and return the count written."""
         encoded_data = self.encode_bytes()
-        # Write the data to the stream.
         stream.write(encoded_data)
-        # Return the number of bytes written.
         return len(encoded_data)
 
     @classmethod
@@ -207,9 +164,7 @@ class BaseUint(int, SSZType):
             raise SSZValueError(
                 ValueFault.SCOPE, type=cls.__name__, expected=byte_length, actual=scope
             )
-        # Read the required number of bytes from the stream.
         serialized_bytes = stream.read(byte_length)
-        # Ensure the correct number of bytes was read.
         if len(serialized_bytes) != byte_length:
             raise SSZValueError(
                 ValueFault.TRUNCATED,
@@ -217,8 +172,6 @@ class BaseUint(int, SSZType):
                 expected=byte_length,
                 actual=len(serialized_bytes),
             )
-        # The width is settled twice over, so a third measure and a retest can only agree.
-        # A struct decodes one integer per integer field, so both are saved per field.
         return cls._wrap(int.from_bytes(serialized_bytes, "little"))
 
     @classmethod
@@ -249,9 +202,6 @@ class BaseUint(int, SSZType):
             Uint64(1) + Uint32(2)  ->  refused  siblings, and the widths disagree
             Slot(1) + True         ->  refused  a bool counts nothing
 
-        A bare integer is admitted because a literal has no unit to confuse.
-        A bool is not, being a subclass of int rather than int itself.
-
         Returns:
             The type to wrap the result in, or NotImplemented to leave the operation to
             the other operand.
@@ -260,9 +210,7 @@ class BaseUint(int, SSZType):
             TypeError: When the operand is a number that no inheritance relates.
         """
         other_cls = type(other)
-        # Invariant: a plain int is the one non-uint operand allowed through.
-        #
-        # It is compared by identity, not isinstance, so bool stays out.
+        # A plain int is the one non-uint operand allowed through, by identity so bool stays out.
         if other_cls is int:
             return cls
         if issubclass(other_cls, BaseUint):
@@ -271,13 +219,10 @@ class BaseUint(int, SSZType):
                 return other_cls
             if issubclass(cls, other_cls):
                 return cls
-        # Why: a number reaching here is a sibling width, or a unit this one cannot count in.
-        # No result type would avoid inventing a unit, so it is refused where it stands.
+        # A number reaching here is a sibling width, or a unit this one cannot count in.
         if isinstance(other, Number):
             cls._raise_type_error(other, op_symbol)
-        # Anything else is not a count at all, though it may know what to do with one.
-        # A sequence repeats by reading its count through the index protocol.
-        # Raising here would end the expression before Python could offer it that chance.
+        # Anything else is declined, so a list multiplied by a uint still repeats itself.
         return NotImplemented
 
     @classmethod
@@ -285,9 +230,7 @@ class BaseUint(int, SSZType):
         """
         Insist on a relation where an arithmetic operator would settle for declining.
 
-        A declined arithmetic operand still ends in a TypeError once both sides decline.
-        A declined equality does not: Python answers false instead, which is the silent
-        type mixing this type exists to prevent.
+        A declined comparison answers false rather than raising, which mixes types silently.
 
         Raises:
             TypeError: When no relation admits the operand.
@@ -389,10 +332,7 @@ class BaseUint(int, SSZType):
     def __pow__(self, value: int, mod: None = None, /) -> Self: ...
     @overload
     def __pow__(self, value: int, mod: int, /) -> Self: ...
-    # The parent declaration uses two stub overloads with different return types.
-    #
-    # Narrowing both to a single subtype is safe by Liskov substitution.
-    # The strict overload-match check rejects it regardless.
+    # Narrowing both parent overloads to one subtype is safe, but the strict check refuses it.
     def __pow__(self, value: int, mod: int | None = None, /) -> Self:  # ty: ignore[invalid-method-override]
         """Forward exponentiation and three-argument pow."""
         cls = type(self)
@@ -400,8 +340,7 @@ class BaseUint(int, SSZType):
             cls = cls._resolve_type(value, "**")
             if cls is NotImplemented:
                 return NotImplemented
-        # The modulus resolves against the type the exponent already settled on.
-        # A unit picked up from the exponent survives a bare base and modulus that way.
+        # The modulus resolves against the type the exponent settled on, so its unit survives.
         if mod is not None and type(mod) is not cls:
             cls = cls._resolve_type(mod, "**")
             if cls is NotImplemented:
@@ -518,13 +457,6 @@ class BaseUint(int, SSZType):
                 return NotImplemented
         return cls._wrap(int.__rshift__(other, self))
 
-    # A comparison answers with a bool.
-    # Which of the two types is more derived therefore does not matter.
-    # Only the relation does, and the resolved type is dropped on the floor.
-    #
-    # That is also why none of the six binds it to a local.
-    # The same-type path stays two type calls and a branch, as it was before.
-
     def __eq__(self, other: object) -> bool:
         """Equality."""
         if type(other) is not type(self):
@@ -569,18 +501,7 @@ class BaseUint(int, SSZType):
         """Informal representation matches the underlying value."""
         return str(int(self))
 
-    # A uint hashes as the integer it holds.
-    # Equality relates a type to the types derived from it, and admits a bare integer.
-    # The value is therefore all the hash can depend on.
-    #
-    # A hash never decides equality, so naming the type in one cannot make it stricter.
-    # It would only break the rule that equal values hash equally.
-    #
-    # What this changes is where a mismatched value lands.
-    # A bare 5 now shares a bucket with Uint64(5).
-    # A lookup of a bare 5 therefore reaches the comparison, which raises as it means to.
-    # A type-mixing hash sent that probe to an empty bucket instead.
-    # It answered "absent" without ever consulting the comparison.
+    # Equality admits a bare integer, so the value alone can decide the hash.
     __hash__ = int.__hash__
 
     def __index__(self) -> int:
