@@ -32,7 +32,7 @@ carries:
 - `_info` — provenance metadata, including a content `hash`.
 
 Decode-failure vectors additionally carry `rawBytes` (the rejected input) and a
-`rejectionReason`.
+`rejectionReason`, the name of the `ValueFault` the decoder raised.
 
 ## Layout
 
@@ -40,7 +40,6 @@ Decode-failure vectors additionally carry `rawBytes` (the rejected input) and a
 src/ssz_testing/
   __init__.py          # public exports (SSZTest, SSZFixture, SSZTestFiller, ...)
   fixtures.py          # fixture formats: input specs and emitted vectors
-  rejection.py         # RejectionReason enum
   hex_codec.py         # 0x-prefixed hex helpers
   plugin.py            # pytest plugin: collection, generation, writing
   cli.py               # the `fill` command

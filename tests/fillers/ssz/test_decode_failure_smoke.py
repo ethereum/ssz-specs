@@ -3,7 +3,7 @@
 from typing import ClassVar
 
 from ssz import BitList, Boolean
-from ssz_testing import ExpectedRejection, RejectionReason, SSZTestFiller
+from ssz_testing import ExpectedRejection, SSZTestFiller, ValueFault
 
 
 class SmokeBitList8(BitList):
@@ -19,7 +19,7 @@ def test_ssz_decode_failure_bitlist_exceeds_limit(ssz_test: SSZTestFiller) -> No
     Given
     -----
     - a bitlist type capped at eight bits.
-    - the input bytes 0x0010, which place the sentinel at bit sixteen.
+    - the input bytes 0x0010, which place the sentinel at bit twelve.
 
     When
     ----
@@ -34,5 +34,5 @@ def test_ssz_decode_failure_bitlist_exceeds_limit(ssz_test: SSZTestFiller) -> No
         type_name="SmokeBitList8",
         value=SmokeBitList8(data=[Boolean(False)]),
         raw_bytes="0x0010",
-        expected_rejection=ExpectedRejection(reason=RejectionReason.DECODE_ERROR),
+        expected_rejection=ExpectedRejection(reason=ValueFault.LIMIT),
     )

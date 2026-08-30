@@ -8,13 +8,13 @@ from typing import Any, cast
 
 import pytest
 from hypothesis import given, strategies as st
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 
 from ssz.byte_arrays import (
     ByteList,
     ByteVector,
 )
-from ssz.exceptions import SSZSerializationError, SSZTypeError, SSZValueError
+from ssz.exceptions import SSZTypeError, SSZValueError
 
 
 class Bytes4(ByteVector):
@@ -108,7 +108,7 @@ class TestBaseBytesConstruction:
         """Inputs whose length doesn't match LENGTH raise with the exact element count."""
         with pytest.raises(SSZValueError) as exception_info:
             Bytes4(wrong_input)
-        assert str(exception_info.value) == f"Bytes4 requires exactly 4 bytes, got {count}"
+        assert str(exception_info.value) == f"Bytes4 holds exactly 4 bytes, got {count}"
 
     @pytest.mark.parametrize("bad_input", [42, 1.5, None])
     def test_construction_with_non_coercible_input_raises(self, bad_input: Any) -> None:
@@ -116,13 +116,23 @@ class TestBaseBytesConstruction:
         name = type(bad_input).__name__
         with pytest.raises(TypeError) as exception_info:
             Bytes4(bad_input)
-        assert str(exception_info.value) == f"Cannot coerce {name} to bytes"
+        assert str(exception_info.value) == f"expected bytes, got {name}"
+
+    def test_construction_from_a_string_that_is_not_hex_digits_raises(self) -> None:
+        """A string is read as hex, so one holding anything else is refused by name."""
+        # The refusal belongs to this library rather than to the parser underneath it,
+        # so a caller catching SSZ refusals around construction still sees this one.
+        with pytest.raises(SSZValueError) as exception_info:
+            Bytes4("zzzzzzzz")
+        assert str(exception_info.value) == (
+            "Bytes4 reads a string as hex digits, and this one holds something else"
+        )
 
     def test_construction_without_length_attribute_raises(self) -> None:
         """Direct instantiation of the abstract base raises SSZTypeError."""
         with pytest.raises(SSZTypeError) as exception_info:
             ByteVector(b"")
-        assert str(exception_info.value) == "ByteVector must define LENGTH"
+        assert str(exception_info.value) == "ByteVector must declare LENGTH"
 
     def test_zero_factory(self) -> None:
         """The zero classmethod returns an instance of LENGTH zero bytes."""
@@ -403,16 +413,16 @@ class TestBaseBytesSSZ:
     def test_deserialize_scope_mismatch_raises(self) -> None:
         """deserialize rejects a scope that doesn't match LENGTH."""
         buffer = io.BytesIO(b"\x00\x01\x02\x03")
-        with pytest.raises(SSZSerializationError) as exception_info:
+        with pytest.raises(SSZValueError) as exception_info:
             Bytes4.deserialize(buffer, 3)
-        assert str(exception_info.value) == "Bytes4: expected 4 bytes, got 3"
+        assert str(exception_info.value) == "Bytes4 spans 4 bytes, and the budget is 3"
 
     def test_deserialize_stream_truncation_raises(self) -> None:
         """deserialize detects when the stream ends before delivering scope bytes."""
         buffer = io.BytesIO(b"\x00\x01")
-        with pytest.raises(SSZSerializationError) as exception_info:
+        with pytest.raises(SSZValueError) as exception_info:
             Bytes4.deserialize(buffer, 4)
-        assert str(exception_info.value) == "Bytes4: expected 4 bytes, got 2"
+        assert str(exception_info.value) == "Bytes4 needs 4 bytes, the input holds 2"
 
 
 class TestBaseBytesPydantic:
@@ -468,15 +478,16 @@ class TestBaseByteListConstruction:
 
     def test_construction_over_limit_raises(self) -> None:
         """Input exceeding LIMIT raises with the exact size in the message."""
-        with pytest.raises(SSZValueError) as exception_info:
+        # A refusal inside a field validator is a ValueError, which pydantic collects.
+        with pytest.raises(ValidationError) as exception_info:
             ByteList5(data=b"\x00" * 6)
-        assert str(exception_info.value) == "ByteList5 exceeds limit of 5, got 6"
+        assert "ByteList5 holds at most 5 bytes, got 6" in str(exception_info.value)
 
     def test_construction_without_limit_attribute_raises(self) -> None:
         """Direct instantiation of the abstract base raises SSZTypeError."""
         with pytest.raises(SSZTypeError) as exception_info:
             ByteList(data=b"")
-        assert str(exception_info.value) == "ByteList must define LIMIT"
+        assert str(exception_info.value) == "ByteList must declare LIMIT"
 
 
 class TestBaseByteListEquality:
@@ -642,7 +653,7 @@ class TestBaseByteListMutation:
             payload.append(0x06)
 
         # The same message the field validator raises for the same byte count.
-        assert str(exception_info.value) == "ByteList5 exceeds limit of 5, got 6"
+        assert str(exception_info.value) == "ByteList5 holds at most 5 bytes, got 6"
         assert payload.data == b"\x01\x02\x03\x04\x05"
 
     def test_a_slice_write_past_the_capacity_is_refused(self) -> None:
@@ -650,7 +661,7 @@ class TestBaseByteListMutation:
         payload = ByteList5(data=b"\x01\x02")
         with pytest.raises(SSZValueError) as exception_info:
             payload[0:1] = b"\xaa\xbb\xcc\xdd\xee"
-        assert str(exception_info.value) == "ByteList5 exceeds limit of 5, got 6"
+        assert str(exception_info.value) == "ByteList5 holds at most 5 bytes, got 6"
         assert payload.data == b"\x01\x02"
 
     @pytest.mark.parametrize(
@@ -703,7 +714,7 @@ class TestBaseByteListMutation:
         """The coercion the validator carries out refuses what no branch of it accepts."""
         with pytest.raises(TypeError) as exception_info:
             ByteList5(data=cast("Any", 42))
-        assert str(exception_info.value) == "Cannot coerce int to bytes"
+        assert str(exception_info.value) == "expected bytes, got int"
 
     def test_popping_the_last_byte_of_an_empty_payload_is_refused(self) -> None:
         """An empty payload has no last byte, so the buffer refuses."""
@@ -732,9 +743,10 @@ class TestBaseByteListMutation:
         payload.data = cast("Any", bytearray(b"\x01\x02"))
         assert type(payload.data) is bytes
 
-        with pytest.raises(SSZValueError) as exception_info:
+        # Assignment runs the field validator, so pydantic collects the refusal as before.
+        with pytest.raises(ValidationError) as exception_info:
             payload.data = b"\x01\x02\x03\x04\x05\x06"
-        assert str(exception_info.value) == "ByteList5 exceeds limit of 5, got 6"
+        assert "ByteList5 holds at most 5 bytes, got 6" in str(exception_info.value)
 
 
 class TestBaseByteListSSZ:
@@ -750,7 +762,7 @@ class TestBaseByteListSSZ:
             ByteList16.get_byte_length()
         assert (
             str(exception_info.value)
-            == "ByteList16: variable-size byte list has no fixed byte length"
+            == "ByteList16 is a variable-size byte list, and has no one byte length"
         )
 
     @pytest.mark.parametrize(
@@ -783,23 +795,23 @@ class TestBaseByteListSSZ:
     def test_deserialize_negative_scope_raises(self) -> None:
         """deserialize rejects a negative scope."""
         buffer = io.BytesIO(b"")
-        with pytest.raises(SSZSerializationError) as exception_info:
+        with pytest.raises(SSZValueError) as exception_info:
             ByteList16.deserialize(buffer, -1)
-        assert str(exception_info.value) == "ByteList16: negative scope"
+        assert str(exception_info.value) == "a budget of -1 is not a byte count"
 
     def test_deserialize_over_limit_raises(self) -> None:
         """deserialize rejects a scope exceeding LIMIT."""
         buffer = io.BytesIO(b"\x00" * 6)
         with pytest.raises(SSZValueError) as exception_info:
             ByteList5.deserialize(buffer, 6)
-        assert str(exception_info.value) == "ByteList5 exceeds limit of 5, got 6"
+        assert str(exception_info.value) == "ByteList5 holds at most 5 bytes, got 6"
 
     def test_deserialize_stream_truncation_raises(self) -> None:
         """deserialize detects when the stream ends before delivering scope bytes."""
         buffer = io.BytesIO(b"\x00\x01")
-        with pytest.raises(SSZSerializationError) as exception_info:
+        with pytest.raises(SSZValueError) as exception_info:
             ByteList16.deserialize(buffer, 3)
-        assert str(exception_info.value) == "ByteList16: expected 3 bytes, got 2"
+        assert str(exception_info.value) == "ByteList16 needs 3 bytes, the input holds 2"
 
 
 class TestBaseByteListPydantic:
@@ -813,9 +825,10 @@ class TestBaseByteListPydantic:
         assert model.payload.encode_bytes() == raw_bytes
 
     def test_rejects_oversized_input(self) -> None:
-        """Pydantic rejects data exceeding LIMIT via SSZValueError."""
-        with pytest.raises(SSZValueError):
+        """Pydantic rejects data exceeding LIMIT, collecting the refusal's own sentence."""
+        with pytest.raises(ValidationError) as exception_info:
             ModelLists(payload=ByteList16(data=bytes(range(17))))
+        assert "ByteList16 holds at most 16 bytes, got 17" in str(exception_info.value)
 
     def test_json_serialization_to_hex(self) -> None:
         """JSON-mode serialization renders the data field as a 0x-prefixed hex string."""
@@ -842,19 +855,19 @@ class TestBaseBytesDefault:
         # earlier, so the suppression here is what lets the runtime half be pinned.
         with pytest.raises(TypeError) as exception_info:
             Bytes4(None)  # ty: ignore[invalid-argument-type]
-        assert str(exception_info.value) == "Cannot coerce NoneType to bytes"
+        assert str(exception_info.value) == "expected bytes, got NoneType"
 
     def test_an_explicitly_empty_input_stays_a_length_error(self) -> None:
         """Zero bytes is a count mismatch against LENGTH, never a request for the default."""
         with pytest.raises(SSZValueError) as exception_info:
             Bytes4(b"")
-        assert str(exception_info.value) == "Bytes4 requires exactly 4 bytes, got 0"
+        assert str(exception_info.value) == "Bytes4 holds exactly 4 bytes, got 0"
 
     def test_a_shape_without_a_length_reports_its_own_declaration_error(self) -> None:
         """No length means no byte count to zero, so the declaration error comes first."""
         with pytest.raises(SSZTypeError) as exception_info:
             ByteVector()
-        assert str(exception_info.value) == "ByteVector must define LENGTH"
+        assert str(exception_info.value) == "ByteVector must declare LENGTH"
 
     def test_the_default_is_zeroed_and_any_set_byte_is_not(self) -> None:
         """The zero-filled array equals a fresh default of its type; a set byte does not."""

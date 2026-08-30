@@ -13,14 +13,9 @@ from ssz import (
     List,
     ProgressiveContainer,
     ProgressiveList,
-    SSZDefaultError,
-    SSZDefinitionError,
-    SSZFixedSizeError,
-    SSZLimitError,
-    SSZSerializationError,
     SSZTypeError,
-    SSZTypeMismatch,
-    SSZUnionOptionsError,
+    SSZValueError,
+    TypeFault,
     Uint8,
     Uint16,
     Uint32,
@@ -158,7 +153,7 @@ class TestOptionDeclaration:
 
     def test_a_union_must_declare_options(self) -> None:
         """Options are the one declaration a union needs, so omitting them is fatal."""
-        with pytest.raises(SSZDefinitionError, match=r"^NoOptions must define OPTIONS$"):
+        with pytest.raises(SSZTypeError, match=r"^NoOptions must declare OPTIONS$"):
 
             class NoOptions(CompatibleUnion):
                 pass
@@ -166,8 +161,8 @@ class TestOptionDeclaration:
     def test_an_empty_option_map_is_rejected(self) -> None:
         """A union with no option admits no value at all."""
         with pytest.raises(
-            SSZUnionOptionsError,
-            match=r"^NoVariants: invalid union options, the options are empty$",
+            SSZTypeError,
+            match=r"^a union declares at least one option$",
         ):
             type("NoVariants", (CompatibleUnion,), {"OPTIONS": {}})
 
@@ -184,11 +179,8 @@ class TestOptionDeclaration:
     def test_a_selector_outside_one_through_127_is_rejected(self, selector: int) -> None:
         """Only 1 through 127 name an option; the rest of the byte is reserved."""
         with pytest.raises(
-            SSZUnionOptionsError,
-            match=(
-                r"^OutOfRange: invalid union options, "
-                + rf"selector {selector} falls outside 1 through 127$"
-            ),
+            SSZTypeError,
+            match=(rf"^selector {selector} falls outside 1 through 127$"),
         ):
             type("OutOfRange", (CompatibleUnion,), {"OPTIONS": {selector: Square}})
 
@@ -203,8 +195,8 @@ class TestOptionDeclaration:
     def test_options_given_as_a_sequence_are_rejected(self) -> None:
         """A sequence of types would read its own entries as selectors."""
         with pytest.raises(
-            SSZUnionOptionsError,
-            match=r"^Sequenced: invalid union options, the options are not a selector-to-type map$",
+            SSZTypeError,
+            match=r"^a union declares a selector-to-type map, got list$",
         ):
             type("Sequenced", (CompatibleUnion,), {"OPTIONS": [Square, Circle]})
 
@@ -213,8 +205,8 @@ class TestOptionDeclaration:
         # A typed uint compares strictly against a plain int, so a typed key would fail
         # the range check with a bare type error instead of the union's own message.
         with pytest.raises(
-            SSZUnionOptionsError,
-            match=r"^TypedKey: invalid union options, selector Uint8\(1\) is not a plain int$",
+            SSZTypeError,
+            match=r"^selector Uint8\(1\) is not a plain integer$",
         ):
             type("TypedKey", (CompatibleUnion,), {"OPTIONS": {Uint8(1): Square}})
 
@@ -229,16 +221,16 @@ class TestOptionDeclaration:
     def test_an_option_that_is_not_an_ssz_type_is_rejected(self, option: object) -> None:
         """An option has to be a type this library can serialize and merkleize."""
         with pytest.raises(
-            SSZUnionOptionsError,
-            match=r"^NotSSZ: invalid union options, option 1 is not an SSZ type$",
+            SSZTypeError,
+            match=r"^option 1 is not an SSZ type$",
         ):
             type("NotSSZ", (CompatibleUnion,), {"OPTIONS": {1: option}})
 
     def test_options_that_merkleize_differently_are_rejected(self) -> None:
         """Two options that build different trees cannot both answer one proof."""
         with pytest.raises(
-            SSZUnionOptionsError,
-            match=r"^Clashing: invalid union options, options 1 and 2 merkleize differently$",
+            SSZTypeError,
+            match=r"^options 1 and 2 merkleize differently$",
         ):
             type("Clashing", (CompatibleUnion,), {"OPTIONS": {1: Uint16List4, 2: Uint32List4}})
 
@@ -252,8 +244,8 @@ class TestOptionDeclaration:
         illegal even though each option fits its neighbour.
         """
         with pytest.raises(
-            SSZUnionOptionsError,
-            match=r"^FirstAndThird: invalid union options, options 1 and 3 merkleize differently$",
+            SSZTypeError,
+            match=r"^options 1 and 3 merkleize differently$",
         ):
             type(
                 "FirstAndThird",
@@ -264,8 +256,8 @@ class TestOptionDeclaration:
     def test_a_clash_between_the_second_and_third_options_is_caught(self) -> None:
         """The same three shapes reordered, so the clashing pair excludes the first option."""
         with pytest.raises(
-            SSZUnionOptionsError,
-            match=r"^SecondAndThird: invalid union options, options 2 and 3 merkleize differently$",
+            SSZTypeError,
+            match=r"^options 2 and 3 merkleize differently$",
         ):
             type(
                 "SecondAndThird",
@@ -273,13 +265,12 @@ class TestOptionDeclaration:
                 {"OPTIONS": {1: Tail, 2: Square, 3: Shade}},
             )
 
-    def test_the_error_carries_the_union_and_the_rule_it_broke(self) -> None:
-        """The exception keeps its fields machine-readable, not only the formatted message."""
-        with pytest.raises(SSZUnionOptionsError) as exception_info:
+    def test_the_error_names_the_rule_it_broke(self) -> None:
+        """The exception keeps its reason machine-readable, not only the formatted message."""
+        with pytest.raises(SSZTypeError) as exception_info:
             type("Empty", (CompatibleUnion,), {"OPTIONS": {}})
-        assert isinstance(exception_info.value, SSZTypeError)
-        assert exception_info.value.type_name == "Empty"
-        assert exception_info.value.reason == "the options are empty"
+        # The fault is the rule, as a tag rather than as prose to match on.
+        assert exception_info.value.fault is TypeFault.UNION_EMPTY
 
     def test_a_union_of_unions_is_a_legal_declaration(self) -> None:
         """A union option may itself be a union, checked by the same relation one level down."""
@@ -288,8 +279,8 @@ class TestOptionDeclaration:
     def test_a_union_of_clashing_unions_is_rejected(self) -> None:
         """The relation descends into the options of the options, so a deep clash still fires."""
         with pytest.raises(
-            SSZUnionOptionsError,
-            match=r"^DeepClash: invalid union options, options 1 and 2 merkleize differently$",
+            SSZTypeError,
+            match=r"^options 1 and 2 merkleize differently$",
         ):
             type("DeepClash", (CompatibleUnion,), {"OPTIONS": {1: Shape, 2: Numbers}})
 
@@ -337,28 +328,23 @@ class TestConstruction:
 
     def test_a_selector_naming_no_option_is_rejected(self) -> None:
         """Selector 3 is inside the legal range and still names nothing this union declares."""
-        with pytest.raises(
-            SSZUnionOptionsError,
-            match=r"^Shape: invalid union options, selector 3 names no option$",
-        ):
+        # The refusal is a ValueError, which pydantic collects out of the model validator.
+        with pytest.raises(ValidationError, match=r"selector 3 names no option of Shape"):
             Shape(selector=Uint8(3), data=SQUARE)
 
     def test_the_reserved_zero_selector_names_no_option_either(self) -> None:
         """Zero can never be declared, so it can never be held."""
-        with pytest.raises(
-            SSZUnionOptionsError,
-            match=r"^Shape: invalid union options, selector 0 names no option$",
-        ):
+        with pytest.raises(ValidationError, match=r"selector 0 names no option of Shape"):
             Shape(selector=Uint8(0), data=SQUARE)
 
     def test_data_of_another_option_is_rejected(self) -> None:
         """Selector 1 names Square, so a Circle payload under it is a different value."""
-        with pytest.raises(SSZTypeMismatch, match=r"^Expected Square, got Circle$"):
+        with pytest.raises(SSZTypeError, match=r"^expected Square, got Circle$"):
             Shape(selector=Uint8(1), data=CIRCLE)
 
     def test_data_of_no_option_at_all_is_rejected(self) -> None:
         """A payload of a type the union never declared fails the same check."""
-        with pytest.raises(SSZTypeMismatch, match=r"^Expected Circle, got Square$"):
+        with pytest.raises(SSZTypeError, match=r"^expected Circle, got Square$"):
             Shape(selector=Uint8(2), data=SQUARE)
 
     def test_a_value_is_frozen(self) -> None:
@@ -379,26 +365,26 @@ class TestNoDefaultValue:
 
     def test_building_a_union_from_nothing_is_rejected(self) -> None:
         """No selector and no payload names no option, so there is nothing to build."""
-        with pytest.raises(SSZDefaultError, match=r"^Shape has no default value$"):
+        with pytest.raises(SSZTypeError, match=r"^Shape has no default value$"):
             Shape.default()
 
     def test_the_error_is_a_type_error_carrying_the_type_name(self) -> None:
         """The failure keeps the offending type machine-readable, as every SSZ error does."""
-        with pytest.raises(SSZDefaultError) as exception_info:
+        with pytest.raises(SSZTypeError) as exception_info:
             Shape.default()
-        assert isinstance(exception_info.value, SSZTypeError)
-        assert exception_info.value.type_name == "Shape"
+        assert exception_info.value.fault is TypeFault.NO_DEFAULT
+        assert exception_info.value.fields["type"] == "Shape"
         assert exception_info.value.args[0] == "Shape has no default value"
 
     def test_the_error_names_whichever_union_was_asked(self) -> None:
         """Each union reports itself, so a nested absence points at the right type."""
-        with pytest.raises(SSZDefaultError, match=r"^NestedShape has no default value$"):
+        with pytest.raises(SSZTypeError, match=r"^NestedShape has no default value$"):
             NestedShape.default()
 
     def test_is_zero_is_undefined_on_a_union(self) -> None:
         """The zeroed check compares against a default, and a union has none to compare to."""
         value = Shape(selector=Uint8(1), data=SQUARE)
-        with pytest.raises(SSZDefaultError, match=r"^Shape has no default value$"):
+        with pytest.raises(SSZTypeError, match=r"^Shape has no default value$"):
             value.is_zero()
 
     def test_a_selector_without_a_payload_is_not_a_request_for_a_default(self) -> None:
@@ -427,13 +413,13 @@ class TestSizing:
 
     def test_asking_a_union_for_a_byte_length_raises(self) -> None:
         """Variable-size types have no fixed byte length, and a union is one of them."""
-        with pytest.raises(SSZFixedSizeError) as exception_info:
+        with pytest.raises(SSZTypeError) as exception_info:
             Shape.get_byte_length()
         assert exception_info.value.args[0] == (
-            "Shape: variable-size compatible union has no fixed byte length"
+            "Shape is a variable-size compatible union, and has no one byte length"
         )
-        assert exception_info.value.type_name == "Shape"
-        assert exception_info.value.kind == "compatible union"
+        assert exception_info.value.fields["type"] == "Shape"
+        assert exception_info.value.fields["kind"] == "compatible union"
 
 
 class TestSerialization:
@@ -522,15 +508,15 @@ class TestDeserialization:
 
     def test_an_empty_budget_holds_no_selector(self) -> None:
         """A union always carries a selector, so a zero-byte input is never one."""
-        with pytest.raises(SSZSerializationError) as exception_info:
+        with pytest.raises(SSZValueError) as exception_info:
             Shape.decode_bytes(b"")
-        assert exception_info.value.args[0] == "Shape: scope 0 holds no selector"
+        assert exception_info.value.args[0] == "a budget of 0 holds no selector"
 
     def test_a_short_budget_is_rejected_by_deserialize_directly(self) -> None:
         """The stream decoder checks the budget before it touches the stream."""
-        with pytest.raises(SSZSerializationError) as exception_info:
+        with pytest.raises(SSZValueError) as exception_info:
             Shape.deserialize(io.BytesIO(b""), 0)
-        assert exception_info.value.args[0] == "Shape: scope 0 holds no selector"
+        assert exception_info.value.args[0] == "a budget of 0 holds no selector"
 
     @pytest.mark.parametrize(
         "selector_byte, selector_value",
@@ -545,36 +531,38 @@ class TestDeserialization:
         self, selector_byte: str, selector_value: int
     ) -> None:
         """A wire selector this union never declared is rejected before the payload is read."""
-        with pytest.raises(SSZUnionOptionsError) as exception_info:
+        with pytest.raises(SSZValueError) as exception_info:
             Shape.decode_bytes(bytes.fromhex(selector_byte + "341242"))
         assert exception_info.value.args[0] == (
-            f"Shape: invalid union options, selector {selector_value} names no option"
+            f"selector {selector_value} names no option of Shape"
         )
 
     def test_trailing_bytes_are_rejected(self) -> None:
         """One canonical encoding per value, so a spare byte after the payload is noise."""
         # The rest of the budget belongs to the option, so the option refuses a wide one.
-        with pytest.raises(SSZSerializationError) as exception_info:
+        with pytest.raises(SSZValueError) as exception_info:
             Shape.decode_bytes(bytes.fromhex("0134124200"))
-        assert exception_info.value.args[0] == "Square: expected 3 bytes, got 4"
+        assert exception_info.value.args[0] == "Square spans 3 bytes, and the budget is 4"
 
     def test_a_truncated_payload_surfaces_the_option_s_own_error(self) -> None:
         """The rest of the budget belongs to the option, which reports its own shortfall."""
-        with pytest.raises(SSZSerializationError) as exception_info:
+        with pytest.raises(SSZValueError) as exception_info:
             Shape.decode_bytes(bytes.fromhex("0134"))
-        assert exception_info.value.args[0] == "Uint16: expected 2 bytes, got 1"
+        # The selector the payload was read under is a path step, in front of the sentence.
+        assert str(exception_info.value) == "[1].side: Uint16 needs 2 bytes, the input holds 1"
 
     def test_a_payload_the_option_cannot_parse_is_rejected(self) -> None:
         """A three-byte budget is not a whole number of two-byte elements."""
-        with pytest.raises(SSZSerializationError) as exception_info:
+        with pytest.raises(SSZValueError) as exception_info:
             Numbers.decode_bytes(bytes.fromhex("01010002"))
         assert exception_info.value.args[0] == (
-            "Uint16List4: scope 3 not divisible by element size 2"
+            "a budget of 3 does not divide by an element width of 2"
         )
 
     def test_an_over_capacity_payload_is_rejected(self) -> None:
         """The option's own capacity rule still applies inside the union's budget."""
-        with pytest.raises(SSZLimitError, match=r"^Uint16List4 exceeds limit of 4, got 5$"):
+        over_capacity = r"^\[1\]: Uint16List4 holds at most 4 elements, got 5$"
+        with pytest.raises(SSZValueError, match=over_capacity):
             Numbers.decode_bytes(bytes.fromhex("01") + b"\x00" * 10)
 
 

@@ -9,12 +9,7 @@ from pydantic.annotated_handlers import GetCoreSchemaHandler
 from pydantic_core import CoreSchema, core_schema
 
 from ssz.base import wrapping_schema
-from ssz.exceptions import (
-    SSZSerializationError,
-    SSZTypeError,
-    SSZTypeMismatch,
-    SSZValueError,
-)
+from ssz.exceptions import SSZTypeError, SSZValueError, TypeFault, ValueFault
 from ssz.ssz_base import SSZType
 
 
@@ -62,7 +57,9 @@ class Boolean(int, SSZType):
             SSZValueError: If value is an integer outside 0 or 1.
         """
         if not isinstance(value, int):
-            raise SSZTypeMismatch("bool or int", type(value))
+            raise SSZTypeError(
+                TypeFault.WRONG_TYPE, expected="bool or int", got=type(value).__name__
+            )
 
         # Coerce to a plain int before the membership test:
         #
@@ -71,7 +68,7 @@ class Boolean(int, SSZType):
         #   - int(value) returns a plain int, so == falls back to int equality.
         bit = int(value)
         if bit not in (0, 1):
-            raise SSZValueError(f"Boolean value must be 0 or 1, not {value}")
+            raise SSZValueError(ValueFault.NOT_A_BIT, value=value)
 
         # The value is 0 or 1 by this point, so it indexes the pair directly.
         interned: tuple[Self, ...] = cls._INTERNED
@@ -89,7 +86,7 @@ class Boolean(int, SSZType):
         Raises:
             SSZTypeError: Always, because a bit is only the bit it holds.
         """
-        raise SSZTypeError(f"{type(self).__name__} is immutable")
+        raise SSZTypeError(TypeFault.IMMUTABLE, type=type(self).__name__)
 
     @classmethod
     def __get_pydantic_core_schema__(
@@ -107,14 +104,8 @@ class Boolean(int, SSZType):
 
     @classmethod
     @override
-    def is_fixed_size(cls) -> bool:
-        """Always fixed-size — every boolean encodes to one byte."""
-        return True
-
-    @classmethod
-    @override
-    def get_byte_length(cls) -> int:
-        """Return the byte length of the encoded form."""
+    def fixed_size(cls) -> int:
+        """One byte, for either of the two values."""
         return 1
 
     @override
@@ -142,14 +133,16 @@ class Boolean(int, SSZType):
             A boolean wrapping the decoded value.
 
         Raises:
-            SSZSerializationError:
+            SSZValueError:
                 - When the input length is not 1.
                 - When the byte value is outside the 0x00 / 0x01 set.
         """
         if len(data) != 1:
-            raise SSZSerializationError(f"Boolean: expected 1 byte, got {len(data)}")
+            raise SSZValueError(
+                ValueFault.TRUNCATED, type=cls.__name__, expected=1, actual=len(data)
+            )
         if data[0] not in (0, 1):
-            raise SSZSerializationError(f"Boolean: byte must be 0x00 or 0x01, got {data[0]:#04x}")
+            raise SSZValueError(ValueFault.NOT_A_BIT, value=f"{data[0]:#04x}")
 
         # The byte is 0 or 1 by the guard above.
         # That is the whole of what the constructor settles before indexing this same pair.
@@ -177,12 +170,12 @@ class Boolean(int, SSZType):
             A boolean wrapping the decoded value.
 
         Raises:
-            SSZSerializationError:
+            SSZValueError:
                 - When scope is not 1.
                 - When the underlying byte decode fails.
         """
         if scope != 1:
-            raise SSZSerializationError(f"Boolean: expected scope of 1, got {scope}")
+            raise SSZValueError(ValueFault.SCOPE, type=cls.__name__, expected=1, actual=scope)
         return cls.decode_bytes(stream.read(1))
 
     @classmethod

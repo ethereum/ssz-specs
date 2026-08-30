@@ -10,7 +10,7 @@ from ssz import (
     Uint16,
     Uint64,
 )
-from ssz_testing import ExpectedRejection, RejectionReason, SSZTestFiller
+from ssz_testing import ExpectedRejection, SSZTestFiller, ValueFault
 
 
 class SampleSquare(ProgressiveContainer):
@@ -453,8 +453,8 @@ def test_compatible_union_decode_failure_empty_input(ssz_test: SSZTestFiller) ->
         ),
         raw_bytes="0x",
         expected_rejection=ExpectedRejection(
-            reason=RejectionReason.DECODE_ERROR,
-            exact_message="SampleShape: scope 0 holds no selector",
+            reason=ValueFault.NO_SELECTOR,
+            exact_message="a budget of 0 holds no selector",
         ),
     )
 
@@ -485,8 +485,8 @@ def test_compatible_union_decode_failure_undeclared_selector(ssz_test: SSZTestFi
         ),
         raw_bytes="0x03341242",
         expected_rejection=ExpectedRejection(
-            reason=RejectionReason.DECODE_ERROR,
-            exact_message="SampleShape: invalid union options, selector 3 names no option",
+            reason=ValueFault.UNKNOWN_SELECTOR,
+            exact_message="selector 3 names no option of SampleShape",
         ),
     )
 
@@ -517,8 +517,8 @@ def test_compatible_union_decode_failure_reserved_zero_selector(ssz_test: SSZTes
         ),
         raw_bytes="0x00341242",
         expected_rejection=ExpectedRejection(
-            reason=RejectionReason.DECODE_ERROR,
-            exact_message="SampleShape: invalid union options, selector 0 names no option",
+            reason=ValueFault.UNKNOWN_SELECTOR,
+            exact_message="selector 0 names no option of SampleShape",
         ),
     )
 
@@ -550,8 +550,8 @@ def test_compatible_union_decode_failure_trailing_byte(ssz_test: SSZTestFiller) 
         ),
         raw_bytes="0x0134124200",
         expected_rejection=ExpectedRejection(
-            reason=RejectionReason.DECODE_ERROR,
-            exact_message="SampleSquare: expected 3 bytes, got 4",
+            reason=ValueFault.SCOPE,
+            exact_message="[1]: SampleSquare spans 3 bytes, and the budget is 4",
         ),
     )
 
@@ -582,7 +582,7 @@ def test_compatible_union_decode_failure_truncated_payload(ssz_test: SSZTestFill
         ),
         raw_bytes="0x0134",
         expected_rejection=ExpectedRejection(
-            reason=RejectionReason.DECODE_ERROR,
-            exact_message="Uint16: expected 2 bytes, got 1",
+            reason=ValueFault.TRUNCATED,
+            exact_message="[1].side: Uint16 needs 2 bytes, the input holds 1",
         ),
     )

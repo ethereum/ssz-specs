@@ -26,22 +26,14 @@ Three variable-size bodies of widths 5, 3 and 7 encode to 27 bytes:
 
 import io
 from abc import ABC
-from collections.abc import Mapping, Sequence
+from collections.abc import Iterable, Mapping, Sequence
 from itertools import pairwise
 from typing import IO, Any, ClassVar, Self, cast, overload, override
 
 from pydantic import Field, field_serializer, field_validator
 
 from ssz.byte_arrays import ByteVector
-from ssz.exceptions import (
-    SSZDefinitionError,
-    SSZError,
-    SSZFixedSizeError,
-    SSZScopeError,
-    SSZSerializationError,
-    SSZTypeMismatch,
-    SSZValueError,
-)
+from ssz.exceptions import SSZError, SSZTypeError, SSZValueError, TypeFault, ValueFault
 from ssz.ssz_base import (
     BYTES_PER_LENGTH_OFFSET,
     SSZCollection,
@@ -110,10 +102,10 @@ class _SSZSequence[T: SSZType](SSZCollection[T], ABC):
         Refuse a shape that has not declared what it needs to hold a value.
 
         Raises:
-            SSZDefinitionError: When the element type was never declared.
+            SSZTypeError: When the element type was never declared.
         """
         if not hasattr(cls, "ELEMENT_TYPE"):
-            raise SSZDefinitionError(cls.__name__, "ELEMENT_TYPE")
+            raise SSZTypeError(TypeFault.UNDECLARED, type=cls.__name__, requirement="ELEMENT_TYPE")
 
     @classmethod
     @override
@@ -157,7 +149,8 @@ class _SSZSequence[T: SSZType](SSZCollection[T], ABC):
         So a hex string with no prefix stays refused.
 
         Raises:
-            SSZTypeMismatch: When the class is unrelated, or the value fails its type.
+            SSZError: The refusal the element type itself raised, where it raised one.
+            SSZTypeError: When the class is unrelated, or a foreign refusal named it.
         """
         element_type = cls.ELEMENT_TYPE
         element_class = type(value)
@@ -184,13 +177,21 @@ class _SSZSequence[T: SSZType](SSZCollection[T], ABC):
             ):
                 return element_type(value)
 
-        # A pydantic refusal arrives as a ValueError.
-        except (SSZError, TypeError, ValueError) as exception:
-            raise SSZTypeMismatch(
-                element_type.__name__, element_class, detail=str(exception)
+        # An SSZ refusal already says what broke and why, so it is caught first.
+        except SSZError:
+            raise
+
+        # Anything else, a pydantic refusal included, says only that the value did not fit.
+        except (TypeError, ValueError) as exception:
+            raise SSZTypeError(
+                TypeFault.WRONG_TYPE,
+                expected=element_type.__name__,
+                got=element_class.__name__,
             ) from exception
 
-        raise SSZTypeMismatch(element_type.__name__, element_class)
+        raise SSZTypeError(
+            TypeFault.WRONG_TYPE, expected=element_type.__name__, got=element_class.__name__
+        )
 
     def _write_variable_payload(self, stream: IO[bytes]) -> int:
         """
@@ -225,16 +226,30 @@ class _SSZSequence[T: SSZType](SSZCollection[T], ABC):
         So it is read as the plain integer it is compared and subtracted as.
 
         Raises:
-            SSZScopeError: When the stream ends before the table is complete.
+            SSZValueError: When the stream ends before the table is complete.
         """
         width = count * BYTES_PER_LENGTH_OFFSET
         table = stream.read(width)
         if len(table) != width:
-            raise SSZScopeError(cls.__name__, width, len(table))
+            raise SSZValueError(
+                ValueFault.TRUNCATED, type=cls.__name__, expected=width, actual=len(table)
+            )
         return [
             int.from_bytes(table[at : at + BYTES_PER_LENGTH_OFFSET], "little")
             for at in range(0, width, BYTES_PER_LENGTH_OFFSET)
         ]
+
+    @classmethod
+    def _read_elements(cls, stream: IO[bytes], spans: Iterable[int]) -> list[SSZType]:
+        """Read one element per span, naming the position of the one that refuses."""
+        elements: list[SSZType] = []
+        for index, span in enumerate(spans):
+            try:
+                elements.append(cls.ELEMENT_TYPE.deserialize(stream, span))
+            except SSZError as error:
+                error.at(index)
+                raise
+        return elements
 
     @classmethod
     def _read_bodies(cls, stream: IO[bytes], offsets: list[int], scope: int) -> Self:
@@ -257,7 +272,7 @@ class _SSZSequence[T: SSZType](SSZCollection[T], ABC):
         So a table cannot be read from without having been checked.
 
         Raises:
-            SSZSerializationError:
+            SSZValueError:
                 - When an offset is above the one after it.
                 - When the last offset runs past the budget.
         """
@@ -270,21 +285,17 @@ class _SSZSequence[T: SSZType](SSZCollection[T], ABC):
             if end >= start:
                 continue
             if index == last:
-                raise SSZSerializationError(
-                    f"{cls.__name__}[{index}]: offset {start} runs past the scope of {end}"
-                )
-            raise SSZSerializationError(
-                f"{cls.__name__}[{index}]: offset {start} is above the next offset {end}"
-            )
+                error = SSZValueError(ValueFault.OFFSET_PAST_SCOPE, offset=start, scope=end)
+            else:
+                error = SSZValueError(ValueFault.OFFSET_UNORDERED, offset=start, next=end)
+            error.at(index)
+            raise error
 
         # Every element is already the declared type, and the caller settled the count.
         # So the value is built past validation rather than through it.
-        element_type = cls.ELEMENT_TYPE
         return cls.model_construct(
             _fields_set={"data"},
-            data=[
-                element_type.deserialize(stream, end - start) for start, end in pairwise(boundaries)
-            ],
+            data=cls._read_elements(stream, (end - start for start, end in pairwise(boundaries))),
         )
 
     @override
@@ -355,14 +366,14 @@ class Vector[T: SSZType](_SSZSequence[T]):
         Refuse a capacity no vector has, then give the elements their default.
 
         Raises:
-            SSZDefinitionError: When the shape declares a bound, which a vector has none of.
-            SSZValueError: When the declared length is zero or negative.
+            SSZTypeError: When the shape declares a bound, which a vector has none of.
+            SSZTypeError: When the declared length is zero or negative.
         """
         super().__pydantic_init_subclass__(**kwargs)
 
         # The count is pinned, so a bound is a second count rule the tree never reads.
         if cls.LIMIT is not None:
-            raise SSZDefinitionError(cls.__name__, "no LIMIT of its own")
+            raise SSZTypeError(TypeFault.NOT_ENTITLED, type=cls.__name__, capacity="LIMIT")
 
         # An abstract layer keeps the empty default it inherits.
         # Building a value from it fails its own declaration check instead.
@@ -372,7 +383,7 @@ class Vector[T: SSZType](_SSZSequence[T]):
         # The spec writes a vector as Vector[type, N] with N > 0.
         # A vector of no elements has no offset table to read a body from.
         if cls.LENGTH < 1:
-            raise SSZValueError(f"{cls.__name__}: LENGTH must be positive, got {cls.LENGTH}")
+            raise SSZTypeError(TypeFault.VECTOR_EMPTY, length=cls.LENGTH)
 
         element_type, length = cls.ELEMENT_TYPE, cls.LENGTH
         if cls.IMMUTABLE_ELEMENTS:
@@ -396,31 +407,21 @@ class Vector[T: SSZType](_SSZSequence[T]):
         A vector also needs its exact count, which no input can supply.
 
         Raises:
-            SSZDefinitionError: When the element type or the length was never declared.
+            SSZTypeError: When the element type or the length was never declared.
         """
         if not hasattr(cls, "ELEMENT_TYPE") or cls.LENGTH is None:
-            raise SSZDefinitionError(cls.__name__, "ELEMENT_TYPE and LENGTH")
+            raise SSZTypeError(
+                TypeFault.UNDECLARED, type=cls.__name__, requirement="ELEMENT_TYPE and LENGTH"
+            )
+
+    KIND = "vector"
 
     @classmethod
     @override
-    def is_fixed_size(cls) -> bool:
-        """A vector is fixed-size if and only if its elements are fixed-size."""
-        return cls.ELEMENT_TYPE.is_fixed_size()
-
-    @classmethod
-    @override
-    def get_byte_length(cls) -> int:
-        """
-        Return the element width times the element count.
-
-        Raises:
-            SSZTypeError: When the element type is variable-size.
-        """
-        # A variable-size element has no width to give, so asking for one is the check.
-        try:
-            return cls.ELEMENT_TYPE.get_byte_length() * cls.declared_length()
-        except SSZFixedSizeError as variable_element:
-            raise SSZFixedSizeError(cls.__name__, "vector") from variable_element
+    def fixed_size(cls) -> int | None:
+        """The element width once per position, and no width at all where an element has none."""
+        element_width = cls.ELEMENT_TYPE.fixed_size()
+        return None if element_width is None else element_width * cls.declared_length()
 
     @override
     def serialize(self, stream: IO[bytes]) -> int:
@@ -436,28 +437,29 @@ class Vector[T: SSZType](_SSZSequence[T]):
         Read one vector from a binary stream within the given byte budget.
 
         Raises:
-            SSZScopeError: When a fixed-size budget is not the exact width.
-            SSZSerializationError: When the budget or any offset is inconsistent.
+            SSZValueError: When the budget or any offset is inconsistent.
         """
         # Fixed-size case: the budget is the element width times the count, exactly.
         if cls.is_fixed_size():
             element_byte_length = cls.ELEMENT_TYPE.get_byte_length()
             expected_total = element_byte_length * cls.declared_length()
             if scope != expected_total:
-                raise SSZScopeError(cls.__name__, expected_total, scope)
+                raise SSZValueError(
+                    ValueFault.SCOPE, type=cls.__name__, expected=expected_total, actual=scope
+                )
             return cls.model_construct(
                 _fields_set={"data"},
-                data=[
-                    cls.ELEMENT_TYPE.deserialize(stream, element_byte_length)
-                    for _ in range(cls.declared_length())
-                ],
+                data=cls._read_elements(stream, [element_byte_length] * cls.declared_length()),
             )
 
         # Variable-size case: the count is known, so the table's width is known too.
         expected_first = cls.declared_length() * BYTES_PER_LENGTH_OFFSET
         if scope < expected_first:
-            raise SSZSerializationError(
-                f"{cls.__name__}: scope {scope} too small, expected at least {expected_first}"
+            raise SSZValueError(
+                ValueFault.SCOPE_TOO_SMALL,
+                type=cls.__name__,
+                expected=expected_first,
+                actual=scope,
             )
 
         # The declared length is positive, so there is always a first offset to read.
@@ -466,9 +468,7 @@ class Vector[T: SSZType](_SSZSequence[T]):
         # The first body starts right after the table.
         # Any other value leaves a gap or an overlap, so one value could encode twice.
         if offsets[0] != expected_first:
-            raise SSZSerializationError(
-                f"{cls.__name__}: invalid offset {offsets[0]}, expected {expected_first}"
-            )
+            raise SSZValueError(ValueFault.FIRST_OFFSET, actual=offsets[0], expected=expected_first)
         return cls._read_bodies(stream, offsets, scope)
 
 
@@ -487,7 +487,7 @@ class _SSZList[T: SSZType](_SSZSequence[T]):
         Add one element at the end, coerced as construction coerces one.
 
         Raises:
-            SSZLimitError: When the resulting count exceeds a declared capacity.
+            SSZValueError: When the resulting count exceeds a declared capacity.
         """
         self._begin_mutation()
 
@@ -535,22 +535,13 @@ class _SSZList[T: SSZType](_SSZSequence[T]):
         # Built through the constructor, so a bounded list still rejects an overflow.
         return type(self)(data=new_data)
 
-    @classmethod
-    @override
-    def is_fixed_size(cls) -> bool:
-        """Never fixed-size: the element count varies from one instance to the next."""
-        return False
+    KIND = "list"
 
     @classmethod
     @override
-    def get_byte_length(cls) -> int:
-        """
-        Variable-size types have no fixed byte length.
-
-        Raises:
-            SSZTypeError: Always — call this only on fixed-size types.
-        """
-        raise SSZFixedSizeError(cls.__name__, "list")
+    def fixed_size(cls) -> None:
+        """No width: the element count varies from one instance to the next."""
+        return None
 
     @override
     def serialize(self, stream: IO[bytes]) -> int:
@@ -572,16 +563,16 @@ class _SSZList[T: SSZType](_SSZSequence[T]):
         So neither can be driven to allocate beyond its input.
 
         Raises:
-            SSZDefinitionError: When the shape has not declared what it holds.
-            SSZSerializationError: When the budget or any offset is malformed.
-            SSZLimitError: When the recovered count exceeds a declared capacity.
+            SSZTypeError: When the shape has not declared what it holds.
+            SSZValueError: When the budget or any offset is malformed, or the recovered
+                count exceeds a declared capacity.
         """
         # A decode is built past the validator that asks this, so the decoder asks it.
         cls._check_declaration()
 
         # A negative budget divides into a negative count, which reads as no elements at all.
         if scope < 0:
-            raise SSZSerializationError(f"{cls.__name__}: scope {scope} is negative")
+            raise SSZValueError(ValueFault.SCOPE_NEGATIVE, scope=scope)
 
         if scope == 0:
             # A count of zero is still a count, so no exit here returns an unchecked one.
@@ -592,44 +583,42 @@ class _SSZList[T: SSZType](_SSZSequence[T]):
         if cls.ELEMENT_TYPE.is_fixed_size():
             element_size = cls.ELEMENT_TYPE.get_byte_length()
             if scope % element_size != 0:
-                raise SSZSerializationError(
-                    f"{cls.__name__}: scope {scope} not divisible by element size {element_size}"
-                )
+                raise SSZValueError(ValueFault.SCOPE_UNDIVIDED, scope=scope, width=element_size)
             num_elements = scope // element_size
 
             # Checked here, so an over-capacity payload reports the capacity it broke.
             cls._validate_length(num_elements)
             return cls.model_construct(
                 _fields_set={"data"},
-                data=[
-                    cls.ELEMENT_TYPE.deserialize(stream, element_size) for _ in range(num_elements)
-                ],
+                data=cls._read_elements(stream, [element_size] * num_elements),
             )
 
         # Variable-size case: the first offset is the table's own width.
         # So it gives both where the bodies begin and how many there are.
         if scope < BYTES_PER_LENGTH_OFFSET:
-            raise SSZSerializationError(
-                f"{cls.__name__}: scope {scope} too small, "
-                + f"expected at least {BYTES_PER_LENGTH_OFFSET}"
+            raise SSZValueError(
+                ValueFault.SCOPE_TOO_SMALL,
+                type=cls.__name__,
+                expected=BYTES_PER_LENGTH_OFFSET,
+                actual=scope,
             )
         first_offset = cls._read_offsets(stream, 1)[0]
 
         # Zero is contradictory: no elements, yet one body spanning the whole budget.
         if first_offset < BYTES_PER_LENGTH_OFFSET:
-            raise SSZSerializationError(
-                f"{cls.__name__}: first offset {first_offset} is below "
-                + f"the table's own width of {BYTES_PER_LENGTH_OFFSET}"
+            raise SSZValueError(
+                ValueFault.OFFSET_BELOW_TABLE,
+                offset=first_offset,
+                width=BYTES_PER_LENGTH_OFFSET,
             )
         if first_offset % BYTES_PER_LENGTH_OFFSET != 0:
-            raise SSZSerializationError(
-                f"{cls.__name__}: first offset {first_offset} is not a multiple "
-                + f"of {BYTES_PER_LENGTH_OFFSET}"
+            raise SSZValueError(
+                ValueFault.OFFSET_UNALIGNED,
+                offset=first_offset,
+                width=BYTES_PER_LENGTH_OFFSET,
             )
         if first_offset > scope:
-            raise SSZSerializationError(
-                f"{cls.__name__}: first offset {first_offset} runs past the scope of {scope}"
-            )
+            raise SSZValueError(ValueFault.OFFSET_PAST_SCOPE, offset=first_offset, scope=scope)
 
         num_elements = first_offset // BYTES_PER_LENGTH_OFFSET
         cls._validate_length(num_elements)
@@ -652,11 +641,11 @@ class List[T: SSZType](_SSZList[T]):
 
         # A pinned count is a vector's rule, and the tree here is laid out from the bound.
         if cls.LENGTH is not None:
-            raise SSZDefinitionError(cls.__name__, "no LENGTH of its own")
+            raise SSZTypeError(TypeFault.NOT_ENTITLED, type=cls.__name__, capacity="LENGTH")
 
         # A bound below zero leaves the type no value at all, the empty one included.
         if cls.LIMIT is not None and cls.LIMIT < 0:
-            raise SSZValueError(f"{cls.__name__}: LIMIT must not be negative, got {cls.LIMIT}")
+            raise SSZTypeError(TypeFault.LIMIT_NEGATIVE, limit=cls.LIMIT)
 
     @classmethod
     @override
@@ -665,10 +654,12 @@ class List[T: SSZType](_SSZList[T]):
         A bounded list also needs the bound it enforces.
 
         Raises:
-            SSZDefinitionError: When the element type or the limit was never declared.
+            SSZTypeError: When the element type or the limit was never declared.
         """
         if not hasattr(cls, "ELEMENT_TYPE") or cls.LIMIT is None:
-            raise SSZDefinitionError(cls.__name__, "ELEMENT_TYPE and LIMIT")
+            raise SSZTypeError(
+                TypeFault.UNDECLARED, type=cls.__name__, requirement="ELEMENT_TYPE and LIMIT"
+            )
 
 
 class ProgressiveList[T: SSZType](_SSZList[T]):
@@ -685,6 +676,6 @@ class ProgressiveList[T: SSZType](_SSZList[T]):
 
         # EIP-7916 gives this shape no capacity, and its tree grows with what it holds.
         if cls.LENGTH is not None:
-            raise SSZDefinitionError(cls.__name__, "no LENGTH of its own")
+            raise SSZTypeError(TypeFault.NOT_ENTITLED, type=cls.__name__, capacity="LENGTH")
         if cls.LIMIT is not None:
-            raise SSZDefinitionError(cls.__name__, "no LIMIT of its own")
+            raise SSZTypeError(TypeFault.NOT_ENTITLED, type=cls.__name__, capacity="LIMIT")

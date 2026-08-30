@@ -20,15 +20,7 @@ from pydantic.annotated_handlers import GetCoreSchemaHandler
 from pydantic_core import core_schema
 
 from ssz.base import wrapping_schema
-from ssz.exceptions import (
-    SSZDefinitionError,
-    SSZFixedSizeError,
-    SSZLengthError,
-    SSZLimitError,
-    SSZScopeError,
-    SSZSerializationError,
-    SSZTypeError,
-)
+from ssz.exceptions import SSZTypeError, SSZValueError, TypeFault, ValueFault
 from ssz.ssz_base import SSZCollection, SSZType
 
 
@@ -44,11 +36,51 @@ class _Omitted(Enum):
     TOKEN = "omitted"
 
 
+def _coerced_bytes(type_name: str, value: Any) -> bytes:
+    r"""
+    Read one constructor input as the byte string it stands for.
+
+    Both shapes below accept the same spellings, so both read their input through here:
+
+        b"\x01\x02"     bytes and bytearray, taken as they are
+        "0x0102"        hex digits, the prefix optional
+        [1, 2]          any other iterable of byte values
+
+    Args:
+        type_name: The shape doing the reading, for the refusal to name.
+        value: Whatever the caller passed.
+
+    Returns:
+        The bytes the input stands for, of whatever length it turned out to be.
+
+    Raises:
+        SSZTypeError: When no spelling above accepts the input.
+        SSZValueError: When a string holds something other than hex digits.
+    """
+    # A plain bytes object is already the answer, and a subclass is copied out below.
+    if type(value) is bytes:
+        return value
+    match value:
+        case bytes() | bytearray():
+            return bytes(value)
+        case str():
+            try:
+                return bytes.fromhex(value.removeprefix("0x"))
+            except ValueError as not_hex:
+                raise SSZValueError(ValueFault.NOT_HEX, type=type_name) from not_hex
+        case Iterable():
+            return bytes(value)
+        case _:
+            raise SSZTypeError(TypeFault.WRONG_TYPE, expected="bytes", got=type(value).__name__)
+
+
 class ByteVector(bytes, SSZType):
     """Fixed-length SSZ byte array with exactly N bytes."""
 
     LENGTH: ClassVar[int | None]
     """The exact number of bytes (overridden by subclasses)."""
+
+    UNIT = "bytes"
 
     def __new__(
         cls, value: bytes | bytearray | str | Iterable[int] | _Omitted = _Omitted.TOKEN
@@ -62,11 +94,11 @@ class ByteVector(bytes, SSZType):
 
         Raises:
             SSZTypeError: If the subclass has not declared a length.
+            SSZTypeError: If a value is passed that no coercion accepts.
             SSZValueError: If the coerced byte count differs from the declared length.
-            TypeError: If a value is passed that no coercion accepts.
         """
         if cls.LENGTH is None:
-            raise SSZDefinitionError(cls.__name__, "LENGTH")
+            raise SSZTypeError(TypeFault.UNDECLARED, type=cls.__name__, requirement="LENGTH")
 
         # Only the total absence of an argument asks for the default:
         #
@@ -76,22 +108,15 @@ class ByteVector(bytes, SSZType):
         if value is _Omitted.TOKEN:
             return cls._trusted(b"\x00" * cls.LENGTH)
 
-        # A plain bytes object is already the answer, and a subclass is copied out below.
-        if type(value) is bytes:
-            coerced_bytes = value
-        else:
-            match value:
-                case bytes() | bytearray():
-                    coerced_bytes = bytes(value)
-                case str():
-                    coerced_bytes = bytes.fromhex(value.removeprefix("0x"))
-                case Iterable():
-                    coerced_bytes = bytes(value)
-                case _:
-                    raise TypeError(f"Cannot coerce {type(value).__name__} to bytes")
-
+        coerced_bytes = _coerced_bytes(cls.__name__, value)
         if len(coerced_bytes) != cls.LENGTH:
-            raise SSZLengthError(cls.__name__, cls.LENGTH, len(coerced_bytes), unit="bytes")
+            raise SSZValueError(
+                ValueFault.COUNT,
+                type=cls.__name__,
+                expected=cls.LENGTH,
+                actual=len(coerced_bytes),
+                unit=cls.UNIT,
+            )
 
         return super().__new__(cls, coerced_bytes)
 
@@ -102,7 +127,7 @@ class ByteVector(bytes, SSZType):
         Raises:
             SSZTypeError: Always, because a byte array is only the bytes it holds.
         """
-        raise SSZTypeError(f"{type(self).__name__} is immutable")
+        raise SSZTypeError(TypeFault.IMMUTABLE, type=type(self).__name__)
 
     @classmethod
     def _trusted(cls, data: bytes) -> Self:
@@ -124,14 +149,8 @@ class ByteVector(bytes, SSZType):
 
     @classmethod
     @override
-    def is_fixed_size(cls) -> bool:
-        """Always fixed-size by definition."""
-        return True
-
-    @classmethod
-    @override
-    def get_byte_length(cls) -> int:
-        """Return the declared byte length."""
+    def fixed_size(cls) -> int:
+        """The declared byte count, which is the width by definition."""
         return cls.declared_length()
 
     @override
@@ -155,16 +174,21 @@ class ByteVector(bytes, SSZType):
             A new instance wrapping the read bytes.
 
         Raises:
-            SSZSerializationError:
+            SSZValueError:
                 - When scope does not equal the declared width.
                 - When the stream ends before delivering scope bytes.
         """
         length = cls.declared_length()
         if scope != length:
-            raise SSZScopeError(cls.__name__, length, scope)
+            raise SSZValueError(ValueFault.SCOPE, type=cls.__name__, expected=length, actual=scope)
         serialized_bytes = stream.read(scope)
         if len(serialized_bytes) != scope:
-            raise SSZScopeError(cls.__name__, scope, len(serialized_bytes))
+            raise SSZValueError(
+                ValueFault.TRUNCATED,
+                type=cls.__name__,
+                expected=scope,
+                actual=len(serialized_bytes),
+            )
         # The read delivered exactly the checked count, which the guard above pinned.
         return cls._trusted(serialized_bytes)
 
@@ -252,6 +276,8 @@ class ByteList(SSZCollection[int]):
     LIMIT: ClassVar[int | None]
     """Maximum number of bytes the instance may contain."""
 
+    UNIT = "bytes"
+
     data: bytes = Field(default=b"")
     """
     The raw bytes stored in this list.
@@ -263,27 +289,27 @@ class ByteList(SSZCollection[int]):
     @field_validator("data", mode="before")
     @classmethod
     def _validate_byte_list_data(cls, value: Any) -> bytes:
-        """Enforce the maximum byte count and coerce inputs into a plain bytes object."""
+        """
+        Enforce the maximum byte count and coerce inputs into a plain bytes object.
+
+        Raises:
+            SSZTypeError: When the limit was never declared, or no coercion accepts the input.
+            SSZValueError: When the coerced byte count exceeds the declared limit.
+        """
         # Subclasses must declare LIMIT before any instances can be validated.
         if cls.LIMIT is None:
-            raise SSZDefinitionError(cls.__name__, "LIMIT")
+            raise SSZTypeError(TypeFault.UNDECLARED, type=cls.__name__, requirement="LIMIT")
 
         # Coerce the input first, then enforce the upper bound.
-        # A plain bytes object is already the answer, and a subclass is copied out below.
-        if type(value) is bytes:
-            coerced_bytes = value
-        else:
-            match value:
-                case bytes() | bytearray():
-                    coerced_bytes = bytes(value)
-                case str():
-                    coerced_bytes = bytes.fromhex(value.removeprefix("0x"))
-                case Iterable():
-                    coerced_bytes = bytes(value)
-                case _:
-                    raise TypeError(f"Cannot coerce {type(value).__name__} to bytes")
+        coerced_bytes = _coerced_bytes(cls.__name__, value)
         if len(coerced_bytes) > cls.LIMIT:
-            raise SSZLimitError(cls.__name__, cls.LIMIT, len(coerced_bytes))
+            raise SSZValueError(
+                ValueFault.LIMIT,
+                type=cls.__name__,
+                limit=cls.LIMIT,
+                actual=len(coerced_bytes),
+                unit=cls.UNIT,
+            )
         return coerced_bytes
 
     @field_serializer("data", when_used="json")
@@ -298,7 +324,7 @@ class ByteList(SSZCollection[int]):
         The field validates on assignment, so the entry is written directly and marked set.
 
         Raises:
-            SSZLimitError: When the mutation leaves more bytes than the limit allows.
+            SSZValueError: When the mutation leaves more bytes than the limit allows.
         """
         self._validate_length(len(working))
         self.__dict__["data"] = bytes(working)
@@ -336,22 +362,13 @@ class ByteList(SSZCollection[int]):
         self._store(working)
         return last
 
-    @classmethod
-    @override
-    def is_fixed_size(cls) -> bool:
-        """Variable-size by definition — the byte count depends on the value."""
-        return False
+    KIND = "byte list"
 
     @classmethod
     @override
-    def get_byte_length(cls) -> int:
-        """
-        Variable-size types have no fixed byte length.
-
-        Raises:
-            SSZTypeError: Always — call this only on fixed-size types.
-        """
-        raise SSZFixedSizeError(cls.__name__, "byte list")
+    def fixed_size(cls) -> None:
+        """No width by definition — the byte count depends on the value."""
+        return None
 
     @override
     def serialize(self, stream: IO[bytes]) -> int:
@@ -375,19 +392,26 @@ class ByteList(SSZCollection[int]):
             A new instance wrapping the read bytes.
 
         Raises:
-            SSZSerializationError:
+            SSZValueError:
                 - When scope is negative.
+                - When scope exceeds the declared limit.
                 - When the stream ends before delivering scope bytes.
-            SSZValueError: When scope exceeds the declared limit.
         """
         if scope < 0:
-            raise SSZSerializationError(f"{cls.__name__}: negative scope")
+            raise SSZValueError(ValueFault.SCOPE_NEGATIVE, scope=scope)
         limit = cls.declared_limit()
         if scope > limit:
-            raise SSZLimitError(cls.__name__, limit, scope)
+            raise SSZValueError(
+                ValueFault.LIMIT, type=cls.__name__, limit=limit, actual=scope, unit=cls.UNIT
+            )
         serialized_bytes = stream.read(scope)
         if len(serialized_bytes) != scope:
-            raise SSZScopeError(cls.__name__, scope, len(serialized_bytes))
+            raise SSZValueError(
+                ValueFault.TRUNCATED,
+                type=cls.__name__,
+                expected=scope,
+                actual=len(serialized_bytes),
+            )
         return cls(data=serialized_bytes)
 
     @override

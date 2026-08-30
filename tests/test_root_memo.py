@@ -14,7 +14,7 @@ from ssz.boolean import Boolean
 from ssz.byte_arrays import ByteList, ByteVector
 from ssz.collections import List, ProgressiveList, Vector
 from ssz.container import Container, ProgressiveContainer
-from ssz.exceptions import SSZTypeError, SSZTypeMismatch
+from ssz.exceptions import SSZTypeError
 from ssz.merkleization import _root_witness, hash_tree_root
 from ssz.proofs import build_proof, get_generalized_index, node_root, verify_merkle_proof
 from ssz.ssz_base import SSZModel
@@ -152,11 +152,7 @@ class Unmerkleizable(SSZModel):
     x: Uint64
 
     @classmethod
-    def is_fixed_size(cls) -> bool:
-        return True
-
-    @classmethod
-    def get_byte_length(cls) -> int:
+    def fixed_size(cls) -> int:
         return 8
 
     def serialize(self, stream: IO[bytes]) -> int:
@@ -413,7 +409,7 @@ def test_a_sequence_holds_exactly_its_element_class_on_every_write_route() -> No
         lambda: validators.__setitem__(0, intruder),
         lambda: validators.__setitem__(slice(0, 1), [intruder]),
     ):
-        with pytest.raises(SSZTypeMismatch, match="Expected Validator, got Slashable"):
+        with pytest.raises(SSZTypeError, match="^expected Validator, got Slashable$"):
             write()
     assert [type(element) for element in validators] == [Validator, Validator]
 
@@ -501,7 +497,7 @@ def test_a_shape_with_no_merkleization_rule_is_refused_rather_than_remembered() 
     """An unknown shape gets a witness that never matches, so no root of it is reused."""
     value = Unmerkleizable(x=Uint64(1))
     assert _root_witness(value) != _root_witness(value)
-    with pytest.raises(SSZTypeError, match="unsupported value type Unmerkleizable"):
+    with pytest.raises(SSZTypeError, match="^Unmerkleizable has no Merkle layout$"):
         value.hash_tree_root()
 
 

@@ -26,7 +26,7 @@ from ssz import (
     Uint256,
     Vector,
 )
-from ssz.exceptions import SSZSerializationError, SSZTypeError, SSZValueError
+from ssz.exceptions import SSZTypeError, SSZValueError
 from ssz.merkleization import hash_tree_root
 from ssz.uint import BaseUint
 
@@ -110,7 +110,7 @@ def test_instantiation_from_invalid_types_raises_error(
     uint_class: Type[BaseUint], invalid_value: Any, expected_type_name: str
 ) -> None:
     """Tests that instantiating with non-integer types raises SSZTypeError."""
-    expected_message = f"Expected int, got {expected_type_name}"
+    expected_message = f"expected int, got {expected_type_name}"
     with pytest.raises(SSZTypeError) as exception_info:
         uint_class(invalid_value)
     assert str(exception_info.value) == expected_message
@@ -129,7 +129,7 @@ def test_instantiation_and_type(uint_class: Type[BaseUint]) -> None:
 def test_instantiation_negative(uint_class: Type[BaseUint]) -> None:
     """Tests that instantiating with a negative number raises SSZValueError."""
     # A negative also indexes the shared table from the end, so this refusal blocks that.
-    expected_message = f"-5 out of range for {uint_class.__name__} [0, {2**uint_class.BITS - 1}]"
+    expected_message = f"-5 is out of range for {uint_class.__name__} [0, {2**uint_class.BITS - 1}]"
     with pytest.raises(SSZValueError) as exception_info:
         uint_class(-5)
     assert str(exception_info.value) == expected_message
@@ -139,7 +139,7 @@ def test_instantiation_negative(uint_class: Type[BaseUint]) -> None:
 def test_instantiation_too_large(uint_class: Type[BaseUint]) -> None:
     """Tests that instantiating with a value >= MAX raises SSZValueError."""
     max_value = 2**uint_class.BITS
-    expected_message = f"{max_value} out of range for {uint_class.__name__} [0, {max_value - 1}]"
+    expected_message = f"{max_value} is out of range for {uint_class.__name__} [0, {max_value - 1}]"
     with pytest.raises(SSZValueError) as exception_info:
         uint_class(max_value)
     assert str(exception_info.value) == expected_message
@@ -186,7 +186,7 @@ def test_instantiation_from_an_out_of_range_uint_instance() -> None:
     #     input : 256, valid in [0, 65535]
     #     target: bound is 255
     #     -> out of range, reported against the bound rather than as a type conflict
-    expected_message = f"{2**8} out of range for Uint8 [0, {2**8 - 1}]"
+    expected_message = f"{2**8} is out of range for Uint8 [0, {2**8 - 1}]"
     with pytest.raises(SSZValueError) as exception_info:
         Uint8(Uint16(2**8))
     assert str(exception_info.value) == expected_message
@@ -212,21 +212,21 @@ def test_arithmetic_operators(uint_class: Type[BaseUint]) -> None:
 
     # Addition
     assert left + right == uint_class(a_value + b_value)
-    expected_message = f"{max_int + b_value} out of range for {name} [0, {max_int}]"
+    expected_message = f"{max_int + b_value} is out of range for {name} [0, {max_int}]"
     with pytest.raises(SSZValueError) as exception_info:
         _ = max_value + right
     assert str(exception_info.value) == expected_message
 
     # Subtraction
     assert left - right == uint_class(a_value - b_value)
-    expected_message = f"{b_value - a_value} out of range for {name} [0, {max_int}]"
+    expected_message = f"{b_value - a_value} is out of range for {name} [0, {max_int}]"
     with pytest.raises(SSZValueError) as exception_info:
         _ = right - left
     assert str(exception_info.value) == expected_message
 
     # Multiplication
     assert left * right == uint_class(a_value * b_value)
-    expected_message = f"{max_int * b_value} out of range for {name} [0, {max_int}]"
+    expected_message = f"{max_int * b_value} is out of range for {name} [0, {max_int}]"
     with pytest.raises(SSZValueError) as exception_info:
         _ = max_value * right
     assert str(exception_info.value) == expected_message
@@ -240,7 +240,7 @@ def test_arithmetic_operators(uint_class: Type[BaseUint]) -> None:
     # Exponentiation
     assert uint_class(b_value) ** uint_class(4) == uint_class(b_value**4)
     if uint_class.BITS <= 16:  # Pow gets too big quickly
-        expected_message = f"{a_value**b_value} out of range for {name} [0, {max_int}]"
+        expected_message = f"{a_value**b_value} is out of range for {name} [0, {max_int}]"
         with pytest.raises(SSZValueError) as exception_info:
             _ = left**right
         assert str(exception_info.value) == expected_message
@@ -527,14 +527,15 @@ class TestUintSSZ:
 
     @pytest.mark.parametrize("uint_class", ALL_UINT_TYPES)
     def test_decode_bytes_invalid_length(self, uint_class: Type[BaseUint]) -> None:
-        """Tests that decode_bytes raises SSZSerializationError for wrong length data."""
+        """Tests that decode_bytes raises SSZValueError for wrong length data."""
         # Create byte string that is one byte too short.
         expected_length = uint_class.get_byte_length()
         invalid_data = b"\x00" * (expected_length - 1)
         expected_message = (
-            f"{uint_class.__name__}: expected {expected_length} bytes, got {expected_length - 1}"
+            f"{uint_class.__name__} needs {expected_length} bytes, "
+            + f"the input holds {expected_length - 1}"
         )
-        with pytest.raises(SSZSerializationError) as exception_info:
+        with pytest.raises(SSZValueError) as exception_info:
             uint_class.decode_bytes(invalid_data)
         assert str(exception_info.value) == expected_message
 
@@ -559,28 +560,27 @@ class TestUintSSZ:
 
     @pytest.mark.parametrize("uint_class", ALL_UINT_TYPES)
     def test_deserialize_invalid_scope(self, uint_class: Type[BaseUint]) -> None:
-        """Tests that deserialize raises an SSZSerializationError if the scope is incorrect."""
+        """Tests that deserialize raises an SSZValueError if the scope is incorrect."""
         byte_length = uint_class.get_byte_length()
         stream = io.BytesIO(b"\x00" * byte_length)
         invalid_scope = byte_length - 1
         expected_message = (
-            f"{uint_class.__name__}: invalid scope, "
-            + f"expected {byte_length} bytes, got {invalid_scope}"
+            f"{uint_class.__name__} spans {byte_length} bytes, and the budget is {invalid_scope}"
         )
-        with pytest.raises(SSZSerializationError) as exception_info:
+        with pytest.raises(SSZValueError) as exception_info:
             uint_class.deserialize(stream, scope=invalid_scope)
         assert str(exception_info.value) == expected_message
 
     @pytest.mark.parametrize("uint_class", ALL_UINT_TYPES)
     def test_deserialize_stream_too_short(self, uint_class: Type[BaseUint]) -> None:
-        """Tests that deserialize raises SSZSerializationError if stream ends prematurely."""
+        """Tests that deserialize raises SSZValueError if stream ends prematurely."""
         byte_length = uint_class.get_byte_length()
         # Create a stream that is shorter than what the type requires.
         stream = io.BytesIO(b"\x00" * (byte_length - 1))
         expected_message = (
-            f"{uint_class.__name__}: expected {byte_length} bytes, got {byte_length - 1}"
+            f"{uint_class.__name__} needs {byte_length} bytes, the input holds {byte_length - 1}"
         )
-        with pytest.raises(SSZSerializationError) as exception_info:
+        with pytest.raises(SSZValueError) as exception_info:
             uint_class.deserialize(stream, scope=byte_length)
         assert str(exception_info.value) == expected_message
 
@@ -615,8 +615,8 @@ class TestTheDeclaredWidthIsTheWireWidth:
     def test_a_payload_of_the_wrong_width_is_refused_against_the_declared_width(self) -> None:
         """A payload of the accessor's four bytes is short of the width, and reported as such."""
         with pytest.raises(
-            SSZSerializationError,
-            match=r"^AccessorNarrowerThanTheWidth: expected 8 bytes, got 4$",
+            SSZValueError,
+            match=r"^AccessorNarrowerThanTheWidth needs 8 bytes, the input holds 4$",
         ):
             AccessorNarrowerThanTheWidth.decode_bytes(b"\x00" * 4)
 
@@ -624,8 +624,8 @@ class TestTheDeclaredWidthIsTheWireWidth:
         """A stream read is scoped by the declared width too, and says which width it wanted."""
         stream = io.BytesIO(b"\x00" * 8)
         with pytest.raises(
-            SSZSerializationError,
-            match=r"^AccessorNarrowerThanTheWidth: invalid scope, expected 8 bytes, got 4$",
+            SSZValueError,
+            match=r"^AccessorNarrowerThanTheWidth spans 8 bytes, and the budget is 4$",
         ):
             AccessorNarrowerThanTheWidth.deserialize(stream, scope=4)
 
@@ -1350,7 +1350,7 @@ class TestOpaqueByteSpelling:
         # Why not a real subclass, measured with one declared over the eight-bit number:
         #
         #     Sub(5) == Uint8(5)      TypeError: Unsupported operand type(s) for ==
-        #     Uint8List4.of(Sub(5))   SSZTypeMismatch: Expected Uint8, got Sub
+        #     Uint8List4.of(Sub(5))   SSZTypeError: Expected Uint8, got Sub
         #
         # Integers here compare by exact class.
         # Collections coerce their elements by exact class too.

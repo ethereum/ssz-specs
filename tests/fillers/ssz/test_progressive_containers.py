@@ -12,7 +12,7 @@ from ssz import (
     Uint32,
     Uint64,
 )
-from ssz_testing import ExpectedRejection, RejectionReason, SSZTestFiller
+from ssz_testing import ExpectedRejection, SSZTestFiller, ValueFault
 
 
 class SampleUint16List4(List[Uint16]):
@@ -514,8 +514,8 @@ def test_progressive_container_decode_failure_trailing_byte(ssz_test: SSZTestFil
         value=SampleSquare(side=Uint16(0x1234), color=Uint8(0x56)),
         raw_bytes="0x34125600",
         expected_rejection=ExpectedRejection(
-            reason=RejectionReason.DECODE_ERROR,
-            exact_message="SampleSquare: expected 3 bytes, got 4",
+            reason=ValueFault.SCOPE,
+            exact_message="SampleSquare spans 3 bytes, and the budget is 4",
         ),
     )
 
@@ -543,7 +543,7 @@ def test_progressive_container_decode_failure_first_offset(ssz_test: SSZTestFill
         value=SampleBoundedListField(head=Uint64(7), body=SampleUint16List4(data=[])),
         raw_bytes="0x07000000000000000d000000",
         expected_rejection=ExpectedRejection(
-            reason=RejectionReason.DECODE_ERROR,
-            exact_message="SampleBoundedListField: first offset 13 != fixed-part end 12",
+            reason=ValueFault.FIRST_OFFSET,
+            exact_message="the first offset is 13, and the fixed part ends at 12",
         ),
     )

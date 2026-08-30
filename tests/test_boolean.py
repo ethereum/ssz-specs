@@ -11,7 +11,7 @@ from pydantic import BaseModel, ValidationError
 import ssz
 from ssz import Bit, Container
 from ssz.boolean import Boolean
-from ssz.exceptions import SSZSerializationError, SSZTypeError, SSZValueError
+from ssz.exceptions import SSZTypeError, SSZValueError
 
 
 class BooleanModel(BaseModel):
@@ -61,7 +61,7 @@ def test_instantiation_from_invalid_int_raises_error(invalid_int: int) -> None:
     """Tests that instantiating with an int other than 0 or 1 raises SSZValueError."""
     with pytest.raises(SSZValueError) as exception_info:
         Boolean(invalid_int)
-    assert str(exception_info.value) == f"Boolean value must be 0 or 1, not {invalid_int}"
+    assert str(exception_info.value) == f"a boolean is 0 or 1, got {invalid_int}"
 
 
 @pytest.mark.parametrize("invalid_type", [1.0, "True", b"\x01", None])
@@ -70,7 +70,7 @@ def test_instantiation_from_invalid_types_raises_error(invalid_type: Any) -> Non
     name = type(invalid_type).__name__
     with pytest.raises(SSZTypeError) as exception_info:
         Boolean(invalid_type)
-    assert str(exception_info.value) == f"Expected bool or int, got {name}"
+    assert str(exception_info.value) == f"expected bool or int, got {name}"
 
 
 def test_wrapping_existing_boolean_succeeds() -> None:
@@ -443,21 +443,21 @@ class TestBooleanSSZ:
 
     def test_decode_invalid_length(self) -> None:
         """Tests that decode_bytes fails with incorrect byte length."""
-        with pytest.raises(SSZSerializationError) as exception_info:
+        with pytest.raises(SSZValueError) as exception_info:
             Boolean.decode_bytes(b"")
-        assert str(exception_info.value) == "Boolean: expected 1 byte, got 0"
-        with pytest.raises(SSZSerializationError) as exception_info:
+        assert str(exception_info.value) == "Boolean needs 1 bytes, the input holds 0"
+        with pytest.raises(SSZValueError) as exception_info:
             Boolean.decode_bytes(b"\x00\x01")
-        assert str(exception_info.value) == "Boolean: expected 1 byte, got 2"
+        assert str(exception_info.value) == "Boolean needs 1 bytes, the input holds 2"
 
     def test_decode_invalid_value(self) -> None:
         """Tests that decode_bytes fails with an invalid byte value."""
-        with pytest.raises(SSZSerializationError) as exception_info:
+        with pytest.raises(SSZValueError) as exception_info:
             Boolean.decode_bytes(b"\x02")
-        assert str(exception_info.value) == "Boolean: byte must be 0x00 or 0x01, got 0x02"
-        with pytest.raises(SSZSerializationError) as exception_info:
+        assert str(exception_info.value) == "a boolean is 0 or 1, got 0x02"
+        with pytest.raises(SSZValueError) as exception_info:
             Boolean.decode_bytes(b"\xff")
-        assert str(exception_info.value) == "Boolean: byte must be 0x00 or 0x01, got 0xff"
+        assert str(exception_info.value) == "a boolean is 0 or 1, got 0xff"
 
     @pytest.mark.parametrize("value", [True, False])
     def test_serialize_deserialize_roundtrip(self, value: bool) -> None:
@@ -478,21 +478,21 @@ class TestBooleanSSZ:
     def test_deserialize_invalid_scope(self) -> None:
         """Tests that deserialize fails with an incorrect scope."""
         stream = io.BytesIO(b"\x01")
-        with pytest.raises(SSZSerializationError) as exception_info:
+        with pytest.raises(SSZValueError) as exception_info:
             Boolean.deserialize(stream, scope=0)
-        assert str(exception_info.value) == "Boolean: expected scope of 1, got 0"
+        assert str(exception_info.value) == "Boolean spans 1 bytes, and the budget is 0"
 
         stream.seek(0)
-        with pytest.raises(SSZSerializationError) as exception_info:
+        with pytest.raises(SSZValueError) as exception_info:
             Boolean.deserialize(stream, scope=2)
-        assert str(exception_info.value) == "Boolean: expected scope of 1, got 2"
+        assert str(exception_info.value) == "Boolean spans 1 bytes, and the budget is 2"
 
     def test_deserialize_premature_stream_end(self) -> None:
         """Tests that deserialize fails if the stream ends prematurely."""
         stream = io.BytesIO(b"")  # Empty stream
-        with pytest.raises(SSZSerializationError) as exception_info:
+        with pytest.raises(SSZValueError) as exception_info:
             Boolean.deserialize(stream, scope=1)
-        assert str(exception_info.value) == "Boolean: expected 1 byte, got 0"
+        assert str(exception_info.value) == "Boolean needs 1 bytes, the input holds 0"
 
 
 class TestBooleanDefault:

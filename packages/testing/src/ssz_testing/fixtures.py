@@ -10,10 +10,10 @@ from pydantic import BaseModel, ConfigDict, Field, field_serializer
 from pydantic.alias_generators import to_camel
 
 from ssz.boolean import Boolean
+from ssz.exceptions import SSZError, ValueFault
 from ssz.merkleization import hash_tree_root
 from ssz.ssz_base import SSZModel, SSZType
 from ssz_testing.hex_codec import from_hex, to_hex
-from ssz_testing.rejection import RejectionReason
 
 
 class CamelModel(BaseModel):
@@ -73,14 +73,13 @@ class ExpectedRejection(CamelModel):
     """
     Author-side expectation that an input must be rejected.
 
-    The reason is the language-neutral contract clients assert against.
-    The optional substring pins the rejection to a specific spec assertion.
+    The fault names which refusal has to fire, and its name is what the vector emits.
     """
 
     model_config = CamelModel.model_config | {"extra": "forbid", "frozen": True, "strict": True}
 
-    reason: RejectionReason
-    """Reason the vector's input must be rejected."""
+    reason: ValueFault
+    """The fault the decoder must raise on this input."""
 
     message_substring: str | None = None
     """
@@ -142,13 +141,13 @@ class BaseConsensusFixture(CamelModel):
     info: FixtureInfo | None = Field(default=None, exclude=True)
     """Metadata about the test (description, format, etc.)."""
 
-    rejection_reason: RejectionReason | None = None
-    """
-    Language-neutral reason the vector's input must be rejected.
+    rejection_reason: ValueFault | None = None
+    """The fault a negative vector's input is rejected with, and the field clients assert on."""
 
-    Filled during generation for negative vectors.
-    This is the field clients assert against.
-    """
+    @field_serializer("rejection_reason", when_used="json-unless-none")
+    def serialize_rejection_reason(self, fault: ValueFault) -> str:
+        """Emit the fault's name, its stable tag, rather than the sentence it renders."""
+        return fault.name
 
     def with_info(self, info: FixtureInfo) -> Self:
         """Return a copy carrying the metadata envelope."""
@@ -243,24 +242,22 @@ class BaseTestSpec(CamelModel):
 
     def assert_decode_rejection(
         self,
-        exception_raised: Exception | None,
+        exception_raised: SSZError[Any] | None,
         decoder_name: str,
-    ) -> RejectionReason:
+    ) -> ValueFault:
         """
-        Check a decode-failure outcome and resolve the emitted reason.
-
-        The authored expectation is the only source of the emitted reason.
+        Check a decode-failure outcome, and resolve the fault the vector emits.
 
         Args:
-            exception_raised: The exception the decoder raised, or None on success.
+            exception_raised: The refusal the decoder raised, or None on success.
             decoder_name: Decoder label for failure messages.
 
         Returns:
-            The reason emitted into the test vector.
+            The fault emitted into the test vector.
 
         Raises:
             ValueError: When the authored expectation is missing.
-            AssertionError: When decoding succeeds or contradicts the expectation.
+            AssertionError: When decoding succeeds, or refuses for another reason.
         """
         if self.expected_rejection is None:
             raise ValueError("decode-failure vectors require expected_rejection to be set")
@@ -269,7 +266,17 @@ class BaseTestSpec(CamelModel):
                 f"Expected {decoder_name} to reject the input, but decoding succeeded"
             )
         self.assert_expected_outcome(exception_raised)
-        return self.expected_rejection.reason
+
+        expected = self.expected_rejection.reason
+        if exception_raised.fault is not expected:
+            raise AssertionError(
+                f"{decoder_name} refused for the wrong reason.\n"
+                f"  Expected fault: {expected.name}\n"
+                f"  Actual fault: {exception_raised.fault.name}"
+            )
+
+        # Past that check the authored member is the raised one, so this emits the fault that fired.
+        return expected
 
 
 class SSZFixture(BaseConsensusFixture):
@@ -361,10 +368,11 @@ class SSZTest(BaseTestSpec):
 
         raw = from_hex(self.raw_bytes)
         decoder = type(self.value)
-        exception_raised: Exception | None = None
+        exception_raised: SSZError[Any] | None = None
         try:
             decoder.decode_bytes(raw)
-        except Exception as exception:
+        # Only an SSZ refusal is a vector; anything else is a bug, and crashes the fill.
+        except SSZError as exception:
             exception_raised = exception
 
         return SSZFixture(

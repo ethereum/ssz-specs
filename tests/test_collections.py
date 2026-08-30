@@ -13,10 +13,7 @@ from ssz.byte_arrays import ByteVector
 from ssz.collections import List, ProgressiveList, Vector
 from ssz.container import Container
 from ssz.exceptions import (
-    SSZDefaultError,
-    SSZSerializationError,
     SSZTypeError,
-    SSZTypeMismatch,
     SSZValueError,
 )
 from ssz.union import CompatibleUnion
@@ -249,7 +246,7 @@ class TestVectorValidator:
 
         with pytest.raises(TypeOrValidationError) as exception_info:
             MissingBoth(data=cast(Any, [1]))
-        assert str(exception_info.value) == "MissingBoth must define ELEMENT_TYPE and LENGTH"
+        assert str(exception_info.value) == "MissingBoth must declare ELEMENT_TYPE and LENGTH"
 
     def test_missing_length_rejected(self) -> None:
         """A subclass with ELEMENT_TYPE but no LENGTH cannot validate."""
@@ -260,7 +257,7 @@ class TestVectorValidator:
         with pytest.raises(TypeOrValidationError) as exception_info:
             MissingLengthVector(data=cast(Any, [1]))
         assert (
-            str(exception_info.value) == "MissingLengthVector must define ELEMENT_TYPE and LENGTH"
+            str(exception_info.value) == "MissingLengthVector must declare ELEMENT_TYPE and LENGTH"
         )
 
     @pytest.mark.parametrize(
@@ -275,13 +272,13 @@ class TestVectorValidator:
         """Strings, bytes, and bytearrays never iterate as element collections."""
         with pytest.raises(TypeOrValidationError) as exception_info:
             Uint8Vector2(data=bad_input)
-        assert str(exception_info.value) == f"Expected iterable of Uint8, got {type_name}"
+        assert str(exception_info.value) == f"expected iterable of Uint8, got {type_name}"
 
     def test_non_iterable_scalar_rejected(self) -> None:
         """Scalar inputs without an iterator interface raise an iterable error."""
         with pytest.raises(TypeOrValidationError) as exception_info:
             Uint8Vector2(data=cast(Any, 42))
-        assert str(exception_info.value) == "Expected iterable, got int"
+        assert str(exception_info.value) == "expected iterable, got int"
 
     def test_generator_input_coerced(self) -> None:
         """A generator is materialized and each value is coerced to ELEMENT_TYPE."""
@@ -306,19 +303,19 @@ class TestVectorValidator:
         """A value whose class is not the element class or an ancestor is rejected."""
         with pytest.raises(TypeOrValidationError) as exception_info:
             Uint8Vector4(data=cast(Any, [1, "bad", 3, 4]))
-        assert str(exception_info.value) == "Expected Uint8, got str"
+        assert str(exception_info.value) == "expected Uint8, got str"
 
     def test_too_few_elements_rejected(self) -> None:
         """A vector requires exactly LENGTH elements and rejects shorter inputs."""
         with pytest.raises(ValueOrValidationError) as exception_info:
             Uint8Vector4(data=cast(Any, [1, 2, 3]))
-        assert str(exception_info.value) == "Uint8Vector4 requires exactly 4 elements, got 3"
+        assert "Uint8Vector4 holds exactly 4 elements, got 3" in str(exception_info.value)
 
     def test_too_many_elements_rejected(self) -> None:
         """A vector requires exactly LENGTH elements and rejects longer inputs."""
         with pytest.raises(ValueOrValidationError) as exception_info:
             Uint8Vector4(data=cast(Any, [1, 2, 3, 4, 5]))
-        assert str(exception_info.value) == "Uint8Vector4 requires exactly 4 elements, got 5"
+        assert "Uint8Vector4 holds exactly 4 elements, got 5" in str(exception_info.value)
 
 
 class TestElementAcceptance:
@@ -358,21 +355,27 @@ class TestElementAcceptance:
         # the same object, so the descent test is still what answers.
         with pytest.raises(TypeOrValidationError) as exception_info:
             Uint8List10(data=[TypedUint8(7)])
-        assert str(exception_info.value) == "Expected Uint8, got TypedUint8"
+        assert str(exception_info.value) == "expected Uint8, got TypedUint8"
 
     def test_an_unrelated_class_is_refused_and_names_itself(self) -> None:
         """A boolean is neither the declared class nor an ancestor of it."""
         with pytest.raises(TypeOrValidationError) as exception_info:
             Uint8List10(data=cast(Any, [Boolean(True)]))
-        assert str(exception_info.value) == "Expected Uint8, got Boolean"
+        assert str(exception_info.value) == "expected Uint8, got Boolean"
 
-    def test_an_ancestor_value_out_of_range_reports_both_the_type_and_the_detail(self) -> None:
-        """A value the declared class refuses keeps the reason it refused it."""
-        with pytest.raises(TypeOrValidationError) as exception_info:
+    def test_an_ancestor_value_out_of_range_reports_the_reason_it_was_refused(self) -> None:
+        """A value the declared class refuses arrives with that class's own refusal, untouched."""
+        with pytest.raises(ValidationError) as exception_info:
             Uint8List10(data=cast(Any, [256]))
-        assert str(exception_info.value) == (
-            "Expected Uint8, got int: 256 out of range for Uint8 [0, 255]"
-        )
+        assert "256 is out of range for Uint8 [0, 255]" in str(exception_info.value)
+
+    def test_a_foreign_refusal_is_reported_as_the_class_mismatch_it_stands_for(self) -> None:
+        """A refusal from outside this library says only that the value did not fit."""
+        # A mapping is how a model-backed element renders, so one is read back through
+        # pydantic, whose own refusal names neither the element class nor the reason.
+        with pytest.raises(SSZTypeError) as exception_info:
+            VariableContainerList2(data=cast(Any, [{"a": 1, "unknown": 2}]))
+        assert str(exception_info.value) == "expected VariableContainer, got dict"
 
 
 class TestVectorClassMetadata:
@@ -431,7 +434,7 @@ class TestVectorClassMetadata:
             VariableContainerVector2.get_byte_length()
         assert (
             str(exception_info.value)
-            == "VariableContainerVector2: variable-size vector has no fixed byte length"
+            == "VariableContainerVector2 is a variable-size vector, and has no one byte length"
         )
 
 
@@ -491,7 +494,7 @@ class TestVectorAccessors:
         """A dict payload with the wrong element count surfaces the length error."""
         with pytest.raises(ValueOrValidationError) as exception_info:
             Uint8Vector2Model(value=cast(Any, {"data": [10]}))
-        assert str(exception_info.value) == "Uint8Vector2 requires exactly 2 elements, got 1"
+        assert "Uint8Vector2 holds exactly 2 elements, got 1" in str(exception_info.value)
 
 
 class TestListValidator:
@@ -505,7 +508,7 @@ class TestListValidator:
 
         with pytest.raises(TypeOrValidationError) as exception_info:
             MissingBoth(data=cast(Any, [1]))
-        assert str(exception_info.value) == "MissingBoth must define ELEMENT_TYPE and LIMIT"
+        assert str(exception_info.value) == "MissingBoth must declare ELEMENT_TYPE and LIMIT"
 
     def test_missing_limit_rejected(self) -> None:
         """A subclass with ELEMENT_TYPE but no LIMIT cannot validate."""
@@ -515,13 +518,13 @@ class TestListValidator:
 
         with pytest.raises(TypeOrValidationError) as exception_info:
             MissingLimitList(data=cast(Any, [1]))
-        assert str(exception_info.value) == "MissingLimitList must define ELEMENT_TYPE and LIMIT"
+        assert str(exception_info.value) == "MissingLimitList must declare ELEMENT_TYPE and LIMIT"
 
     def test_raw_base_class_rejected(self) -> None:
         """Instantiating the raw List base surfaces the metadata-missing error."""
         with pytest.raises(SSZTypeError) as exception_info:
             List(data=[])
-        assert str(exception_info.value) == "List must define ELEMENT_TYPE and LIMIT"
+        assert str(exception_info.value) == "List must declare ELEMENT_TYPE and LIMIT"
 
     @pytest.mark.parametrize(
         "bad_input, type_name",
@@ -535,13 +538,13 @@ class TestListValidator:
         """Strings, bytes, and bytearrays never iterate as element collections."""
         with pytest.raises(TypeOrValidationError) as exception_info:
             Uint8List4(data=bad_input)
-        assert str(exception_info.value) == f"Expected iterable of Uint8, got {type_name}"
+        assert str(exception_info.value) == f"expected iterable of Uint8, got {type_name}"
 
     def test_non_iterable_scalar_rejected(self) -> None:
         """Scalar inputs without an iterator interface raise an iterable error."""
         with pytest.raises(TypeOrValidationError) as exception_info:
             Uint8List4(data=cast(Any, 5))
-        assert str(exception_info.value) == "Expected iterable, got int"
+        assert str(exception_info.value) == "expected iterable, got int"
 
     def test_generator_input_coerced(self) -> None:
         """A generator is materialized and each value is coerced to ELEMENT_TYPE."""
@@ -565,7 +568,7 @@ class TestListValidator:
         """A value whose class is not the element class or an ancestor is rejected."""
         with pytest.raises(TypeOrValidationError) as exception_info:
             Uint8List4(data=cast(Any, [1, "bad"]))
-        assert str(exception_info.value) == "Expected Uint8, got str"
+        assert str(exception_info.value) == "expected Uint8, got str"
 
     def test_empty_list_allowed(self) -> None:
         """A list with zero elements is always valid, regardless of LIMIT."""
@@ -584,13 +587,13 @@ class TestListValidator:
         """A list with more than LIMIT elements raises the exceeds-limit error."""
         with pytest.raises(ValueOrValidationError) as exception_info:
             Uint8List4(data=cast(Any, [1, 2, 3, 4, 5]))
-        assert str(exception_info.value) == "Uint8List4 exceeds limit of 4, got 5"
+        assert "Uint8List4 holds at most 4 elements, got 5" in str(exception_info.value)
 
     def test_over_limit_rejected_for_boolean_list(self) -> None:
         """The same exceeds-limit error fires for a list of booleans."""
         with pytest.raises(ValueOrValidationError) as exception_info:
             BooleanList4(data=[Boolean(True)] * 5)
-        assert str(exception_info.value) == "BooleanList4 exceeds limit of 4, got 5"
+        assert "BooleanList4 holds at most 4 elements, got 5" in str(exception_info.value)
 
 
 class TestListClassMetadata:
@@ -621,8 +624,8 @@ class TestListClassMetadata:
         """A list type has no fixed byte length even for fixed-size elements."""
         with pytest.raises(SSZTypeError) as exception_info:
             Uint8List4.get_byte_length()
-        assert (
-            str(exception_info.value) == "Uint8List4: variable-size list has no fixed byte length"
+        assert str(exception_info.value) == (
+            "Uint8List4 is a variable-size list, and has no one byte length"
         )
 
     def test_get_byte_length_raises_for_variable_element_list(self) -> None:
@@ -631,7 +634,7 @@ class TestListClassMetadata:
             VariableContainerList2.get_byte_length()
         assert (
             str(exception_info.value)
-            == "VariableContainerList2: variable-size list has no fixed byte length"
+            == "VariableContainerList2 is a variable-size list, and has no one byte length"
         )
 
 
@@ -745,7 +748,7 @@ class TestListAccessors:
         base = Uint8List4(data=[Uint8(1), Uint8(2), Uint8(3)])
         with pytest.raises(ValueOrValidationError) as exception_info:
             base + [4, 5]
-        assert str(exception_info.value) == "Uint8List4 exceeds limit of 4, got 5"
+        assert "Uint8List4 holds at most 4 elements, got 5" in str(exception_info.value)
 
 
 class TestVectorSerialization:
@@ -809,30 +812,30 @@ class TestVectorSerialization:
 
     def test_fixed_size_vector_rejects_scope_too_small(self) -> None:
         """A fixed-size vector rejects payloads shorter than its byte budget."""
-        with pytest.raises(SSZSerializationError) as exception_info:
+        with pytest.raises(SSZValueError) as exception_info:
             Uint8Vector4.decode_bytes(b"\x00\x01\x02")
-        assert str(exception_info.value) == "Uint8Vector4: expected 4 bytes, got 3"
+        assert str(exception_info.value) == "Uint8Vector4 spans 4 bytes, and the budget is 3"
 
     def test_fixed_size_vector_rejects_scope_too_large(self) -> None:
         """A fixed-size vector rejects payloads larger than its byte budget."""
-        with pytest.raises(SSZSerializationError) as exception_info:
+        with pytest.raises(SSZValueError) as exception_info:
             Uint8Vector4.decode_bytes(b"\x00\x01\x02\x03\x04")
-        assert str(exception_info.value) == "Uint8Vector4: expected 4 bytes, got 5"
+        assert str(exception_info.value) == "Uint8Vector4 spans 4 bytes, and the budget is 5"
 
     def test_variable_size_vector_rejects_scope_below_offset_table(self) -> None:
         """A scope smaller than the offset table cannot describe any layout."""
-        with pytest.raises(SSZSerializationError) as exception_info:
+        with pytest.raises(SSZValueError) as exception_info:
             VariableContainerVector2.decode_bytes(b"\x00\x00\x00")
         assert (
             str(exception_info.value)
-            == "VariableContainerVector2: scope 3 too small, expected at least 8"
+            == "VariableContainerVector2 needs at least 8 bytes, and the budget is 3"
         )
 
     def test_variable_size_vector_rejects_invalid_first_offset(self) -> None:
         """The first offset must point past the offset table."""
-        with pytest.raises(SSZSerializationError) as exception_info:
+        with pytest.raises(SSZValueError) as exception_info:
             VariableContainerVector2.decode_bytes(b"\x04\x00\x00\x00\x08\x00\x00\x00")
-        assert str(exception_info.value) == "VariableContainerVector2: invalid offset 4, expected 8"
+        assert str(exception_info.value) == "the first offset is 4, and the fixed part ends at 8"
 
     def test_variable_size_vector_rejects_non_monotonic_offsets(self) -> None:
         """A later offset smaller than an earlier one means a body would have negative width."""
@@ -847,12 +850,9 @@ class TestVectorSerialization:
         #     boundaries    8       6       8
         #     spans         8..6            -> negative width, refused at element 0
         encoded_bytes = b"\x08\x00\x00\x00\x06\x00\x00\x00"
-        with pytest.raises(SSZSerializationError) as exception_info:
+        with pytest.raises(SSZValueError) as exception_info:
             VariableContainerVector2.decode_bytes(encoded_bytes)
-        assert (
-            str(exception_info.value)
-            == "VariableContainerVector2[0]: offset 8 is above the next offset 6"
-        )
+        assert str(exception_info.value) == "[0]: offset 8 is above the offset after it, 6"
 
     def test_variable_size_vector_rejects_final_offset_overflow(self) -> None:
         """A last offset past the byte budget is reported as the overrun it is."""
@@ -870,12 +870,9 @@ class TestVectorSerialization:
         # The failing pair is the one closed by the budget, which is what separates this
         # fault from a table that is merely out of order.
         encoded_bytes = b"\x08\x00\x00\x00\x64\x00\x00\x00" + b"\x00" * 12
-        with pytest.raises(SSZSerializationError) as exception_info:
+        with pytest.raises(SSZValueError) as exception_info:
             VariableContainerVector2.decode_bytes(encoded_bytes)
-        assert (
-            str(exception_info.value)
-            == "VariableContainerVector2[1]: offset 100 runs past the scope of 20"
-        )
+        assert str(exception_info.value) == "[1]: offset 100 runs past the budget of 20"
 
 
 class TestListSerialization:
@@ -939,57 +936,48 @@ class TestListSerialization:
 
     def test_fixed_size_list_rejects_scope_not_divisible_by_element_size(self) -> None:
         """A fixed-size list rejects payloads whose length is not a multiple of the stride."""
-        with pytest.raises(SSZSerializationError) as exception_info:
+        with pytest.raises(SSZValueError) as exception_info:
             Uint16List4.decode_bytes(b"\x01")
-        assert str(exception_info.value) == "Uint16List4: scope 1 not divisible by element size 2"
+        assert str(exception_info.value) == "a budget of 1 does not divide by an element width of 2"
 
     def test_fixed_size_list_rejects_count_beyond_limit(self) -> None:
         """A fixed-size list rejects payloads that decode to more than LIMIT elements."""
         with pytest.raises(SSZValueError) as exception_info:
             Uint8List4.decode_bytes(b"\x00\x01\x02\x03\x04")
-        assert str(exception_info.value) == "Uint8List4 exceeds limit of 4, got 5"
+        assert str(exception_info.value) == "Uint8List4 holds at most 4 elements, got 5"
 
     def test_variable_size_list_rejects_scope_below_offset_word(self) -> None:
         """A variable-size list requires at least one offset word in the payload."""
         # An offset word is 4 bytes, so 3 bytes cannot even hold the first one.
-        with pytest.raises(SSZSerializationError) as exception_info:
+        with pytest.raises(SSZValueError) as exception_info:
             VariableContainerList2.decode_bytes(b"\x00\x00\x00")
         assert (
             str(exception_info.value)
-            == "VariableContainerList2: scope 3 too small, " + "expected at least 4"
+            == "VariableContainerList2 needs at least 4 bytes, and the budget is 3"
         )
 
     def test_variable_size_list_rejects_first_offset_past_scope(self) -> None:
         """A first offset larger than the available scope is invalid."""
         # The first offset is the table's own width, so 100 claims a 100-byte table
         # inside a 4-byte payload, leaving every body outside the input.
-        with pytest.raises(SSZSerializationError) as exception_info:
+        with pytest.raises(SSZValueError) as exception_info:
             VariableContainerList2.decode_bytes(b"\x64\x00\x00\x00")
-        assert (
-            str(exception_info.value)
-            == "VariableContainerList2: first offset 100 runs past the scope of 4"
-        )
+        assert str(exception_info.value) == "offset 100 runs past the budget of 4"
 
     def test_variable_size_list_rejects_misaligned_first_offset(self) -> None:
         """A first offset that is not a multiple of the offset width is invalid."""
         # The table is a whole number of 4-byte words, so 5 divides into no element count.
-        with pytest.raises(SSZSerializationError) as exception_info:
+        with pytest.raises(SSZValueError) as exception_info:
             VariableContainerList2.decode_bytes(b"\x05\x00\x00\x00\x00\x00\x00\x00")
-        assert (
-            str(exception_info.value)
-            == "VariableContainerList2: first offset 5 is not a multiple of 4"
-        )
+        assert str(exception_info.value) == "the first offset 5 is not a multiple of 4"
 
     def test_variable_size_list_rejects_zero_first_offset(self) -> None:
         """A zero first offset is contradictory and rejected before building the boundary list."""
         # Zero says the table is empty, so there are no elements — yet the payload then
         # claims one body spanning the whole budget.
-        with pytest.raises(SSZSerializationError) as exception_info:
+        with pytest.raises(SSZValueError) as exception_info:
             VariableContainerList2.decode_bytes(bytes.fromhex("00000000aabbccdd"))
-        assert (
-            str(exception_info.value)
-            == "VariableContainerList2: first offset 0 is below the table's own width of 4"
-        )
+        assert str(exception_info.value) == "the first offset 0 is below the table's own width of 4"
 
     def test_variable_size_list_rejects_count_beyond_limit(self) -> None:
         """A first offset that implies more than LIMIT elements is rejected."""
@@ -999,7 +987,7 @@ class TestListSerialization:
         encoded_bytes = b"\x0c\x00\x00\x00" + b"\x00" * 8
         with pytest.raises(SSZValueError) as exception_info:
             VariableContainerList2.decode_bytes(encoded_bytes)
-        assert str(exception_info.value) == "VariableContainerList2 exceeds limit of 2, got 3"
+        assert str(exception_info.value) == "VariableContainerList2 holds at most 2 elements, got 3"
 
     def test_variable_size_list_rejects_non_monotonic_offsets(self) -> None:
         """A later offset smaller than an earlier one means a body would have negative width."""
@@ -1010,12 +998,9 @@ class TestListSerialization:
         #     offsets       8       6
         #     spans         8..6            -> negative width, refused at element 0
         encoded_bytes = b"\x08\x00\x00\x00\x06\x00\x00\x00" + b"\x00" * 12
-        with pytest.raises(SSZSerializationError) as exception_info:
+        with pytest.raises(SSZValueError) as exception_info:
             VariableContainerList2.decode_bytes(encoded_bytes)
-        assert (
-            str(exception_info.value)
-            == "VariableContainerList2[0]: offset 8 is above the next offset 6"
-        )
+        assert str(exception_info.value) == "[0]: offset 8 is above the offset after it, 6"
 
     def test_variable_size_list_rejects_final_offset_overflow(self) -> None:
         """A last offset past the byte budget is reported as the overrun it is."""
@@ -1026,12 +1011,9 @@ class TestListSerialization:
         #     offsets       8       100
         #     spans         8..100  100..20  -> element 1 starts past the budget
         encoded_bytes = b"\x08\x00\x00\x00\x64\x00\x00\x00" + b"\x00" * 12
-        with pytest.raises(SSZSerializationError) as exception_info:
+        with pytest.raises(SSZValueError) as exception_info:
             VariableContainerList2.decode_bytes(encoded_bytes)
-        assert (
-            str(exception_info.value)
-            == "VariableContainerList2[1]: offset 100 runs past the scope of 20"
-        )
+        assert str(exception_info.value) == "[1]: offset 100 runs past the budget of 20"
 
     def test_variable_size_list_single_element_decodes(self) -> None:
         """A single-element list reads no further offsets after the first."""
@@ -1054,13 +1036,13 @@ class TestProgressiveListValidator:
 
         with pytest.raises(TypeOrValidationError) as exception_info:
             MissingElementType(data=cast(Any, [1]))
-        assert str(exception_info.value) == "MissingElementType must define ELEMENT_TYPE"
+        assert str(exception_info.value) == "MissingElementType must declare ELEMENT_TYPE"
 
     def test_raw_base_class_rejected(self) -> None:
         """Instantiating the raw ProgressiveList base surfaces the metadata-missing error."""
         with pytest.raises(SSZTypeError) as exception_info:
             ProgressiveList(data=[])
-        assert str(exception_info.value) == "ProgressiveList must define ELEMENT_TYPE"
+        assert str(exception_info.value) == "ProgressiveList must declare ELEMENT_TYPE"
 
     @pytest.mark.parametrize(
         "bad_input, type_name",
@@ -1074,13 +1056,13 @@ class TestProgressiveListValidator:
         """Strings, bytes, and bytearrays never iterate as element collections."""
         with pytest.raises(TypeOrValidationError) as exception_info:
             Uint8ProgressiveList(data=bad_input)
-        assert str(exception_info.value) == f"Expected iterable of Uint8, got {type_name}"
+        assert str(exception_info.value) == f"expected iterable of Uint8, got {type_name}"
 
     def test_non_iterable_scalar_rejected(self) -> None:
         """Scalar inputs without an iterator interface raise an iterable error."""
         with pytest.raises(TypeOrValidationError) as exception_info:
             Uint8ProgressiveList(data=cast(Any, 5))
-        assert str(exception_info.value) == "Expected iterable, got int"
+        assert str(exception_info.value) == "expected iterable, got int"
 
     def test_generator_input_coerced(self) -> None:
         """A generator is materialized and each value is coerced to ELEMENT_TYPE."""
@@ -1104,7 +1086,7 @@ class TestProgressiveListValidator:
         """A value whose class is not the element class or an ancestor is rejected."""
         with pytest.raises(TypeOrValidationError) as exception_info:
             Uint8ProgressiveList(data=cast(Any, [1, "bad"]))
-        assert str(exception_info.value) == "Expected Uint8, got str"
+        assert str(exception_info.value) == "expected Uint8, got str"
 
     def test_empty_list_allowed(self) -> None:
         """A progressive list with zero elements is valid and is the default value."""
@@ -1158,16 +1140,16 @@ class TestProgressiveListClassMetadata:
             Uint8ProgressiveList.get_byte_length()
         assert (
             str(exception_info.value)
-            == "Uint8ProgressiveList: variable-size list has no fixed byte length"
+            == "Uint8ProgressiveList is a variable-size list, and has no one byte length"
         )
 
     def test_get_byte_length_raises_for_variable_element_list(self) -> None:
         """The same error fires for progressive lists whose elements are variable-size."""
         with pytest.raises(SSZTypeError) as exception_info:
             VariableContainerProgressiveList.get_byte_length()
-        assert (
-            str(exception_info.value)
-            == "VariableContainerProgressiveList: variable-size list has no fixed byte length"
+        assert str(exception_info.value) == (
+            "VariableContainerProgressiveList is a variable-size list, "
+            + "and has no one byte length"
         )
 
 
@@ -1269,7 +1251,7 @@ class TestProgressiveListAccessors:
     def test_progressive_list_mutation_rejects_a_foreign_element(self) -> None:
         """An element of another type is refused, leaving the stored elements untouched."""
         instance = Uint8ProgressiveList(data=[Uint8(1)])
-        with pytest.raises(SSZTypeMismatch):
+        with pytest.raises(SSZTypeError):
             instance.append(Uint16(2))  # ty: ignore[invalid-argument-type]
         assert instance == Uint8ProgressiveList(data=[Uint8(1)])
 
@@ -1451,55 +1433,42 @@ class TestProgressiveListSerialization:
 
     def test_fixed_size_list_rejects_scope_not_divisible_by_element_size(self) -> None:
         """A fixed-size payload whose length is not a multiple of the stride is invalid."""
-        with pytest.raises(SSZSerializationError) as exception_info:
+        with pytest.raises(SSZValueError) as exception_info:
             Uint16ProgressiveList.decode_bytes(b"\x01")
-        assert (
-            str(exception_info.value)
-            == "Uint16ProgressiveList: scope 1 not divisible by element size 2"
-        )
+        assert str(exception_info.value) == "a budget of 1 does not divide by an element width of 2"
 
     def test_variable_size_list_rejects_scope_below_offset_word(self) -> None:
         """A variable-size list requires at least one offset word in the payload."""
         # An offset word is 4 bytes, so 3 bytes cannot even hold the first one.
-        with pytest.raises(SSZSerializationError) as exception_info:
+        with pytest.raises(SSZValueError) as exception_info:
             VariableContainerProgressiveList.decode_bytes(b"\x00\x00\x00")
         assert (
             str(exception_info.value)
-            == "VariableContainerProgressiveList: scope 3 too small, expected at least 4"
+            == "VariableContainerProgressiveList needs at least 4 bytes, and the budget is 3"
         )
 
     def test_variable_size_list_rejects_first_offset_past_scope(self) -> None:
         """A first offset larger than the available scope is invalid."""
         # The first offset is the table's own width, so 100 claims a 100-byte table
         # inside a 4-byte payload, leaving every body outside the input.
-        with pytest.raises(SSZSerializationError) as exception_info:
+        with pytest.raises(SSZValueError) as exception_info:
             VariableContainerProgressiveList.decode_bytes(b"\x64\x00\x00\x00")
-        assert (
-            str(exception_info.value)
-            == "VariableContainerProgressiveList: first offset 100 runs past the scope of 4"
-        )
+        assert str(exception_info.value) == "offset 100 runs past the budget of 4"
 
     def test_variable_size_list_rejects_misaligned_first_offset(self) -> None:
         """A first offset that is not a multiple of the offset width is invalid."""
         # The table is a whole number of 4-byte words, so 5 divides into no element count.
-        with pytest.raises(SSZSerializationError) as exception_info:
+        with pytest.raises(SSZValueError) as exception_info:
             VariableContainerProgressiveList.decode_bytes(b"\x05\x00\x00\x00\x00\x00\x00\x00")
-        assert (
-            str(exception_info.value)
-            == "VariableContainerProgressiveList: first offset 5 is not a multiple of 4"
-        )
+        assert str(exception_info.value) == "the first offset 5 is not a multiple of 4"
 
     def test_variable_size_list_rejects_zero_first_offset(self) -> None:
         """A zero first offset is contradictory and rejected before any body is read."""
         # Zero says the table is empty, so there are no elements — yet the payload then
         # claims one body spanning the whole budget.
-        with pytest.raises(SSZSerializationError) as exception_info:
+        with pytest.raises(SSZValueError) as exception_info:
             VariableContainerProgressiveList.decode_bytes(bytes.fromhex("00000000aabbccdd"))
-        assert (
-            str(exception_info.value)
-            == "VariableContainerProgressiveList: first offset 0 "
-            + "is below the table's own width of 4"
-        )
+        assert str(exception_info.value) == "the first offset 0 is below the table's own width of 4"
 
     def test_variable_size_list_rejects_non_monotonic_offsets(self) -> None:
         """A later offset smaller than an earlier one means a body would have negative width."""
@@ -1510,12 +1479,9 @@ class TestProgressiveListSerialization:
         #     offsets       8       6
         #     spans         8..6            -> negative width, refused at element 0
         encoded_bytes = b"\x08\x00\x00\x00\x06\x00\x00\x00" + b"\x00" * 12
-        with pytest.raises(SSZSerializationError) as exception_info:
+        with pytest.raises(SSZValueError) as exception_info:
             VariableContainerProgressiveList.decode_bytes(encoded_bytes)
-        assert (
-            str(exception_info.value)
-            == "VariableContainerProgressiveList[0]: offset 8 is above the next offset 6"
-        )
+        assert str(exception_info.value) == "[0]: offset 8 is above the offset after it, 6"
 
     def test_variable_size_list_rejects_interior_offset_past_scope(self) -> None:
         """A last offset past the byte budget is reported as the overrun it is."""
@@ -1526,12 +1492,9 @@ class TestProgressiveListSerialization:
         #     offsets       8       100
         #     spans         8..100  100..20  -> element 1 starts past the budget
         encoded_bytes = b"\x08\x00\x00\x00\x64\x00\x00\x00" + b"\x00" * 12
-        with pytest.raises(SSZSerializationError) as exception_info:
+        with pytest.raises(SSZValueError) as exception_info:
             VariableContainerProgressiveList.decode_bytes(encoded_bytes)
-        assert (
-            str(exception_info.value)
-            == "VariableContainerProgressiveList[1]: offset 100 runs past the scope of 20"
-        )
+        assert str(exception_info.value) == "[1]: offset 100 runs past the budget of 20"
 
     def test_variable_size_list_single_element_decodes(self) -> None:
         """A single-element list reads no further offsets after the first."""
@@ -1575,7 +1538,7 @@ class TestSequenceDefaults:
         """Zero elements is a count mismatch against LENGTH, never a request for the default."""
         with pytest.raises(ValueOrValidationError) as exception_info:
             Uint8Vector4(data=[])
-        assert str(exception_info.value) == "Uint8Vector4 requires exactly 4 elements, got 0"
+        assert "Uint8Vector4 holds exactly 4 elements, got 0" in str(exception_info.value)
 
     def test_vector_data_is_no_longer_a_required_field(self) -> None:
         """The elements carry a default, so Pydantic itself reports them as optional."""
@@ -1591,7 +1554,7 @@ class TestSequenceDefaults:
 
         with pytest.raises(TypeOrValidationError) as exception_info:
             MissingBothDeclarations()
-        expected = "MissingBothDeclarations must define ELEMENT_TYPE and LENGTH"
+        expected = "MissingBothDeclarations must declare ELEMENT_TYPE and LENGTH"
         assert str(exception_info.value) == expected
 
     def test_a_vector_missing_only_its_length_reports_its_own_error(self) -> None:
@@ -1602,7 +1565,7 @@ class TestSequenceDefaults:
 
         with pytest.raises(TypeOrValidationError) as exception_info:
             MissingOnlyLength()
-        assert str(exception_info.value) == "MissingOnlyLength must define ELEMENT_TYPE and LENGTH"
+        assert str(exception_info.value) == "MissingOnlyLength must declare ELEMENT_TYPE and LENGTH"
 
     def test_each_default_element_is_built_on_its_own(self) -> None:
         """One instance placed at every position would alias, and elements are mutable."""
@@ -1677,7 +1640,7 @@ class TestSequenceDefaults:
 
     def test_a_vector_of_unions_has_no_default(self) -> None:
         """A vector needs an element default at every position, and a union has none."""
-        with pytest.raises(SSZDefaultError, match=r"^FixedContainerUnion has no default value$"):
+        with pytest.raises(SSZTypeError, match=r"^FixedContainerUnion has no default value$"):
             FixedContainerUnionVector2()
 
     def test_a_vector_of_unions_still_builds_from_given_elements(self) -> None:
@@ -1813,21 +1776,23 @@ class TestZeroLengthVector:
         """A vector of no elements is refused where it is written, not where it is used."""
         # A zero-length vector has no offset table, so a variable-size body would have
         # nowhere to be read from.
-        with pytest.raises(SSZValueError) as exception_info:
+        with pytest.raises(SSZTypeError) as exception_info:
 
             class EmptyVector(Vector[Uint8]):
                 LENGTH = 0
 
-        assert str(exception_info.value) == "EmptyVector: LENGTH must be positive, got 0"
+        assert str(exception_info.value) == "a vector holds at least one element, got a length of 0"
 
     def test_negative_length_is_refused_at_declaration(self) -> None:
         """A negative count is refused the same way, and for the same reason."""
-        with pytest.raises(SSZValueError) as exception_info:
+        with pytest.raises(SSZTypeError) as exception_info:
 
             class NegativeVector(Vector[Uint8]):
                 LENGTH = -1
 
-        assert str(exception_info.value) == "NegativeVector: LENGTH must be positive, got -1"
+        assert str(exception_info.value) == (
+            "a vector holds at least one element, got a length of -1"
+        )
 
 
 class TestNegativeListLimit:
@@ -1836,12 +1801,15 @@ class TestNegativeListLimit:
     def test_a_negative_limit_is_refused_at_declaration(self) -> None:
         """A negative bound is refused where it is written, not where it is used."""
         # A negative bound admits no value at all, the empty list included.
-        with pytest.raises(SSZValueError) as exception_info:
+        with pytest.raises(SSZTypeError) as exception_info:
 
             class NegativeList(List[Uint8]):
                 LIMIT = -1
 
-        assert str(exception_info.value) == "NegativeList: LIMIT must not be negative, got -1"
+        assert (
+            str(exception_info.value)
+            == "a bound counts the elements a shape may hold, and -1 is not a count"
+        )
 
     def test_a_limit_of_zero_admits_the_empty_value_and_nothing_else(self) -> None:
         """A bound of zero is where the line falls: one value, and it holds no elements."""
@@ -1854,7 +1822,7 @@ class TestNegativeListLimit:
         with pytest.raises(SSZValueError) as exception_info:
             EmptyList.decode_bytes(b"\x01")
 
-        assert str(exception_info.value) == "EmptyList exceeds limit of 0, got 1"
+        assert str(exception_info.value) == "EmptyList holds at most 0 elements, got 1"
 
 
 class TestUnentitledCapacity:
@@ -1867,7 +1835,7 @@ class TestUnentitledCapacity:
             class BoundedVector(Vector[Uint8]):
                 LIMIT = 2
 
-        assert str(exception_info.value) == "BoundedVector must define no LIMIT of its own"
+        assert str(exception_info.value) == "BoundedVector declares a LIMIT its shape has none of"
 
     def test_a_vector_refuses_a_bound_beside_its_own_count(self) -> None:
         """Two count rules can contradict, and a vector's default is the first casualty."""
@@ -1878,7 +1846,7 @@ class TestUnentitledCapacity:
                 LENGTH = 4
                 LIMIT = 2
 
-        assert str(exception_info.value) == "BothCounts must define no LIMIT of its own"
+        assert str(exception_info.value) == "BothCounts declares a LIMIT its shape has none of"
 
     def test_a_list_refuses_an_exact_count(self) -> None:
         """A list holds any count up to its bound, and pinning one exactly is a vector."""
@@ -1888,7 +1856,7 @@ class TestUnentitledCapacity:
                 LIMIT = 4
                 LENGTH = 2
 
-        assert str(exception_info.value) == "PinnedList must define no LENGTH of its own"
+        assert str(exception_info.value) == "PinnedList declares a LENGTH its shape has none of"
 
     def test_a_progressive_list_refuses_an_exact_count(self) -> None:
         """EIP-7916 gives the shape no capacity, an exact count included."""
@@ -1897,7 +1865,10 @@ class TestUnentitledCapacity:
             class PinnedProgressiveList(ProgressiveList[Uint8]):
                 LENGTH = 2
 
-        assert str(exception_info.value) == "PinnedProgressiveList must define no LENGTH of its own"
+        assert (
+            str(exception_info.value)
+            == "PinnedProgressiveList declares a LENGTH its shape has none of"
+        )
 
     def test_a_progressive_list_refuses_a_bound(self) -> None:
         """A bound reads as a bounded list on construction, and never reaches the tree."""
@@ -1906,7 +1877,10 @@ class TestUnentitledCapacity:
             class BoundedProgressiveList(ProgressiveList[Uint8]):
                 LIMIT = 2
 
-        assert str(exception_info.value) == "BoundedProgressiveList must define no LIMIT of its own"
+        assert (
+            str(exception_info.value)
+            == "BoundedProgressiveList declares a LIMIT its shape has none of"
+        )
 
 
 class TestDecodeAsksWhatTheShapeDeclares:
@@ -1922,7 +1896,7 @@ class TestDecodeAsksWhatTheShapeDeclares:
         with pytest.raises(SSZTypeError) as exception_info:
             Unbounded.decode_bytes(b"\x01" * 10)
 
-        assert str(exception_info.value) == "Unbounded must define ELEMENT_TYPE and LIMIT"
+        assert str(exception_info.value) == "Unbounded must declare ELEMENT_TYPE and LIMIT"
 
     def test_a_list_without_its_bound_refuses_an_empty_payload_too(self) -> None:
         """The empty payload is a value of the type as well, and the type is not usable."""
@@ -1933,14 +1907,14 @@ class TestDecodeAsksWhatTheShapeDeclares:
         with pytest.raises(SSZTypeError) as exception_info:
             Unbounded.decode_bytes(b"")
 
-        assert str(exception_info.value) == "Unbounded must define ELEMENT_TYPE and LIMIT"
+        assert str(exception_info.value) == "Unbounded must declare ELEMENT_TYPE and LIMIT"
 
     def test_the_bare_list_base_refuses_a_payload(self) -> None:
         """The unparameterized base declares neither of the two, and names both."""
         with pytest.raises(SSZTypeError) as exception_info:
             List.decode_bytes(b"\x01")
 
-        assert str(exception_info.value) == "List must define ELEMENT_TYPE and LIMIT"
+        assert str(exception_info.value) == "List must declare ELEMENT_TYPE and LIMIT"
 
     def test_a_progressive_list_without_an_element_type_refuses_a_payload(self) -> None:
         """The unbounded shape declares no bound, and still needs to know what it holds."""
@@ -1951,7 +1925,7 @@ class TestDecodeAsksWhatTheShapeDeclares:
         with pytest.raises(SSZTypeError) as exception_info:
             Untyped.decode_bytes(b"\x01")
 
-        assert str(exception_info.value) == "Untyped must define ELEMENT_TYPE"
+        assert str(exception_info.value) == "Untyped must declare ELEMENT_TYPE"
 
 
 class TestJsonRoundTrip:
@@ -1977,10 +1951,10 @@ class TestJsonRoundTrip:
         """Only the 0x-prefixed rendering is accepted, never a bare hex string."""
         # A byte count read as characters is the mistake this refusal exists to catch,
         # so an unprefixed string stays a type error rather than becoming 64 bytes.
-        with pytest.raises(SSZTypeMismatch) as exception_info:
+        with pytest.raises(SSZTypeError) as exception_info:
             Bytes32List32(data=cast(Any, ["ab" * 32]))
 
-        assert str(exception_info.value) == "Expected Bytes32, got str"
+        assert str(exception_info.value) == "expected Bytes32, got str"
 
     def test_a_sequence_of_uints_round_trips(self) -> None:
         """An integer leaf renders as a plain int, which is already an ancestor class."""
@@ -2016,10 +1990,12 @@ class TestTruncatedOffsetTable:
         # This is what a corrupt outer offset table looks like from the inside: the
         # span handed down is wider than the bytes that back it.
         stream = io.BytesIO(b"\x08\x00\x00\x00")
-        with pytest.raises(SSZSerializationError) as exception_info:
+        with pytest.raises(SSZValueError) as exception_info:
             VariableContainerVector2.deserialize(stream, 20)
 
-        assert str(exception_info.value) == "VariableContainerVector2: expected 8 bytes, got 4"
+        assert str(exception_info.value) == (
+            "VariableContainerVector2 needs 8 bytes, the input holds 4"
+        )
 
     def test_a_list_refuses_a_table_the_stream_cannot_back(self) -> None:
         """The same truncation is caught when the count came from the first offset."""
@@ -2027,11 +2003,12 @@ class TestTruncatedOffsetTable:
         #
         # Fixture state: the caller promises 24 bytes, but only the first offset is there.
         stream = io.BytesIO(b"\x0c\x00\x00\x00")
-        with pytest.raises(SSZSerializationError) as exception_info:
+        with pytest.raises(SSZValueError) as exception_info:
             VariableContainerProgressiveList.deserialize(stream, 24)
 
         assert (
-            str(exception_info.value) == "VariableContainerProgressiveList: expected 8 bytes, got 0"
+            str(exception_info.value)
+            == "VariableContainerProgressiveList needs 8 bytes, the input holds 0"
         )
 
 
@@ -2042,32 +2019,32 @@ class TestNegativeScope:
         """A negative budget over fixed-size elements is refused rather than read as empty."""
         # A negative budget divides into a negative count, which reads as no elements at all.
         stream = io.BytesIO(b"\x01\x02\x03\x04")
-        with pytest.raises(SSZSerializationError) as exception_info:
+        with pytest.raises(SSZValueError) as exception_info:
             Uint8List4.deserialize(stream, -4)
 
-        assert str(exception_info.value) == "Uint8List4: scope -4 is negative"
+        assert str(exception_info.value) == "a budget of -4 is not a byte count"
         assert stream.tell() == 0
 
     def test_a_progressive_list_refuses_a_budget_below_zero(self) -> None:
         """The unbounded shape refuses it on the same grounds, holding no capacity to trip."""
-        with pytest.raises(SSZSerializationError) as exception_info:
+        with pytest.raises(SSZValueError) as exception_info:
             Uint8ProgressiveList.deserialize(io.BytesIO(b"\x01"), -1)
 
-        assert str(exception_info.value) == "Uint8ProgressiveList: scope -1 is negative"
+        assert str(exception_info.value) == "a budget of -1 is not a byte count"
 
     def test_a_vector_refuses_a_budget_below_zero(self) -> None:
         """A vector needs an exact width, and no width is negative."""
-        with pytest.raises(SSZSerializationError) as exception_info:
+        with pytest.raises(SSZValueError) as exception_info:
             Uint8Vector4.deserialize(io.BytesIO(b"\x01\x02\x03\x04"), -4)
 
-        assert str(exception_info.value) == "Uint8Vector4: expected 4 bytes, got -4"
+        assert str(exception_info.value) == "Uint8Vector4 spans 4 bytes, and the budget is -4"
 
     def test_a_variable_size_vector_refuses_a_budget_below_zero(self) -> None:
         """A table of its own width does not fit in a negative budget either."""
-        with pytest.raises(SSZSerializationError) as exception_info:
+        with pytest.raises(SSZValueError) as exception_info:
             VariableContainerVector2.deserialize(io.BytesIO(b"\x08\x00\x00\x00"), -8)
 
         assert (
             str(exception_info.value)
-            == "VariableContainerVector2: scope -8 too small, expected at least 8"
+            == "VariableContainerVector2 needs at least 8 bytes, and the budget is -8"
         )

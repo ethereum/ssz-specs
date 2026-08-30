@@ -8,9 +8,8 @@ import pytest
 from pydantic import ValidationError
 
 from ssz import (
-    SSZLengthError,
-    SSZLimitError,
-    SSZTypeMismatch,
+    SSZTypeError,
+    SSZValueError,
     Uint8,
     Uint16,
     Uint32,
@@ -23,14 +22,7 @@ from ssz.boolean import Boolean
 from ssz.byte_arrays import ByteList, ByteVector
 from ssz.collections import List, ProgressiveList, Vector
 from ssz.container import Container, ProgressiveContainer
-from ssz.exceptions import (
-    SSZDefaultError,
-    SSZDefinitionError,
-    SSZError,
-    SSZSerializationError,
-    SSZTypeError,
-    SSZValueError,
-)
+from ssz.exceptions import SSZError
 from ssz.merkleization import ZERO_ROOT, Root, hash_tree_root
 from ssz.proofs import chunk_count
 from ssz.ssz_base import SSZCollection, SSZType
@@ -46,6 +38,12 @@ class Uint16List4(List[Uint16]):
 
 class Uint16Vector2(Vector[Uint16]):
     """A vector of exactly 2 Uint16 values."""
+
+    LENGTH = 2
+
+
+class Uint16ListVector2(Vector[Uint16List4]):
+    """A vector of two lists, whose elements leave it with no width of its own."""
 
     LENGTH = 2
 
@@ -275,14 +273,9 @@ class TestSSZTypeEncodeDecode:
             """A type that reads one byte and leaves the rest of its budget unread."""
 
             @classmethod
-            def is_fixed_size(cls) -> bool:
-                """Variable-size, so no caller derives a width to hand it."""
-                return False
-
-            @classmethod
-            def get_byte_length(cls) -> int:
-                """No fixed width to give."""
-                raise SSZTypeError("OneByteOfMany has no fixed byte length")
+            def fixed_size(cls) -> None:
+                """No width, so no caller derives one to hand it."""
+                return None
 
             def serialize(self, stream: IO[bytes]) -> int:
                 """Write the one byte this type stands for."""
@@ -295,10 +288,10 @@ class TestSSZTypeEncodeDecode:
                 return cls()
 
         # The outermost decode compares what was read against what was given.
-        with pytest.raises(SSZSerializationError) as exception_info:
+        with pytest.raises(SSZValueError) as exception_info:
             OneByteOfMany.decode_bytes(b"\x00\xff")
 
-        assert str(exception_info.value) == "OneByteOfMany: 1 trailing byte(s) after decode"
+        assert str(exception_info.value) == "1 byte(s) past the end of the value"
 
 
 class TestSSZCollectionIteration:
@@ -689,37 +682,37 @@ class TestSSZCollectionNegativeIndex:
             pytest.param(
                 Uint16Vector2(data=[Uint16(1), Uint16(2)]),
                 "x",
-                "Expected Uint16, got str",
+                "expected Uint16, got str",
                 id="vector",
             ),
             pytest.param(
                 Uint16List4(data=[Uint16(1), Uint16(2)]),
                 "x",
-                "Expected Uint16, got str",
+                "expected Uint16, got str",
                 id="list",
             ),
             pytest.param(
                 Uint16ProgressiveList(data=[Uint16(1), Uint16(2)]),
                 "x",
-                "Expected Uint16, got str",
+                "expected Uint16, got str",
                 id="progressive_list",
             ),
             pytest.param(
                 SmallBitVector(data=[Boolean(True)] * 3),
                 2,
-                "Boolean value must be 0 or 1, not 2",
+                "a boolean is 0 or 1, got 2",
                 id="bitvector",
             ),
             pytest.param(
                 SmallBitList(data=[Boolean(True), Boolean(False)]),
                 2,
-                "Boolean value must be 0 or 1, not 2",
+                "a boolean is 0 or 1, got 2",
                 id="bitlist",
             ),
             pytest.param(
                 ProgressiveBitList(data=[Boolean(True), Boolean(False)]),
                 2,
-                "Boolean value must be 0 or 1, not 2",
+                "a boolean is 0 or 1, got 2",
                 id="progressive_bitlist",
             ),
         ],
@@ -756,13 +749,13 @@ class TestSSZCollectionNegativeIndex:
             pytest.param(
                 Uint16Vector2(data=[Uint16(1), Uint16(2)]),
                 [Uint16(9)],
-                "Uint16Vector2 requires exactly 2 elements, got 1",
+                "Uint16Vector2 holds exactly 2 elements, got 1",
                 id="vector",
             ),
             pytest.param(
                 SmallBitVector(data=[Boolean(True)] * 3),
                 [Boolean(False)],
-                "SmallBitVector requires exactly 3 elements, got 2",
+                "SmallBitVector holds exactly 3 elements, got 2",
                 id="bitvector",
             ),
         ],
@@ -796,7 +789,7 @@ class TestSSZCollectionNegativeIndex:
         # The capacity is enforced as the whole payload is stored back.
         # The write therefore lands complete or not at all.
         # A partly grown payload is never observable.
-        with pytest.raises(SSZLimitError, match=r"^ByteList4 exceeds limit of 4, got 5$"):
+        with pytest.raises(SSZValueError, match=r"^ByteList4 holds at most 4 bytes, got 5$"):
             payload[-1:] = b"\xaa\xbb\xcc"
         assert payload == ByteList4(data=b"\xde\xad\xbe")
 
@@ -1124,7 +1117,7 @@ class TestDefaultValue:
 
     def test_a_union_has_no_default_to_build(self) -> None:
         """The one shape the spec leaves without a default refuses to invent one."""
-        with pytest.raises(SSZDefaultError, match=r"^SmallUnion has no default value$"):
+        with pytest.raises(SSZTypeError, match=r"^SmallUnion has no default value$"):
             SmallUnion.default()
 
 
@@ -1158,10 +1151,10 @@ class TestSSZCollectionOf:
         # This factory always states the elements, so stating none of them is a count of
         # zero. Only construction with no argument at all asks for the default.
         type_name = collection_type.__name__
-        with pytest.raises((SSZValueError, ValidationError)) as exception_info:
+        with pytest.raises(ValidationError) as exception_info:
             collection_type.of()
-        assert str(exception_info.value) == (
-            f"{type_name} requires exactly {expected_length} elements, got 0"
+        assert f"{type_name} holds exactly {expected_length} elements, got 0" in str(
+            exception_info.value
         )
         # The same shape asked for its default is full, not empty.
         assert len(collection_type.default()) == expected_length
@@ -1190,12 +1183,12 @@ class TestSSZCollectionOf:
 
     def test_of_rejects_bool_for_uint_elements(self) -> None:
         """A bool is not an integer element, even though bool subclasses int."""
-        with pytest.raises(SSZTypeMismatch):
+        with pytest.raises(SSZTypeError):
             Uint16List4.of(True)
 
     def test_of_rejects_other_uint_widths(self) -> None:
         """A uint of another width is a type error, regardless of its value."""
-        with pytest.raises(SSZTypeMismatch):
+        with pytest.raises(SSZTypeError):
             Uint16List4.of(Uint32(7))
 
     def test_of_accepts_a_parent_uint_class(self) -> None:
@@ -1206,13 +1199,14 @@ class TestSSZCollectionOf:
 
     def test_of_rejects_a_child_uint_class(self) -> None:
         """A value of a child class of the element type is a type error."""
-        with pytest.raises(SSZTypeMismatch):
+        with pytest.raises(SSZTypeError):
             Uint16List4.of(TypedUint16(7))
 
     def test_of_beyond_limit_rejected(self) -> None:
         """More element arguments than the limit fail validation."""
-        with pytest.raises(SSZLimitError):
+        with pytest.raises(ValidationError) as exception_info:
             Uint16List4.of(1, 2, 3, 4, 5)
+        assert "Uint16List4 holds at most 4 elements, got 5" in str(exception_info.value)
 
     def test_of_converts_plain_bytes_elements(self) -> None:
         """Plain bytes, such as bytes.fromhex output, convert into byte-array elements."""
@@ -1223,16 +1217,15 @@ class TestSSZCollectionOf:
 
     def test_of_rejects_hex_string_elements(self) -> None:
         """A hex string is not bytes; convert it with bytes.fromhex first."""
-        with pytest.raises(SSZTypeMismatch) as exception_info:
+        with pytest.raises(SSZTypeError) as exception_info:
             RootList4.of("ab" * 32)
-        assert str(exception_info.value) == "Expected Root, got str"
+        assert str(exception_info.value) == "expected Root, got str"
 
-    def test_of_wrong_length_bytes_keeps_coercion_detail(self) -> None:
-        """An ancestor-class element that fails construction chains the inner detail."""
-        with pytest.raises(SSZTypeMismatch) as exception_info:
+    def test_of_wrong_length_bytes_surfaces_the_element_s_own_refusal(self) -> None:
+        """An ancestor-class element that fails construction reports why, not merely that."""
+        with pytest.raises(ValidationError) as exception_info:
             RootList4.of(b"\xab\xcd")
-        expected = "Expected Root, got bytes: Root requires exactly 32 bytes, got 2"
-        assert str(exception_info.value) == expected
+        assert "Root holds exactly 32 bytes, got 2" in str(exception_info.value)
 
     def test_of_returns_the_subclass_type(self) -> None:
         """The factory binds to the concrete subclass, not the base."""
@@ -1366,13 +1359,13 @@ class TestDeclaredCapacity:
         #
         # Nothing inside this block builds a value.
         # So reaching the failure needs no use of the type at all.
-        with pytest.raises(SSZTypeMismatch) as exception_info:
+        with pytest.raises(SSZTypeError) as exception_info:
 
             class Bad(List[Uint8]):
                 LIMIT = rejected
 
         assert str(exception_info.value) == (
-            f"Expected an integer count for Bad.LIMIT, got {rejected_type_name}"
+            f"Bad.LIMIT must be a plain integer, got {rejected_type_name}"
         )
         # The class statement raised before it could bind its own name.
         # So no value of that type was ever constructible, in this test or anywhere else.
@@ -1380,14 +1373,12 @@ class TestDeclaredCapacity:
 
     def test_a_fractional_capacity_is_refused(self) -> None:
         """A capacity between two whole numbers has no reading that is safe to guess."""
-        with pytest.raises(SSZTypeMismatch) as exception_info:
+        with pytest.raises(SSZTypeError) as exception_info:
 
             class Fractional(List[Uint8]):
                 LIMIT = 4.7
 
-        assert str(exception_info.value) == (
-            "Expected an integer count for Fractional.LIMIT, got float"
-        )
+        assert str(exception_info.value) == ("Fractional.LIMIT must be a plain integer, got float")
 
         # A capacity is not a hint.
         # It sets how far a value is padded before it is hashed.
@@ -1426,7 +1417,7 @@ class TestDeclaredCapacity:
         # Every integer type in this library already draws the line in the same place.
         # A capacity drawing it elsewhere is what would be inconsistent:
         assert Uint8(Boolean(True)) == Uint8(1)
-        with pytest.raises(SSZTypeMismatch, match=r"^Expected int, got bool$"):
+        with pytest.raises(SSZTypeError, match=r"^expected int, got bool$"):
             Uint8(True)
 
     @pytest.mark.parametrize(
@@ -1485,32 +1476,32 @@ class TestDeclaredCapacity:
         [
             pytest.param(
                 lambda: TypedLimitList.of(1, 2, 3, 4, 5),
-                "TypedLimitList exceeds limit of 4, got 5",
+                "TypedLimitList holds at most 4 elements, got 5",
                 id="list_over_capacity",
             ),
             pytest.param(
                 lambda: TypedLimitBitList.of(*[True] * 5),
-                "TypedLimitBitList exceeds limit of 4, got 5",
+                "TypedLimitBitList holds at most 4 elements, got 5",
                 id="bitlist_over_capacity",
             ),
             pytest.param(
                 lambda: TypedLimitByteList.of(*[0x01] * 5),
-                "TypedLimitByteList exceeds limit of 4, got 5",
+                "TypedLimitByteList holds at most 4 bytes, got 5",
                 id="byte_list_over_capacity",
             ),
             pytest.param(
                 lambda: TypedLengthVector.of(1, 2, 3),
-                "TypedLengthVector requires exactly 4 elements, got 3",
+                "TypedLengthVector holds exactly 4 elements, got 3",
                 id="vector_wrong_count",
             ),
             pytest.param(
                 lambda: TypedLengthBitVector.of(*[True] * 3),
-                "TypedLengthBitVector requires exactly 4 elements, got 3",
+                "TypedLengthBitVector holds exactly 4 elements, got 3",
                 id="bitvector_wrong_count",
             ),
             pytest.param(
                 lambda: TypedLengthBytes(b"\xde\xad\xbe"),
-                "TypedLengthBytes requires exactly 4 bytes, got 3",
+                "TypedLengthBytes holds exactly 4 bytes, got 3",
                 id="fixed_byte_array_wrong_count",
             ),
         ],
@@ -1527,9 +1518,10 @@ class TestDeclaredCapacity:
         #
         # The number in each message is the capacity exactly as declared.
         # So nothing was rounded or truncated on the way in.
-        with pytest.raises(SSZValueError) as exception_info:
+        # A byte array builds outside pydantic, so it alone still raises the refusal raw.
+        with pytest.raises((SSZValueError, ValidationError)) as exception_info:
             build()
-        assert str(exception_info.value) == message
+        assert message in str(exception_info.value)
 
     def test_growing_a_value_reads_the_capacity_on_its_own_route(self) -> None:
         """Mutation checks a count against the capacity somewhere other than construction."""
@@ -1540,13 +1532,14 @@ class TestDeclaredCapacity:
         #     held  = [1, 2, 3, 4]   under a capacity of 4
         #     append                 ->  5 elements, one past the capacity
         values = TypedLimitList.of(1, 2, 3, 4)
-        with pytest.raises(SSZLimitError, match=r"^TypedLimitList exceeds limit of 4, got 5$"):
+        over_capacity = r"^TypedLimitList holds at most 4 elements, got 5$"
+        with pytest.raises(SSZValueError, match=over_capacity):
             values.append(Uint8(5))
 
         # Replacing one element with two grows the value the same way:
         #
         #     [1, 2, 3, 4]  ->  [0:1] = [9, 9]  ->  5 elements
-        with pytest.raises(SSZLimitError, match=r"^TypedLimitList exceeds limit of 4, got 5$"):
+        with pytest.raises(SSZValueError, match=over_capacity):
             values[0:1] = [Uint8(9)] * 2
         assert values == TypedLimitList.of(1, 2, 3, 4)
 
@@ -1555,7 +1548,7 @@ class TestDeclaredCapacity:
         #     4 bits  ->  [1:] = [0, 0]  ->  3 bits, one short of the required 4
         bits = TypedLengthBitVector.of(*[True] * 4)
         with pytest.raises(
-            SSZLengthError, match=r"^TypedLengthBitVector requires exactly 4 elements, got 3$"
+            SSZValueError, match=r"^TypedLengthBitVector holds exactly 4 elements, got 3$"
         ):
             bits[1:] = [Boolean(False)] * 2
         assert bits == TypedLengthBitVector.of(*[True] * 4)
@@ -1596,9 +1589,9 @@ class TestDeclaredCapacity:
         # for one. So the layer states nothing, and building a value of it still fails.
         assert "LIMIT" not in Intermediate.__dict__
         assert Intermediate.LIMIT is None
-        with pytest.raises(SSZDefinitionError) as exception_info:
+        with pytest.raises(SSZTypeError) as exception_info:
             Intermediate.of(1)
-        assert str(exception_info.value) == "Intermediate must define ELEMENT_TYPE and LIMIT"
+        assert str(exception_info.value) == "Intermediate must declare ELEMENT_TYPE and LIMIT"
 
         class Concrete(Intermediate):
             LIMIT = Uint64(4)
@@ -1643,9 +1636,9 @@ class TestDeclaredCapacity:
         #
         # So the value behaves as the capacity it names, and the limit is still enforced.
         assert list(Late.of(1, 2)) == [Uint8(1), Uint8(2)]
-        with pytest.raises(SSZError) as exception_info:
+        with pytest.raises(ValidationError) as exception_info:
             Late.of(1, 2, 3, 4, 5)
-        assert str(exception_info.value) == "Late exceeds limit of 4, got 5"
+        assert "Late holds at most 4 elements, got 5" in str(exception_info.value)
 
     def test_an_exact_count_never_declared_is_reported_where_it_is_read(self) -> None:
         """An absent count is a definition error, not arithmetic against None."""
@@ -1653,12 +1646,12 @@ class TestDeclaredCapacity:
         class NoLength(ByteVector):
             pass
 
-        with pytest.raises(SSZDefinitionError) as exception_info:
+        with pytest.raises(SSZTypeError) as exception_info:
             NoLength.declared_length()
-        assert str(exception_info.value) == "NoLength must define LENGTH"
+        assert str(exception_info.value) == "NoLength must declare LENGTH"
 
         # A fixed byte array's width is its count, so callers of the width land here too.
-        with pytest.raises(SSZDefinitionError):
+        with pytest.raises(SSZTypeError):
             NoLength.get_byte_length()
 
     def test_an_upper_bound_never_declared_is_reported_where_it_is_read(self) -> None:
@@ -1667,13 +1660,70 @@ class TestDeclaredCapacity:
         class NoLimit(List[Uint16]):
             pass
 
-        with pytest.raises(SSZDefinitionError) as exception_info:
+        with pytest.raises(SSZTypeError) as exception_info:
             NoLimit.declared_limit()
-        assert str(exception_info.value) == "NoLimit must define LIMIT"
+        assert str(exception_info.value) == "NoLimit must declare LIMIT"
 
         # A proof sizes the tree from the bound, and reaches the same report.
-        with pytest.raises(SSZDefinitionError):
+        with pytest.raises(SSZTypeError):
             chunk_count(NoLimit)
+
+
+class TestFixedSize:
+    """
+    Tests that one stated width answers every question asked about a shape's size.
+
+    A shape states its width in one place, and both spellings that ask for it read that
+    one answer. So a shape reporting a width can always give it, and one reporting none
+    refuses every caller alike.
+
+    A refusal names the shape, because the type's own name does not say which rule
+    refused: a container is named for what it holds, and a vector loses its width only
+    through its elements.
+    """
+
+    @pytest.mark.parametrize(
+        "declared_type, width",
+        [
+            pytest.param(Uint64, 8, id="uint"),
+            pytest.param(Boolean, 1, id="boolean"),
+            pytest.param(TypedLengthBytes, 4, id="fixed_byte_array"),
+            pytest.param(SmallBitVector, 1, id="bitvector"),
+            pytest.param(Uint16Vector2, 4, id="vector"),
+            pytest.param(TwoFieldContainer, 3, id="container"),
+        ],
+    )
+    def test_a_shape_with_a_width_answers_both_spellings_with_it(
+        self, declared_type: type[SSZType], width: int
+    ) -> None:
+        """The stated width settles both questions, so neither can drift from it."""
+        assert declared_type.fixed_size() == width
+        assert declared_type.is_fixed_size() is True
+        assert declared_type.get_byte_length() == width
+
+    @pytest.mark.parametrize(
+        "declared_type, kind",
+        [
+            pytest.param(Uint16List4, "list", id="list"),
+            pytest.param(Uint16ProgressiveList, "list", id="progressive_list"),
+            pytest.param(Uint16ListVector2, "vector", id="vector"),
+            pytest.param(SmallBitList, "bitlist", id="bitlist"),
+            pytest.param(SmallByteList, "byte list", id="byte_list"),
+            pytest.param(ThreeFieldContainer, "container", id="container"),
+            pytest.param(SmallUnion, "compatible union", id="compatible_union"),
+        ],
+    )
+    def test_a_shape_without_a_width_names_itself_where_one_is_demanded(
+        self, declared_type: type[SSZType], kind: str
+    ) -> None:
+        """Every family that can lack a width names itself, none falling back on the bare word."""
+        assert declared_type.fixed_size() is None
+        assert declared_type.is_fixed_size() is False
+        with pytest.raises(SSZTypeError) as exception_info:
+            declared_type.get_byte_length()
+        assert str(exception_info.value) == (
+            f"{declared_type.__name__} is a variable-size {kind}, and has no one byte length"
+        )
 
 
 class TestFinalHashTreeRoot:
@@ -1707,23 +1757,23 @@ class TestFinalHashTreeRoot:
 
     def test_a_uint_subclass_declaring_its_own_root_method_is_refused(self) -> None:
         """A basic type's subclass is refused at the class statement."""
-        with pytest.raises(SSZDefinitionError) as exception_info:
+        with pytest.raises(SSZTypeError) as exception_info:
 
             class BadUint(Uint16):
                 def hash_tree_root(self) -> Root:  # ty: ignore[override-of-final-method]
                     return ZERO_ROOT
 
-        assert str(exception_info.value) == "BadUint must define no hash_tree_root of its own"
+        assert str(exception_info.value) == "BadUint declares a hash_tree_root of its own"
 
     def test_a_byte_array_subclass_declaring_its_own_root_method_is_refused(self) -> None:
         """The bytes-backed families reach the guard through the same hook."""
-        with pytest.raises(SSZDefinitionError) as exception_info:
+        with pytest.raises(SSZTypeError) as exception_info:
 
             class BadRoot(Root):
                 def hash_tree_root(self) -> Root:  # ty: ignore[override-of-final-method]
                     return ZERO_ROOT
 
-        assert str(exception_info.value) == "BadRoot must define no hash_tree_root of its own"
+        assert str(exception_info.value) == "BadRoot declares a hash_tree_root of its own"
 
     @pytest.mark.parametrize(
         "base",
@@ -1749,10 +1799,10 @@ class TestFinalHashTreeRoot:
         """
         # Built through the family's own metaclass, so Pydantic's class machinery runs
         # exactly as a class statement would run it.
-        with pytest.raises(SSZDefinitionError) as exception_info:
+        with pytest.raises(SSZTypeError) as exception_info:
             type(base)("Bad", (base,), {"hash_tree_root": lambda self: ZERO_ROOT})
 
-        assert str(exception_info.value) == "Bad must define no hash_tree_root of its own"
+        assert str(exception_info.value) == "Bad declares a hash_tree_root of its own"
 
     def test_a_subclass_that_declares_no_root_method_is_accepted(self) -> None:
         """
@@ -1822,12 +1872,12 @@ class TestFinalHashTreeRoot:
                 """Answer with a fixed root, standing in for a cache that went stale."""
                 return ZERO_ROOT
 
-        with pytest.raises(SSZDefinitionError) as exception_info:
+        with pytest.raises(SSZTypeError) as exception_info:
 
             class Fast(CachedRoot, TwoFieldContainer):
                 """A container that would let the mixin answer for its root."""
 
-        assert str(exception_info.value) == "Fast must define no hash_tree_root of its own"
+        assert str(exception_info.value) == "Fast declares a hash_tree_root of its own"
 
     def test_a_field_named_for_the_root_method_is_refused(self) -> None:
         """A field of that name is refused, because it shadows the method on every instance."""
@@ -1841,11 +1891,11 @@ class TestFinalHashTreeRoot:
         #
         # A container also hashes itself by its own root, so the shadowed name would
         # break hashing rather than merely occupy it.
-        with pytest.raises(SSZDefinitionError) as exception_info:
+        with pytest.raises(SSZTypeError) as exception_info:
 
             class Odd(Container):
                 """A container claiming the one field name the root method needs."""
 
                 hash_tree_root: Uint16  # ty: ignore[override-of-final-method]
 
-        assert str(exception_info.value) == "Odd must define no hash_tree_root of its own"
+        assert str(exception_info.value) == "Odd declares a hash_tree_root of its own"

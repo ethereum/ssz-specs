@@ -19,15 +19,7 @@ from ssz.container import (
     _SSZContainer,
     active_fields,
 )
-from ssz.exceptions import (
-    SSZActiveFieldsError,
-    SSZDefaultError,
-    SSZDefinitionError,
-    SSZSerializationError,
-    SSZTypeError,
-    SSZTypeMismatch,
-    SSZValueError,
-)
+from ssz.exceptions import SSZTypeError, SSZValueError, TypeFault
 from ssz.merkleization import ZERO_ROOT, hash_tree_root, merkleize_progressive, mix_in_active_fields
 from ssz.ssz_base import SSZType
 from ssz.uint import Uint8, Uint16, Uint32, Uint64
@@ -459,7 +451,9 @@ class TestVariableContainer:
         """A variable-size container has no fixed byte length and must raise."""
         with pytest.raises(SSZTypeError) as exc_info:
             TwoVar.get_byte_length()
-        assert exc_info.value.args[0] == "TwoVar: variable-size container has no fixed byte length"
+        assert exc_info.value.args[0] == (
+            "TwoVar is a variable-size container, and has no one byte length"
+        )
 
     def test_all_variable_roundtrip(self) -> None:
         """A container of two variable lists roundtrips through encode then decode."""
@@ -504,7 +498,9 @@ class TestMixedContainer:
         """The mixed container has no fixed byte length and must raise."""
         with pytest.raises(SSZTypeError) as exc_info:
             Mixed.get_byte_length()
-        assert exc_info.value.args[0] == "Mixed: variable-size container has no fixed byte length"
+        assert exc_info.value.args[0] == (
+            "Mixed is a variable-size container, and has no one byte length"
+        )
 
     def test_mixed_wire_layout(self) -> None:
         """The fixed slots and offsets land before the tail payloads in field order."""
@@ -646,22 +642,24 @@ class TestErrors:
         self, declared: type, type_name: str
     ) -> None:
         """A field with no SSZ rules is refused where it is written, not where it is read."""
-        with pytest.raises(SSZTypeMismatch) as exception_info:
+        with pytest.raises(SSZTypeError) as exception_info:
             type(ssz.Container)(
                 "BadField",
                 (ssz.Container,),
                 {"__annotations__": {"slot": Uint64, "extra": declared}},
             )
 
-        assert (
-            str(exception_info.value) == f"Expected an SSZ type for BadField.extra, got {type_name}"
-        )
+        assert str(exception_info.value) == f"BadField.extra must be an SSZ type, got {type_name}"
 
     @pytest.mark.parametrize(
         ("bad_offset", "expected_message"),
         [
-            pytest.param(11, "Mixed: first offset 11 != fixed-part end 20", id="below_fixed_end"),
-            pytest.param(21, "Mixed: first offset 21 != fixed-part end 20", id="above_fixed_end"),
+            pytest.param(
+                11, "the first offset is 11, and the fixed part ends at 20", id="below_fixed_end"
+            ),
+            pytest.param(
+                21, "the first offset is 21, and the fixed part ends at 20", id="above_fixed_end"
+            ),
         ],
     )
     def test_first_offset_must_match_fixed_part_end(
@@ -678,7 +676,7 @@ class TestErrors:
             + bytes.fromhex("01000200")
             + bytes.fromhex("0300")
         )
-        with pytest.raises(SSZSerializationError) as exc_info:
+        with pytest.raises(SSZValueError) as exc_info:
             Mixed.decode_bytes(encoded_bytes)
         assert exc_info.value.args[0] == expected_message
 
@@ -687,23 +685,24 @@ class TestErrors:
         # Fixed part is 8 bytes for two Uint32 offsets.
         # First offset is 8 (valid), second offset is 5 (decreasing).
         encoded_bytes = (8).to_bytes(4, "little") + (5).to_bytes(4, "little") + b"\x34\x12"
-        with pytest.raises(SSZSerializationError) as exc_info:
+        with pytest.raises(SSZValueError) as exc_info:
             TwoVar.decode_bytes(encoded_bytes)
-        assert exc_info.value.args[0] == "TwoVar.a: non-monotonic offsets (8 > 5)"
+        # The field the offsets belong to is a path step, in front of the sentence.
+        assert str(exc_info.value) == "a: offset 8 is above the offset after it, 5"
 
     def test_short_input_on_fixed_field_raises(self) -> None:
         """A truncated stream on a fixed field surfaces the field type's own error."""
         # 15 bytes is one short of the 16-byte fixed width.
-        with pytest.raises(SSZSerializationError) as exc_info:
+        with pytest.raises(SSZValueError) as exc_info:
             TwoUint64.decode_bytes(b"\x00" * 15)
-        assert exc_info.value.args[0] == "Uint64: expected 8 bytes, got 7"
+        assert str(exc_info.value) == "b: Uint64 needs 8 bytes, the input holds 7"
 
     def test_trailing_bytes_raises(self) -> None:
         """An input one byte longer than the canonical encoding is rejected."""
         # A struct of fixed-size fields spans its own width, so it refuses the spare byte.
-        with pytest.raises(SSZSerializationError) as exc_info:
+        with pytest.raises(SSZValueError) as exc_info:
             TwoUint64.decode_bytes(b"\x00" * 17)
-        assert exc_info.value.args[0] == "TwoUint64: expected 16 bytes, got 17"
+        assert exc_info.value.args[0] == "TwoUint64 spans 16 bytes, and the budget is 17"
 
 
 class TestFixedSizeStructSpansItsOwnWidth:
@@ -713,19 +712,19 @@ class TestFixedSizeStructSpansItsOwnWidth:
         """A surplus byte inside the window is not something the caller can see."""
         # The whole input is there to be read, so the budget itself is what fails.
         stream = io.BytesIO(b"\x00" * 17)
-        with pytest.raises(SSZSerializationError) as exception_info:
+        with pytest.raises(SSZValueError) as exception_info:
             TwoUint64.deserialize(stream, 17)
 
-        assert exception_info.value.args[0] == "TwoUint64: expected 16 bytes, got 17"
+        assert exception_info.value.args[0] == "TwoUint64 spans 16 bytes, and the budget is 17"
 
     def test_a_narrower_budget_is_refused(self) -> None:
         """A budget under the width names no value of this shape either."""
         # The stream holds the full 16 bytes, so the shortfall is in the budget alone.
         stream = io.BytesIO(b"\x00" * 16)
-        with pytest.raises(SSZSerializationError) as exception_info:
+        with pytest.raises(SSZValueError) as exception_info:
             TwoUint64.deserialize(stream, 15)
 
-        assert exception_info.value.args[0] == "TwoUint64: expected 16 bytes, got 15"
+        assert exception_info.value.args[0] == "TwoUint64 spans 16 bytes, and the budget is 15"
 
     def test_the_exact_width_decodes(self) -> None:
         """The one budget that is the width decodes, and consumes all of it."""
@@ -762,12 +761,11 @@ class TestFromHex:
         assert EmptyContainer.from_hex(hex_input) == EmptyContainer()
 
     def test_from_hex_bad_hex_raises_value_error(self) -> None:
-        """Non-hex characters surface a ValueError from the underlying parser."""
-        with pytest.raises(ValueError) as exception_info:
+        """Non-hex characters are refused by the shape reading them, and it names itself."""
+        with pytest.raises(SSZValueError) as exception_info:
             OneByte.from_hex("zz")
-        assert (
-            str(exception_info.value)
-            == "non-hexadecimal number found in fromhex() arg at position 0"
+        assert str(exception_info.value) == (
+            "OneByte reads a string as hex digits, and this one holds something else"
         )
 
 
@@ -807,8 +805,7 @@ class TestHexStringValidator:
             ValidationError,
             match=(
                 r"(?s)^1 validation error for OneByte\n"
-                + r"  Value error, invalid OneByte hex: "
-                + r"OneByte: expected 1 bytes, got 2 "
+                + r"  Value error, OneByte spans 1 bytes, and the budget is 2 "
                 + r"\[type=value_error, input_value='abcd', input_type=str\]\n"
                 + r"    For further information visit "
                 + r"https://errors\.pydantic\.dev/[^/]+/v/value_error\Z"
@@ -837,8 +834,8 @@ class TestProgressiveContainerLayoutRules:
         # A container with no field serializes to nothing, which would leave the
         # element count of a list of them unrecoverable from the wire bytes.
         with pytest.raises(
-            SSZActiveFieldsError,
-            match=r"^EmptyLayout: invalid active fields, the layout is empty$",
+            SSZTypeError,
+            match=r"^a field layout holds at least one position, got 0$",
         ):
 
             class EmptyLayout(ProgressiveContainer):
@@ -858,8 +855,8 @@ class TestProgressiveContainerLayoutRules:
         # The mixed-in word ignores a high zero bit, and at some widths the leaf tree
         # ignores the extra position too, which would give two layouts one root.
         with pytest.raises(
-            SSZActiveFieldsError,
-            match=r"^Gapped: invalid active fields, the layout ends in a gap$",
+            SSZTypeError,
+            match=r"^a field layout ends on a field, not on a gap$",
         ):
             type("Gapped", (ProgressiveContainer,), {"ACTIVE_FIELDS": tuple(active_fields)})
 
@@ -874,10 +871,9 @@ class TestProgressiveContainerLayoutRules:
         """The layout is mixed in as one 32-byte word, so 256 positions is the ceiling."""
         active_fields = (*([0] * (position_count - 1)), 1)
         with pytest.raises(
-            SSZActiveFieldsError,
+            SSZTypeError,
             match=(
-                r"^TooWide: invalid active fields, the layout holds "
-                + rf"{position_count} positions, over the limit of 256$"
+                r"^a field layout holds " + rf"{position_count} positions, over the limit of 256$"
             ),
         ):
             type("TooWide", (ProgressiveContainer,), {"ACTIVE_FIELDS": active_fields})
@@ -894,8 +890,8 @@ class TestProgressiveContainerLayoutRules:
         # Every layout comes from the factory. Inheriting the base alone leaves none,
         # and a struct with no layout has no position to merkleize its fields at.
         with pytest.raises(
-            SSZDefinitionError,
-            match=r"^NoLayout must define ACTIVE_FIELDS$",
+            SSZTypeError,
+            match=r"^NoLayout must declare ACTIVE_FIELDS$",
         ):
 
             class NoLayout(ProgressiveContainer):
@@ -904,11 +900,8 @@ class TestProgressiveContainerLayoutRules:
     def test_field_count_below_the_set_bit_count_rejected(self) -> None:
         """A layout that sets more positions than the struct declares fields is rejected."""
         with pytest.raises(
-            SSZActiveFieldsError,
-            match=(
-                r"^TooFewFields: invalid active fields, "
-                + r"the layout sets 2 positions, and the struct declares 1$"
-            ),
+            SSZTypeError,
+            match=(r"^the layout sets 2 positions, and the struct declares 1$"),
         ):
 
             class TooFewFields(ProgressiveContainer):
@@ -919,11 +912,8 @@ class TestProgressiveContainerLayoutRules:
     def test_field_count_above_the_set_bit_count_rejected(self) -> None:
         """A layout that sets fewer positions than the struct declares fields is rejected."""
         with pytest.raises(
-            SSZActiveFieldsError,
-            match=(
-                r"^TooManyFields: invalid active fields, "
-                + r"the layout sets 1 positions, and the struct declares 2$"
-            ),
+            SSZTypeError,
+            match=(r"^the layout sets 1 positions, and the struct declares 2$"),
         ):
 
             class TooManyFields(ProgressiveContainer):
@@ -936,11 +926,8 @@ class TestProgressiveContainerLayoutRules:
         """The field-count rule is what catches a progressive container with no field."""
         # The layout itself is legal here; the struct simply declares nothing to fill it.
         with pytest.raises(
-            SSZActiveFieldsError,
-            match=(
-                r"^NoFields: invalid active fields, "
-                + r"the layout sets 1 positions, and the struct declares 0$"
-            ),
+            SSZTypeError,
+            match=(r"^the layout sets 1 positions, and the struct declares 0$"),
         ):
 
             class NoFields(ProgressiveContainer):
@@ -951,11 +938,8 @@ class TestProgressiveContainerLayoutRules:
     def test_subclass_of_a_progressive_container_rechecks_the_layout(self) -> None:
         """Appending a field to a concrete shape breaks the layout it inherited."""
         with pytest.raises(
-            SSZActiveFieldsError,
-            match=(
-                r"^BiggerSquare: invalid active fields, "
-                + r"the layout sets 2 positions, and the struct declares 3$"
-            ),
+            SSZTypeError,
+            match=(r"^the layout sets 2 positions, and the struct declares 3$"),
         ):
 
             class BiggerSquare(Square):
@@ -963,12 +947,11 @@ class TestProgressiveContainerLayoutRules:
 
     def test_layout_error_is_a_type_error_carrying_its_reason(self) -> None:
         """The failure is an SSZ type error and keeps both operands machine-readable."""
-        with pytest.raises(SSZActiveFieldsError) as exception_info:
+        with pytest.raises(SSZTypeError) as exception_info:
             type("GapTail", (ProgressiveContainer,), {"ACTIVE_FIELDS": (1, 0)})
-        assert isinstance(exception_info.value, SSZTypeError)
-        assert exception_info.value.type_name == "GapTail"
-        assert exception_info.value.active_fields == (1, 0)
-        assert exception_info.value.reason == "the layout ends in a gap"
+        # The fault is the reason, as a tag rather than as prose to match on.
+        assert exception_info.value.fault is TypeFault.LAYOUT_TRAILING_GAP
+        assert exception_info.value.fields["layout"] == (1, 0)
 
 
 class TestProgressiveContainerLayoutMetadata:
@@ -1002,8 +985,8 @@ class TestProgressiveContainerLayoutMetadata:
         # A layout written as the string "101" would otherwise read as three set
         # positions, since every character of it is truthy.
         with pytest.raises(
-            SSZActiveFieldsError,
-            match=r"^BadBits: invalid active fields, a position holds neither 0 nor 1$",
+            SSZTypeError,
+            match=r"^a field layout holds only 0 and 1$",
         ):
             type("BadBits", (ProgressiveContainer,), {"ACTIVE_FIELDS": layout})
 
@@ -1056,12 +1039,13 @@ class TestProgressiveContainerLayoutMetadata:
         [
             pytest.param(
                 ListFieldProgressive,
-                "ListFieldProgressive: variable-size container has no fixed byte length",
+                "ListFieldProgressive is a variable-size container, and has no one byte length",
                 id="bounded_list_field",
             ),
             pytest.param(
                 ProgressiveFieldsProgressive,
-                "ProgressiveFieldsProgressive: variable-size container has no fixed byte length",
+                "ProgressiveFieldsProgressive is a variable-size container, "
+                + "and has no one byte length",
                 id="progressive_fields",
             ),
         ],
@@ -1112,12 +1096,12 @@ class TestLayoutBuilderShapes:
         "width, gaps, expected_message",
         [
             pytest.param(
-                0, (), "a layout holds at least one position, got a width of 0", id="zero_width"
+                0, (), "a field layout holds at least one position, got 0", id="zero_width"
             ),
             pytest.param(
                 -1,
                 (),
-                "a layout holds at least one position, got a width of -1",
+                "a field layout holds at least one position, got -1",
                 id="negative_width",
             ),
             pytest.param(
@@ -1144,20 +1128,30 @@ class TestLayoutBuilderShapes:
         #
         # A repeat vanishes the same way.
         # Two vacancies at one position leave one hole, against the two that were counted.
-        with pytest.raises(SSZValueError) as exception_info:
+        with pytest.raises(SSZTypeError) as exception_info:
             active_fields(width=width, gaps=gaps)
         assert exception_info.value.args[0] == expected_message
 
     @pytest.mark.parametrize(
         "width, gaps, expected_message",
         [
-            pytest.param(True, (), "Expected an integer width, got bool", id="boolean_width"),
-            pytest.param(3.0, (), "Expected an integer width, got float", id="fractional_width"),
             pytest.param(
-                3, (True,), "Expected an integer position, got bool", id="boolean_vacancy"
+                True, (), "a field layout width is a plain integer, got bool", id="boolean_width"
             ),
             pytest.param(
-                3, (1.0,), "Expected an integer position, got float", id="fractional_vacancy"
+                3.0, (), "a field layout width is a plain integer, got float", id="fractional_width"
+            ),
+            pytest.param(
+                3,
+                (True,),
+                "a field layout position is a plain integer, got bool",
+                id="boolean_vacancy",
+            ),
+            pytest.param(
+                3,
+                (1.0,),
+                "a field layout position is a plain integer, got float",
+                id="fractional_vacancy",
             ),
         ],
     )
@@ -1178,7 +1172,7 @@ class TestLayoutBuilderShapes:
         #
         # A boolean written as a bit is a different matter, and stays legal.
         # There a boolean is the value 0 or 1, not a count of positions.
-        with pytest.raises(SSZTypeMismatch) as exception_info:
+        with pytest.raises(SSZTypeError) as exception_info:
             active_fields(width=width, gaps=gaps)
         assert exception_info.value.args[0] == expected_message
 
@@ -1271,11 +1265,8 @@ class TestTheWidthIsStatedRatherThanCounted:
         # A stated width keeps the two counts independent.
         # The disagreement then has nowhere to hide.
         with pytest.raises(
-            SSZActiveFieldsError,
-            match=(
-                r"^Forgot: invalid active fields, "
-                + r"the layout sets 4 positions, and the struct declares 3$"
-            ),
+            SSZTypeError,
+            match=(r"^the layout sets 4 positions, and the struct declares 3$"),
         ):
 
             class Forgot(ProgressiveContainer):
@@ -1299,12 +1290,12 @@ class TestRulesLeftWithTheDeclaration:
         #                    its message can say which shape broke which rule
         #
         # A trailing vacancy is a property of the finished layout, not of the arguments.
-        # The rule earns its keep only when the message names the shape that broke it.
+        # Only the declaration holds that layout, so only it can weigh the rule.
         assert active_fields(width=3, gaps=(2,)) == (1, 1, 0)
 
         with pytest.raises(
-            SSZActiveFieldsError,
-            match=r"^TrailingGap: invalid active fields, the layout ends in a gap$",
+            SSZTypeError,
+            match=r"^a field layout ends on a field, not on a gap$",
         ):
             type(
                 "TrailingGap",
@@ -1321,11 +1312,8 @@ class TestRulesLeftWithTheDeclaration:
         assert len(active_fields(width=MAX_ACTIVE_FIELDS + 1)) == 257
 
         with pytest.raises(
-            SSZActiveFieldsError,
-            match=(
-                r"^TooWideBuilt: invalid active fields, "
-                + r"the layout holds 257 positions, over the limit of 256$"
-            ),
+            SSZTypeError,
+            match=(r"^a field layout holds 257 positions, over the limit of 256$"),
         ):
             type(
                 "TooWideBuilt",
@@ -1435,7 +1423,7 @@ class TestALayoutWrittenWithTypedNumbers:
 
     def test_a_typed_position_out_of_range_is_reported_as_a_plain_number(self) -> None:
         """A refusal names the position, not the spelling it arrived in."""
-        with pytest.raises(SSZValueError, match=r"^gap 5 falls outside a layout of 3 positions$"):
+        with pytest.raises(SSZTypeError, match=r"^gap 5 falls outside a layout of 3 positions$"):
             active_fields(width=3, gaps=(Uint64(5),))
 
 
@@ -1549,7 +1537,7 @@ class TestProgressiveContainerSerialization:
 
     def test_bad_hex_reports_the_shape_name(self) -> None:
         """A malformed hex payload surfaces a validation error tagged by the class name."""
-        with pytest.raises(ValidationError, match=r"invalid Square hex: "):
+        with pytest.raises(ValidationError, match=r"1 validation error for Square"):
             Square.model_validate("34125600")
 
 
@@ -1622,16 +1610,16 @@ class TestProgressiveContainerDecodeErrors:
     def test_short_input_on_a_fixed_field_raises(self) -> None:
         """A truncated stream on a fixed field surfaces the field type's own error."""
         # Two bytes feed side and leave nothing for color.
-        with pytest.raises(SSZSerializationError) as exception_info:
+        with pytest.raises(SSZValueError) as exception_info:
             Square.decode_bytes(bytes.fromhex("3412"))
-        assert exception_info.value.args[0] == "Uint8: expected 1 bytes, got 0"
+        assert str(exception_info.value) == "color: Uint8 needs 1 bytes, the input holds 0"
 
     def test_trailing_bytes_raise(self) -> None:
         """An input one byte longer than the canonical encoding is rejected."""
         # Both shapes span the width of their fixed part, so each refuses the spare byte.
-        with pytest.raises(SSZSerializationError) as exception_info:
+        with pytest.raises(SSZValueError) as exception_info:
             Square.decode_bytes(bytes.fromhex("34125600"))
-        assert exception_info.value.args[0] == "Square: expected 3 bytes, got 4"
+        assert exception_info.value.args[0] == "Square spans 3 bytes, and the budget is 4"
 
     @pytest.mark.parametrize(
         "bad_offset",
@@ -1643,10 +1631,10 @@ class TestProgressiveContainerDecodeErrors:
     def test_first_offset_must_match_the_fixed_part_end(self, bad_offset: int) -> None:
         """The first offset must equal the end of the fixed part, here 12 bytes in."""
         encoded_bytes = (7).to_bytes(8, "little") + bad_offset.to_bytes(4, "little")
-        with pytest.raises(SSZSerializationError) as exception_info:
+        with pytest.raises(SSZValueError) as exception_info:
             ListFieldProgressive.decode_bytes(encoded_bytes)
         assert exception_info.value.args[0] == (
-            f"ListFieldProgressive: first offset {bad_offset} != fixed-part end 12"
+            f"the first offset is {bad_offset}, and the fixed part ends at 12"
         )
 
     def test_non_monotonic_offsets_raise(self) -> None:
@@ -1655,18 +1643,16 @@ class TestProgressiveContainerDecodeErrors:
         encoded_bytes = (
             (1).to_bytes(4, "little") + (12).to_bytes(4, "little") + (11).to_bytes(4, "little")
         )
-        with pytest.raises(SSZSerializationError) as exception_info:
+        with pytest.raises(SSZValueError) as exception_info:
             ProgressiveFieldsProgressive.decode_bytes(encoded_bytes)
-        assert exception_info.value.args[0] == (
-            "ProgressiveFieldsProgressive.numbers: non-monotonic offsets (12 > 11)"
-        )
+        assert str(exception_info.value) == "numbers: offset 12 is above the offset after it, 11"
 
     def test_scope_shorter_than_the_fixed_part_raises(self) -> None:
         """A scope that cannot even cover the offsets is rejected by the field decoder."""
         stream = io.BytesIO(bytes.fromhex("0700000000000000"))
-        with pytest.raises(SSZSerializationError) as exception_info:
+        with pytest.raises(SSZValueError) as exception_info:
             ListFieldProgressive.deserialize(stream, 8)
-        assert exception_info.value.args[0] == "Uint32: expected 4 bytes, got 0"
+        assert str(exception_info.value) == "body: Uint32 needs 4 bytes, the input holds 0"
 
 
 class TestContainerUnaffectedByTheSharedBase:
@@ -1822,7 +1808,7 @@ class TestContainerDefaults:
 
     def test_a_struct_holding_a_union_has_no_default(self) -> None:
         """A union has no default, and the struct inherits that absence through the field."""
-        with pytest.raises(SSZDefaultError, match=r"^TagUnion has no default value$"):
+        with pytest.raises(SSZTypeError, match=r"^TagUnion has no default value$"):
             ContainerWithUnion.default()
 
     def test_a_struct_holding_a_union_still_builds_when_the_union_is_given(self) -> None:
