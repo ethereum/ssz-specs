@@ -135,8 +135,8 @@ def is_compatible(left: type[SSZType], right: type[SSZType]) -> bool:
     if issubclass(left, Boolean) and issubclass(right, Boolean):
         return True
 
-    # Byte arrays are the spec's aliases for vectors and lists of single bytes, and the
-    # alias is compatible with the type it stands for.
+    # Byte arrays are the spec's aliases for vectors and lists of single bytes.
+    # An alias is compatible with the type it stands for.
     left_bytes, right_bytes = _byte_vector_length(left), _byte_vector_length(right)
     if left_bytes is not None or right_bytes is not None:
         return left_bytes == right_bytes
@@ -321,8 +321,8 @@ class CompatibleUnion(SSZModel):
                 raise SSZTypeError(TypeFault.UNION_OPTION_TYPE, selector=selector)
 
         # Every pair is checked, not every option against the first.
-        # A proof reads whichever option a value turns out to hold, so a clash between
-        # the second and third is as fatal as one with the first.
+        # A proof reads whichever option a value turns out to hold.
+        # A clash between the second and third is as fatal as one with the first.
         options = list(cls.OPTIONS.items())
         for index, (selector, option) in enumerate(options):
             for other_selector, other in options[index + 1 :]:

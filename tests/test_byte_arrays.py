@@ -120,8 +120,8 @@ class TestBaseBytesConstruction:
 
     def test_construction_from_a_string_that_is_not_hex_digits_raises(self) -> None:
         """A string is read as hex, so one holding anything else is refused by name."""
-        # The refusal belongs to this library rather than to the parser underneath it,
-        # so a caller catching SSZ refusals around construction still sees this one.
+        # The refusal belongs to this library rather than to the parser underneath it.
+        # A caller catching SSZ refusals around construction still sees this one.
         with pytest.raises(SSZValueError) as exception_info:
             Bytes4("zzzzzzzz")
         assert str(exception_info.value) == (
@@ -279,8 +279,9 @@ class TestBaseBytesEqualityFollowsInheritance:
                 except TypeError:
                     continue
                 compared += 1
-                # The implication Python requires runs one way only, so an unequal pair
-                # is free to share a hash. Here the payload alone decides both sides.
+                # The implication Python requires runs one way only.
+                # An unequal pair is free to share a hash.
+                # Here the payload alone decides both sides.
                 assert equal is (hash(left) == hash(right))
         # Guard against the loop passing because every pair raised.
         assert compared == 20
@@ -310,8 +311,8 @@ class TestBaseBytesOperations:
 
         # One position gives a plain integer.
         # A trailing range gives plain bytes.
-        # Neither is wrapped back into a byte-array type, because a 2-byte result would no
-        # longer satisfy the 4-byte count the type declares.
+        # Neither is wrapped back into a byte-array type.
+        # A 2-byte result would no longer satisfy the 4-byte count the type declares.
         assert byte_array[-1] == 4
         assert type(byte_array[-1]) is int
         assert byte_array[-2:] == b"\x03\x04"
@@ -596,8 +597,8 @@ class TestBaseByteListOperations:
         # A trailing range answers as raw bytes, which is how the payload is stored.
         assert byte_list[-2:] == b"\xad\xbe"
 
-        # Answering by position and by length is all the host language needs to walk a
-        # sequence backwards.
+        # Answering by position and by length is all the host language needs.
+        # Those two are what it walks a sequence backwards with.
         # A byte list is therefore reversible without declaring anything further.
         assert list(reversed(byte_list)) == [0xBE, 0xAD, 0xDE]
 
@@ -629,8 +630,8 @@ class TestBaseByteListMutation:
         payload = ByteList16(data=b"\xde")
         payload.append(0xAD)
 
-        # A stored bytearray would be a payload that could change under a value that
-        # already reported its root.
+        # A stored bytearray would be a payload that could still change.
+        # It would change under a value that already reported its root.
         assert type(payload.data) is bytes
         assert payload.data == b"\xde\xad"
 
@@ -848,11 +849,11 @@ class TestBaseBytesDefault:
 
     def test_an_explicitly_missing_value_is_still_rejected(self) -> None:
         """Only an omitted argument asks for the default, never a missing value passed as one."""
-        # Passing a missing value through by mistake is the case this catches: an optional
-        # that arrived empty must fail loudly rather than read as four zero bytes.
+        # Passing a missing value through by mistake is the case this catches.
+        # An optional that arrived empty must fail loudly rather than read as four zero bytes.
         #
-        # A static checker rejects the call as well, which is the same property one step
-        # earlier, so the suppression here is what lets the runtime half be pinned.
+        # A static checker rejects the call as well, which is the same property one step earlier.
+        # The suppression here is what lets the runtime half be pinned.
         with pytest.raises(TypeError) as exception_info:
             Bytes4(None)  # ty: ignore[invalid-argument-type]
         assert str(exception_info.value) == "expected bytes, got NoneType"

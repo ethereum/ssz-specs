@@ -605,8 +605,8 @@ SEQUENCE_PAIRS = [
         False,
         id="progressive_lists_over_clashing_shapes",
     ),
-    # The two list shapes share a wire format and nothing else: one pads to its declared
-    # capacity, the other grows a spine with the data.
+    # The two list shapes share a wire format and nothing else.
+    # One pads to its declared capacity, the other grows a spine with the data.
     pytest.param(Uint16ProgressiveList, Uint16List4, False, id="progressive_and_bounded_list"),
     pytest.param(Uint8List4, ProgressiveList[Uint8], False, id="byte_list_and_progressive_list"),
     pytest.param(Uint16ProgressiveList, Square, False, id="progressive_list_and_a_shape"),
@@ -765,12 +765,13 @@ def test_a_container_field_that_is_a_union_recurses_too() -> None:
 
 def test_a_union_of_unions_recurses_through_both_levels() -> None:
     """Every option of every option has to fit, since a proof may descend that far."""
-    # NestedShape holds Shape and SquareOnly; NestedShapeAlias holds ShapeRestated and
-    # SquareOnly. The four cross pairs all reduce to Square against Circle, or to
-    # Square against Square.
+    # NestedShape holds Shape and SquareOnly.
+    # NestedShapeAlias holds ShapeRestated and SquareOnly.
+    # The four cross pairs all reduce to Square against Circle, or to Square against Square.
     assert_relation(NestedShape, NestedShapeAlias, True)
-    # A union of unions is not the union one level down from it: comparing them pits
-    # Shape against Square, a union against a progressive container, which never fits.
+    # A union of unions is not the union one level down from it.
+    # Comparing them pits Shape against Square.
+    # That is a union against a progressive container, which never fits.
     assert_relation(NestedShape, Shape, False)
 
 

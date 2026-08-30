@@ -548,8 +548,8 @@ def calculate_merkle_root(leaf: Chunk, proof: Sequence[Chunk], index: int) -> Ro
     for level, sibling in enumerate(proof):
         node = _hash_pair(sibling, node) if gindex_bit(index, level) else _hash_pair(node, sibling)
     # Invariant: the depth of a provable index is at least one.
-    # The loop above therefore ran and
-    # left a digest behind. Re-measuring it would only re-derive what _hash_pair guarantees.
+    # The loop above therefore ran and left a digest behind.
+    # Re-measuring it would only re-derive what _hash_pair guarantees.
     return Root._trusted(node)
 
 

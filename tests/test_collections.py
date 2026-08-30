@@ -332,8 +332,8 @@ class TestElementAcceptance:
         values = Uint8List10(data=[element])
 
         # The same object, not merely an equal one.
-        # A rebuilt element would be a second value with the same contents, and a composite
-        # element rebuilt on entry would stop reporting the mutations made through it.
+        # A rebuilt element would be a second value with the same contents.
+        # A composite element rebuilt on entry would stop reporting the mutations made through it.
         assert values[0] is element
 
     def test_an_element_of_an_ancestor_class_is_built(self) -> None:
@@ -348,11 +348,11 @@ class TestElementAcceptance:
         class TypedUint8(Uint8):
             """A Uint8 subtype, as applications define semantic integer types."""
 
-        # The declared class does not descend from this one, so the value is not one the
-        # declared class can be built from.
+        # The declared class does not descend from this one.
+        # The value is not one the declared class can be built from.
         #
-        # Reading the element's class first settles nothing here: the two classes are not
-        # the same object, so the descent test is still what answers.
+        # Reading the element's class first settles nothing here.
+        # The two classes are not the same object, so the descent test is still what answers.
         with pytest.raises(TypeOrValidationError) as exception_info:
             Uint8List10(data=[TypedUint8(7)])
         assert str(exception_info.value) == "expected Uint8, got TypedUint8"
@@ -371,8 +371,9 @@ class TestElementAcceptance:
 
     def test_a_foreign_refusal_is_reported_as_the_class_mismatch_it_stands_for(self) -> None:
         """A refusal from outside this library says only that the value did not fit."""
-        # A mapping is how a model-backed element renders, so one is read back through
-        # pydantic, whose own refusal names neither the element class nor the reason.
+        # A mapping is how a model-backed element renders.
+        # One is therefore read back through pydantic.
+        # Pydantic's own refusal names neither the element class nor the reason.
         with pytest.raises(SSZTypeError) as exception_info:
             VariableContainerList2(data=cast(Any, [{"a": 1, "unknown": 2}]))
         assert str(exception_info.value) == "expected VariableContainer, got dict"
@@ -839,8 +840,8 @@ class TestVectorSerialization:
 
     def test_variable_size_vector_rejects_non_monotonic_offsets(self) -> None:
         """A later offset smaller than an earlier one means a body would have negative width."""
-        # Invariant: an offset never exceeds the one after it, or the span between them
-        # is a body of negative width.
+        # Invariant: an offset never exceeds the one after it.
+        # The span between a pair that does is a body of negative width.
         #
         # Fixture state: a 2-element vector, so a table of two offsets and no bodies.
         #
@@ -858,8 +859,8 @@ class TestVectorSerialization:
         """A last offset past the byte budget is reported as the overrun it is."""
         # Invariant: the last body ends at the budget, so the last offset cannot exceed it.
         #
-        # Fixture state: a 2-element vector over 20 bytes, so a table of two offsets
-        # followed by 12 bytes of bodies.
+        # Fixture state: a 2-element vector over 20 bytes.
+        # A table of two offsets followed by 12 bytes of bodies.
         #
         # Mutation: the second offset points past the end of the input.
         #
@@ -867,8 +868,8 @@ class TestVectorSerialization:
         #     boundaries    8       100      20
         #     spans         8..100  100..20  -> element 1 starts past the budget
         #
-        # The failing pair is the one closed by the budget, which is what separates this
-        # fault from a table that is merely out of order.
+        # The failing pair is the one closed by the budget.
+        # That is what separates this fault from a table that is merely out of order.
         encoded_bytes = b"\x08\x00\x00\x00\x64\x00\x00\x00" + b"\x00" * 12
         with pytest.raises(SSZValueError) as exception_info:
             VariableContainerVector2.decode_bytes(encoded_bytes)
@@ -958,8 +959,8 @@ class TestListSerialization:
 
     def test_variable_size_list_rejects_first_offset_past_scope(self) -> None:
         """A first offset larger than the available scope is invalid."""
-        # The first offset is the table's own width, so 100 claims a 100-byte table
-        # inside a 4-byte payload, leaving every body outside the input.
+        # The first offset is the table's own width.
+        # 100 claims a 100-byte table inside a 4-byte payload, leaving every body outside the input.
         with pytest.raises(SSZValueError) as exception_info:
             VariableContainerList2.decode_bytes(b"\x64\x00\x00\x00")
         assert str(exception_info.value) == "offset 100 runs past the budget of 4"
@@ -973,8 +974,8 @@ class TestListSerialization:
 
     def test_variable_size_list_rejects_zero_first_offset(self) -> None:
         """A zero first offset is contradictory and rejected before building the boundary list."""
-        # Zero says the table is empty, so there are no elements — yet the payload then
-        # claims one body spanning the whole budget.
+        # Zero says the table is empty.
+        # There are no elements — yet the payload then claims one body spanning the whole budget.
         with pytest.raises(SSZValueError) as exception_info:
             VariableContainerList2.decode_bytes(bytes.fromhex("00000000aabbccdd"))
         assert str(exception_info.value) == "the first offset 0 is below the table's own width of 4"
@@ -1449,8 +1450,8 @@ class TestProgressiveListSerialization:
 
     def test_variable_size_list_rejects_first_offset_past_scope(self) -> None:
         """A first offset larger than the available scope is invalid."""
-        # The first offset is the table's own width, so 100 claims a 100-byte table
-        # inside a 4-byte payload, leaving every body outside the input.
+        # The first offset is the table's own width.
+        # 100 claims a 100-byte table inside a 4-byte payload, leaving every body outside the input.
         with pytest.raises(SSZValueError) as exception_info:
             VariableContainerProgressiveList.decode_bytes(b"\x64\x00\x00\x00")
         assert str(exception_info.value) == "offset 100 runs past the budget of 4"
@@ -1464,8 +1465,8 @@ class TestProgressiveListSerialization:
 
     def test_variable_size_list_rejects_zero_first_offset(self) -> None:
         """A zero first offset is contradictory and rejected before any body is read."""
-        # Zero says the table is empty, so there are no elements — yet the payload then
-        # claims one body spanning the whole budget.
+        # Zero says the table is empty.
+        # There are no elements — yet the payload then claims one body spanning the whole budget.
         with pytest.raises(SSZValueError) as exception_info:
             VariableContainerProgressiveList.decode_bytes(bytes.fromhex("00000000aabbccdd"))
         assert str(exception_info.value) == "the first offset 0 is below the table's own width of 4"
@@ -1546,8 +1547,8 @@ class TestSequenceDefaults:
 
     def test_a_vector_missing_its_declarations_reports_its_own_error(self) -> None:
         """A shape with no element type or length keeps the inherited empty default."""
-        # The default is injected only once both declarations are present, so such a shape
-        # falls through to its own declaration check rather than a new failure mode.
+        # The default is injected only once both declarations are present.
+        # Such a shape falls through to its own declaration check rather than a new failure mode.
 
         class MissingBothDeclarations(Vector):
             pass
@@ -1732,9 +1733,9 @@ class TestDeclarationIsolation:
         """A vector's default reaches its own type and no other."""
         # The contents field is declared once, on the base the three shapes share.
         #
-        # A vector installs its default by writing through that field's descriptor, so a
-        # shape declared after it would inherit the vector's default if that write reached
-        # the shared descriptor rather than a copy of it.
+        # A vector installs its default by writing through that field's descriptor.
+        # A write reaching the shared descriptor rather than a copy would outlive the shape.
+        # A shape declared after it would then inherit the vector's default.
 
         class LaterVector(Vector[Uint8]):
             LENGTH = 7
@@ -1774,8 +1775,8 @@ class TestZeroLengthVector:
 
     def test_zero_length_is_refused_at_declaration(self) -> None:
         """A vector of no elements is refused where it is written, not where it is used."""
-        # A zero-length vector has no offset table, so a variable-size body would have
-        # nowhere to be read from.
+        # A zero-length vector has no offset table.
+        # A variable-size body would have nowhere to be read from.
         with pytest.raises(SSZTypeError) as exception_info:
 
             class EmptyVector(Vector[Uint8]):
@@ -1784,14 +1785,19 @@ class TestZeroLengthVector:
         assert str(exception_info.value) == "a vector holds at least one element, got a length of 0"
 
     def test_negative_length_is_refused_at_declaration(self) -> None:
-        """A negative count is refused the same way, and for the same reason."""
+        """A negative count is refused a step earlier, as no count at all."""
+        # Zero is a count, and this shape is the one with no use for it.
+        #
+        # Below zero counts nothing at all, so every shape refuses it alike.
+        #
+        # The refusal therefore names the capacity rather than the shape.
         with pytest.raises(SSZTypeError) as exception_info:
 
             class NegativeVector(Vector[Uint8]):
                 LENGTH = -1
 
         assert str(exception_info.value) == (
-            "a vector holds at least one element, got a length of -1"
+            "NegativeVector.LENGTH counts what a shape holds, and -1 is not a count"
         )
 
 
@@ -1808,7 +1814,7 @@ class TestNegativeListLimit:
 
         assert (
             str(exception_info.value)
-            == "a bound counts the elements a shape may hold, and -1 is not a count"
+            == "NegativeList.LIMIT counts what a shape holds, and -1 is not a count"
         )
 
     def test_a_limit_of_zero_admits_the_empty_value_and_nothing_else(self) -> None:
@@ -1949,8 +1955,8 @@ class TestJsonRoundTrip:
 
     def test_a_bare_hex_string_element_is_still_refused(self) -> None:
         """Only the 0x-prefixed rendering is accepted, never a bare hex string."""
-        # A byte count read as characters is the mistake this refusal exists to catch,
-        # so an unprefixed string stays a type error rather than becoming 64 bytes.
+        # A byte count read as characters is the mistake this refusal exists to catch.
+        # An unprefixed string stays a type error rather than becoming 64 bytes.
         with pytest.raises(SSZTypeError) as exception_info:
             Bytes32List32(data=cast(Any, ["ab" * 32]))
 
@@ -1987,8 +1993,8 @@ class TestTruncatedOffsetTable:
         #     promised   [ off_0 | off_1 | bodies... ]   20 bytes
         #     actual     [ off_0 ]                        4 bytes
         #
-        # This is what a corrupt outer offset table looks like from the inside: the
-        # span handed down is wider than the bytes that back it.
+        # This is what a corrupt outer offset table looks like from the inside.
+        # The span handed down is wider than the bytes that back it.
         stream = io.BytesIO(b"\x08\x00\x00\x00")
         with pytest.raises(SSZValueError) as exception_info:
             VariableContainerVector2.deserialize(stream, 20)

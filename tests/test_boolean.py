@@ -168,8 +168,8 @@ class TestArithmeticOperands:
 
     def test_the_host_language_reports_what_both_sides_decline(self) -> None:
         """With nobody left to answer, Python raises the TypeError any other type would."""
-        # Lower case where this library's own message is capitalised, because the message
-        # here is the interpreter's.
+        # Lower case where this library's own message is capitalised.
+        # The message here is the interpreter's.
         with pytest.raises(TypeError, match="^unsupported operand type"):
             _ = Boolean(True) + "2"
 

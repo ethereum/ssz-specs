@@ -152,10 +152,21 @@ class SSZType(ABC):
         integer, whatever the declaration was written at.
 
         A capacity that is not an integer at all is refused here as well.
-        Declaration is the only place that refusal can be useful:
+
+        So is one below zero.
+
+        Declaration is the only place either refusal can be useful:
 
             LIMIT = 4.7   ->  refused, rather than resolving to a chunk count nobody wrote
             LIMIT = "4"   ->  refused, rather than reporting a wrong element count later
+            LIMIT = -1    ->  refused, rather than bounding a shape no value can satisfy
+
+        The floor of zero is stated once, for every shape that declares a capacity at all.
+
+        A shape with a higher floor of its own states that one where it is declared:
+
+        - a vector holds at least one element,
+        - a bound of zero admits the empty value and nothing else.
 
         # Refusing a root of its own
 
@@ -187,6 +198,7 @@ class SSZType(ABC):
         Raises:
             SSZTypeError: When a declared capacity is not an integer.
             SSZTypeError: When a declared capacity is a boolean, which counts nothing.
+            SSZTypeError: When a declared capacity is below zero, which counts nothing either.
             SSZTypeError: When a type declares a hash_tree_root of its own.
         """
         super().__init_subclass__(**kwargs)
@@ -194,8 +206,8 @@ class SSZType(ABC):
         # Reading the resolved attribute covers every way a type can answer for itself:
         # a method of its own, a property, or one inherited from outside this type system.
         #
-        # A field of that name shadows the method on each instance rather than on the class,
-        # which leaves the resolved attribute looking untouched.
+        # A field of that name shadows the method on each instance, not on the class.
+        # That leaves the resolved attribute looking untouched.
         # So the annotations this class declares are read as well.
         if (
             cls.hash_tree_root is not SSZType.hash_tree_root
@@ -209,28 +221,36 @@ class SSZType(ABC):
             if name not in cls.__dict__:
                 continue
 
-            # A plain integer is the common case.
+            # A plain integer is the common case, needing no narrowing at all.
             # Recognizing it costs one identity check, once per type declared.
             declared = cls.__dict__[name]
-            if type(declared) is int:
-                continue
+            if type(declared) is not int:
+                # A boolean is a flag rather than a count.
+                # Narrowing one would make a nonsensical declaration a capacity of 1.
+                #
+                # A boolean of this library's own narrows, every integer here taking one.
+                if not isinstance(declared, int) or isinstance(declared, bool):
+                    raise SSZTypeError(
+                        TypeFault.NOT_AN_INTEGER,
+                        type=cls.__name__,
+                        field=name,
+                        got=type(declared).__name__,
+                    )
 
-            # A boolean is a flag rather than a count.
-            # Narrowing one would turn a nonsensical declaration into a capacity of 1,
-            # which is worse than refusing it.
+                # Every integer type narrows the same way, whatever width it declares.
+                declared = int(declared)
+                setattr(cls, name, declared)
+
+            # A capacity counts what a shape holds.
+            # Nothing is held a negative number of times.
             #
-            # A boolean of this library's own is left to narrow, because every integer
-            # here already accepts one in place of 0 or 1.
-            if not isinstance(declared, int) or isinstance(declared, bool):
+            # Below zero admits no value at all, the empty one included.
+            #
+            # A shape with a higher floor of its own states that one where it is declared.
+            if declared < 0:
                 raise SSZTypeError(
-                    TypeFault.NOT_AN_INTEGER,
-                    type=cls.__name__,
-                    field=name,
-                    got=type(declared).__name__,
+                    TypeFault.CAPACITY_NEGATIVE, type=cls.__name__, field=name, got=declared
                 )
-
-            # Every integer type narrows the same way, whatever width it declares.
-            setattr(cls, name, int(declared))
 
     @classmethod
     @abstractmethod
@@ -476,9 +496,10 @@ class SSZModel(StrictBaseModel, SSZType, ABC):
     """
 
     if TYPE_CHECKING:
-        # Declared for the type checker only. Writing these as annotations in the class
-        # body would make Pydantic read them as private attributes, which is the shape
-        # the slots above exist to avoid. This block never runs, so nothing is declared.
+        # Declared for the type checker only.
+        # Annotating these in the class body would make Pydantic read them as private.
+        # That is the shape the slots above exist to avoid.
+        # This block never runs, so nothing is declared.
         _version: ClassVar[int]
         _root_memo: ClassVar["tuple[object, Root] | None"]
 
@@ -511,11 +532,10 @@ class SSZModel(StrictBaseModel, SSZType, ABC):
         # Written past this class's own __setattr__, which is the door itself.
         object.__setattr__(self, "_version", self._version + 1)
 
-    # Hidden from type checkers: a visible __setattr__ typed to accept Any
-    # would exempt every field assignment from static checking against the
-    # declared field types.
-    # A visible fallback returning Any would make
-    # every misspelled attribute resolve instead of being reported.
+    # Both are hidden from type checkers.
+    # A visible setter typed to accept Any would exempt every field assignment.
+    # Each would go unchecked against the field type it was declared at.
+    # A visible fallback returning Any would resolve every misspelled attribute.
     if not TYPE_CHECKING:  # pragma: no cover
 
         def __setattr__(self, name: str, value: Any) -> None:
@@ -525,8 +545,8 @@ class SSZModel(StrictBaseModel, SSZType, ABC):
 
         def __getattr__(self, name: str) -> Any:
             """Fill a cache slot on first read, leaving every other name to Pydantic."""
-            # An unset slot raises before this method is reached, so the common case of
-            # a slot already filled never gets here at all.
+            # An unset slot raises before this method is reached.
+            # A slot already filled, the common case, never gets here at all.
             if name in _COLD_CACHE:
                 cold = _COLD_CACHE[name]
                 object.__setattr__(self, name, cold)
