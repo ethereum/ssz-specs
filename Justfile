@@ -98,6 +98,41 @@ pack-fixtures tag: fill
         --create --file="ssz-test-vectors-{{tag}}.tar.gz" fixtures
     $SHA256 "ssz-test-vectors-{{tag}}.tar.gz" > "ssz-test-vectors-{{tag}}.tar.gz.sha256"
 
+# Remove worktrees and branches whose pull request is already merged
+#
+# A squash merge hides them from any ancestry check, so this asks the forge instead.
+# Pass --dry-run to list what would go without removing anything.
+[group('housekeeping')]
+prune-worktrees *args:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    command -v gh >/dev/null || { echo "gh is required: https://cli.github.com" >&2; exit 1; }
+    dry_run=""
+    [ "${1:-}" = "--dry-run" ] && dry_run=1
+    current=$(git rev-parse --abbrev-ref HEAD)
+    root=$(git rev-parse --show-toplevel)
+    merged=$(gh pr list --state merged --limit 200 --json headRefName --jq '.[].headRefName')
+
+    git worktree list --porcelain |
+        awk '/^worktree /{p=$2} /^branch /{sub("refs/heads/","",$2); print p"\t"$2}' |
+        while IFS=$'\t' read -r path branch; do
+            [ "$path" = "$root" ] && continue
+            [ "$branch" = "$current" ] && continue
+            grep -qxF "$branch" <<< "$merged" || continue
+            if [ -n "$(git -C "$path" status --porcelain)" ]; then
+                echo "kept     $branch (uncommitted changes)"
+                continue
+            fi
+            if [ -n "$dry_run" ]; then
+                echo "would remove $branch"
+            else
+                git worktree remove "$path"
+                git branch -D "$branch" >/dev/null
+                echo "removed  $branch"
+            fi
+        done
+    [ -n "$dry_run" ] || git worktree prune
+
 # Print the command to install shell completions for just recipes
 [group('housekeeping')]
 shell-completions:
