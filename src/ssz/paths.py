@@ -6,17 +6,12 @@ from typing import Final, NamedTuple
 from ssz.bitfields import BitList, BitVector, ProgressiveBitList
 from ssz.boolean import Boolean
 from ssz.byte_arrays import ByteList, ByteVector
+from ssz.chunks import BITS_PER_CHUNK, BYTES_PER_CHUNK, next_pow2
 from ssz.collections import List, ProgressiveList, Vector
 from ssz.container import Container, ProgressiveContainer
 from ssz.exceptions import SSZTypeError, SSZValueError, TypeFault, ValueFault
 from ssz.gindex import gindex_child, gindex_concat, progressive_chunk_gindex
-from ssz.merkleization import (
-    BITS_PER_CHUNK,
-    BYTES_PER_CHUNK,
-    _field_names,
-    _next_pow2,
-    _progressive_container_plan,
-)
+from ssz.layout import field_names, progressive_container_plan
 from ssz.ssz_base import SSZType
 from ssz.uint import BaseUint, Uint8
 from ssz.union import CompatibleUnion
@@ -96,7 +91,7 @@ def chunk_count(ssz_type: type[SSZType]) -> int:
         width = ssz_type.declared_limit() * item_length(ssz_type.ELEMENT_TYPE)
         return (width + BYTES_PER_CHUNK - 1) // BYTES_PER_CHUNK
     if issubclass(ssz_type, Container):
-        return len(_field_names(ssz_type))
+        return len(field_names(ssz_type))
     # A progressive shape grows without bound.
     # It therefore has no leaf count to report.
     raise SSZTypeError(TypeFault.NO_CHUNK_COUNT, type=ssz_type.__name__)
@@ -169,11 +164,11 @@ def _field_layout_position(ssz_type: type[ProgressiveContainer], step: PathStep)
         SSZValueError: An unknown field name.
         SSZTypeError: A layout that no longer pairs with its fields.
     """
-    names = _field_names(ssz_type)
+    names = field_names(ssz_type)
     if str(step) not in names:
         raise SSZValueError(ValueFault.NO_SUCH_FIELD, type=ssz_type.__name__, step=step)
     # A layout is declared as bits and never coerced, so a list of them arrives as one.
-    positions, _ = _progressive_container_plan(tuple(ssz_type.ACTIVE_FIELDS), names)
+    positions, _ = progressive_container_plan(tuple(ssz_type.ACTIVE_FIELDS), names)
     return positions.index(str(step))
 
 
@@ -196,7 +191,7 @@ def chunk_position(ssz_type: type[SSZType], step: PathStep) -> ChunkPosition:
             _field_layout_position(ssz_type, step), 0, item_length(element_type(ssz_type, step))
         )
     if issubclass(ssz_type, Container):
-        names = _field_names(ssz_type)
+        names = field_names(ssz_type)
         if str(step) not in names:
             raise SSZValueError(ValueFault.NO_SUCH_FIELD, type=ssz_type.__name__, step=step)
         return ChunkPosition(names.index(str(step)), 0, item_length(element_type(ssz_type, step)))
@@ -272,7 +267,7 @@ def get_generalized_index(ssz_type: type[SSZType], *path: PathStep) -> int:
         if issubclass(current, (List, ByteList, BitList)):
             index = gindex_child(index, right_side=False)
         # In a bounded tree of a given width, chunk c is the node at width + c.
-        index = gindex_concat(index, _next_pow2(chunk_count(current)) + chunk)
+        index = gindex_concat(index, next_pow2(chunk_count(current)) + chunk)
         current = element_type(current, step)
 
     return index

@@ -24,7 +24,7 @@ from ssz import (
     Uint64,
     Uint256,
 )
-from ssz.merkleization import hash_tree_root
+from ssz.roots import hash_tree_root
 from ssz.ssz_base import SSZType
 
 

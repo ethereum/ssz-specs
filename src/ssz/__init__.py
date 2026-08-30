@@ -6,6 +6,7 @@ from ssz.byte_arrays import (
     ByteList,
     ByteVector,
 )
+from ssz.chunks import ZERO_ROOT, Chunk, Root
 from ssz.collections import List, ProgressiveList, Vector
 from ssz.container import Container, ProgressiveContainer, active_fields
 from ssz.exceptions import (
@@ -29,7 +30,6 @@ from ssz.gindex import (
     gindex_sibling,
     progressive_chunk_gindex,
 )
-from ssz.merkleization import ZERO_ROOT, Chunk, Root, hash_tree_root
 from ssz.paths import (
     ACTIVE_FIELDS_KEY,
     LENGTH_KEY,
@@ -43,6 +43,7 @@ from ssz.paths import (
     item_length,
 )
 from ssz.proofs import build_multiproof, build_proof, node_root
+from ssz.roots import hash_tree_root
 from ssz.ssz_base import SSZType
 from ssz.uint import Byte, Uint8, Uint16, Uint32, Uint64, Uint128, Uint256
 from ssz.union import CompatibleUnion

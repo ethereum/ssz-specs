@@ -2,6 +2,7 @@
 
 from collections.abc import Sequence
 
+from ssz.chunks import Root, next_pow2
 from ssz.exceptions import SSZValueError, ValueFault
 from ssz.gindex import (
     get_branch_indices,
@@ -11,14 +12,9 @@ from ssz.gindex import (
     gindex_length,
     gindex_rebase,
 )
-from ssz.merkleization import (
-    Root,
-    _next_pow2,
-    hash_tree_root,
-    merkle_layout,
-    merkleize,
-    merkleize_progressive,
-)
+from ssz.layout import merkle_layout
+from ssz.roots import hash_tree_root, layout_chunks
+from ssz.trees import merkleize, merkleize_progressive
 
 
 def node_root(value: object, index: int) -> Root:
@@ -74,9 +70,9 @@ def node_root(value: object, index: int) -> Root:
         else:
             # The turns ran out on the spine itself, so the index names a spine node,
             # whose root covers every leaf still to come.
-            return merkleize_progressive(layout.chunks(leaves_from), capacity)
+            return merkleize_progressive(layout_chunks(layout, leaves_from), capacity)
 
-    width = _next_pow2(capacity)
+    width = next_pow2(capacity)
     tree_depth = width.bit_length() - 1
 
     if depth <= tree_depth:
@@ -84,7 +80,7 @@ def node_root(value: object, index: int) -> Root:
         # Merkleizing that run alone gives its root, padding included.
         span = width >> depth
         start = leaves_from + gindex_below(index, depth) * span
-        return merkleize(layout.chunks(start, start + span), limit=span)
+        return merkleize(layout_chunks(layout, start, start + span), limit=span)
 
     # Deeper than the subtree: the rest of the index is measured inside one leaf's own tree.
     depth -= tree_depth

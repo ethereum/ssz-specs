@@ -16,7 +16,7 @@ from ssz.exceptions import SSZTypeError, SSZValueError, TypeFault, ValueFault
 
 if TYPE_CHECKING:
     # Wanted for one annotation, which is never evaluated.
-    from ssz.merkleization import Root
+    from ssz.chunks import Root
 
 BYTES_PER_LENGTH_OFFSET: Final = 4
 """Width of an SSZ offset prefixing each variable-size element, a little-endian uint32."""
@@ -381,7 +381,7 @@ class SSZType(ABC):
             SSZTypeError: When the type has no registered merkleization rule.
         """
         # Merkleization imports this module, so the name is bound per call, not at import.
-        from ssz.merkleization import hash_tree_root
+        from ssz.roots import hash_tree_root
 
         return hash_tree_root(self)
 

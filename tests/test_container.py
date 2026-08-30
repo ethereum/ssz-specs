@@ -11,6 +11,7 @@ from pydantic import ValidationError
 import ssz
 from ssz.bitfields import ProgressiveBitList
 from ssz.boolean import Boolean
+from ssz.chunks import ZERO_ROOT
 from ssz.collections import List, ProgressiveList, Vector
 from ssz.container import (
     MAX_ACTIVE_FIELDS,
@@ -20,8 +21,10 @@ from ssz.container import (
     active_fields,
 )
 from ssz.exceptions import SSZTypeError, SSZValueError, TypeFault
-from ssz.merkleization import ZERO_ROOT, hash_tree_root, merkleize_progressive, mix_in_active_fields
+from ssz.mixins import mix_in_active_fields
+from ssz.roots import hash_tree_root
 from ssz.ssz_base import SSZType
+from ssz.trees import merkleize_progressive
 from ssz.uint import Uint8, Uint16, Uint32, Uint64
 from ssz.union import CompatibleUnion
 
