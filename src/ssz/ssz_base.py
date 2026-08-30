@@ -190,10 +190,6 @@ class SSZType(ABC):
         """
         Bytes every instance encodes to, or None where that count varies.
 
-        A shape states its width here and nowhere else. Both questions below are read off
-        this one answer, so neither can drift from the other, and having a width is a value
-        to test rather than an error to catch.
-
         Returns:
             The width every instance shares, or None for a variable-size shape.
         """
@@ -204,9 +200,6 @@ class SSZType(ABC):
         """
         Whether every instance encodes to the same number of bytes.
 
-        The wire format branches on this: a fixed-size value sits inline, and a
-        variable-size one is reached through an offset.
-
         Returns:
             True for fixed-size types, False for variable-size.
         """
@@ -216,9 +209,6 @@ class SSZType(ABC):
     def get_byte_length(cls) -> int:
         """
         Fixed encoded byte length of this type.
-
-        The spelling for a caller that has already established the shape is fixed-size,
-        and would otherwise carry a None it knows cannot arrive.
 
         Returns:
             The constant byte width every instance encodes to.

@@ -74,7 +74,6 @@ class ExpectedRejection(CamelModel):
     Author-side expectation that an input must be rejected.
 
     The fault names which refusal has to fire, and its name is what the vector emits.
-    The optional message pins the numbers that fault's one sentence renders.
     """
 
     model_config = CamelModel.model_config | {"extra": "forbid", "frozen": True, "strict": True}
@@ -248,8 +247,6 @@ class BaseTestSpec(CamelModel):
     ) -> ValueFault:
         """
         Check a decode-failure outcome, and resolve the fault the vector emits.
-
-        The emitted fault is the one that fired, and the authored one has to be that same one.
 
         Args:
             exception_raised: The refusal the decoder raised, or None on success.
