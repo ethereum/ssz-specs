@@ -46,6 +46,14 @@ class TwoVar(Container):
     b: Uint16List4
 
 
+class ThreeVar(Container):
+    """Three variable-size list fields, so one offset pair sits in the middle of the table."""
+
+    a: Uint16List4
+    b: Uint16List4
+    c: Uint16List4
+
+
 class Mixed(Container):
     """Interleaved fixed and variable fields covering the canonical mixed shape."""
 
@@ -703,6 +711,78 @@ class TestErrors:
         with pytest.raises(SSZValueError) as exc_info:
             TwoUint64.decode_bytes(b"\x00" * 17)
         assert exc_info.value.args[0] == "TwoUint64 spans 16 bytes, and the budget is 17"
+
+
+class TestTheOffsetTableIsCheckedBeforeAnyPayloadIsRead:
+    """A struct settles its whole table first, so no field is read behind a broken one."""
+
+    def test_a_last_offset_past_the_budget_is_reported_as_the_overrun_it_is(self) -> None:
+        """The pair the budget closes is a body reaching past the input, not a decrease."""
+        # Fixture state: two offsets, so the fixed part is 8 bytes and the budget is 12.
+        #
+        # Mutation: the second offset points past the end of the window.
+        #
+        #     offsets       8       14
+        #     spans         8..14   14..12  -> field b starts past the budget
+        #
+        # The stream holds more than the window does, so only the budget stops the read.
+        stream = io.BytesIO(b"\x08\x00\x00\x00\x0e\x00\x00\x00" + b"\x00" * 12)
+        with pytest.raises(SSZValueError) as exception_info:
+            TwoVar.deserialize(stream, 12)
+
+        assert str(exception_info.value) == "b: offset 14 runs past the budget of 12"
+
+        # The table alone is read, so field a never consumed the bytes beyond the budget.
+        assert stream.tell() == 8
+
+    def test_a_pair_decreasing_mid_table_is_reported_against_the_field_it_starts(self) -> None:
+        """A pair that decreases anywhere but at the end is a body of negative width."""
+        # Fixture state: three offsets, so the fixed part is 12 bytes and the budget is 20.
+        #
+        # Mutation: the third offset points behind the second.
+        #
+        #     offsets       12      20      16
+        #     spans         12..20  20..16          -> field b would have negative width
+        table = b"".join(position.to_bytes(4, "little") for position in (12, 20, 16))
+        stream = io.BytesIO(table + b"\x00" * 8)
+        with pytest.raises(SSZValueError) as exception_info:
+            ThreeVar.deserialize(stream, 20)
+
+        assert str(exception_info.value) == "b: offset 20 is above the offset after it, 16"
+
+        # Field a is inside the budget and would have decoded, and is still not read.
+        assert stream.tell() == 12
+
+    def test_a_corrupt_table_is_not_reported_as_the_field_it_hands_a_bad_span(self) -> None:
+        """An offset far past the window is the table's fault, not the field type's."""
+        # Fixture state: two offsets, so the fixed part is 8 bytes and the budget is 12.
+        #
+        # Mutation: the second offset lands far outside the input.
+        #
+        #     offsets       8       99
+        #     spans         8..99   99..12  -> field a is handed 91 bytes it has no claim to
+        stream = io.BytesIO(b"\x08\x00\x00\x00\x63\x00\x00\x00" + b"\x00" * 4)
+        with pytest.raises(SSZValueError) as exception_info:
+            TwoVar.deserialize(stream, 12)
+
+        assert str(exception_info.value) == "b: offset 99 runs past the budget of 12"
+        assert stream.tell() == 8
+
+    def test_a_progressive_shape_settles_its_table_on_the_same_rule(self) -> None:
+        """The two struct shapes share one wire format, and one refusal for a broken table."""
+        # Fixture state: a Uint32 and two offsets, so the fixed part is 12 bytes.
+        #
+        #     offsets       12      40
+        #     spans         12..40  40..20  -> field flags starts past the budget
+        encoded = (1).to_bytes(4, "little") + b"".join(
+            position.to_bytes(4, "little") for position in (12, 40)
+        )
+        stream = io.BytesIO(encoded + b"\x00" * 8)
+        with pytest.raises(SSZValueError) as exception_info:
+            ProgressiveFieldsProgressive.deserialize(stream, 20)
+
+        assert str(exception_info.value) == "flags: offset 40 runs past the budget of 20"
+        assert stream.tell() == 12
 
 
 class TestFixedSizeStructSpansItsOwnWidth:
