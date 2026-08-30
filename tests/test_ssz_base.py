@@ -24,7 +24,7 @@ from ssz.collections import List, ProgressiveList, Vector
 from ssz.container import Container, ProgressiveContainer
 from ssz.exceptions import SSZError
 from ssz.merkleization import ZERO_ROOT, Root, hash_tree_root
-from ssz.proofs import chunk_count
+from ssz.paths import chunk_count
 from ssz.ssz_base import SSZCollection, SSZType
 from ssz.uint import BaseUint
 from ssz.union import CompatibleUnion

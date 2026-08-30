@@ -604,7 +604,7 @@ def _layout_bytelist(value: ByteList) -> MerkleLayout:
     # That is also the element count here.
     return MerkleLayout.packing(
         _pack_bytes(serialized_bytes),
-        limit=math.ceil(type(value).declared_limit() / BYTES_PER_CHUNK),
+        limit=(type(value).declared_limit() + BYTES_PER_CHUNK - 1) // BYTES_PER_CHUNK,
         mixin=length_word(len(serialized_bytes)),
     )
 
@@ -612,7 +612,8 @@ def _layout_bytelist(value: ByteList) -> MerkleLayout:
 @merkle_layout.register
 def _layout_bitvector(value: BitVector) -> MerkleLayout:
     return MerkleLayout.packing(
-        _pack_bits(value.data), limit=math.ceil(type(value).declared_length() / BITS_PER_CHUNK)
+        _pack_bits(value.data),
+        limit=(type(value).declared_length() + BITS_PER_CHUNK - 1) // BITS_PER_CHUNK,
     )
 
 
@@ -620,7 +621,7 @@ def _layout_bitvector(value: BitVector) -> MerkleLayout:
 def _layout_bitlist(value: BitList) -> MerkleLayout:
     return MerkleLayout.packing(
         _pack_bits(value.data),
-        limit=math.ceil(type(value).declared_limit() / BITS_PER_CHUNK),
+        limit=(type(value).declared_limit() + BITS_PER_CHUNK - 1) // BITS_PER_CHUNK,
         mixin=length_word(len(value.data)),
     )
 
@@ -643,7 +644,7 @@ def _layout_vector(value: Vector) -> MerkleLayout:
         element_size = element_type.get_byte_length()
         return MerkleLayout.packing(
             _pack_basic_elements(value.data, element_size),
-            limit=math.ceil(length * element_size / BYTES_PER_CHUNK),
+            limit=(length * element_size + BYTES_PER_CHUNK - 1) // BYTES_PER_CHUNK,
         )
     # Composite elements each contribute their own hash tree root as a leaf.
     return MerkleLayout.nesting(value, limit=length)
@@ -658,7 +659,7 @@ def _layout_list(value: List) -> MerkleLayout:
         element_size = element_type.get_byte_length()
         return MerkleLayout.packing(
             _pack_basic_elements(value.data, element_size),
-            limit=math.ceil(limit * element_size / BYTES_PER_CHUNK),
+            limit=(limit * element_size + BYTES_PER_CHUNK - 1) // BYTES_PER_CHUNK,
             mixin=mixin,
         )
     return MerkleLayout.nesting(value, limit=limit, mixin=mixin)
