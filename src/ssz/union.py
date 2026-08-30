@@ -15,9 +15,11 @@ from ssz.ssz_base import SSZModel, SSZType
 from ssz.uint import BaseUint, Uint8
 
 MIN_SELECTOR: Final = 1
-"""Lowest selector a union may declare.
+"""
+Lowest selector a union may declare.
 
-Zero is reserved against incomplete initialization, so an all-zero value names no option."""
+Zero is reserved against incomplete initialization, so an all-zero value names no option.
+"""
 
 MAX_SELECTOR: Final = 127
 """Highest selector a union may declare, the high bit being reserved."""

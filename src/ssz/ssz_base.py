@@ -425,7 +425,8 @@ class SSZModel(StrictBaseModel, SSZType, ABC):
     """
 
     __slots__ = ("_root_memo", "_version")
-    """The mutation counter and the remembered root, one pair per value.
+    """
+    The mutation counter and the remembered root, one pair per value.
 
     Slots, because a field would serialize and a private attribute would join equality.
     """

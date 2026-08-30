@@ -358,10 +358,12 @@ MisplacedGapState = cast(
         },
     ),
 )
-"""The shape a misplaced gap declares: the counts still agree, and the fields move.
+"""
+The shape a misplaced gap declares: the counts still agree, and the fields move.
 
 Built by hand rather than written out, so the two shapes cannot drift apart in their
-fields, which is the one thing this shape must hold constant against the one above."""
+fields, which is the one thing this shape must hold constant against the one above.
+"""
 
 
 class SquareList4(List[Square]):

@@ -325,9 +325,11 @@ class SSZTest(BaseTestSpec):
     """SSZ type class name."""
 
     value: SSZType
-    """The SSZ value under test.
+    """
+    The SSZ value under test.
 
-    In decode-failure mode only its class matters, since the class supplies the decoder."""
+    In decode-failure mode only its class matters, since the class supplies the decoder.
+    """
 
     raw_bytes: str | None = None
     """Hex malformed input, consulted only in decode-failure mode."""
