@@ -18,7 +18,7 @@ from pydantic.functional_validators import ModelWrapValidatorHandler
 from pydantic_core import PydanticUndefined
 
 from ssz.exceptions import SSZError, SSZTypeError, SSZValueError, TypeFault, ValueFault
-from ssz.ssz_base import BYTES_PER_LENGTH_OFFSET, SSZModel, SSZType
+from ssz.ssz_base import BYTES_PER_LENGTH_OFFSET, SSZModel, SSZType, offset_table_spans
 from ssz.uint import Uint32
 
 MAX_ACTIVE_FIELDS: Final = 256
@@ -184,7 +184,8 @@ class _SSZContainer(SSZModel):
     def deserialize(cls, stream: IO[bytes], scope: int) -> Self:
         """Read the fixed part with offsets, then each variable payload by its offset window."""
         fields: dict[str, SSZType] = {}
-        variable_fields: list[tuple[str, type[SSZType], int]] = []
+        variable_fields: list[tuple[str, type[SSZType]]] = []
+        offsets: list[int] = []
         bytes_read = 0
 
         # Phase 1: each slot is either the field itself or an offset to its tail payload.
@@ -195,8 +196,8 @@ class _SSZContainer(SSZModel):
                     fields[name] = field_type.deserialize(stream, width)
                     bytes_read += width
                 else:
-                    offset = int(Uint32.deserialize(stream, BYTES_PER_LENGTH_OFFSET))
-                    variable_fields.append((name, field_type, offset))
+                    offsets.append(int(Uint32.deserialize(stream, BYTES_PER_LENGTH_OFFSET)))
+                    variable_fields.append((name, field_type))
                     bytes_read += BYTES_PER_LENGTH_OFFSET
             except SSZError as error:
                 error.at(name)
@@ -213,23 +214,15 @@ class _SSZContainer(SSZModel):
 
         # The first offset lands on the end of the fixed part, which a struct measures itself.
         # Any other value leaves a gap or an overlap, giving one value two encodings.
-        if variable_fields[0][2] != bytes_read:
-            raise SSZValueError(
-                ValueFault.FIRST_OFFSET, actual=variable_fields[0][2], expected=bytes_read
-            )
+        if offsets[0] != bytes_read:
+            raise SSZValueError(ValueFault.FIRST_OFFSET, actual=offsets[0], expected=bytes_read)
 
-        # Phase 2: each variable payload spans from its offset to the next.
-        # Scope closes the final span.
-        boundaries = [offset for _, _, offset in variable_fields] + [scope]
-        for (name, field_type, _), (start, end) in zip(
-            variable_fields, pairwise(boundaries), strict=True
-        ):
-            if end < start:
-                unordered = SSZValueError(ValueFault.OFFSET_UNORDERED, offset=start, next=end)
-                unordered.at(name)
-                raise unordered
+        # Phase 2: the table is settled whole, so no payload is read behind a broken one.
+        # Each field names itself on a refusal, the table's own included.
+        spans = offset_table_spans(offsets, scope, [name for name, _ in variable_fields])
+        for (name, field_type), span in zip(variable_fields, spans, strict=True):
             try:
-                fields[name] = field_type.deserialize(stream, end - start)
+                fields[name] = field_type.deserialize(stream, span)
             except SSZError as error:
                 error.at(name)
                 raise

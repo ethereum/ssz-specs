@@ -27,7 +27,6 @@ Three variable-size bodies of widths 5, 3 and 7 encode to 27 bytes:
 import io
 from abc import ABC
 from collections.abc import Iterable, Mapping, Sequence
-from itertools import pairwise
 from typing import IO, Any, ClassVar, Self, cast, overload, override
 
 from pydantic import Field, field_serializer, field_validator
@@ -39,6 +38,7 @@ from ssz.ssz_base import (
     SSZCollection,
     SSZModel,
     SSZType,
+    offset_table_spans,
 )
 from ssz.uint import Uint32
 
@@ -256,15 +256,7 @@ class _SSZSequence[T: SSZType](SSZCollection[T], ABC):
         """
         Read one body per offset, after checking the table closes over the budget.
 
-        Appending the budget gives one boundary more than there are bodies.
-        Consecutive pairs are then exactly the spans to read:
-
-            offsets       12       17       20
-            boundaries    12       17       20       27
-            spans         12..17   17..20   20..27
-
-        A pair that decreases is a body of negative width.
-        The pair closed by the budget is a body reaching past the input.
+        An element has no name of its own, so its position is the step it takes on a refusal.
 
         Each span is read from where the last stopped, so a short body shifts every later span.
 
@@ -272,31 +264,13 @@ class _SSZSequence[T: SSZType](SSZCollection[T], ABC):
         So a table cannot be read from without having been checked.
 
         Raises:
-            SSZValueError:
-                - When an offset is above the one after it.
-                - When the last offset runs past the budget.
+            SSZValueError: When the table does not close over the budget.
         """
-        boundaries = [*offsets, scope]
-
-        # The last pair is the only one closed by the budget rather than an offset.
-        last = len(offsets) - 1
-
-        for index, (start, end) in enumerate(pairwise(boundaries)):
-            if end >= start:
-                continue
-            if index == last:
-                error = SSZValueError(ValueFault.OFFSET_PAST_SCOPE, offset=start, scope=end)
-            else:
-                error = SSZValueError(ValueFault.OFFSET_UNORDERED, offset=start, next=end)
-            error.at(index)
-            raise error
+        spans = offset_table_spans(offsets, scope, range(len(offsets)))
 
         # Every element is already the declared type, and the caller settled the count.
         # So the value is built past validation rather than through it.
-        return cls.model_construct(
-            _fields_set={"data"},
-            data=cls._read_elements(stream, (end - start for start, end in pairwise(boundaries))),
-        )
+        return cls.model_construct(_fields_set={"data"}, data=cls._read_elements(stream, spans))
 
     @override
     def __len__(self) -> int:
