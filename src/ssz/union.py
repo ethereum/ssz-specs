@@ -231,6 +231,8 @@ class CompatibleUnion(SSZModel):
 
     model_config = ConfigDict(frozen=True)
 
+    KIND = "compatible union"
+
     OPTIONS: ClassVar[Mapping[int, type[SSZType]]]
     """Selector to type option, one entry per variant the union admits."""
 
@@ -327,8 +329,6 @@ class CompatibleUnion(SSZModel):
                 TypeFault.WRONG_TYPE, expected=option.__name__, got=type(self.data).__name__
             )
         return self
-
-    KIND = "compatible union"
 
     @classmethod
     @override

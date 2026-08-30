@@ -290,6 +290,8 @@ class ByteList(SSZCollection[int]):
 
     UNIT = "bytes"
 
+    KIND = "byte list"
+
     data: bytes = Field(default=b"")
     """
     The raw bytes stored in this list.
@@ -373,8 +375,6 @@ class ByteList(SSZCollection[int]):
         last = working.pop()
         self._store(working)
         return last
-
-    KIND = "byte list"
 
     @classmethod
     @override

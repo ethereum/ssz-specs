@@ -77,6 +77,8 @@ class _SSZContainer(SSZModel):
 
     model_config = ConfigDict(validate_assignment=True)
 
+    KIND = "container"
+
     _FIELD_TYPES: ClassVar[tuple[tuple[str, type[SSZType]], ...]] = ()
     """Each field's name and declared type, in the declaration order the wire format follows."""
 
@@ -151,8 +153,6 @@ class _SSZContainer(SSZModel):
         cls._LEADING_SLOTS = tuple(leading_slots)
         cls._LEADING_WIDTH = leading_width
         cls._FIXED_SIZE = total_width
-
-    KIND = "container"
 
     @classmethod
     @override

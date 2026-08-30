@@ -245,6 +245,8 @@ class _SSZBitList(SSZCollection[Boolean]):
     - The Merkle tree shape, which lives in the merkleization module.
     """
 
+    KIND = "bitlist"
+
     data: Sequence[Boolean] = Field(default_factory=list[Boolean])
     """
     The bits, in position order.
@@ -341,8 +343,6 @@ class _SSZBitList(SSZCollection[Boolean]):
             case _:
                 return NotImplemented
         return type(self)(data=new_data)
-
-    KIND = "bitlist"
 
     @classmethod
     @override
