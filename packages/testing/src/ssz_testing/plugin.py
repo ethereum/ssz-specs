@@ -147,11 +147,11 @@ def pytest_configure(config: pytest.Config) -> None:
             )
             if len(leftover_fixture_paths) > 5:
                 leftover_names_preview += ", ..."
-            pytest.exit(
+            # A usage error is how a configuration hook refuses, and it exits with that code.
+            raise pytest.UsageError(
                 f"Output directory '{output_directory}' is not empty. "
                 f"Contains: {leftover_names_preview}. Use --clean to remove all existing files "
-                "or specify a different output directory.",
-                returncode=pytest.ExitCode.USAGE_ERROR,
+                "or specify a different output directory."
             )
         shutil.rmtree(output_directory)
 

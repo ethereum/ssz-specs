@@ -413,7 +413,8 @@ class TestVectorClassMetadata:
             TypeError,
             match=r"^BaseModel\.__init__\(\) takes 1 positional argument but 2 were given\Z",
         ):
-            Vector([])  # type: ignore[misc]
+            # The positional call is the test: the base takes none, and must say so at runtime.
+            Vector([])  # ty: ignore[too-many-positional-arguments]
 
     def test_fixed_size_vector_reports_fixed_size_true(self) -> None:
         """A vector of fixed-size elements is itself fixed-size."""

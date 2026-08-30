@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from hashlib import sha256
-from typing import Any, cast
+from typing import Any, ClassVar, cast
 
 import pytest
 
@@ -897,7 +897,8 @@ class TestGeneralizedIndexPerShape:
         # An index for a value that cannot be rooted is worse than a refusal.
 
         class Drifted(ProgressiveContainer):
-            ACTIVE_FIELDS = (1, 0, 1)
+            # Declared as the base declares it, so a layout of any width can be put back.
+            ACTIVE_FIELDS: ClassVar[tuple[int, ...]] = (1, 0, 1)
 
             head: Uint16
             tail: Uint8

@@ -38,31 +38,37 @@ CROSS_UINT_TYPE_PAIRS = list(permutations(ALL_UINT_TYPES, 2))
 
 
 # Model classes for Pydantic validation tests
-class Uint8Model(BaseModel):
+class UintModel(BaseModel):
+    # Each width below restates this field as its own type.
+    # The base says only that the field is there, and that validation decides what it holds.
+    value: Any
+
+
+class Uint8Model(UintModel):
     value: Uint8
 
 
-class Uint16Model(BaseModel):
+class Uint16Model(UintModel):
     value: Uint16
 
 
-class Uint32Model(BaseModel):
+class Uint32Model(UintModel):
     value: Uint32
 
 
-class Uint64Model(BaseModel):
+class Uint64Model(UintModel):
     value: Uint64
 
 
-class Uint128Model(BaseModel):
+class Uint128Model(UintModel):
     value: Uint128
 
 
-class Uint256Model(BaseModel):
+class Uint256Model(UintModel):
     value: Uint256
 
 
-UINT_MODELS: dict[Type[BaseUint], Type[BaseModel]] = {
+UINT_MODELS: dict[Type[BaseUint], Type[UintModel]] = {
     Uint8: Uint8Model,
     Uint16: Uint16Model,
     Uint32: Uint32Model,
@@ -78,7 +84,7 @@ def test_pydantic_validation_accepts_valid_int(uint_class: Type[BaseUint]) -> No
     """Tests that Pydantic validation correctly accepts a valid integer."""
     model = UINT_MODELS[uint_class]
     instance = model(value=10)
-    validated_value = instance.value  # type: ignore[attribute-defined]
+    validated_value = instance.value
     assert isinstance(validated_value, uint_class)
     assert validated_value == uint_class(10)
 
@@ -1592,5 +1598,6 @@ class TestAValueCarriesNoState:
         """Setting an attribute would publish it to every other holder of the same value."""
         expected_message = "Uint64 is immutable"
         with pytest.raises(SSZTypeError) as exception_info:
-            Uint64(7).note = "mine"  # type: ignore[attr-defined]
+            # __setattr__ never returns, which ty reads as a write that cannot stand.
+            Uint64(7).note = "mine"  # ty: ignore[invalid-assignment]
         assert str(exception_info.value) == expected_message
