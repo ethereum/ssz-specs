@@ -15,26 +15,17 @@ from ssz.base import StrictBaseModel
 from ssz.exceptions import SSZTypeError, SSZValueError, TypeFault, ValueFault
 
 if TYPE_CHECKING:
-    # The name is wanted for one annotation, which is never evaluated.
-    # The method that carries it explains why the import cannot happen at runtime.
+    # Wanted for one annotation, which is never evaluated.
     from ssz.merkleization import Root
 
 BYTES_PER_LENGTH_OFFSET: Final = 4
-"""Width of an SSZ offset prefixing each variable-size element.
-
-Encoded as a uint32 in little-endian byte order."""
+"""Width of an SSZ offset prefixing each variable-size element, a little-endian uint32."""
 
 _CAPACITY_NAMES: Final = ("LENGTH", "LIMIT")
-"""The class attributes a shape declares its element count with.
-
-An exact count and an upper bound are spelled differently, and no shape declares both."""
+"""The class attributes a shape declares its element count with."""
 
 _COLD_CACHE: Final = {"_version": 0, "_root_memo": None}
-"""What each cache slot holds before anything has touched it.
-
-Filled on first read, so decoding pays nothing and a copied value starts cold rather
-than stale.
-"""
+"""What each cache slot holds before anything has touched it."""
 
 
 def offset_table_spans(offsets: Sequence[int], scope: int, steps: Sequence[str | int]) -> list[int]:
@@ -101,8 +92,7 @@ class SSZType(ABC):
     A composite default is built from the defaults of its parts, so it recurses.
     A part with no default leaves the whole with none.
 
-    Only the total absence of input asks for a default.
-    An empty sequence handed to a fixed-length shape is a wrong count, and an error.
+    Only the total absence of input asks for a default, never an empty sequence.
     """
 
     LENGTH: ClassVar[int | None] = None
@@ -142,20 +132,14 @@ class SSZType(ABC):
         """
         Narrow a declared capacity, and refuse a root of the type's own, where each is declared.
 
-        A capacity may be written with a typed value.
-        Requiring a cast at every declaration would therefore mean casting almost all of them:
+        A capacity may be written with a typed value, so it is narrowed to a plain integer:
 
             class Attestations(List[Attestation]):
                 LIMIT = MAX_ATTESTATIONS   # already a Uint64
 
-        Narrowing keeps every count this library computes, compares and reports a plain
-        integer, whatever the declaration was written at.
+        Narrowing keeps every count a plain integer, whatever it was declared at.
 
-        A capacity that is not an integer at all is refused here as well.
-
-        So is one below zero.
-
-        Declaration is the only place either refusal can be useful:
+        One that is not an integer, or is below zero, is refused where it was written:
 
             LIMIT = 4.7   ->  refused, rather than resolving to a chunk count nobody wrote
             LIMIT = "4"   ->  refused, rather than reporting a wrong element count later
@@ -168,23 +152,7 @@ class SSZType(ABC):
         - a vector holds at least one element,
         - a bound of zero admits the empty value and nothing else.
 
-        # Refusing a root of its own
-
-        One value has one root, and a type does not get to state a second one.
-
-        Two callers reach a nested root through the module-level function, not through a method.
-
-        - A layout roots each of its leaves with it.
-        - A proof roots one addressed node with it.
-
-        A type declaring a root of its own would answer only the callers that spell it
-        as a method.
-
-        - The tree above it would go on answering with the spec's own root.
-        - So one value would carry two roots, and neither would report the other.
-        - A proof built against one would fail against the other, with no diagnostic.
-
-        Only this one name is refused, so subclassing itself stays untouched:
+        One value has one root, so a type may not declare a hash_tree_root of its own:
 
             class Root(Chunk)                               ->  fine, declares nothing of its own
             class Fingerprint(Root): def is_all_ones(...)   ->  fine, declares another method
@@ -192,8 +160,7 @@ class SSZType(ABC):
             class Fast(Mixin, Root)                         ->  refused, a method from outside
             class Odd(Container): hash_tree_root: Uint16    ->  refused, a field of that name
 
-        The last two matter because neither one appears in the class body being created.
-        A field shadows the method on every instance, and a mixin wins the lookup ahead of it.
+        A second root would answer only the callers that spell it as a method.
 
         Raises:
             SSZTypeError: When a declared capacity is not an integer.
@@ -203,12 +170,8 @@ class SSZType(ABC):
         """
         super().__init_subclass__(**kwargs)
 
-        # Reading the resolved attribute covers every way a type can answer for itself:
-        # a method of its own, a property, or one inherited from outside this type system.
-        #
-        # A field of that name shadows the method on each instance, not on the class.
-        # That leaves the resolved attribute looking untouched.
-        # So the annotations this class declares are read as well.
+        # The resolved attribute covers a method, a property, or one inherited from outside.
+        # A field of that name shadows only instances, so the annotations are read as well.
         if (
             cls.hash_tree_root is not SSZType.hash_tree_root
             or "hash_tree_root" in cls.__annotations__
@@ -216,13 +179,10 @@ class SSZType(ABC):
             raise SSZTypeError(TypeFault.OWN_ROOT, type=cls.__name__)
 
         for name in _CAPACITY_NAMES:
-            # Only a capacity this class declares itself.
-            # An inherited one was already narrowed when its own class was created.
+            # An inherited capacity was already narrowed when its own class was created.
             if name not in cls.__dict__:
                 continue
 
-            # A plain integer is the common case, needing no narrowing at all.
-            # Recognizing it costs one identity check, once per type declared.
             declared = cls.__dict__[name]
             if type(declared) is not int:
                 # A boolean is a flag rather than a count.
@@ -237,16 +197,10 @@ class SSZType(ABC):
                         got=type(declared).__name__,
                     )
 
-                # Every integer type narrows the same way, whatever width it declares.
                 declared = int(declared)
                 setattr(cls, name, declared)
 
-            # A capacity counts what a shape holds.
-            # Nothing is held a negative number of times.
-            #
-            # Below zero admits no value at all, the empty one included.
-            #
-            # A shape with a higher floor of its own states that one where it is declared.
+            # A capacity counts what a shape holds, and nothing is held a negative number of times.
             if declared < 0:
                 raise SSZTypeError(
                     TypeFault.CAPACITY_NEGATIVE, type=cls.__name__, field=name, got=declared
@@ -323,9 +277,7 @@ class SSZType(ABC):
         Build the default value of this type.
 
         Construction with no argument gives the same value.
-        This spelling exists because a type checker reads a field list, not the defaults
-        this library attaches to it, and so reports a no-argument construction as missing
-        its arguments.
+        This spelling exists because a type checker reads that as missing its arguments.
 
         Returns:
             A fresh default value.
@@ -352,8 +304,7 @@ class SSZType(ABC):
         """
         An independent duplicate of this value, at every depth.
 
-        A value that cannot change already satisfies that, so the three immutable shapes
-        hand themselves back.
+        An immutable value already satisfies that, so it hands itself back.
 
         Returns:
             A duplicate nothing can be written through to reach this value.
@@ -373,7 +324,6 @@ class SSZType(ABC):
         Whether this value equals the default of its own type.
 
         The spec calls such a value zeroed.
-        A fresh default is built per call, and hoisting it into a constant would alias it.
 
         Returns:
             True when the value is the default of its type.
@@ -419,13 +369,8 @@ class SSZType(ABC):
         - A capacity reaches that tree only through the width it rounds up to.
 
         A root is remembered until the value changes.
-        A value mutated since it was last rooted is hashed again.
-        One left alone answers with the bytes it answered with before.
+        A mutation counter on each model guards that memo.
 
-        A mutation counter on each model guards the memo.
-        The merkleization module decides what counts as changed.
-
-        The tree rules live with the merkleization primitives, not here.
         The module-level function is the form the spec defines.
         It is also the only form reaching plain bytes, which merkleize and carry no method.
 
@@ -435,8 +380,7 @@ class SSZType(ABC):
         Raises:
             SSZTypeError: When the type has no registered merkleization rule.
         """
-        # Merkleization dispatches on every SSZ type, so its module imports this one.
-        # A root is an SSZ type too, so the name is bound per call rather than at import.
+        # Merkleization imports this module, so the name is bound per call, not at import.
         from ssz.merkleization import hash_tree_root
 
         return hash_tree_root(self)
@@ -446,8 +390,7 @@ class SSZType(ABC):
         """
         Decode SSZ bytes into a new instance.
 
-        Rejects trailing bytes left over after the stream-based decoder finishes.
-        A spec decoder must accept exactly one canonical encoding per value.
+        Rejects trailing bytes, because a spec decoder accepts one encoding per value.
 
         Args:
             data: SSZ-encoded bytes containing exactly one value.
@@ -461,9 +404,7 @@ class SSZType(ABC):
         stream = io.BytesIO(data)
         instance = cls.deserialize(stream, len(data))
 
-        # Spec contract: each canonical encoding maps to exactly one value.
-        #
-        # Any unread bytes mean the input either over-allocated or carries noise.
+        # Unread bytes mean the input either over-allocated or carries noise.
         leftover = len(data) - stream.tell()
         if leftover:
             raise SSZValueError(ValueFault.TRAILING_BYTES, leftover=leftover)
@@ -479,11 +420,6 @@ class SSZModel(StrictBaseModel, SSZType, ABC):
     - Collections wrap an inner sequence in one Pydantic field called data.
     - Containers expose multiple named Pydantic fields that map to a struct on the wire.
 
-    The default length and string forms switch on which shape the subclass uses.
-
-    Mutability is configurable per type through the MUTABLE flag, which defaults to on.
-    The flag is inherited, so one base declaring it False freezes every type built on it.
-
     Every mutation raises this value's version.
     A remembered root is reused only while every version below it is unchanged.
     """
@@ -491,15 +427,12 @@ class SSZModel(StrictBaseModel, SSZType, ABC):
     __slots__ = ("_root_memo", "_version")
     """The mutation counter and the remembered root, one pair per value.
 
-    Slots, because a field would serialize and a private attribute would take part in
-    equality. A slot is invisible to both, which is what a cache has to be.
+    Slots, because a field would serialize and a private attribute would join equality.
     """
 
     if TYPE_CHECKING:
-        # Declared for the type checker only.
-        # Annotating these in the class body would make Pydantic read them as private.
-        # That is the shape the slots above exist to avoid.
-        # This block never runs, so nothing is declared.
+        # Declared for the type checker only, and never run.
+        # A real annotation here would become a Pydantic private attribute, not a slot.
         _version: ClassVar[int]
         _root_memo: ClassVar["tuple[object, Root] | None"]
 
@@ -510,8 +443,7 @@ class SSZModel(StrictBaseModel, SSZType, ABC):
         """
         Hash by Merkle tree root, which is what equality compares.
 
-        A mutable value hashes differently once mutated.
-        A dict or set still files it under the old root, so a lookup by value misses it.
+        A mutable value hashes differently once mutated, so a dict or set loses track of it.
         """
         return hash(self.hash_tree_root())
 
@@ -520,9 +452,7 @@ class SSZModel(StrictBaseModel, SSZType, ABC):
         Admit one mutation, refusing it outright on an immutable type.
 
         Every mutator passes here, so invalidation is one name to grep for.
-        Raising the version retires any remembered root. It only ever goes up.
-        Raising it before validation means a failed mutation costs a recomputation
-        rather than a stale root.
+        The version is raised before validation, so a failed mutation costs a recomputation.
 
         Raises:
             SSZTypeError: When the type declares itself immutable.
@@ -532,10 +462,8 @@ class SSZModel(StrictBaseModel, SSZType, ABC):
         # Written past this class's own __setattr__, which is the door itself.
         object.__setattr__(self, "_version", self._version + 1)
 
-    # Both are hidden from type checkers.
-    # A visible setter typed to accept Any would exempt every field assignment.
-    # Each would go unchecked against the field type it was declared at.
-    # A visible fallback returning Any would resolve every misspelled attribute.
+    # Hidden from type checkers, which would otherwise stop checking field assignments.
+    # A visible __getattr__ would also make every misspelled attribute resolve.
     if not TYPE_CHECKING:  # pragma: no cover
 
         def __setattr__(self, name: str, value: Any) -> None:
@@ -545,8 +473,7 @@ class SSZModel(StrictBaseModel, SSZType, ABC):
 
         def __getattr__(self, name: str) -> Any:
             """Fill a cache slot on first read, leaving every other name to Pydantic."""
-            # An unset slot raises before this method is reached.
-            # A slot already filled, the common case, never gets here at all.
+            # Only an unset slot reaches here, so a filled one costs nothing.
             if name in _COLD_CACHE:
                 cold = _COLD_CACHE[name]
                 object.__setattr__(self, name, cold)
@@ -558,9 +485,8 @@ class SSZModel(StrictBaseModel, SSZType, ABC):
         """
         An independent duplicate of this value, at every depth.
 
-        Every field holding something writable is duplicated, stopping at the immutable
-        leaves. Entries are replaced in the field dictionary rather than assigned, because
-        an immutable type refuses assignment and assignment would revalidate.
+        Entries are replaced in the field dictionary rather than assigned.
+        Assignment would revalidate, and an immutable type refuses it outright.
 
         Returns:
             A duplicate that shares no writable object with this value.
@@ -580,8 +506,7 @@ class SSZModel(StrictBaseModel, SSZType, ABC):
 
     def __len__(self) -> int:
         """Element count for a collection, field count for every other shape."""
-        # The base class decides, not the field name.
-        # A union names its payload field the way the spec does, and is not a collection.
+        # The base class decides, not the field name, since a union is not a collection.
         if isinstance(self, SSZCollection):
             return len(self.data)
         return len(type(self).model_fields)
@@ -599,29 +524,17 @@ class SSZCollection[T](SSZModel, Sequence[T], ABC):
     """
     Pydantic-backed SSZ base for collections that wrap their contents in one data field.
 
-    Sequences, bitfields, and byte lists all share this base.
-    Containers do not — their contents live in named fields, not a single data field.
+    Sequences, bitfields, and byte lists all share this base; containers do not.
 
-    Every subclass wraps its contents in one field named data.
-
-    Construction passes the field by keyword, or the elements positionally
-    through the `of` factory:
+    Construction passes that field by keyword, or the elements positionally:
 
         Uint8List4(data=[1, 2, 3])
         Uint8List4.of(1, 2, 3)
 
-    Collections mutate in place, by the same rules construction applies.
-    Mutation validates the incoming elements and the resulting length.
-    Elements already inside were validated when they entered, and are left alone.
-    Mutation therefore costs the change rather than the collection size.
+    Mutation in place validates the incoming elements and the resulting length, nothing more.
+    Only variable-size collections offer append and pop, a fixed one refusing any resize.
 
-    Reading a position and assigning to one both live on this shared base.
-    Only variable-size collections offer append and pop.
-    A fixed-length shape accepts element assignment and rejects any length change.
-
-    The type parameter is the declared element type.
-    Sequences bind their own element type, bitfields bind Boolean, and byte lists bind int.
-    Mutation is typed against it, not against the values it accepts.
+    The type parameter is the declared element type, and mutation is typed against it.
     A type checker therefore flags a raw value that the validator would have coerced.
     """
 
@@ -636,19 +549,14 @@ class SSZCollection[T](SSZModel, Sequence[T], ABC):
         r"""
         Build an instance from the given elements.
 
-        Pydantic models are keyword-only, so the data field is normally passed by
-        keyword. This factory is the positional form: each argument is exactly one
-        element, and no argument is ever spread. Classmethods are inherited without
-        re-synthesis, so unlike a custom constructor this form stays fully visible
-        to static type checkers on every subclass.
+        Each argument is exactly one element, and no argument is ever spread:
 
             Uint8List4.of(1, 2, 3)     ==  Uint8List4(data=[1, 2, 3])
             Uint8List4.of()            ==  Uint8List4(data=[])
             Uint8List4.of(*existing)   spreads an existing sequence
             ByteList10.of(0xDE, 0xAD)  ==  ByteList10(data=b"\xde\xad")
 
-        A fixed-length shape needs every element, and no argument means zero of them.
-        So this factory with no argument is a length error there, never the default.
+        A call with no argument therefore means zero elements, which a fixed shape refuses.
         Only construction with no argument at all asks for the default.
 
         Args:
@@ -665,8 +573,7 @@ class SSZCollection[T](SSZModel, Sequence[T], ABC):
         """
         Iterate over the contents.
 
-        The parent Pydantic model otherwise yields field name and value pairs.
-        Yielding the contents instead is the intended collection behavior.
+        The parent Pydantic model would otherwise yield field name and value pairs.
         """
         return iter(self.data)
 
@@ -679,12 +586,7 @@ class SSZCollection[T](SSZModel, Sequence[T], ABC):
         """
         Read the element or elements at a position.
 
-        Reading delegates to the contents.
-        Every addressing form the host language offers therefore works, including a
-        position counted from the end.
-
-        A position counted from the end resolves against the number of elements held.
-        It never resolves against the declared capacity.
+        A position counted from the end resolves against the elements held, never the capacity:
 
             held = [10, 20, 30]   under a capacity of 4
 
@@ -692,9 +594,7 @@ class SSZCollection[T](SSZModel, Sequence[T], ABC):
             [-3]  ->  10
             [-4]  ->  IndexError  no fourth element to count back to
 
-        The zeros that pad a value to its capacity belong to merkleization.
-        They are not members of the value.
-        So the unused slot is unaddressable from either end.
+        The zeros that pad a value to its capacity belong to merkleization, not to the value.
         """
         return self.data[index]
 
@@ -708,8 +608,7 @@ class SSZCollection[T](SSZModel, Sequence[T], ABC):
         self._begin_mutation()
         if isinstance(index, slice):
             elements = [self._validate_element(v) for v in cast("Sequence[T]", value)]
-            # The resulting count is arithmetic, so no copy is made to observe it.
-            # A step of anything but one resizes nothing.
+            # A step of anything but one resizes nothing, so the held count stands.
             # The store below refuses a mismatched count with the error a plain list raises.
             held = len(self.data)
             start, stop, step = index.indices(held)
@@ -724,9 +623,8 @@ class SSZCollection[T](SSZModel, Sequence[T], ABC):
         """
         The contents as the list they are stored in, for a mutator to write through.
 
-        - The field is declared a sequence, so any iterable is accepted on input.
-        - Validation always returns a list, so a list is always what is stored.
-        - A shape holding anything else overrides every mutator and never asks for this.
+        Validation always returns a list, whatever iterable the declared sequence accepted.
+        A shape holding anything else overrides every mutator and never asks for this.
         """
         return cast("list[T]", self.data)
 
@@ -735,9 +633,8 @@ class SSZCollection[T](SSZModel, Sequence[T], ABC):
         """
         How this shape names the input it accepts, for the error a refusal raises.
 
-        A shape declaring an element type names it, since "iterable of Uint8" tells a
-        caller more than "iterable" does. One binding its element type in advance has
-        no name to add, and keeps the bare word.
+        A shape declaring an element type names it, since "iterable of Uint8" says more.
+        One binding its element type in advance has no name to add, and keeps the bare word.
         """
         return "iterable"
 
@@ -751,8 +648,6 @@ class SSZCollection[T](SSZModel, Sequence[T], ABC):
         - list or tuple        pass through directly.
         - other iterables      materialize into a list so the length check works.
         - str, bytes, bytearray  rejected — iterating yields characters or ints.
-
-        The count rule is applied to the returned sequence by the caller.
 
         Raises:
             SSZTypeError: When the input is a string, bytes, or non-iterable.
@@ -774,8 +669,7 @@ class SSZCollection[T](SSZModel, Sequence[T], ABC):
         """
         Validate one incoming element by the family's construction rule.
 
-        Each concrete family implements this with the same rule its data
-        validator applies to every element at construction.
+        Each family implements it with the rule its data validator applies at construction.
         """
         raise NotImplementedError
 
@@ -784,9 +678,7 @@ class SSZCollection[T](SSZModel, Sequence[T], ABC):
         """
         Check a prospective element count against whatever bound the shape declares.
 
-        A shape pinning an exact count declares LENGTH; one bounding it declares LIMIT;
-        a progressive shape declares neither and accepts any count. So this one rule
-        covers every collection, and no shape needs a count check of its own.
+        LENGTH pins an exact count, LIMIT bounds one, and a progressive shape declares neither.
 
         Raises:
             SSZValueError: When a pinned count is not met exactly.
