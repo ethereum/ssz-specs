@@ -30,7 +30,8 @@ class Boolean(int, SSZType):
     """
 
     _INTERNED: ClassVar[tuple[Any, ...]] = ()
-    """The two values of this class, one shared instance each.
+    """
+    The two values of this class, one shared instance each.
 
     A bit is the whole of what one of these values holds.
     Every holder of a given bit can therefore be handed the same object.

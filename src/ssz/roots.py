@@ -22,7 +22,8 @@ from ssz.uint import BaseUint
 from ssz.union import CompatibleUnion
 
 PARANOID_ROOTS: bool = os.environ.get("SSZ_PARANOID_ROOTS") == "1"
-"""Whether every remembered root is recomputed and checked against the memo.
+"""
+Whether every remembered root is recomputed and checked against the memo.
 
 A proof built from the same layout agrees with a stale root while both are wrong.
 Recomputing is the only evidence against one.

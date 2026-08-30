@@ -34,7 +34,8 @@ _MIXED_IN_WORDS: Final[dict[PathStep, tuple[tuple[type[SSZType], ...], str]]] = 
     ACTIVE_FIELDS_KEY: ((ProgressiveContainer,), "field layout"),
     SELECTOR_KEY: ((CompatibleUnion,), "type selector"),
 }
-"""Each reserved step: the shapes that mix that word in, and what the word is called.
+"""
+Each reserved step: the shapes that mix that word in, and what the word is called.
 
 This is the whole set of words an SSZ root is hashed against.
 An integer step misses the table, a position being no reserved word.

@@ -107,7 +107,8 @@ class MerkleLayout:
     """
 
     packed: tuple[bytes, ...]
-    """Leaves as data, for a shape whose elements pack into chunks.
+    """
+    Leaves as data, for a shape whose elements pack into chunks.
 
     An element of such a shape shares its chunk with its neighbours.
     The chunk is therefore the leaf, and nothing below it can be addressed.
@@ -115,7 +116,8 @@ class MerkleLayout:
     """
 
     nested: tuple[SSZType | None, ...] | None
-    """Leaves as values, one root each, or None for a shape that packs instead.
+    """
+    Leaves as values, one root each, or None for a shape that packs instead.
 
     A position carrying no value holds nothing, which merkleizes as a zero leaf.
     """
