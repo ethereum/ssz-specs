@@ -83,24 +83,15 @@ Depth 64 covers any chunk count the protocol uses.
 
 def _zero_tree_root(width: int) -> Root:
     """
-    Root of an all-zero perfect binary tree with the given leaf count.
+    Root of the all-zero perfect binary tree spanning the given leaf count.
 
-    The width must be a power of two.
+    Invariant: every caller passes a power of two, the width of a perfect tree.
     """
-    # A single-leaf tree has no parent to hash; the root is the leaf itself.
-    if width <= 1:
-        return ZERO_ROOT
-    # A perfect binary tree with 2**d leaves has depth d.
+    # Subtracting one before the bit length maps such a width to its own depth:
+    # 1 -> 0, 2 -> 1, 4 -> 2, 1024 -> 10.
     #
-    # Subtract one before taking bit_length so a power of two maps to its own depth.
-    # - Width 2 -> depth 1,
-    # - Width 4 -> depth 2,
-    # - Width 1024 -> depth 10,
-    # - And so on.
-    depth = (width - 1).bit_length()
-    # The cache stores the all-zero subtree root at every depth.
-    # Index by depth to skip materializing 2**d zero leaves and the layers above them.
-    return _ZERO_ROOTS[depth]
+    # Indexing the cache by depth skips materializing 2**d zero leaves and the layers above them.
+    return _ZERO_ROOTS[(width - 1).bit_length()]
 
 
 def merkleize(chunks: Sequence[bytes], limit: int | None = None) -> Root:

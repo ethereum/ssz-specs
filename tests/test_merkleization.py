@@ -33,7 +33,6 @@ from ssz.merkleization import (
     _next_pow2,
     _pack_basic_elements,
     _pack_bytes,
-    _zero_tree_root,
     hash_tree_root,
     merkle_layout,
     merkleize,
@@ -290,7 +289,7 @@ def test_merkleize_a_payload_zero_but_for_one_chunk_is_not_a_zero_tree(
     chunks[nonzero_position] = Chunk(b"\xff" * 32)
     assert merkleize(chunks, limit=8) == perfect_tree_root(chunks, 8)
     # A zero prefix is not a zero payload, wherever the data that follows it sits.
-    assert merkleize(chunks, limit=8) != _zero_tree_root(8)
+    assert merkleize(chunks, limit=8) != Z[3]
 
 
 def test_mix_in_length() -> None:
@@ -417,13 +416,10 @@ def test_mix_in_selector_separates_two_selectors_over_one_root() -> None:
     assert mix_in_selector(root, 1) != mix_in_selector(root, 127)
 
 
-def test_zero_tree_root_internal() -> None:
-    """Returns the cached zero-subtree root at depths within the cache."""
-    assert _zero_tree_root(1) == Z[0]
-    assert _zero_tree_root(2) == Z[1]
-    assert _zero_tree_root(4) == Z[2]
-    assert _zero_tree_root(8) == Z[3]
-    assert _zero_tree_root(16) == Z[4]
+@pytest.mark.parametrize("depth", range(5))
+def test_empty_payload_takes_the_cached_zero_tree_root(depth: int) -> None:
+    """The cached zero-subtree shortcut agrees with hashing 2**depth zero leaves by hand."""
+    assert merkleize([], limit=2**depth) == Z[depth]
 
 
 def test_merkleize_progressive_empty_is_the_plain_zero_chunk() -> None:
