@@ -17,22 +17,14 @@ from ssz.uint import BaseUint, Uint8
 MIN_SELECTOR: Final = 1
 """Lowest selector a union may declare.
 
-Zero is reserved against incomplete initialization, so an all-zero value names no option.
-A later EIP may give zero a meaning of its own, to mark an option absent."""
+Zero is reserved against incomplete initialization, so an all-zero value names no option."""
 
 MAX_SELECTOR: Final = 127
-"""Highest selector a union may declare.
-
-The high bit is reserved, leaving room for a later extension to use it."""
+"""Highest selector a union may declare, the high bit being reserved."""
 
 
 def _byte_vector_length(ssz_type: type[SSZType]) -> int | None:
-    """
-    Fixed byte count of a type that is a vector of bytes, or None for anything else.
-
-    A fixed byte array is the spec's alias for a vector of single bytes.
-    Both spellings answer alike here, which is what keeps them compatible.
-    """
+    """Fixed byte count of a type that is a vector of bytes, or None for anything else."""
     if issubclass(ssz_type, ByteVector):
         return getattr(ssz_type, "LENGTH", None)
     element = getattr(ssz_type, "ELEMENT_TYPE", None)
@@ -42,12 +34,7 @@ def _byte_vector_length(ssz_type: type[SSZType]) -> int | None:
 
 
 def _byte_list_limit(ssz_type: type[SSZType]) -> int | None:
-    """
-    Capacity of a type that is a list of bytes, or None for anything else.
-
-    A byte list is the spec's alias for a list of single bytes.
-    Both spellings answer alike here, which is what keeps them compatible.
-    """
+    """Capacity of a type that is a list of bytes, or None for anything else."""
     if issubclass(ssz_type, ByteList):
         return getattr(ssz_type, "LIMIT", None)
     element = getattr(ssz_type, "ELEMENT_TYPE", None)
@@ -67,18 +54,13 @@ def _progressive_layouts_agree(
     - A position set in both must hold one field name, of compatible types.
     - A name set in both must sit at one position.
 
-    The second direction does not follow from the first.
-    Two layouts can share no set position and still place one name twice:
+    The second does not follow from the first, since one name can sit at two positions:
 
         position     0        1        2
         (1, 0, 1)    amount   -        tag
         (0, 1, 1)    -        amount   tag
 
-    Position 2 agrees, so the first rule passes.
-    A proof for the shared name would still read position 0 on one and 1 on the other.
-
-    A position set in only one layout is free.
-    The other leaves a zero leaf there, and nothing it holds moves.
+    A position set in only one layout is free, the other leaving a zero leaf there.
     """
     left_fields = _fields_by_position(left)
     right_fields = _fields_by_position(right)
@@ -125,7 +107,7 @@ def is_compatible(left: type[SSZType], right: type[SSZType]) -> bool:
     Returns:
         True when a proof about one verifies against the other.
     """
-    # The spec's first rule, and the fast path that settles most calls without recursing.
+    # The spec's first rule.
     if left is right:
         return True
 
@@ -135,8 +117,7 @@ def is_compatible(left: type[SSZType], right: type[SSZType]) -> bool:
     if issubclass(left, Boolean) and issubclass(right, Boolean):
         return True
 
-    # Byte arrays are the spec's aliases for vectors and lists of single bytes.
-    # An alias is compatible with the type it stands for.
+    # A byte array is the spec's alias for a vector or list of single bytes, and fits it.
     left_bytes, right_bytes = _byte_vector_length(left), _byte_vector_length(right)
     if left_bytes is not None or right_bytes is not None:
         return left_bytes == right_bytes
@@ -155,8 +136,7 @@ def is_compatible(left: type[SSZType], right: type[SSZType]) -> bool:
         return (
             issubclass(left, BitList) and issubclass(right, BitList) and left.LIMIT == right.LIMIT
         )
-    # The spec lists no rule for a progressive bitlist, which carries no parameter.
-    # Two of them are one type under the first rule, whatever names they were given.
+    # A progressive bitlist carries no parameter, so any two of them agree.
     if issubclass(left, ProgressiveBitList) or issubclass(right, ProgressiveBitList):
         return issubclass(left, ProgressiveBitList) and issubclass(right, ProgressiveBitList)
 
@@ -205,7 +185,6 @@ def is_compatible(left: type[SSZType], right: type[SSZType]) -> bool:
         )
 
     # Two unions agree when every option of one fits every option of the other.
-    # Each union is already internally compatible, so the cross product settles the pair.
     if issubclass(left, CompatibleUnion) or issubclass(right, CompatibleUnion):
         return (
             issubclass(left, CompatibleUnion)
@@ -217,7 +196,6 @@ def is_compatible(left: type[SSZType], right: type[SSZType]) -> bool:
             )
         )
 
-    # Everything else is incompatible.
     return False
 
 
@@ -239,31 +217,16 @@ class CompatibleUnion(SSZModel):
 
     A field keeps one tree position across every option.
     A proof about it therefore verifies against any option that declares it.
-    Verifiers need no per-variant map of field positions, which a plain union cannot offer.
 
-    The selector is mixed into the root, separating options that would otherwise root alike:
-
-    - Two options holding equal data would otherwise root identically.
-    - Two options differing only in a list's element type collide while that list is empty.
+    The selector is mixed into the root, so two options holding equal data do not root alike.
 
     A union is always variable-size, even where every option shares one width.
-    A container therefore reaches one through an offset.
 
-    A compatible union has no default value.
-    Selector zero is reserved, so no option could stand in as the default one.
-    A struct or a vector holding one therefore has no default either.
+    A union has no default value, so a struct or a vector holding one has none either.
 
-    A copy taken with a field replaced skips validation, as it does for any model here.
-    On a union that yields a selector naming an option the value does not hold.
-
-    A later version may add options and drop them without breaking a verifier.
-    Wrapping an existing field in a union is not backwards compatible.
-
-    The spec writes the options as a call:
+    The spec writes the options as a call, where they are a class attribute here:
 
         CompatibleUnion({1: Square, 2: Circle})
-
-    They are a class attribute here, as a vector's length and a list's limit are.
     """
 
     model_config = ConfigDict(frozen=True)
@@ -306,8 +269,6 @@ class CompatibleUnion(SSZModel):
             if type(selector) is not int:
                 raise SSZTypeError(TypeFault.UNION_SELECTOR_TYPE, selector=selector)
 
-            # Zero is reserved against incomplete initialization.
-            # Selectors 128 and above have the high bit set, held back for a later extension.
             if not MIN_SELECTOR <= selector <= MAX_SELECTOR:
                 raise SSZTypeError(
                     TypeFault.UNION_SELECTOR_RANGE,
@@ -320,9 +281,7 @@ class CompatibleUnion(SSZModel):
             if not (isinstance(option, type) and issubclass(option, SSZType)):
                 raise SSZTypeError(TypeFault.UNION_OPTION_TYPE, selector=selector)
 
-        # Every pair is checked, not every option against the first.
-        # A proof reads whichever option a value turns out to hold.
-        # A clash between the second and third is as fatal as one with the first.
+        # Every pair is checked, since a clash between the second and third is as fatal as any.
         options = list(cls.OPTIONS.items())
         for index, (selector, option) in enumerate(options):
             for other_selector, other in options[index + 1 :]:
@@ -337,14 +296,10 @@ class CompatibleUnion(SSZModel):
         """
         Refuse to build a compatible union from nothing, which the spec makes an error.
 
-        A struct or vector holding one has no default either.
-        Both build their default through this constructor, so the error propagates from here.
-
         Raises:
             SSZTypeError: When no input is given at all.
         """
         # An empty input is the only way to ask for a default, and this type has none.
-        # Selector zero is reserved, so no option could be named as the default one.
         if raw_input == {}:
             raise SSZTypeError(TypeFault.NO_DEFAULT, type=cls.__name__)
         return raw_input
@@ -393,7 +348,6 @@ class CompatibleUnion(SSZModel):
         Read one union from a binary stream within the given byte budget.
 
         The selector leads, so the option is known before its bytes are read.
-        A parser therefore sees the tree shape ahead of the data, nested options included.
 
         Raises:
             SSZValueError: When the budget holds no selector, or the selector names no option.
@@ -409,8 +363,7 @@ class CompatibleUnion(SSZModel):
                 ValueFault.UNKNOWN_SELECTOR, selector=int(selector), type=cls.__name__
             )
 
-        # The rest of the budget belongs to the option, whatever its own shape.
-        # A refusal inside it names the selector it was read under, as a path step.
+        # A refusal inside the option names the selector it was read under, as a path step.
         try:
             data = option.deserialize(stream, scope - Uint8.get_byte_length())
         except SSZError as error:
