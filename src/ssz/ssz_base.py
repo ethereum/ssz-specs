@@ -25,24 +25,7 @@ _COLD_CACHE: Final = {"_version": 0, "_root_memo": None}
 
 
 class SSZType(ABC):
-    """
-    Abstract base for every SSZ-encodable type.
-
-    Every type but one has a default value, and building it from nothing gives that default:
-
-        uint, boolean                      zero, false
-        fixed byte array                   every byte zero
-        bitvector                          every bit clear
-        vector                             the element default, once per position
-        container                          one field default per field
-        list, bitlist, progressive shapes  empty
-        compatible union                   none, and asking for one is an error
-
-    A composite default is built from the defaults of its parts, so it recurses.
-    A part with no default leaves the whole with none.
-
-    Only the total absence of input asks for a default, never an empty sequence.
-    """
+    """Abstract base for every SSZ-encodable type."""
 
     LENGTH: ClassVar[int | None] = None
     """Exact element count, or None where the shape declares none."""
@@ -81,29 +64,17 @@ class SSZType(ABC):
         """
         Narrow a declared capacity, and refuse a root of the type's own, where each is declared.
 
-        A capacity may be written with a typed value, so it is narrowed to a plain integer:
-
-            class Attestations(List[Attestation]):
-                LIMIT = MAX_ATTESTATIONS   # already a Uint64
-
-        Narrowing keeps every count a plain integer, whatever it was declared at.
-
-        One that is not an integer, or is below zero, is refused where it was written:
+        A capacity may be written with a typed value, so it is narrowed to a plain integer,
+        and anything that counts nothing is refused where it was written:
 
             LIMIT = 4.7   ->  refused, rather than resolving to a chunk count nobody wrote
             LIMIT = "4"   ->  refused, rather than reporting a wrong element count later
             LIMIT = -1    ->  refused, rather than bounding a shape no value can satisfy
 
-        The floor of zero is stated once, for every shape that declares a capacity at all.
-
-        A shape with a higher floor of its own states that one where it is declared:
-
-        - a vector holds at least one element,
-        - a bound of zero admits the empty value and nothing else.
+        The floor of zero is stated once here, and a shape with a higher one states its own.
 
         One value has one root, so a type may not declare a hash_tree_root of its own:
 
-            class Root(Chunk)                               ->  fine, declares nothing of its own
             class Fingerprint(Root): def is_all_ones(...)   ->  fine, declares another method
             class Fast(Root): def hash_tree_root(...)       ->  refused, a method of its own
             class Fast(Mixin, Root)                         ->  refused, a method from outside
@@ -112,10 +83,8 @@ class SSZType(ABC):
         A second root would answer only the callers that spell it as a method.
 
         Raises:
-            SSZTypeError: When a declared capacity is not an integer.
-            SSZTypeError: When a declared capacity is a boolean, which counts nothing.
-            SSZTypeError: When a declared capacity is below zero, which counts nothing either.
-            SSZTypeError: When a type declares a hash_tree_root of its own.
+            SSZTypeError: A capacity that is not a whole number at or above zero.
+            SSZTypeError: A type that declares a root of its own.
         """
         super().__init_subclass__(**kwargs)
 
@@ -223,13 +192,21 @@ class SSZType(ABC):
     @classmethod
     def default(cls) -> Self:
         """
-        Build the default value of this type.
+        Build the default value of this type, which every type but one has:
+
+            uint, boolean                      zero, false
+            fixed byte array                   every byte zero
+            bitvector                          every bit clear
+            vector                             the element default, once per position
+            container                          one field default per field
+            list, bitlist, progressive shapes  empty
+            compatible union                   none, and asking for one is an error
+
+        A composite builds from its parts, so a part with no default leaves it none.
+        Only the total absence of input asks for a default, never an empty sequence.
 
         Construction with no argument gives the same value.
         This spelling exists because a type checker reads that as missing its arguments.
-
-        Returns:
-            A fresh default value.
 
         Raises:
             SSZTypeError: When the type has no default value.
@@ -239,10 +216,7 @@ class SSZType(ABC):
     @classmethod
     def empty(cls) -> Self:
         """
-        Build a value holding nothing.
-
-        Returns:
-            A fresh default value.
+        Build a value holding nothing, which is the default under another name.
 
         Raises:
             SSZTypeError: When the type has no default value.
@@ -387,7 +361,7 @@ class SSZModel(StrictBaseModel, SSZType, ABC):
         _root_memo: ClassVar["tuple[object, Root] | None"]
 
     MUTABLE: ClassVar[bool] = True
-    """Whether instances accept mutation. Set False on a subclass to freeze it."""
+    """Whether instances accept mutation, and False on a subclass freezes it."""
 
     def __hash__(self) -> int:
         """

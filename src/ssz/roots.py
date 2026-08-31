@@ -183,7 +183,7 @@ def _root_from_layout(value: object) -> Root:
     Root a value from its layout, remembering nothing.
 
     Raises:
-        SSZTypeError: If the value's type has no registered handler.
+        SSZTypeError: A value whose type has no registered handler.
     """
     layout = merkle_layout(value)
     chunks = layout_chunks(
@@ -203,12 +203,8 @@ def hash_tree_root(value: object) -> Root:
     """
     Compute the SSZ Merkle root of a value.
 
-    A value whose whole encoding fits one chunk is its own root, once padded.
-    A value that can hold one reports the root it last computed, until a mutation
-    invalidates its witness.
-
     Raises:
-        SSZTypeError: If the value's type has no registered handler.
+        SSZTypeError: A value whose type has no registered handler.
     """
     # A value of at most one chunk bounds its tree at one leaf.
     # A one-leaf tree has no parent to hash, leaving the padded encoding as the root.
