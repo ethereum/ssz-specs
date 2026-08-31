@@ -305,13 +305,11 @@ class SSZFixture(BaseConsensusFixture):
         # Collections and containers carry their contents in Pydantic fields.
         if isinstance(ssz_value, SSZModel):
             return ssz_value.model_dump(mode="json")
-        # Boolean before int — Boolean subclasses int.
+        # A boolean carries JSON true or false, not the string the fallback would give.
         if isinstance(ssz_value, Boolean):
             return bool(ssz_value)
         if isinstance(ssz_value, bytes):
             return to_hex(ssz_value)
-        if isinstance(ssz_value, int):
-            return str(ssz_value)
         return str(ssz_value)
 
 
