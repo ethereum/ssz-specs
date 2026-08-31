@@ -285,6 +285,10 @@ def _layout_progressive_list(value: ProgressiveList) -> MerkleLayout:
 def _layout_progressive_container(value: ProgressiveContainer) -> MerkleLayout:
     # One leaf per layout position, not per field, though the spec's formula reads that way.
     # A cleared bit keeps its zero leaf, the gap that holds every other field still.
+    #
+    # The leaf count is therefore the layout width, never the field count.
+    #
+    # Six positions holding three fields merkleize six leaves, where three would root differently.
     cls = type(value)
     # A layout is declared as bits and never coerced, so a list of them arrives as one.
     names, word = progressive_container_plan(tuple(cls.ACTIVE_FIELDS), field_names(cls))

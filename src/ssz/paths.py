@@ -247,6 +247,12 @@ def get_generalized_index(ssz_type: type[SSZType], *path: PathStep) -> int:
                 raise SSZValueError(ValueFault.NO_SUCH_OPTION, type=current.__name__, step=step)
             # Every option shares the left child.
             # That is what keeps a field common to several options at one position.
+            #
+            # A proof for a field of one option therefore verifies under every other option too.
+            #
+            # It reads as zero where the option actually held declares no field there.
+            #
+            # So a verifier reads the selector, or the layout beside it, to tell absent from zero.
             index = gindex_child(index, right_side=False)
             current = option
             continue

@@ -1669,6 +1669,18 @@ def test_hash_tree_root_progressive_container_from_explicit_leaves(
     )
 
 
+def test_progressive_container_leaves_follow_the_layout_and_not_the_field_count() -> None:
+    """Six positions holding three fields merkleize six leaves, where three would root apart."""
+    value = MultiGapProgressive(A=Uint8(1), B=Uint16(0x0203), C=Uint32(0x04050607))
+    layout = MultiGapProgressive.ACTIVE_FIELDS
+    field_roots = [pad(b"\x01"), pad(b"\x03\x02"), pad(b"\x07\x06\x05\x04")]
+    with_gaps = [field_roots[0], ZERO_ROOT, ZERO_ROOT, field_roots[1], ZERO_ROOT, field_roots[2]]
+    assert len(field_roots) == 3
+    assert len(with_gaps) == len(layout) == 6
+    assert hash_tree_root(value) == expected_progressive_container_root(with_gaps, layout)
+    assert hash_tree_root(value) != expected_progressive_container_root(field_roots, layout)
+
+
 @pytest.mark.parametrize(
     "value, expected_leaves",
     [

@@ -335,6 +335,12 @@ SPINE_VALUE = Spine(f0=Uint64(11), f1=Uint64(22), f2=Uint64(33))
 GAPPED_VALUE = GappedSpine(first=Uint64(1), third=Uint64(3))
 SHAPE_VALUE = Shape(selector=Uint8(1), data=Square(side=Uint16(0x1234), color=Uint8(0x42)))
 
+# The other option of that union, whose layout leaves position 0 vacant.
+CIRCLE_SHAPE = Shape(selector=Uint8(2), data=Circle(radius=Uint16(7), color=Uint8(0x42)))
+
+# The first option again, holding zero in the field that position 0 carries.
+ZEROED_SHAPE = Shape(selector=Uint8(1), data=Square(side=Uint16(0), color=Uint8(0x42)))
+
 ALTAIR_VALUE = state_value(AltairState, 24)
 GLOAS_VALUE = state_value(GloasState, 46)
 
@@ -1055,6 +1061,25 @@ class TestCompatibleUnionPaths:
         # The union adds no leaf of its own: the whole tree below the root is the option's.
         # Its sibling is the selector, zero-extended from one byte to a full chunk.
         assert verify_merkle_proof(hash_tree_root(value.data), [word(1)], 2, hash_tree_root(value))
+
+    def test_a_field_of_one_option_reads_as_zero_under_another(self) -> None:
+        """A proof of a field the held option never declared still verifies, reading zero."""
+        # Position 0 carries the first option's private field, and is a gap in the second's.
+        # A gap merkleizes as a zero leaf, so the branch authenticates a real node.
+        index = get_generalized_index(Shape, 1, "side")
+        assert node_root(CIRCLE_SHAPE, index) == ZERO_ROOT
+        assert round_trip(CIRCLE_SHAPE, index)
+        # The option that does declare the field, holding zero, gives the same leaf.
+        assert node_root(ZEROED_SHAPE, index) == node_root(CIRCLE_SHAPE, index)
+
+    def test_the_selector_and_the_layout_tell_an_absent_field_from_a_zero_one(self) -> None:
+        """The two leaves a verifier has to read to resolve that collision."""
+        selector = get_generalized_index(Shape, SELECTOR_KEY)
+        assert node_root(CIRCLE_SHAPE, selector) != node_root(ZEROED_SHAPE, selector)
+        # Both layouts are three positions wide, so the layout leaf sits at one index either way.
+        layout = get_generalized_index(Shape, 1, ACTIVE_FIELDS_KEY)
+        assert layout == get_generalized_index(Shape, 2, ACTIVE_FIELDS_KEY)
+        assert node_root(CIRCLE_SHAPE, layout) != node_root(ZEROED_SHAPE, layout)
 
     def test_a_selector_naming_no_option_is_refused(self) -> None:
         """A path can only descend through an option the union declares."""

@@ -49,6 +49,12 @@ def selector_word(selector: int) -> Chunk:
 
         selector 1  ->  01 00 00 ... 00
 
+    Read literally the byte is the whole operand, giving a 33-byte pre-image.
+
+    No other word mixed in is narrower than a chunk: a count takes 32 bytes, a layout takes one.
+
+    The literal reading roots every union differently.
+
     Raises:
         SSZValueError: A selector that does not fit one byte.
     """
