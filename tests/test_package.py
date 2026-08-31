@@ -86,3 +86,8 @@ def test_every_exported_name_resolves() -> None:
 def test_the_exports_are_sorted() -> None:
     """A sorted list is the one order two people adding a name will not conflict over."""
     assert list(ssz.__all__) == sorted(ssz.__all__)
+
+
+def test_the_type_marker_ships_with_the_package() -> None:
+    """Without the marker a consumer's type checker reads every export as untyped."""
+    assert (PACKAGE / "py.typed").is_file()
