@@ -24,6 +24,7 @@ from ssz import (
     Vector,
 )
 from ssz.bitfields import BitList, BitVector
+from ssz.exceptions import SSZTypeError
 from ssz.ssz_base import SSZType
 from ssz.union import is_compatible
 
@@ -828,3 +829,84 @@ def test_progressive_layouts_pin_a_shared_name_to_one_position() -> None:
     square_color = Square.model_fields["color"].annotation
     moved_color = MovedSide.model_fields["color"].annotation
     assert is_compatible(square_color, moved_color)
+
+
+# --------------------------------------------------------------------------------------
+# Types that declare no shape
+# --------------------------------------------------------------------------------------
+
+
+# An abstract base declares none of the parameters a shape reads, so it describes no tree.
+UNDECLARED_PAIRS = [
+    # Neither spelling of a byte array carries a capacity, so neither names a shape.
+    pytest.param(ByteVector, ByteList, id="byte_array_bases"),
+    pytest.param(Vector, Uint16Vector4, id="vector_base_with_a_vector"),
+    pytest.param(List, Uint16List4, id="list_base_with_a_list"),
+    pytest.param(ProgressiveList, Uint16ProgressiveList, id="progressive_list_base"),
+    pytest.param(ProgressiveContainer, Square, id="progressive_container_base"),
+    pytest.param(CompatibleUnion, Shape, id="union_base"),
+]
+
+
+@pytest.mark.parametrize(("left", "right"), UNDECLARED_PAIRS)
+def test_a_type_declaring_no_shape_is_compatible_with_nothing(
+    left: type[SSZType], right: type[SSZType]
+) -> None:
+    """An undeclared parameter is answered, not read: the relation is total and never raises."""
+    assert_relation(left, right, False)
+
+
+def test_a_type_declaring_no_shape_is_still_compatible_with_itself() -> None:
+    """Identity is settled before any parameter is looked at, so it holds for the bases too."""
+    for base in (ByteVector, ByteList, Vector, List, ProgressiveList, CompatibleUnion):
+        assert is_compatible(base, base) is True
+
+
+def test_a_shape_pinning_no_capacity_agrees_with_nothing() -> None:
+    """Two types with no capacity have no tree shape, so neither is the other's shape."""
+
+    # Nothing refuses these declarations, and each carries no count at all.
+    class Unbounded(BitVector):
+        """Bitvector declaring no length."""
+
+    class AlsoUnbounded(BitVector):
+        """Another bitvector declaring no length."""
+
+    class Uncounted(List[Uint16]):
+        """List declaring no limit."""
+
+    class AlsoUncounted(List[Uint16]):
+        """Another list declaring no limit."""
+
+    # Reading the two counts and finding them both absent must not read as agreement.
+    assert_relation(Unbounded, AlsoUnbounded, False)
+    assert_relation(Uncounted, AlsoUncounted, False)
+
+    # So a union cannot be declared over them, which is where the answer is acted on.
+    with pytest.raises(SSZTypeError):
+
+        class Unshaped(CompatibleUnion):
+            """Union over two options that pin no shape."""
+
+            OPTIONS = {1: Unbounded, 2: AlsoUnbounded}
+
+
+def test_unions_are_compared_across_every_crossing_pair_of_options() -> None:
+    """No single crossing pair stands for the rest, because the relation is not transitive."""
+
+    # Square and Shade clash, but each agrees with Tail, so both unions declare cleanly.
+    class SquareOrTail(CompatibleUnion):
+        """Union whose options are a layout and one sharing no position with it."""
+
+        OPTIONS = {1: Square, 2: Tail}
+
+    class ShadeOrTail(CompatibleUnion):
+        """Union over the layout that clashes with the first, and the same neutral one."""
+
+        OPTIONS = {1: Shade, 2: Tail}
+
+    # The pair crossing at Tail agrees, so stopping at one pair would answer yes.
+    assert is_compatible(Tail, Tail) is True
+    # The pair crossing at Square and Shade does not, and that is the answer.
+    assert is_compatible(Square, Shade) is False
+    assert_relation(SquareOrTail, ShadeOrTail, False)

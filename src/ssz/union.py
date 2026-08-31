@@ -1,6 +1,6 @@
 """SSZ compatible union, per EIP-8016."""
 
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from typing import IO, Any, ClassVar, Final, Self, override
 
 from pydantic import ConfigDict, model_validator
@@ -15,220 +15,31 @@ from ssz.ssz_base import SSZModel, SSZType
 from ssz.uint import BaseUint, Uint8
 
 MIN_SELECTOR: Final = 1
-"""
-Lowest selector a union may declare.
-
-Zero is reserved against incomplete initialization, so an all-zero value names no option.
-"""
+"""Lowest selector a union may declare, zero being reserved so an all-zero value names none."""
 
 MAX_SELECTOR: Final = 127
 """Highest selector a union may declare, the high bit being reserved."""
-
-
-def _byte_vector_length(ssz_type: type[SSZType]) -> int | None:
-    """Fixed byte count of a type that is a vector of bytes, or None for anything else."""
-    if issubclass(ssz_type, ByteVector):
-        return getattr(ssz_type, "LENGTH", None)
-    element = getattr(ssz_type, "ELEMENT_TYPE", None)
-    if issubclass(ssz_type, Vector) and element is not None and issubclass(element, BaseUint):
-        return getattr(ssz_type, "LENGTH", None) if element.BITS == Uint8.BITS else None
-    return None
-
-
-def _byte_list_limit(ssz_type: type[SSZType]) -> int | None:
-    """Capacity of a type that is a list of bytes, or None for anything else."""
-    if issubclass(ssz_type, ByteList):
-        return getattr(ssz_type, "LIMIT", None)
-    element = getattr(ssz_type, "ELEMENT_TYPE", None)
-    if issubclass(ssz_type, List) and element is not None and issubclass(element, BaseUint):
-        return getattr(ssz_type, "LIMIT", None) if element.BITS == Uint8.BITS else None
-    return None
-
-
-def _progressive_layouts_agree(
-    left: type[ProgressiveContainer], right: type[ProgressiveContainer]
-) -> bool:
-    """
-    Whether two field layouts place their shared fields alike.
-
-    Two rules, each in one direction:
-
-    - A position set in both must hold one field name, of compatible types.
-    - A name set in both must sit at one position.
-
-    The second does not follow from the first, since one name can sit at two positions:
-
-        position     0        1        2
-        (1, 0, 1)    amount   -        tag
-        (0, 1, 1)    -        amount   tag
-
-    A position set in only one layout is free, the other leaving a zero leaf there.
-    """
-    left_fields = _fields_by_position(left)
-    right_fields = _fields_by_position(right)
-
-    # A proof addresses a position, so two names at one position would read as each other.
-    for position, (name, field_type) in left_fields.items():
-        if position not in right_fields:
-            continue
-        other_name, other_type = right_fields[position]
-        if name != other_name or not is_compatible(field_type, other_type):
-            return False
-
-    # One name at two positions would send a single proof to two different leaves.
-    left_positions = {name: position for position, (name, _) in left_fields.items()}
-    right_positions = {name: position for position, (name, _) in right_fields.items()}
-    return all(
-        position == right_positions[name]
-        for name, position in left_positions.items()
-        if name in right_positions
-    )
-
-
-def _fields_by_position(
-    ssz_type: type[ProgressiveContainer],
-) -> dict[int, tuple[str, type[SSZType]]]:
-    """Map each set position of a layout to the field name and type standing there."""
-    # A field belongs to the n-th set position, not to position n.
-    # Layout (1, 0, 1) puts the first field at 0 and the second at 2.
-    set_positions = (i for i, bit in enumerate(ssz_type.ACTIVE_FIELDS) if bit)
-    return {
-        position: (name, field_type)
-        for position, (name, field_type) in zip(set_positions, ssz_type._FIELD_TYPES, strict=True)
-    }
-
-
-def is_compatible(left: type[SSZType], right: type[SSZType]) -> bool:
-    """
-    Whether two types merkleize into the same tree shape.
-
-    Args:
-        left: One SSZ type.
-        right: The type to compare it against.
-
-    Returns:
-        True when a proof about one verifies against the other.
-    """
-    # The spec's first rule.
-    if left is right:
-        return True
-
-    # Basic types answer for their width alone, so a named subtype of one still fits.
-    if issubclass(left, BaseUint) and issubclass(right, BaseUint):
-        return left.BITS == right.BITS
-    if issubclass(left, Boolean) and issubclass(right, Boolean):
-        return True
-
-    # A byte array is the spec's alias for a vector or list of single bytes, and fits it.
-    left_bytes, right_bytes = _byte_vector_length(left), _byte_vector_length(right)
-    if left_bytes is not None or right_bytes is not None:
-        return left_bytes == right_bytes
-    left_byte_list, right_byte_list = _byte_list_limit(left), _byte_list_limit(right)
-    if left_byte_list is not None or right_byte_list is not None:
-        return left_byte_list == right_byte_list
-
-    # Bitfields answer for their capacity, and never across the three shapes.
-    if issubclass(left, BitVector) or issubclass(right, BitVector):
-        return (
-            issubclass(left, BitVector)
-            and issubclass(right, BitVector)
-            and left.LENGTH == right.LENGTH
-        )
-    if issubclass(left, BitList) or issubclass(right, BitList):
-        return (
-            issubclass(left, BitList) and issubclass(right, BitList) and left.LIMIT == right.LIMIT
-        )
-    # A progressive bitlist carries no parameter, so any two of them agree.
-    if issubclass(left, ProgressiveBitList) or issubclass(right, ProgressiveBitList):
-        return issubclass(left, ProgressiveBitList) and issubclass(right, ProgressiveBitList)
-
-    # Sequences answer for their capacity and their element type.
-    if issubclass(left, Vector) or issubclass(right, Vector):
-        return (
-            issubclass(left, Vector)
-            and issubclass(right, Vector)
-            and left.LENGTH == right.LENGTH
-            and is_compatible(left.ELEMENT_TYPE, right.ELEMENT_TYPE)
-        )
-    if issubclass(left, List) or issubclass(right, List):
-        return (
-            issubclass(left, List)
-            and issubclass(right, List)
-            and left.LIMIT == right.LIMIT
-            and is_compatible(left.ELEMENT_TYPE, right.ELEMENT_TYPE)
-        )
-    if issubclass(left, ProgressiveList) or issubclass(right, ProgressiveList):
-        return (
-            issubclass(left, ProgressiveList)
-            and issubclass(right, ProgressiveList)
-            and is_compatible(left.ELEMENT_TYPE, right.ELEMENT_TYPE)
-        )
-
-    # A container answers for its field names, in order, and their types.
-    if issubclass(left, Container) or issubclass(right, Container):
-        return (
-            issubclass(left, Container)
-            and issubclass(right, Container)
-            and list(left.model_fields) == list(right.model_fields)
-            and all(
-                is_compatible(left_type, right_type)
-                for (_, left_type), (_, right_type) in zip(
-                    left._FIELD_TYPES, right._FIELD_TYPES, strict=True
-                )
-            )
-        )
-
-    # A progressive container answers for the positions its layout sets, not its width.
-    if issubclass(left, ProgressiveContainer) or issubclass(right, ProgressiveContainer):
-        return (
-            issubclass(left, ProgressiveContainer)
-            and issubclass(right, ProgressiveContainer)
-            and _progressive_layouts_agree(left, right)
-        )
-
-    # Two unions agree when every option of one fits every option of the other.
-    if issubclass(left, CompatibleUnion) or issubclass(right, CompatibleUnion):
-        return (
-            issubclass(left, CompatibleUnion)
-            and issubclass(right, CompatibleUnion)
-            and all(
-                is_compatible(left_option, right_option)
-                for left_option in left.OPTIONS.values()
-                for right_option in right.OPTIONS.values()
-            )
-        )
-
-    return False
 
 
 class CompatibleUnion(SSZModel):
     """
     Tagged union whose options all merkleize into one tree shape, per EIP-8016.
 
-    Options are a map from selector to type, and a value carries the selector it holds:
+    Options are declared as a map from selector to type, and the selector leads the encoding:
 
         class Shape(CompatibleUnion):
             OPTIONS = {1: Square, 2: Circle}
 
         Shape(selector=1, data=Square(side=Uint16(0x1234), color=Uint8(0x42)))
 
-    The selector leads the option's own encoding:
-
         01        34 12   42
         selector  side    color
 
-    A field keeps one tree position across every option.
-    A proof about it therefore verifies against any option that declares it.
+    One tree position per field is what lets a proof verify against any option declaring it.
 
     The selector is mixed into the root, so two options holding equal data do not root alike.
 
-    A union is always variable-size, even where every option shares one width.
-
-    A union has no default value, so a struct or a vector holding one has none either.
-
-    The spec writes the options as a call, where they are a class attribute here:
-
-        CompatibleUnion({1: Square, 2: Circle})
+    A union is always variable-size, and has no default, so a shape holding one has none either.
     """
 
     model_config = ConfigDict(frozen=True)
@@ -236,7 +47,7 @@ class CompatibleUnion(SSZModel):
     KIND = "compatible union"
 
     OPTIONS: ClassVar[Mapping[int, type[SSZType]]]
-    """Selector to type option, one entry per variant the union admits."""
+    """Selector to type, one entry per variant the union admits."""
 
     selector: Uint8
     """Selector of the option this value holds."""
@@ -247,32 +58,26 @@ class CompatibleUnion(SSZModel):
     @classmethod
     def __pydantic_init_subclass__(cls, **kwargs: Any) -> None:
         """
-        Enforce the option rules of EIP-8016 on every declared union.
+        Enforce the option rules on every declared union.
 
         Raises:
-            SSZTypeError: When no options are declared, the options are not a map, the
-                options are empty, a selector is not a plain int in 1 through 127, an
-                option is not an SSZ type, or two options merkleize differently.
+            SSZTypeError: When the options are missing, malformed, or not all of one shape.
         """
         super().__pydantic_init_subclass__(**kwargs)
 
-        # Merkleization proves every option shares one shape, so the set must be known.
+        # Merkleization rests on every option sharing one shape, so the set must be known.
         if not hasattr(cls, "OPTIONS"):
             raise SSZTypeError(TypeFault.UNDECLARED, type=cls.__name__, requirement="OPTIONS")
-
-        # A union with no option admits no value at all.
         if not cls.OPTIONS:
             raise SSZTypeError(TypeFault.UNION_EMPTY)
-
         # A sequence of types would read its own entries as selectors.
         if not isinstance(cls.OPTIONS, Mapping):
             raise SSZTypeError(TypeFault.UNION_NOT_A_MAP, got=type(cls.OPTIONS).__name__)
 
         for selector, option in cls.OPTIONS.items():
-            # A selector is a plain int, and a typed one compares strictly against the bounds.
+            # A bool is an int subclass, so identity keeps true out of selector position.
             if type(selector) is not int:
                 raise SSZTypeError(TypeFault.UNION_SELECTOR_TYPE, selector=selector)
-
             if not MIN_SELECTOR <= selector <= MAX_SELECTOR:
                 raise SSZTypeError(
                     TypeFault.UNION_SELECTOR_RANGE,
@@ -280,12 +85,10 @@ class CompatibleUnion(SSZModel):
                     low=MIN_SELECTOR,
                     high=MAX_SELECTOR,
                 )
-
-            # An option is a type this library can serialize, not any Python class.
             if not (isinstance(option, type) and issubclass(option, SSZType)):
                 raise SSZTypeError(TypeFault.UNION_OPTION_TYPE, selector=selector)
 
-        # Every pair is checked, since a clash between the second and third is as fatal as any.
+        # Compatibility is not transitive, so every pair has to be asked, not just neighbours.
         options = list(cls.OPTIONS.items())
         for index, (selector, option) in enumerate(options):
             for other_selector, other in options[index + 1 :]:
@@ -297,13 +100,7 @@ class CompatibleUnion(SSZModel):
     @model_validator(mode="before")
     @classmethod
     def _reject_a_default(cls, raw_input: Any) -> Any:
-        """
-        Refuse to build a compatible union from nothing, which the spec makes an error.
-
-        Raises:
-            SSZTypeError: When no input is given at all.
-        """
-        # An empty input is the only way to ask for a default, and this type has none.
+        """Refuse the empty input that asks for a default, which this type does not have."""
         if raw_input == {}:
             raise SSZTypeError(TypeFault.NO_DEFAULT, type=cls.__name__)
         return raw_input
@@ -315,7 +112,7 @@ class CompatibleUnion(SSZModel):
 
         Raises:
             SSZValueError: When the selector names no option.
-            SSZTypeError: When the value is a type other than the one the selector names.
+            SSZTypeError: When the value is a type other than the one named.
         """
         # A value is built field by field, so its selector may name nothing at all.
         option = type(self).OPTIONS.get(int(self.selector))
@@ -335,7 +132,7 @@ class CompatibleUnion(SSZModel):
     @classmethod
     @override
     def fixed_size(cls) -> None:
-        """No width, even where every option shares one: the selector is read per value."""
+        """No width, even where every option shares one, since the selector is read per value."""
         return None
 
     @override
@@ -347,18 +144,16 @@ class CompatibleUnion(SSZModel):
     @override
     def deserialize(cls, stream: IO[bytes], scope: int) -> Self:
         """
-        Read one union from a binary stream within the given byte budget.
-
-        The selector leads, so the option is known before its bytes are read.
+        Read one union within the given byte budget, the selector leading.
 
         Raises:
             SSZValueError: When the budget holds no selector, or the selector names no option.
         """
-        # The selector is one byte, so a budget under one cannot hold even that.
-        if scope < Uint8.get_byte_length():
+        selector_width = Uint8.get_byte_length()
+        if scope < selector_width:
             raise SSZValueError(ValueFault.NO_SELECTOR, scope=scope)
 
-        selector = Uint8.deserialize(stream, Uint8.get_byte_length())
+        selector = Uint8.deserialize(stream, selector_width)
         option = cls.OPTIONS.get(int(selector))
         if option is None:
             raise SSZValueError(
@@ -367,8 +162,180 @@ class CompatibleUnion(SSZModel):
 
         # A refusal inside the option names the selector it was read under, as a path step.
         try:
-            data = option.deserialize(stream, scope - Uint8.get_byte_length())
+            data = option.deserialize(stream, scope - selector_width)
         except SSZError as error:
             error.at(int(selector))
             raise
         return cls(selector=selector, data=data)
+
+
+type _ShapeRule = tuple[type[SSZType], Callable[[Any, Any], bool]]
+"""A shape, and how two types of that shape compare the parameters it carries."""
+
+
+def _rule[S: SSZType](
+    shape: type[S], parameters_agree: Callable[[type[S], type[S]], bool]
+) -> _ShapeRule:
+    """One rule of the relation, tying a comparison to the shape whose parameters it reads."""
+    return (shape, parameters_agree)
+
+
+def is_compatible(left: type[SSZType], right: type[SSZType]) -> bool:
+    """
+    Whether two types merkleize into the same tree shape.
+
+    Reflexive and symmetric, but not transitive.
+
+    Two layouts may each agree with a third on the positions they share, and still clash.
+    """
+    # The spec's first rule, and the only answer available for a type declaring no shape.
+    if left is right:
+        return True
+
+    # A byte array and a sequence of single bytes are one shape, so this outranks those rules.
+    left_bytes, right_bytes = _byte_sequence(left), _byte_sequence(right)
+    if left_bytes is not None or right_bytes is not None:
+        return left_bytes == right_bytes
+
+    # No shape below is a subclass of another, so the first to claim either side settles it.
+    for shape, parameters_agree in _SHAPE_RULES:
+        if issubclass(left, shape) or issubclass(right, shape):
+            return (
+                issubclass(left, shape)
+                and issubclass(right, shape)
+                and parameters_agree(left, right)
+            )
+    return False
+
+
+def _byte_sequence(ssz_type: type[SSZType]) -> tuple[type[SSZType], int] | None:
+    """The byte-array shape a type spells, either spelling, or None for any other shape."""
+    element = getattr(ssz_type, "ELEMENT_TYPE", None)
+    of_bytes = element is not None and issubclass(element, BaseUint) and element.BITS == Uint8.BITS
+    if issubclass(ssz_type, ByteVector) or (of_bytes and issubclass(ssz_type, Vector)):
+        return None if ssz_type.LENGTH is None else (Vector, ssz_type.LENGTH)
+    if issubclass(ssz_type, ByteList) or (of_bytes and issubclass(ssz_type, List)):
+        return None if ssz_type.LIMIT is None else (List, ssz_type.LIMIT)
+    # A progressive list of bytes carries no capacity, so no byte array spells its shape.
+    return None
+
+
+def _capacities_agree(left: int | None, right: int | None) -> bool:
+    """Whether two shapes pin the same count, a shape pinning none agreeing with nothing."""
+    return left is not None and left == right
+
+
+def _elements_agree(left: type[SSZType], right: type[SSZType]) -> bool:
+    """Whether two sequence types both declare an element type, and compatible ones."""
+    left_element = getattr(left, "ELEMENT_TYPE", None)
+    right_element = getattr(right, "ELEMENT_TYPE", None)
+    if left_element is None or right_element is None:
+        return False
+    return is_compatible(left_element, right_element)
+
+
+def _fields_agree(left: type[Container], right: type[Container]) -> bool:
+    """Whether two structs name the same fields in the same order, holding compatible types."""
+    if len(left._FIELD_TYPES) != len(right._FIELD_TYPES):
+        return False
+    return all(
+        left_name == right_name and is_compatible(left_type, right_type)
+        for (left_name, left_type), (right_name, right_type) in zip(
+            left._FIELD_TYPES, right._FIELD_TYPES, strict=True
+        )
+    )
+
+
+def _layouts_agree(left: type[ProgressiveContainer], right: type[ProgressiveContainer]) -> bool:
+    """
+    Whether two field layouts place the fields they share alike.
+
+    Two rules, each in one direction:
+
+    - A position set in both must hold one field name, of compatible types.
+    - A name set in both must sit at one position.
+
+    The second does not follow from the first, since one name can sit at two positions:
+
+        position     0        1        2
+        (1, 0, 1)    amount   -        tag
+        (0, 1, 1)    -        amount   tag
+
+    A position set in only one layout is free, the other leaving a zero leaf there.
+    """
+    left_fields, right_fields = _fields_by_position(left), _fields_by_position(right)
+    if left_fields is None or right_fields is None:
+        return False
+
+    # A proof addresses a position, so two names at one position would read as each other.
+    for position, (name, field_type) in left_fields.items():
+        if position not in right_fields:
+            continue
+        other_name, other_type = right_fields[position]
+        if name != other_name or not is_compatible(field_type, other_type):
+            return False
+
+    # One name at two positions would send a single proof to two different leaves.
+    right_positions = {name: position for position, (name, _) in right_fields.items()}
+    return all(
+        position == right_positions[name]
+        for position, (name, _) in left_fields.items()
+        if name in right_positions
+    )
+
+
+def _fields_by_position(
+    ssz_type: type[ProgressiveContainer],
+) -> dict[int, tuple[str, type[SSZType]]] | None:
+    """Each set position of a layout mapped to the field standing there, or None if undeclared."""
+    layout = getattr(ssz_type, "ACTIVE_FIELDS", None)
+    if layout is None:
+        return None
+    # A field belongs to the n-th set position, so layout (1, 0, 1) puts its fields at 0 and 2.
+    set_positions = (position for position, bit in enumerate(layout) if bit)
+    return dict(zip(set_positions, ssz_type._FIELD_TYPES, strict=True))
+
+
+def _options_agree(left: type[CompatibleUnion], right: type[CompatibleUnion]) -> bool:
+    """Whether every option of one union fits every option of the other."""
+    left_options = getattr(left, "OPTIONS", None)
+    right_options = getattr(right, "OPTIONS", None)
+    if left_options is None or right_options is None:
+        return False
+    # One crossing pair does not stand for the rest, the relation not being transitive.
+    return all(
+        is_compatible(left_option, right_option)
+        for left_option in left_options.values()
+        for right_option in right_options.values()
+    )
+
+
+_SHAPE_RULES: Final[tuple[_ShapeRule, ...]] = (
+    # A basic type answers for its width alone, so a named subtype of one still fits.
+    _rule(BaseUint, lambda left, right: left.BITS == right.BITS),
+    _rule(Boolean, lambda _left, _right: True),
+    # A bitfield answers for its capacity, and never across the three bitfield shapes.
+    _rule(BitVector, lambda left, right: _capacities_agree(left.LENGTH, right.LENGTH)),
+    _rule(BitList, lambda left, right: _capacities_agree(left.LIMIT, right.LIMIT)),
+    # A progressive bitfield carries no capacity, so any two of them agree on one.
+    _rule(ProgressiveBitList, lambda _left, _right: True),
+    # A sequence answers for its capacity and its element type.
+    _rule(
+        Vector,
+        lambda left, right: (
+            _capacities_agree(left.LENGTH, right.LENGTH) and _elements_agree(left, right)
+        ),
+    ),
+    _rule(
+        List,
+        lambda left, right: (
+            _capacities_agree(left.LIMIT, right.LIMIT) and _elements_agree(left, right)
+        ),
+    ),
+    _rule(ProgressiveList, _elements_agree),
+    _rule(Container, _fields_agree),
+    # A progressive container answers for the positions its layout sets, not its width.
+    _rule(ProgressiveContainer, _layouts_agree),
+    _rule(CompatibleUnion, _options_agree),
+)
+"""Every shape a value can take, each paired with what two types of it must share."""
