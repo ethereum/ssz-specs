@@ -21,23 +21,11 @@ def offset_table_spans(offsets: Sequence[int], scope: int, steps: Sequence[str |
         boundaries    12       17       20       27
         spans         12..17   17..20   20..27
 
-    A pair that decreases is a body of negative width.
-    The pair closed by the budget is a body reaching past the input.
-
-    The whole table is settled here before a caller reads one byte of a body.
-    So a corrupt table is refused as one, not as whatever a body made of a bad span.
-
-    Args:
-        offsets: Where each body starts, in wire order.
-        scope: Byte budget the payload spans, which closes the last body.
-        steps: What to name each body on the path of a refusal, in the same order.
-
-    Returns:
-        The width of each body, in wire order.
+    The whole table is settled before a caller reads one byte of a body.
+    A corrupt one is therefore refused as a table, not as whatever a bad span made of it.
 
     Raises:
-        SSZValueError: When an offset is above the one after it.
-        SSZValueError: When the last offset runs past the budget.
+        SSZValueError: An offset above the one after it, or a last one past the budget.
     """
     boundaries = [*offsets, scope]
 
