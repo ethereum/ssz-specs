@@ -140,7 +140,6 @@ version = "0.0.1.dev2"
 source = { editable = "." }
 dependencies = [
     { name = "pydantic" },
-    { name = "typing-extensions" },
 ]
 
 [package.dev-dependencies]
@@ -173,10 +172,7 @@ test = [
 ]
 
 [package.metadata]
-requires-dist = [
-    { name = "pydantic", specifier = ">=2.12.0,<3" },
-    { name = "typing-extensions", specifier = ">=4.4" },
-]
+requires-dist = [{ name = "pydantic", specifier = ">=2.12.0,<3" }]
 
 [package.metadata.requires-dev]
 dev = [
