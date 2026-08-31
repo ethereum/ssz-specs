@@ -169,17 +169,6 @@ class CompatibleUnion(SSZModel):
         return cls(selector=selector, data=data)
 
 
-type _ShapeRule = tuple[type[SSZType], Callable[[Any, Any], bool]]
-"""A shape, and how two types of that shape compare the parameters it carries."""
-
-
-def _rule[S: SSZType](
-    shape: type[S], parameters_agree: Callable[[type[S], type[S]], bool]
-) -> _ShapeRule:
-    """One rule of the relation, tying a comparison to the shape whose parameters it reads."""
-    return (shape, parameters_agree)
-
-
 def is_compatible(left: type[SSZType], right: type[SSZType]) -> bool:
     """
     Whether two types merkleize into the same tree shape.
@@ -197,8 +186,8 @@ def is_compatible(left: type[SSZType], right: type[SSZType]) -> bool:
     if left_bytes is not None or right_bytes is not None:
         return left_bytes == right_bytes
 
-    # No shape below is a subclass of another, so the first to claim either side settles it.
-    for shape, parameters_agree in _SHAPE_RULES:
+    # No shape is a subclass of another, so at most one claims a side and order does not matter.
+    for shape, parameters_agree in _SHAPE_RULES.items():
         if issubclass(left, shape) or issubclass(right, shape):
             return (
                 issubclass(left, shape)
@@ -310,32 +299,26 @@ def _options_agree(left: type[CompatibleUnion], right: type[CompatibleUnion]) ->
     )
 
 
-_SHAPE_RULES: Final[tuple[_ShapeRule, ...]] = (
+_SHAPE_RULES: Final[Mapping[type[SSZType], Callable[[Any, Any], bool]]] = {
     # A basic type answers for its width alone, so a named subtype of one still fits.
-    _rule(BaseUint, lambda left, right: left.BITS == right.BITS),
-    _rule(Boolean, lambda _left, _right: True),
+    BaseUint: lambda left, right: left.BITS == right.BITS,
+    Boolean: lambda _left, _right: True,
     # A bitfield answers for its capacity, and never across the three bitfield shapes.
-    _rule(BitVector, lambda left, right: _capacities_agree(left.LENGTH, right.LENGTH)),
-    _rule(BitList, lambda left, right: _capacities_agree(left.LIMIT, right.LIMIT)),
+    BitVector: lambda left, right: _capacities_agree(left.LENGTH, right.LENGTH),
+    BitList: lambda left, right: _capacities_agree(left.LIMIT, right.LIMIT),
     # A progressive bitfield carries no capacity, so any two of them agree on one.
-    _rule(ProgressiveBitList, lambda _left, _right: True),
+    ProgressiveBitList: lambda _left, _right: True,
     # A sequence answers for its capacity and its element type.
-    _rule(
-        Vector,
-        lambda left, right: (
-            _capacities_agree(left.LENGTH, right.LENGTH) and _elements_agree(left, right)
-        ),
+    Vector: lambda left, right: (
+        _capacities_agree(left.LENGTH, right.LENGTH) and _elements_agree(left, right)
     ),
-    _rule(
-        List,
-        lambda left, right: (
-            _capacities_agree(left.LIMIT, right.LIMIT) and _elements_agree(left, right)
-        ),
+    List: lambda left, right: (
+        _capacities_agree(left.LIMIT, right.LIMIT) and _elements_agree(left, right)
     ),
-    _rule(ProgressiveList, _elements_agree),
-    _rule(Container, _fields_agree),
+    ProgressiveList: _elements_agree,
+    Container: _fields_agree,
     # A progressive container answers for the positions its layout sets, not its width.
-    _rule(ProgressiveContainer, _layouts_agree),
-    _rule(CompatibleUnion, _options_agree),
-)
-"""Every shape a value can take, each paired with what two types of it must share."""
+    ProgressiveContainer: _layouts_agree,
+    CompatibleUnion: _options_agree,
+}
+"""Every shape a value can take, mapped to what two types of it must share."""
