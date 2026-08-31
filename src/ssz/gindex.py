@@ -5,23 +5,28 @@ from collections.abc import Sequence
 from ssz.exceptions import SSZValueError, ValueFault
 
 
-def _reject_unusable(index: int) -> None:
+def gindex_depth(index: int) -> int:
     """
-    Refuse the two indices that name no provable node.
+    Levels a generalized index sits below the root, which is none at all for the root itself.
 
     Raises:
-        SSZValueError: The root, which proves nothing about itself, or anything below it.
+        SSZValueError: A number naming no node.
     """
     if index < 1:
         raise SSZValueError(ValueFault.NOT_A_GINDEX, index=index)
-    if index == 1:
-        raise SSZValueError(ValueFault.ROOT_HAS_NO_BRANCH)
+    return index.bit_length() - 1
 
 
 def gindex_length(index: int) -> int:
-    """Depth of a generalized index, which is the number of nodes on its proof branch."""
-    _reject_unusable(index)
-    return index.bit_length() - 1
+    """
+    Depth of a generalized index, which is the number of nodes on its proof branch.
+
+    Raises:
+        SSZValueError: A number naming no node, or the root, which sits on no branch.
+    """
+    if not (depth := gindex_depth(index)):
+        raise SSZValueError(ValueFault.ROOT_HAS_NO_BRANCH)
+    return depth
 
 
 def gindex_bit(index: int, position: int) -> bool:
@@ -56,8 +61,10 @@ def gindex_concat(outer: int, inner: int) -> int:
     An index carries its depth in its leading bit, so this splices rather than multiplies:
 
         outer 2, inner 24  ->  40, not 48
+
+    An inner root is a depth of no levels, so it splices onto the outer position unmoved.
     """
-    depth = gindex_length(inner)
+    depth = gindex_depth(inner)
     return (outer << depth) | (inner - (1 << depth))
 
 
@@ -107,12 +114,13 @@ def progressive_chunk_gindex(chunk: int) -> int:
 
 
 def get_path_indices(index: int) -> list[int]:
-    """Nodes from the given one up to the root, excluding the root."""
-    _reject_unusable(index)
-    walk = [index]
-    while walk[-1] > 1:
-        walk.append(gindex_parent(walk[-1]))
-    return walk[:-1]
+    """
+    Nodes from the given one up to the root, excluding the root.
+
+    Raises:
+        SSZValueError: A number naming no node, or the root, whose path holds nothing.
+    """
+    return [index >> level for level in range(gindex_length(index))]
 
 
 def get_branch_indices(index: int) -> list[int]:

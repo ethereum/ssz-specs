@@ -49,6 +49,7 @@ from ssz import (
     gindex_bit,
     gindex_child,
     gindex_concat,
+    gindex_depth,
     gindex_length,
     gindex_parent,
     gindex_rebase,
@@ -169,6 +170,54 @@ class Bytes64(ByteVector):
     LENGTH = 64
 
 
+class Bitvector4(BitVector):
+    """Four bits, which fit one chunk with room to spare."""
+
+    LENGTH = 4
+
+
+class Bitvector256(BitVector):
+    """The widest fixed bit sequence that still fits one chunk."""
+
+    LENGTH = 256
+
+
+class Bitlist4(BitList):
+    """Bounded bit sequence whose whole capacity fits one chunk."""
+
+    LIMIT = 4
+
+
+class Bitlist256(BitList):
+    """The widest bounded bit sequence whose capacity still fits one chunk."""
+
+    LIMIT = 256
+
+
+class Bytes1(ByteVector):
+    """A single byte, the narrowest byte array there is."""
+
+    LENGTH = 1
+
+
+class ByteList32(ByteList):
+    """Bounded byte sequence whose whole capacity fits one chunk."""
+
+    LIMIT = 32
+
+
+class Uint64Vector4(Vector[Uint64]):
+    """Four eight-byte elements, packing into one chunk exactly."""
+
+    LENGTH = 4
+
+
+class Uint64List4(List[Uint64]):
+    """Bounded list whose whole capacity packs into one chunk."""
+
+    LIMIT = 4
+
+
 class Uint64ProgressiveList(ProgressiveList[Uint64]):
     """Unbounded sequence of eight-byte elements."""
 
@@ -192,6 +241,18 @@ class PairList8(List[Pair]):
     LIMIT = 8
 
 
+class PairVector1(Vector[Pair]):
+    """One composite element, which is the shape's only leaf."""
+
+    LENGTH = 1
+
+
+class PairList1(List[Pair]):
+    """Bounded list of one composite element, its only leaf."""
+
+    LIMIT = 1
+
+
 class Quad(Container):
     """Four-field struct with a composite last field, filling four leaves with no padding."""
 
@@ -207,6 +268,13 @@ class Triple(Container):
     x: Uint64
     y: Uint64
     z: Pair
+
+
+class OneChunkFields(Container):
+    """Two fields that each merkleize into one chunk, so each field is a leaf of the struct."""
+
+    bits: Bitvector4
+    data: Bytes32
 
 
 class Spine(ProgressiveContainer):
@@ -317,6 +385,12 @@ BITLIST = Bitlist512(data=(Boolean(True),) * 300)
 BITVECTOR = Bitvector512(data=(Boolean(True), Boolean(False)) * 256)
 BYTE_LIST = ByteList64(data=b"abc")
 
+# Two one-chunk fields, addressable down to a single bit and a single byte.
+ONE_CHUNK_FIELDS = OneChunkFields(
+    bits=Bitvector4(data=(Boolean(True), Boolean(False), Boolean(True), Boolean(True))),
+    data=Bytes32(bytes(range(32))),
+)
+
 # One chunk of data opens level 1 alone.
 # The spine closes immediately after it.
 SHORT_PROGRESSIVE = Uint64ProgressiveList(data=(Uint64(1), Uint64(2)))
@@ -407,6 +481,28 @@ class TestGindexArithmetic:
     def test_rebasing_onto_the_root_changes_nothing(self) -> None:
         """An index already measured from the root rebases onto it unchanged."""
         assert gindex_concat(1, 367) == 367
+
+    def test_rebasing_an_inner_root_moves_nothing(self) -> None:
+        """An inner index of no depth splices onto the outer position and leaves it where it was."""
+        # This is the whole of a step into a shape that fits one chunk: the chunk is the root.
+        assert gindex_concat(5, 1) == 5
+        assert gindex_concat(1, 1) == 1
+
+    def test_the_root_has_a_depth_but_no_branch(self) -> None:
+        """A depth of no levels is a measurement; a branch of no nodes is no branch at all."""
+        assert gindex_depth(1) == 0
+        assert gindex_depth(40) == gindex_length(40) == 5
+        with pytest.raises(SSZValueError, match=r"^the root has no proof branch of its own$"):
+            gindex_length(1)
+
+    @pytest.mark.parametrize(
+        "index",
+        [pytest.param(0, id="zero"), pytest.param(-1, id="negative")],
+    )
+    def test_a_depth_is_refused_for_a_number_naming_no_node(self, index: int) -> None:
+        """Measuring permits the root and nothing below it, a generalized index starting at one."""
+        with pytest.raises(SSZValueError, match=rf"^{index} is not a generalized index$"):
+            gindex_depth(index)
 
     @pytest.mark.parametrize(
         "index, message",
@@ -915,6 +1011,101 @@ class TestGeneralizedIndexPerShape:
     def test_an_empty_path_names_the_root(self) -> None:
         """A path selecting nothing lands on the root, which no proof can address."""
         assert get_generalized_index(Quad) == 1
+
+
+class TestOneChunkShapes:
+    """Shapes whose whole contents fit one chunk, which is then the shape's own root."""
+
+    @pytest.mark.parametrize(
+        "ssz_type, path, expected",
+        [
+            # A fixed shape mixes in nothing, so its one chunk is its root and the step stays put.
+            pytest.param(Bitvector4, (0,), 1, id="bitvector_4_bit_0"),
+            pytest.param(Bitvector4, (3,), 1, id="bitvector_4_last_bit"),
+            pytest.param(Bitvector256, (255,), 1, id="bitvector_256_last_bit"),
+            pytest.param(Bytes1, (0,), 1, id="bytes1_only_byte"),
+            pytest.param(Bytes32, (0,), 1, id="bytes32_byte_0"),
+            pytest.param(Bytes32, (31,), 1, id="bytes32_last_byte"),
+            pytest.param(Uint64Vector4, (0,), 1, id="four_uint64s_element_0"),
+            pytest.param(Uint64Vector4, (3,), 1, id="four_uint64s_last_element"),
+            pytest.param(PairVector1, (0,), 1, id="one_element_vector"),
+            pytest.param(SyncCommittee, ("pubkey",), 1, id="single_field_struct"),
+            # A mixed-in element count is the right child, which puts the one chunk on the left.
+            pytest.param(Bitlist4, (0,), 2, id="bitlist_4_bit_0"),
+            pytest.param(Bitlist4, (3,), 2, id="bitlist_4_last_bit"),
+            pytest.param(Bitlist256, (255,), 2, id="bitlist_256_last_bit"),
+            pytest.param(ByteList32, (0,), 2, id="byte_list_32_byte_0"),
+            pytest.param(ByteList32, (31,), 2, id="byte_list_32_last_byte"),
+            pytest.param(Uint64List4, (0,), 2, id="uint64_list_4_element_0"),
+            pytest.param(Uint64List4, (3,), 2, id="uint64_list_4_last_element"),
+            pytest.param(PairList1, (0,), 2, id="one_element_list"),
+            # Below another position, a one-chunk shape keeps that position and steps on from it.
+            pytest.param(OneChunkFields, ("bits", 0), 2, id="bit_of_a_one_chunk_field"),
+            pytest.param(OneChunkFields, ("bits", 3), 2, id="last_bit_of_a_one_chunk_field"),
+            pytest.param(OneChunkFields, ("data", 0), 3, id="byte_of_a_one_chunk_field"),
+            pytest.param(OneChunkFields, ("data", 31), 3, id="last_byte_of_a_one_chunk_field"),
+            pytest.param(Checkpoint, ("root", 0), 3, id="byte_of_a_second_field"),
+            pytest.param(SyncCommittee, ("pubkey", 31), 1, id="byte_of_a_single_field_struct"),
+            pytest.param(PairVector1, (0, "b"), 3, id="field_of_the_only_element"),
+            pytest.param(PairList1, (0, "b"), 5, id="field_of_the_only_list_element"),
+            # The published index for a committee struct, now steppable into its one field.
+            pytest.param(AltairState, ("f22", "pubkey"), 54, id="published_index_stepped_into"),
+            pytest.param(AltairState, ("f20", "root", 0), 105, id="published_index_byte"),
+            pytest.param(GloasState, ("f22", "pubkey"), 2945, id="progressive_index_stepped_into"),
+        ],
+    )
+    def test_a_one_chunk_shape_is_addressable(
+        self, ssz_type: type[SSZType], path: tuple[PathStep, ...], expected: int
+    ) -> None:
+        """
+        Every position of a one-chunk shape names that chunk, which is the shape's own root.
+
+        The spec resolves a step as
+
+            root * base_index * get_power_of_two_ceil(chunk_count(typ)) + pos
+
+        so a shape of one chunk and a position in it multiply the index by nothing but the
+        base: 1 where the shape mixes in no word, and 2 where it mixes in an element count.
+        """
+        assert get_generalized_index(ssz_type, *path) == expected
+
+    def test_a_one_chunk_shape_at_the_top_resolves_to_the_root(self) -> None:
+        """With nothing above it the chunk is the whole tree, so the root is the honest answer."""
+        assert get_generalized_index(Bytes32, 0) == 1
+        # A root is still a node, and rooting one reads it.
+        value = Bytes32(bytes(range(32)))
+        assert node_root(value, 1) == hash_tree_root(value)
+        # What it has is no branch, which is what a proof of it is refused for.
+        with pytest.raises(SSZValueError, match=r"^the root has no proof branch of its own$"):
+            build_proof(value, 1)
+
+    def test_a_position_a_one_chunk_shape_does_not_declare_is_still_refused(self) -> None:
+        """One chunk holding every position the shape has does not give it a position more."""
+        with pytest.raises(SSZValueError, match=r"^Bitvector4 has no position 4$"):
+            get_generalized_index(Bitvector4, 4)
+        with pytest.raises(SSZValueError, match=r"^Uint64Vector4 has no position 4$"):
+            get_generalized_index(Uint64Vector4, 4)
+
+    @pytest.mark.parametrize(
+        "path, expected",
+        [
+            pytest.param(("bits", 0), 2, id="a_bit_of_a_bitvector_4"),
+            pytest.param(("bits", 3), 2, id="the_last_bit_of_a_bitvector_4"),
+            pytest.param(("data", 0), 3, id="a_byte_of_a_bytes32"),
+            pytest.param(("data", 31), 3, id="the_last_byte_of_a_bytes32"),
+        ],
+    )
+    def test_a_proof_to_a_one_chunk_field_rebuilds_the_root(
+        self, path: tuple[PathStep, ...], expected: int
+    ) -> None:
+        """A resolved index earns its keep only if a branch built for it rebuilds the root."""
+        index = get_generalized_index(OneChunkFields, *path)
+        assert index == expected
+        # The node is an ordinary interior one, and it carries the field the path selected.
+        assert node_root(ONE_CHUNK_FIELDS, index) == hash_tree_root(
+            getattr(ONE_CHUNK_FIELDS, str(path[0]))
+        )
+        assert round_trip(ONE_CHUNK_FIELDS, index)
 
 
 class TestPublishedLightClientIndices:
