@@ -8,38 +8,38 @@ default:
 
 # Run all quality checks (lint, format, typecheck, spellcheck, lock)
 [group('quality')]
-check: lint format-check typecheck spellcheck lock-check
+check: lock-check lint format-check typecheck spellcheck
 
 # Lint with ruff (no auto-fix)
 [group('quality')]
 lint *args:
-    uv run --group lint ruff check --no-fix --show-fixes "$@"
+    uv run --locked --group lint ruff check --no-fix --show-fixes "$@"
 
 # Format code with ruff
 [group('quality')]
 format *args:
-    uv run --group lint ruff format "$@"
+    uv run --locked --group lint ruff format "$@"
 
 # Verify formatting with ruff (no changes)
 [group('quality')]
 format-check *args:
-    uv run --group lint ruff format --check "$@"
+    uv run --locked --group lint ruff format --check "$@"
 
 # Auto-fix lint and formatting issues
 [group('quality')]
 fix:
-    uv run --group lint ruff check --fix
-    uv run --group lint ruff format
+    uv run --locked --group lint ruff check --fix
+    uv run --locked --group lint ruff format
 
 # Type check with ty
 [group('quality')]
 typecheck *args:
-    uv run --group lint ty check "$@"
+    uv run --locked --group lint ty check "$@"
 
 # Spell check source, tests, and packages
 [group('quality')]
 spellcheck *args:
-    uv run --group lint codespell src tests packages README.md --skip="*.lock,*.svg,.git,__pycache__,.pytest_cache" "$@"
+    uv run --locked --group lint codespell src tests packages README.md --skip="*.lock,*.svg,.git,__pycache__,.pytest_cache" "$@"
 
 # Verify uv.lock is up to date
 [group('quality')]
@@ -57,22 +57,28 @@ lock-check:
 # Generate SSZ conformance test vectors under fixtures/
 [group('fill')]
 fill *args:
-    uv run --group test fill --clean "$@"
+    uv run --locked --group test fill --clean "$@"
 
 # Run unit tests in parallel
 [group('tests')]
 test *args:
-    uv run --group test pytest tests -n auto --maxprocesses=10 --durations=10 --dist=worksteal "$@"
+    uv run --locked --group test pytest tests -n auto --maxprocesses=10 --durations=10 --dist=worksteal "$@"
+
+# Run unit tests with every remembered root recomputed rather than trusted
+[group('tests')]
+test-paranoid *args:
+    SSZ_PARANOID_ROOTS=1 uv run --locked --group test pytest tests -n auto \
+        --maxprocesses=10 --dist=worksteal --no-cov "$@"
 
 # Run unit tests with coverage report (HTML + terminal)
 [group('tests')]
 test-cov *args:
-    uv run --group test pytest --cov --cov-report=html --cov-report=term "$@"
+    uv run --locked --group test pytest --cov --cov-report=html --cov-report=term "$@"
 
 # Run unit tests with coverage gate (fails below 100%)
 [group('tests')]
 test-cov-gate *args:
-    uv run --group test pytest --cov --cov-report=term-missing --cov-fail-under=100 "$@"
+    uv run --locked --group test pytest --cov --cov-report=term-missing --cov-fail-under=100 "$@"
 
 # Build the eth-ssz-specs sdist and wheel into dist/
 [group('release')]

@@ -1,0 +1,22 @@
+# A pinned digest cannot drift, and cannot improve, so something must propose the upgrades.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    # The digest and the version comment are rewritten together, so both stay true.
+    groups:
+      # A major arrives on its own, being the one worth reading.
+      actions-minor:
+        patterns: ["*"]
+        update-types: [minor, patch]
+
+  - package-ecosystem: uv
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      python-minor:
+        patterns: ["*"]
+        update-types: [minor, patch]
