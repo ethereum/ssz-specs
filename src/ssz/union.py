@@ -25,21 +25,7 @@ class CompatibleUnion(SSZModel):
     """
     Tagged union whose options all merkleize into one tree shape, per EIP-8016.
 
-    Options are declared as a map from selector to type, and the selector leads the encoding:
-
-        class Shape(CompatibleUnion):
-            OPTIONS = {1: Square, 2: Circle}
-
-        Shape(selector=1, data=Square(side=Uint16(0x1234), color=Uint8(0x42)))
-
-        01        34 12   42
-        selector  side    color
-
     One tree position per field is what lets a proof verify against any option declaring it.
-
-    The selector is mixed into the root, so two options holding equal data do not root alike.
-
-    A union is always variable-size, and has no default, so a shape holding one has none either.
     """
 
     model_config = ConfigDict(frozen=True)
