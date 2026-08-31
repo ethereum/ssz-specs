@@ -177,8 +177,7 @@ def chunk_position(ssz_type: type[SSZType], step: PathStep) -> ChunkPosition:
     """
     Where one element sits: its chunk, and the byte range it occupies inside that chunk.
 
-    A generalized index names a chunk, and packed elements share one, so a proof reaches
-    all of them and the byte range says which was asked for:
+    A proof to a packed element reaches every element sharing its chunk:
 
         List[Uint64, 8], element 3  ->  chunk 0, bytes 24 to 32
 
@@ -212,15 +211,13 @@ def get_generalized_index(ssz_type: type[SSZType], *path: PathStep) -> int:
     """
     Position in a Merkle tree of the value a path selects.
 
-    Steps are field names and element positions.
-    A reserved word names the mixed-in word instead, and ends the path:
+    Steps are field names and element positions, or a reserved word ending the path:
 
         get_generalized_index(BeaconState, "finalized_checkpoint", "root")
         get_generalized_index(Attestations, "__len__")
 
-    That word is the right child, which puts the contents on the left.
-    In a progressive container or a union it is also the only thing separating an absent
-    field from one holding zero.
+    A mixed-in word is the right child, which puts the contents on the left.
+    In a progressive container or a union it also tells an absent field from a zero one.
 
     Raises:
         SSZTypeError: A step the shape cannot take.
