@@ -152,7 +152,7 @@ lint = [
 dev = [
     {include-group = "test"},
     {include-group = "lint"},
-    "ipython>=8.31.0,<9",
+    "ipython>=8.31.0,<10",
     "ipdb>=0.13",
     "tomli-w>=1.0.0",
 ]
