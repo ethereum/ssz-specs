@@ -33,12 +33,11 @@ from pydantic import Field, field_serializer, field_validator
 
 from ssz.byte_arrays import ByteVector
 from ssz.exceptions import SSZError, SSZTypeError, SSZValueError, TypeFault, ValueFault
+from ssz.offsets import BYTES_PER_LENGTH_OFFSET, offset_table_spans
 from ssz.ssz_base import (
-    BYTES_PER_LENGTH_OFFSET,
     SSZCollection,
     SSZModel,
     SSZType,
-    offset_table_spans,
 )
 from ssz.uint import Uint32
 

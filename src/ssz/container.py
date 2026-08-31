@@ -18,7 +18,8 @@ from pydantic.functional_validators import ModelWrapValidatorHandler
 from pydantic_core import PydanticUndefined
 
 from ssz.exceptions import SSZError, SSZTypeError, SSZValueError, TypeFault, ValueFault
-from ssz.ssz_base import BYTES_PER_LENGTH_OFFSET, SSZModel, SSZType, offset_table_spans
+from ssz.offsets import BYTES_PER_LENGTH_OFFSET, offset_table_spans
+from ssz.ssz_base import SSZModel, SSZType
 from ssz.uint import Uint32
 
 MAX_ACTIVE_FIELDS: Final = 256
