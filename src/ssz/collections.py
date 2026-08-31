@@ -415,8 +415,12 @@ class Vector[T: SSZType](_SSZSequence[T]):
         Read one vector from a binary stream within the given byte budget.
 
         Raises:
+            SSZTypeError: When the shape has not declared what it holds.
             SSZValueError: When the budget or any offset is inconsistent.
         """
+        # A decode is built past the validator that asks this, so the decoder asks it.
+        cls._check_declaration()
+
         # Fixed-size case: the budget is the element width times the count, exactly.
         if cls.is_fixed_size():
             element_byte_length = cls.ELEMENT_TYPE.get_byte_length()
@@ -560,6 +564,10 @@ class _SSZList[T: SSZType](_SSZSequence[T]):
         # Fixed-size case: the count is the budget divided by the element width.
         if cls.ELEMENT_TYPE.is_fixed_size():
             element_size = cls.ELEMENT_TYPE.get_byte_length()
+
+            # Elements of no width pack to nothing, so no count of them spends a byte.
+            if element_size == 0:
+                raise SSZValueError(ValueFault.SCOPE_WIDTHLESS, type=cls.__name__, scope=scope)
             if scope % element_size != 0:
                 raise SSZValueError(ValueFault.SCOPE_UNDIVIDED, scope=scope, width=element_size)
             num_elements = scope // element_size

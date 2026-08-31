@@ -8,6 +8,7 @@ from hypothesis import given, strategies as st
 from pydantic import BaseModel, ValidationError
 
 from ssz import Uint8, Uint16, Uint32
+from ssz.bitfields import BitVector
 from ssz.boolean import Boolean
 from ssz.byte_arrays import ByteVector
 from ssz.collections import List, ProgressiveList, Vector
@@ -1802,6 +1803,93 @@ class TestZeroLengthVector:
         )
 
 
+class TestZeroWidthElements:
+    """An element spanning no bytes leaves a non-empty payload with no count to recover."""
+
+    def test_a_list_of_empty_containers_refuses_a_payload(self) -> None:
+        """A container of no fields packs to nothing, so no count of them spends a byte."""
+
+        class Empty(Container):
+            pass
+
+        class EmptyList(List[Empty]):
+            LIMIT = 4
+
+        # The empty payload is the one budget a zero-width element accounts for.
+        assert EmptyList.decode_bytes(b"") == EmptyList(data=[])
+
+        with pytest.raises(SSZValueError) as exception_info:
+            EmptyList.decode_bytes(b"\x00")
+
+        assert str(exception_info.value) == (
+            "EmptyList holds elements of no width, so a budget of 1 counts none"
+        )
+
+    def test_a_list_of_zero_length_byte_vectors_refuses_a_payload(self) -> None:
+        """A byte array of no bytes is refused on the same grounds, being the same width."""
+
+        class Bytes0(ByteVector):
+            LENGTH = 0
+
+        class Bytes0List(List[Bytes0]):
+            LIMIT = 4
+
+        with pytest.raises(SSZValueError) as exception_info:
+            Bytes0List.decode_bytes(b"\x00")
+
+        assert str(exception_info.value) == (
+            "Bytes0List holds elements of no width, so a budget of 1 counts none"
+        )
+
+    def test_a_list_of_zero_length_bitvectors_refuses_a_payload(self) -> None:
+        """A bitvector of no bits likewise, whichever zero-width shape the element is."""
+
+        class Bits0(BitVector):
+            LENGTH = 0
+
+        class Bits0List(List[Bits0]):
+            LIMIT = 4
+
+        with pytest.raises(SSZValueError) as exception_info:
+            Bits0List.decode_bytes(b"\x00")
+
+        assert str(exception_info.value) == (
+            "Bits0List holds elements of no width, so a budget of 1 counts none"
+        )
+
+    def test_a_progressive_list_of_empty_containers_refuses_a_payload(self) -> None:
+        """The unbounded shape reads its count off the budget too, and refuses the same way."""
+
+        class Empty(Container):
+            pass
+
+        class EmptyProgressiveList(ProgressiveList[Empty]):
+            pass
+
+        with pytest.raises(SSZValueError) as exception_info:
+            EmptyProgressiveList.decode_bytes(b"\x00")
+
+        assert str(exception_info.value) == (
+            "EmptyProgressiveList holds elements of no width, so a budget of 1 counts none"
+        )
+
+    def test_a_vector_of_empty_containers_spans_no_bytes(self) -> None:
+        """A vector's count is declared, so its width is exact and nothing divides a budget."""
+
+        class Empty(Container):
+            pass
+
+        class EmptyVector(Vector[Empty]):
+            LENGTH = 4
+
+        assert EmptyVector.decode_bytes(b"") == EmptyVector()
+
+        with pytest.raises(SSZValueError) as exception_info:
+            EmptyVector.decode_bytes(b"\x00")
+
+        assert str(exception_info.value) == "EmptyVector spans 0 bytes, and the budget is 1"
+
+
 class TestNegativeListLimit:
     """A bound counts the elements a list may hold, and no count is below zero."""
 
@@ -1922,6 +2010,24 @@ class TestDecodeAsksWhatTheShapeDeclares:
             List.decode_bytes(b"\x01")
 
         assert str(exception_info.value) == "List must declare ELEMENT_TYPE and LIMIT"
+
+    def test_a_vector_without_an_element_type_refuses_a_payload(self) -> None:
+        """A vector enforces its own declarations at a decode the way a list does."""
+
+        class Untyped(Vector):
+            LENGTH = 2
+
+        with pytest.raises(SSZTypeError) as exception_info:
+            Untyped.decode_bytes(b"\x00\x00")
+
+        assert str(exception_info.value) == "Untyped must declare ELEMENT_TYPE and LENGTH"
+
+    def test_the_bare_vector_base_refuses_a_payload(self) -> None:
+        """The unparameterized base declares neither of the two, and names both."""
+        with pytest.raises(SSZTypeError) as exception_info:
+            Vector.decode_bytes(b"\x01")
+
+        assert str(exception_info.value) == "Vector must declare ELEMENT_TYPE and LENGTH"
 
     def test_a_progressive_list_without_an_element_type_refuses_a_payload(self) -> None:
         """The unbounded shape declares no bound, and still needs to know what it holds."""
