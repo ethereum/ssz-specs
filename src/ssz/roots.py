@@ -14,7 +14,7 @@ from ssz.chunks import BYTES_PER_CHUNK, ZERO_ROOT, Root
 from ssz.collections import List, ProgressiveList, Vector
 from ssz.container import Container, ProgressiveContainer
 from ssz.exceptions import SSZValueError, ValueFault
-from ssz.layout import MerkleLayout, merkle_layout
+from ssz.layout import MerkleLayout, PackedLeaves, merkle_layout
 from ssz.mixins import mix_in
 from ssz.ssz_base import SSZModel, SSZType
 from ssz.trees import merkleize, merkleize_progressive
@@ -40,9 +40,9 @@ def layout_chunks(layout: MerkleLayout, start: int = 0, stop: int | None = None)
 
     Every leaf is 32 bytes: a packed one is plain bytes, a nested one its own root.
     """
-    if layout.nested is None:
-        return list(layout.packed[start:stop])
-    values = layout.nested[start:stop]
+    if isinstance(layout.leaves, PackedLeaves):
+        return list(layout.leaves.chunks[start:stop])
+    values = layout.leaves.values[start:stop]
     # Ends that differ rule out a repeat, so distinct leaves stay in the comprehension.
     if not values or values[0] is not values[-1]:
         return [ZERO_ROOT if value is None else hash_tree_root(value) for value in values]

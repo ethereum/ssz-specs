@@ -12,7 +12,7 @@ from ssz.gindex import (
     gindex_length,
     gindex_rebase,
 )
-from ssz.layout import merkle_layout
+from ssz.layout import NestedLeaves, merkle_layout
 from ssz.roots import hash_tree_root, layout_chunks
 from ssz.trees import merkleize, merkleize_progressive
 
@@ -85,11 +85,11 @@ def node_root(value: object, index: int) -> Root:
     # Deeper than the subtree: the rest of the index is measured inside one leaf's own tree.
     depth -= tree_depth
     leaf = leaves_from + gindex_below(index >> depth, tree_depth)
-    if layout.nested is None:
+    if not isinstance(layout.leaves, NestedLeaves):
         raise SSZValueError(ValueFault.PATH_INTO_PACKED, type=name)
-    if leaf >= layout.leaf_count or layout.nested[leaf] is None:
+    if leaf >= layout.leaf_count or layout.leaves.values[leaf] is None:
         raise SSZValueError(ValueFault.PATH_INTO_GAP, type=name)
-    return node_root(layout.nested[leaf], gindex_rebase(index, depth))
+    return node_root(layout.leaves.values[leaf], gindex_rebase(index, depth))
 
 
 def build_proof(value: object, index: int) -> list[Root]:
