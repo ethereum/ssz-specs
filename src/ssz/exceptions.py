@@ -58,6 +58,7 @@ class ValueFault(Enum):
     SCOPE_TOO_SMALL = "{type} needs at least {expected} bytes, and the budget is {actual}"
     SCOPE_NEGATIVE = "a budget of {scope} is not a byte count"
     SCOPE_UNDIVIDED = "a budget of {scope} does not divide by an element width of {width}"
+    SCOPE_WIDTHLESS = "{type} holds elements of no width, so a budget of {scope} counts none"
     TRUNCATED = "{type} needs {expected} bytes, the input holds {actual}"
     TRAILING_BYTES = "{leftover} byte(s) past the end of the value"
 

@@ -1601,3 +1601,16 @@ class TestAValueCarriesNoState:
             # __setattr__ never returns, which ty reads as a write that cannot stand.
             Uint64(7).note = "mine"  # ty: ignore[invalid-assignment]
         assert str(exception_info.value) == expected_message
+
+
+class TestAWidthIsDeclaredBeforeItIsUsed:
+    """Every per-width constant is computed from ``BITS``, so a subtype declares one."""
+
+    def test_a_subtype_without_a_width_is_refused_at_declaration(self) -> None:
+        """The missing declaration is named the way every other missing one is."""
+        with pytest.raises(SSZTypeError) as exception_info:
+
+            class NoBits(BaseUint):
+                pass
+
+        assert str(exception_info.value) == "NoBits must declare BITS"

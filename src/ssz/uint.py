@@ -36,8 +36,15 @@ class BaseUint(int, SSZType):
     """How many entries the shared table holds."""
 
     def __init_subclass__(cls, **kwargs: Any) -> None:
-        """Cache the per-width constants so hot paths never recompute them."""
+        """
+        Cache the per-width constants so hot paths never recompute them.
+
+        Raises:
+            SSZTypeError: When the width was never declared.
+        """
         super().__init_subclass__(**kwargs)
+        if not hasattr(cls, "BITS"):
+            raise SSZTypeError(TypeFault.UNDECLARED, type=cls.__name__, requirement="BITS")
         cls.MAX_VALUE = 2**cls.BITS - 1
         cls.BYTE_LENGTH = cls.BITS // 8
         # One table per class, so a named subtype comes back as itself.
