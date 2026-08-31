@@ -97,12 +97,8 @@ jobs:
         with:
           tool: just
 
-      # A proof built from a stale root agrees with it while both are wrong.
-      # Recomputing every remembered root is the only evidence against one.
       - name: Run tests with every root recomputed
-        env:
-          SSZ_PARANOID_ROOTS: "1"
-        run: just test
+        run: just test-paranoid
 
   coverage-gate:
     name: Coverage gate - Python 3.12

@@ -64,6 +64,16 @@ fill *args:
 test *args:
     uv run --locked --group test pytest tests -n auto --maxprocesses=10 --durations=10 --dist=worksteal "$@"
 
+# Run unit tests with every remembered root recomputed rather than trusted
+#
+# A proof built from a stale root agrees with it while both are wrong, so recomputing
+# is the only evidence against one. Coverage is left to its own recipe: the line that
+# hands back a remembered root is unreachable while every root is being recomputed.
+[group('tests')]
+test-paranoid *args:
+    SSZ_PARANOID_ROOTS=1 uv run --locked --group test pytest tests -n auto \
+        --maxprocesses=10 --dist=worksteal --no-cov "$@"
+
 # Run unit tests with coverage report (HTML + terminal)
 [group('tests')]
 test-cov *args:
