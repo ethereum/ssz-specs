@@ -57,6 +57,13 @@ def node_root(value: object, index: int) -> Root:
         #     ProgressiveList[Uint64] holding two elements  ->  chunk 0 is a node, chunk 5 is not
         #
         # The terminator itself is exempt, being a node the walk stops on rather than turns from.
+        #
+        # So absence is provable in a bounded shape and not in a progressive one.
+        #
+        # A bounded shape pads to its capacity, and that padding is a leaf like any other.
+        #
+        # Three packed eight-byte elements prove the fourth is zero, sharing chunk 0.
+        # The fifth has no leaf to prove.
         capacity = 1
         while depth:
             if leaves_from >= layout.leaf_count:
