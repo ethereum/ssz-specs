@@ -64,24 +64,6 @@ class SSZType(ABC):
         """
         Narrow a declared capacity, and refuse a root of the type's own, where each is declared.
 
-        A capacity may be written with a typed value, so it is narrowed to a plain integer,
-        and anything that counts nothing is refused where it was written:
-
-            LIMIT = 4.7   ->  refused, rather than resolving to a chunk count nobody wrote
-            LIMIT = "4"   ->  refused, rather than reporting a wrong element count later
-            LIMIT = -1    ->  refused, rather than bounding a shape no value can satisfy
-
-        The floor of zero is stated once here, and a shape with a higher one states its own.
-
-        One value has one root, so a type may not declare a hash_tree_root of its own:
-
-            class Fingerprint(Root): def is_all_ones(...)   ->  fine, declares another method
-            class Fast(Root): def hash_tree_root(...)       ->  refused, a method of its own
-            class Fast(Mixin, Root)                         ->  refused, a method from outside
-            class Odd(Container): hash_tree_root: Uint16    ->  refused, a field of that name
-
-        A second root would answer only the callers that spell it as a method.
-
         Raises:
             SSZTypeError: A capacity that is not a whole number at or above zero.
             SSZTypeError: A type that declares a root of its own.
@@ -298,35 +280,11 @@ class SSZType(ABC):
         """
         Merkle root of this value.
 
-        The root is the top node of the binary tree a value merkleizes into.
-        It stands in for the whole value, so a proof is checked against it.
-
-        The declared shape lays that tree out, so contents alone do not decide the root.
-        The same three numbers reach four roots, each row below changing one thing:
-
-            shape                    value      root
-            Vector[Uint8], LENGTH 3  [1, 2, 3]  01 02 03 00 ... 00
-            List[Uint8], LIMIT 3     [1, 2, 3]  14 9f 1a fc ... b9
-            List[Uint64], LIMIT 3    [1, 2, 3]  8d fc c0 c6 ... 93
-            List[Uint64], LIMIT 8    [1, 2, 3]  7e 0a de cc ... 59
-
-        - A vector fixes its count, so row one is the packed bytes themselves.
-        - A list does not, so row two hashes those same bytes against a 3.
-        - Row three packs into 24 bytes instead of 3, so its leaf differs.
-        - Row four bounds a wider tree, so every leaf sits one level deeper.
-        - A capacity reaches that tree only through the width it rounds up to.
-
-        A root is remembered until the value changes.
-        A mutation counter on each model guards that memo.
-
-        The module-level function is the form the spec defines.
-        It is also the only form reaching plain bytes, which merkleize and carry no method.
-
-        Returns:
-            The root of this value's Merkle tree.
+        The declared shape lays the tree out, so contents alone do not decide the root.
+        The module-level function is what the spec defines, and it alone reaches plain bytes.
 
         Raises:
-            SSZTypeError: When the type has no registered merkleization rule.
+            SSZTypeError: A type with no registered merkleization rule.
         """
         # Merkleization imports this module, so the name is bound per call, not at import.
         from ssz.roots import hash_tree_root
@@ -338,13 +296,7 @@ class SSZModel(StrictBaseModel, SSZType, ABC):
     """
     Pydantic-backed SSZ base used by containers, lists, vectors, and bitfields.
 
-    Two shapes share this base:
-
-    - Collections wrap an inner sequence in one Pydantic field called data.
-    - Containers expose multiple named Pydantic fields that map to a struct on the wire.
-
-    Every mutation raises this value's version.
-    A remembered root is reused only while every version below it is unchanged.
+    A collection wraps its contents in one field; a container names one per struct field.
     """
 
     __slots__ = ("_root_memo", "_version")
@@ -376,7 +328,6 @@ class SSZModel(StrictBaseModel, SSZType, ABC):
         Admit one mutation, refusing it outright on an immutable type.
 
         Every mutator passes here, so invalidation is one name to grep for.
-        The version is raised before validation, so a failed mutation costs a recomputation.
 
         Raises:
             SSZTypeError: When the type declares itself immutable.
@@ -445,16 +396,8 @@ class SSZCollection[T](SSZModel, Sequence[T], ABC):
 
     Sequences, bitfields, and byte lists all share this base; containers do not.
 
-    Construction passes that field by keyword, or the elements positionally:
-
         Uint8List4(data=[1, 2, 3])
         Uint8List4.of(1, 2, 3)
-
-    Mutation in place validates the incoming elements and the resulting length, nothing more.
-    Only variable-size collections offer append and pop, a fixed one refusing any resize.
-
-    The type parameter is the declared element type, and mutation is typed against it.
-    A type checker therefore flags a raw value that the validator would have coerced.
     """
 
     model_config = ConfigDict(validate_assignment=True)
@@ -466,23 +409,13 @@ class SSZCollection[T](SSZModel, Sequence[T], ABC):
     @classmethod
     def of(cls, *elements: Any) -> Self:
         r"""
-        Build an instance from the given elements.
-
-        Each argument is exactly one element, and no argument is ever spread:
+        Build an instance from the given elements, each argument being exactly one:
 
             Uint8List4.of(1, 2, 3)     ==  Uint8List4(data=[1, 2, 3])
             Uint8List4.of()            ==  Uint8List4(data=[])
-            Uint8List4.of(*existing)   spreads an existing sequence
             ByteList10.of(0xDE, 0xAD)  ==  ByteList10(data=b"\xde\xad")
 
-        A call with no argument therefore means zero elements, which a fixed shape refuses.
-        Only construction with no argument at all asks for the default.
-
-        Args:
-            *elements: The elements of the new collection.
-
-        Returns:
-            A new instance holding exactly the given elements.
+        No argument means zero elements, where no argument at all asks for the default.
         """
         return cls(data=elements)
 
@@ -515,15 +448,7 @@ class SSZCollection[T](SSZModel, Sequence[T], ABC):
         """
         Read the element or elements at a position.
 
-        A position counted from the end resolves against the elements held, never the capacity:
-
-            held = [10, 20, 30]   under a capacity of 4
-
-            [-1]  ->  30          the last element held
-            [-3]  ->  10
-            [-4]  ->  IndexError  no fourth element to count back to
-
-        The zeros that pad a value to its capacity belong to merkleization, not to the value.
+        A position counted from the end resolves against the elements held, never the padding.
         """
         return self.data[index]
 
@@ -552,8 +477,7 @@ class SSZCollection[T](SSZModel, Sequence[T], ABC):
         """
         The contents as the list they are stored in, for a mutator to write through.
 
-        Validation always returns a list, whatever iterable the declared sequence accepted.
-        A shape holding anything else overrides every mutator and never asks for this.
+        Validation always returns a list, and a shape holding anything else never asks here.
         """
         return cast("list[T]", self.data)
 
@@ -563,7 +487,6 @@ class SSZCollection[T](SSZModel, Sequence[T], ABC):
         How this shape names the input it accepts, for the error a refusal raises.
 
         A shape declaring an element type names it, since "iterable of Uint8" says more.
-        One binding its element type in advance has no name to add, and keeps the bare word.
         """
         return "iterable"
 
@@ -572,11 +495,8 @@ class SSZCollection[T](SSZModel, Sequence[T], ABC):
         """
         Normalize a validator input into a length-checkable sequence.
 
-        Accept the natural input shapes:
-
-        - list or tuple        pass through directly.
-        - other iterables      materialize into a list so the length check works.
-        - str, bytes, bytearray  rejected — iterating yields characters or ints.
+        A list or tuple passes through, and any other iterable materializes into one.
+        A string or a byte string is refused, since iterating one yields characters or ints.
 
         Raises:
             SSZTypeError: When the input is a string, bytes, or non-iterable.
