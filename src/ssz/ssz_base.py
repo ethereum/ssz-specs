@@ -339,7 +339,8 @@ class SSZModel(StrictBaseModel, SSZType, ABC):
 
     # Hidden from type checkers, which would otherwise stop checking field assignments.
     # A visible __getattr__ would also make every misspelled attribute resolve.
-    if not TYPE_CHECKING:  # pragma: no cover
+    # No branch, not no cover: the false arm never runs, but the bodies below run constantly.
+    if not TYPE_CHECKING:  # pragma: no branch
 
         def __setattr__(self, name: str, value: Any) -> None:
             """Pass the mutation door, then assign and validate as usual."""

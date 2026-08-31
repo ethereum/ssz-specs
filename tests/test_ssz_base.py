@@ -26,7 +26,7 @@ from ssz.container import Container, ProgressiveContainer
 from ssz.exceptions import SSZError
 from ssz.paths import chunk_count
 from ssz.roots import hash_tree_root
-from ssz.ssz_base import SSZCollection, SSZType
+from ssz.ssz_base import SSZCollection, SSZModel, SSZType
 from ssz.uint import BaseUint
 from ssz.union import CompatibleUnion
 
@@ -241,6 +241,50 @@ class TestSSZModelRepr:
         assert repr(container) == (
             "ThreeFieldContainer(a=Uint8(5) b=Uint64(42) c=Uint16List4(data=[Uint16(1)]))"
         )
+
+
+class TestSSZModelAttributeReads:
+    """
+    Tests for the reads SSZModel answers itself, and the ones it hands on.
+
+    Both private slots start unset, so the first read of each falls to the override.
+    Every other name has to keep falling, or a misspelling would resolve to something.
+    """
+
+    def test_the_first_read_of_a_cache_slot_fills_it(self) -> None:
+        """A slot nothing has touched is unset, and reading it leaves its cold value behind."""
+        container = TwoFieldContainer(x=Uint8(1), y=Uint16(2))
+        for name, cold in (("_version", 0), ("_root_memo", None)):
+            # The slot descriptor, which reads the slot alone and never the override.
+            slot = SSZModel.__dict__[name]
+            with pytest.raises(AttributeError):
+                slot.__get__(container)
+            assert getattr(container, name) == cold
+            assert slot.__get__(container) == cold
+
+    def test_the_mutation_door_raises_the_version_read_back(self) -> None:
+        """A field assignment passes the door, which counts, so the version read back moves."""
+        container = TwoFieldContainer(x=Uint8(1), y=Uint16(2))
+        assert container._version == 0
+        container.x = Uint8(9)
+        assert container._version == 1
+
+    def test_a_name_the_shape_does_not_carry_is_declined(self) -> None:
+        """
+        Two names are answered and the rest are handed on, so a misspelling still raises.
+
+        The near misses are the point: the override tests the name exactly, and a slot read
+        by a name one character off would otherwise hand back a version or an empty memo.
+        """
+        for value, missing in (
+            (TwoFieldContainer(x=Uint8(1), y=Uint16(2)), "z"),
+            (TwoFieldContainer(x=Uint8(1), y=Uint16(2)), "_versions"),
+            (Uint16List4(data=[Uint16(1)]), "_root_memos"),
+            (Uint16List4(data=[Uint16(1)]), "limit"),
+            (SmallUnion(selector=Uint8(1), data=Uint8(1)), "options"),
+        ):
+            with pytest.raises(AttributeError, match=f"has no attribute '{missing}'$"):
+                getattr(value, missing)
 
 
 class TestSSZTypeEncodeDecode:
