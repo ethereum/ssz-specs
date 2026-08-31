@@ -1,0 +1,25 @@
+# Digest-pinned actions do not drift, which also means they do not improve.
+# This is the other half: every upgrade arrives as a pull request that runs the
+# full gate, rather than as a tag someone else moved under us.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    # Dependabot rewrites the digest and the version comment together, so the
+    # pin stays a pin and the comment stays true.
+    groups:
+      # Routine bumps travel together; a major needs its own read.
+      actions-minor:
+        patterns: ["*"]
+        update-types: [minor, patch]
+
+  - package-ecosystem: uv
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      python-minor:
+        patterns: ["*"]
+        update-types: [minor, patch]
