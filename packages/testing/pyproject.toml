@@ -33,6 +33,7 @@ Homepage = "https://github.com/ethereum/ssz-specs"
 Source = "https://github.com/ethereum/ssz-specs"
 Issues = "https://github.com/ethereum/ssz-specs/issues"
 
+# No pytest11 entry point on purpose: autoloading would make every pytest run rmtree fixtures/.
 [project.scripts]
 fill = "ssz_testing.cli:fill"
 

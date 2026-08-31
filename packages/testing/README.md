@@ -16,6 +16,13 @@ From the workspace root:
 just fill                                   # generate every vector into fixtures/
 uv run --group test fill --clean            # same thing, without just
 uv run --group test fill tests/fillers/ssz  # fill a single directory
+uv run --group test fill --collect-only     # preview, writing and removing nothing
+```
+
+The package's own tests run with the rest of the suite, from the workspace root:
+
+```bash
+uv run --group test pytest packages/testing/tests
 ```
 
 The fillers themselves live in the main repository under `tests/fillers/`. They are
@@ -34,6 +41,9 @@ carries:
 Decode-failure vectors additionally carry `rawBytes` (the rejected input) and a
 `rejectionReason`, the name of the `ValueFault` the decoder raised.
 
+`--output` names a directory inside the workspace, and `--clean` removes it in full, so a
+path the workspace does not contain is refused rather than deleted.
+
 ## Layout
 
 ```
@@ -44,4 +54,5 @@ src/ssz_testing/
   plugin.py            # pytest plugin: collection, generation, writing
   cli.py               # the `fill` command
   pytest_ini_files/    # pytest config used by the fill command
+tests/                 # the package's own tests
 ```

@@ -20,16 +20,10 @@ class FixtureCollector:
         self.fixtures: list[tuple[str, Any, str]] = []
 
     def fixture_output_file(self, test_nodeid: str, fixture_format: str) -> Path:
-        """
-        Compute the fixture file for one test function.
-
-        Raises if the test file is not under the filler tests.
-        """
-        # Strip parametrization suffixes so every case of one function shares one file.
-        nodeid_parts = test_nodeid.split("::")
-        test_file_path = nodeid_parts[0]
-        function_name_with_params = nodeid_parts[1] if len(nodeid_parts) > 1 else ""
-        base_function_name = function_name_with_params.split("[")[0]
+        """The fixture file for one test function, which must sit under the filler tests."""
+        # Every case of one function shares one file, so the file is named for the function.
+        test_file_path, _, name_within_file = test_nodeid.partition("::")
+        base_function_name = name_within_file.split("[")[0].rpartition("::")[2]
 
         try:
             relative_path = Path(test_file_path).relative_to("tests/fillers")
@@ -44,23 +38,15 @@ class FixtureCollector:
         format_directory = fixture_format.removesuffix("_test")
         return self.output_directory / format_directory / test_path / f"{base_function_name}.json"
 
-    def add_fixture(
-        self,
-        fixture_format: str,
-        fixture: Any,
-        test_nodeid: str,
-        config: pytest.Config | None = None,
-    ) -> None:
-        """Add a fixture to the collection."""
-        self.fixtures.append((fixture_format, fixture, test_nodeid))
+    def add_fixture(self, fixture_format: str, fixture: Any, item: pytest.Item) -> None:
+        """Add a fixture to the collection, and record its path on the test that produced it."""
+        self.fixtures.append((fixture_format, fixture, item.nodeid))
 
-        if config is not None:
-            fixture_path = self.fixture_output_file(test_nodeid, fixture_format)
-            config.stash[FIXTURE_PATH_ABSOLUTE_KEY] = str(fixture_path.absolute())
-            config.stash[FIXTURE_PATH_RELATIVE_KEY] = str(
-                fixture_path.relative_to(self.output_directory)
-            )
-            config.stash[FIXTURE_FORMAT_KEY] = fixture_format
+        # Stashed on the item, not the session-wide config, which would leak to later tests.
+        fixture_path = self.fixture_output_file(item.nodeid, fixture_format)
+        item.stash[FIXTURE_PATH_ABSOLUTE_KEY] = str(fixture_path.absolute())
+        item.stash[FIXTURE_PATH_RELATIVE_KEY] = str(fixture_path.relative_to(self.output_directory))
+        item.stash[FIXTURE_FORMAT_KEY] = fixture_format
 
     def write_fixtures(self) -> None:
         """Write all collected fixtures to disk, grouped by test function."""
@@ -86,13 +72,13 @@ FIXTURE_COLLECTOR_KEY: pytest.StashKey[FixtureCollector] = pytest.StashKey()
 """Stash key for the session's fixture collector."""
 
 FIXTURE_PATH_ABSOLUTE_KEY: pytest.StashKey[str] = pytest.StashKey()
-"""Stash key for the absolute path of the current test's fixture file."""
+"""Item stash key for the absolute path of a test's fixture file."""
 
 FIXTURE_PATH_RELATIVE_KEY: pytest.StashKey[str] = pytest.StashKey()
-"""Stash key for the current test's fixture path relative to the output directory."""
+"""Item stash key for a test's fixture path relative to the output directory."""
 
 FIXTURE_FORMAT_KEY: pytest.StashKey[str] = pytest.StashKey()
-"""Stash key for the current test's fixture format name."""
+"""Item stash key for a test's fixture format name."""
 
 
 def pytest_addoption(parser: pytest.Parser) -> None:
@@ -112,14 +98,10 @@ def pytest_addoption(parser: pytest.Parser) -> None:
     )
 
 
-def pytest_ignore_collect(collection_path: Path) -> bool | None:
-    """
-    Ignore paths outside the filler tests.
-
-    Skipping unit tests during fill cuts collection overhead sharply.
-    """
+def pytest_ignore_collect(collection_path: Path, config: pytest.Config) -> bool | None:
+    """Ignore paths outside the filler tests, which sit under the configured root."""
     try:
-        relative_path = collection_path.relative_to(Path.cwd() / "tests")
+        relative_path = collection_path.relative_to(config.rootpath / "tests")
     except ValueError:
         # Not under tests/, let pytest handle it normally.
         return None
@@ -134,20 +116,32 @@ def pytest_ignore_collect(collection_path: Path) -> bool | None:
     return None
 
 
-def pytest_configure(config: pytest.Config) -> None:
-    """Setup the fixture generation session."""
-    output_directory = Path(config.getoption("--output"))
-    clean = config.getoption("--clean")
+def pytest_sessionstart(session: pytest.Session) -> None:
+    """Set up the session here, since the configure hook also runs for a preview."""
+    config = session.config
+    if config.option.collectonly:
+        return
+
+    # Resolved against the configured root, so --output means the same from any directory.
+    root_directory = config.rootpath.resolve()
+    output_directory = (root_directory / config.getoption("--output")).resolve()
+
+    # --clean deletes the whole tree, so a path that is not somewhere below the root is refused.
+    if not output_directory.is_relative_to(root_directory) or output_directory == root_directory:
+        raise pytest.UsageError(
+            f"Output directory '{output_directory}' must be a directory under '{root_directory}'. "
+            "--clean removes it in full, so a path outside the project is refused."
+        )
 
     if output_directory.exists() and any(output_directory.iterdir()):
-        if not clean:
+        if not config.getoption("--clean"):
             leftover_fixture_paths = list(output_directory.iterdir())
             leftover_names_preview = ", ".join(
                 leftover_path.name for leftover_path in leftover_fixture_paths[:5]
             )
             if len(leftover_fixture_paths) > 5:
                 leftover_names_preview += ", ..."
-            # A usage error is how a configuration hook refuses, and it exits with that code.
+            # A usage error is how a hook refuses the run, and it exits with that code.
             raise pytest.UsageError(
                 f"Output directory '{output_directory}' is not empty. "
                 f"Contains: {leftover_names_preview}. Use --clean to remove all existing files "
@@ -173,7 +167,7 @@ def pytest_runtest_makereport(item: pytest.Item, call: pytest.CallInfo[None]) ->
     report = outcome.get_result()
 
     if call.when == "call":
-        stash = item.config.stash
+        stash = item.stash
         if FIXTURE_PATH_ABSOLUTE_KEY in stash and FIXTURE_PATH_RELATIVE_KEY in stash:
             report.user_properties.append(
                 ("fixture_path_absolute", stash[FIXTURE_PATH_ABSOLUTE_KEY])
@@ -231,13 +225,11 @@ def base_spec_filler_parametrizer(spec_class: Any) -> Any:
                 )
             )
 
-            if FIXTURE_COLLECTOR_KEY in request.config.stash:
-                request.config.stash[FIXTURE_COLLECTOR_KEY].add_fixture(
-                    fixture_format=spec_class.format_name,
-                    fixture=filled_fixture,
-                    test_nodeid=request.node.nodeid,
-                    config=request.config,
-                )
+            request.config.stash[FIXTURE_COLLECTOR_KEY].add_fixture(
+                fixture_format=spec_class.format_name,
+                fixture=filled_fixture,
+                item=request.node,
+            )
             return filled_fixture
 
         return fill_and_collect

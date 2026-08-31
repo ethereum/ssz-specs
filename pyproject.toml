@@ -79,6 +79,7 @@ known-first-party = ["ssz", "ssz_testing"]
 
 [tool.ruff.lint.per-file-ignores]
 "tests/**" = ["D"]
+"packages/*/tests/**" = ["D"]
 
 [tool.ty.environment]
 python-version = "3.12"
@@ -96,13 +97,17 @@ error-on-warning = true
 
 [tool.pytest.ini_options]
 minversion = "8.3.3"
-testpaths = ["tests"]
+# The workspace member carries its own suite, and pytest is run from here.
+testpaths = ["tests", "packages/testing/tests"]
 python_files = "test_*.py"
 pythonpath = ["."]
 addopts = [
     "-ra",
     "--strict-markers",
+    # pytester is how the fill plugin's own tests drive a pytest run, and it is not autoloaded.
+    "-p", "pytester",
     "--cov=src",
+    "--cov=packages/testing/src",
     "--cov-report=term-missing",
     "--cov-report=html",
     "--cov-branch",
@@ -116,7 +121,7 @@ markers = [
 timeout = 600
 
 [tool.coverage.run]
-source = ["src"]
+source = ["src", "packages/testing/src"]
 branch = true
 
 [tool.coverage.report]

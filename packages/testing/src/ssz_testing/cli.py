@@ -73,7 +73,3 @@ def fill(
 
     exit_code = subprocess.run([sys.executable, "-m", "pytest", *args]).returncode
     sys.exit(exit_code)
-
-
-if __name__ == "__main__":
-    fill()
