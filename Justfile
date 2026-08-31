@@ -59,15 +59,15 @@ lock-check:
 fill *args:
     uv run --locked --group test fill --clean "$@"
 
-# Run unit tests in parallel
+# Run unit tests in parallel, over every path testpaths names
 [group('tests')]
 test *args:
-    uv run --locked --group test pytest tests -n auto --maxprocesses=10 --durations=10 --dist=worksteal "$@"
+    uv run --locked --group test pytest -n auto --maxprocesses=10 --durations=10 --dist=worksteal "$@"
 
 # Run unit tests with every remembered root recomputed rather than trusted
 [group('tests')]
 test-paranoid *args:
-    SSZ_PARANOID_ROOTS=1 uv run --locked --group test pytest tests -n auto \
+    SSZ_PARANOID_ROOTS=1 uv run --locked --group test pytest -n auto \
         --maxprocesses=10 --dist=worksteal --no-cov "$@"
 
 # Run unit tests with coverage report (HTML + terminal)
