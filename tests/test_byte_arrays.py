@@ -14,7 +14,7 @@ from ssz.byte_arrays import (
     ByteList,
     ByteVector,
 )
-from ssz.exceptions import SSZTypeError, SSZValueError
+from ssz.exceptions import SSZTypeError, SSZValueError, ValueFault
 
 
 class Bytes4(ByteVector):
@@ -819,6 +819,23 @@ class TestBaseByteListSSZ:
         with pytest.raises(SSZValueError) as exception_info:
             ByteList16.deserialize(buffer, 3)
         assert str(exception_info.value) == "ByteList16 needs 3 bytes, the input holds 2"
+
+    def test_decode_bytes_over_limit_raises(self) -> None:
+        """decode_bytes refuses a payload over LIMIT as an SSZ refusal, not a pydantic one."""
+        with pytest.raises(SSZValueError) as exception_info:
+            ByteList5.decode_bytes(b"\x00" * 6)
+        assert exception_info.value.fault is ValueFault.LIMIT
+        assert str(exception_info.value) == "ByteList5 holds at most 5 bytes, got 6"
+
+    def test_both_decode_paths_refuse_a_long_payload_alike(self) -> None:
+        """One input over the limit, one fault, one set of fields, whichever entry point read it."""
+        payload = b"\x00" * 6
+        with pytest.raises(SSZValueError) as from_bytes:
+            ByteList5.decode_bytes(payload)
+        with pytest.raises(SSZValueError) as from_stream:
+            ByteList5.deserialize(io.BytesIO(payload), len(payload))
+        assert from_bytes.value.fault is from_stream.value.fault
+        assert from_bytes.value.fields == from_stream.value.fields
 
 
 class TestBaseByteListPydantic:
