@@ -434,7 +434,15 @@ class ByteList(SSZCollection[int]):
     @classmethod
     @override
     def decode_bytes(cls, data: bytes) -> Self:
-        """Parse SSZ bytes into an instance — the validator enforces the declared limit."""
+        """
+        Parse SSZ bytes into an instance — the payload is the value, byte for byte.
+
+        Raises:
+            SSZValueError: When the payload holds more bytes than the declared limit.
+        """
+        # Bounded here rather than left to the field validator, whose refusal pydantic collects.
+        # The stream path bounds its scope the same way, so both refuse a long payload alike.
+        cls._validate_length(len(data))
         return cls(data=data)
 
     def __bytes__(self) -> bytes:
