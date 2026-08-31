@@ -294,6 +294,31 @@ class SSZType(ABC):
         self.serialize(stream)
         return stream.getvalue()
 
+    @classmethod
+    def decode_bytes(cls, data: bytes) -> Self:
+        """
+        Decode SSZ bytes into a new instance.
+
+        Rejects trailing bytes, because a spec decoder accepts one encoding per value.
+
+        Args:
+            data: SSZ-encoded bytes containing exactly one value.
+
+        Returns:
+            A new instance reconstructed from the input.
+
+        Raises:
+            SSZValueError: If the input carries bytes past the decoded value.
+        """
+        stream = io.BytesIO(data)
+        instance = cls.deserialize(stream, len(data))
+
+        # Unread bytes mean the input either over-allocated or carries noise.
+        leftover = len(data) - stream.tell()
+        if leftover:
+            raise SSZValueError(ValueFault.TRAILING_BYTES, leftover=leftover)
+        return instance
+
     @final
     def hash_tree_root(self) -> "Root":
         """
@@ -333,31 +358,6 @@ class SSZType(ABC):
         from ssz.roots import hash_tree_root
 
         return hash_tree_root(self)
-
-    @classmethod
-    def decode_bytes(cls, data: bytes) -> Self:
-        """
-        Decode SSZ bytes into a new instance.
-
-        Rejects trailing bytes, because a spec decoder accepts one encoding per value.
-
-        Args:
-            data: SSZ-encoded bytes containing exactly one value.
-
-        Returns:
-            A new instance reconstructed from the input.
-
-        Raises:
-            SSZValueError: If the input carries bytes past the decoded value.
-        """
-        stream = io.BytesIO(data)
-        instance = cls.deserialize(stream, len(data))
-
-        # Unread bytes mean the input either over-allocated or carries noise.
-        leftover = len(data) - stream.tell()
-        if leftover:
-            raise SSZValueError(ValueFault.TRAILING_BYTES, leftover=leftover)
-        return instance
 
 
 class SSZModel(StrictBaseModel, SSZType, ABC):
