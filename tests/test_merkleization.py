@@ -30,7 +30,7 @@ from ssz.boolean import Boolean
 from ssz.chunks import BYTES_PER_CHUNK, next_pow2
 from ssz.collections import List, ProgressiveList, Vector
 from ssz.container import Container, ProgressiveContainer
-from ssz.layout import _pack_basic_elements, _pack_bytes, merkle_layout
+from ssz.layout import NestedLeaves, PackedLeaves, _pack_basic_elements, _pack_bytes, merkle_layout
 from ssz.mixins import mix_in_active_fields, mix_in_length, mix_in_selector
 from ssz.roots import hash_tree_root, layout_chunks
 from ssz.trees import merkleize, merkleize_progressive
@@ -2458,8 +2458,7 @@ def test_layout_of_a_container_takes_one_leaf_per_field() -> None:
     """A struct takes one leaf per field, bounded by the field count, with no word mixed in."""
     value = Small(A=Uint16(1), B=Uint16(2))
     layout = merkle_layout(value)
-    assert layout.nested == (value.A, value.B)
-    assert layout.packed == ()
+    assert layout.leaves == NestedLeaves((value.A, value.B))
     assert layout.limit == 2
     assert layout.mixin is None
     assert layout.leaf_count == 2
@@ -2473,8 +2472,7 @@ def test_layout_of_a_bounded_list_packs_its_elements_and_mixes_the_count_in() ->
     value = Uint16List32(data=(Uint16(1), Uint16(2)))
     layout = merkle_layout(value)
     # Packed leaves are plain 32-byte strings now, since nothing reads them but the hash.
-    assert layout.packed == (b"\x01\x00\x02\x00".ljust(32, b"\x00"),)
-    assert layout.nested is None
+    assert layout.leaves == PackedLeaves((b"\x01\x00\x02\x00".ljust(32, b"\x00"),))
     # Two elements fill four bytes of one chunk.
     # That chunk is the only leaf there is.
     assert layout.leaf_count == 1
@@ -2488,7 +2486,7 @@ def test_layout_of_a_progressive_container_keeps_a_leaf_for_every_position() -> 
     """A cleared position keeps a leaf of its own, holding the all-zero chunk."""
     value = GappedProgressive(A=Uint16(0x1234), B=Uint8(0x56))
     layout = merkle_layout(value)
-    assert layout.nested == (value.A, None, value.B)
+    assert layout.leaves == NestedLeaves((value.A, None, value.B))
     assert layout.leaf_count == 3
     # A spine grows with the data.
     # No declared capacity bounds it.
@@ -2529,8 +2527,8 @@ def test_a_vector_of_one_repeated_value_roots_that_value_at_every_position() -> 
     fingerprint = Bytes48(b"\x03" * 48)
     uniform = Bytes48Vector4(data=[fingerprint] * 4)
     layout = merkle_layout(uniform)
-    assert layout.nested is not None
-    assert all(element is fingerprint for element in layout.nested)
+    assert isinstance(layout.leaves, NestedLeaves)
+    assert all(element is fingerprint for element in layout.leaves.values)
     leaf = hash_tree_root(fingerprint)
     assert layout_chunks(layout) == [leaf] * 4
     assert hash_tree_root(uniform) == perfect_tree_root([leaf] * 4, 4)
@@ -2546,7 +2544,8 @@ def test_a_repeat_broken_in_the_middle_roots_every_position_on_its_own() -> None
     value = ChunkVector3(data=[first, middle, first])
     layout = merkle_layout(value)
     # The ends are one value, so the whole range is walked as a run of one.
-    assert layout.nested is not None and layout.nested[0] is layout.nested[2] is first
+    assert isinstance(layout.leaves, NestedLeaves)
+    assert layout.leaves.values[0] is layout.leaves.values[2] is first
     # A chunk is its own root, so the leaves are the elements verbatim.
     assert layout_chunks(layout) == [first, middle, first]
     assert hash_tree_root(value) == perfect_tree_root([first, middle, first], 4)
@@ -2557,7 +2556,7 @@ def test_a_progressive_layout_holding_one_value_twice_keeps_its_gaps_zero() -> N
     fingerprint = Chunk(b"\x07" * 32)
     value = GappedRunProgressive(A=fingerprint, B=fingerprint)
     layout = merkle_layout(value)
-    assert layout.nested == (fingerprint, None, None, None, fingerprint)
+    assert layout.leaves == NestedLeaves((fingerprint, None, None, None, fingerprint))
     expected_leaves = [fingerprint, ZERO_ROOT, ZERO_ROOT, ZERO_ROOT, fingerprint]
     assert layout_chunks(layout) == expected_leaves
     assert hash_tree_root(value) == expected_progressive_container_root(

@@ -62,7 +62,7 @@ from ssz.gindex import (
     gindex_sibling,
     progressive_chunk_gindex,
 )
-from ssz.layout import MerkleLayout, merkle_layout
+from ssz.layout import Leaves, MerkleLayout, NestedLeaves, PackedLeaves, merkle_layout
 from ssz.mixins import (
     active_fields_word,
     length_word,
@@ -112,8 +112,11 @@ __all__ = [
     "CompatibleUnion",
     "Container",
     "LENGTH_KEY",
+    "Leaves",
     "List",
     "MerkleLayout",
+    "NestedLeaves",
+    "PackedLeaves",
     "PathStep",
     "ProgressiveBitList",
     "ProgressiveContainer",

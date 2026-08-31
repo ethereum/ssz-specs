@@ -86,6 +86,42 @@ def _pack_basic_elements(elements: Sequence[int], element_size: int) -> list[byt
 
 
 @dataclass(frozen=True, slots=True)
+class PackedLeaves:
+    """
+    Leaves as data, where elements share a chunk with their neighbours.
+
+    The chunk is the leaf, so nothing below it can be addressed.
+    """
+
+    chunks: tuple[bytes, ...]
+    """The packed data, one 32-byte chunk per leaf."""
+
+    def __len__(self) -> int:
+        """Leaves held, one per chunk."""
+        return len(self.chunks)
+
+
+@dataclass(frozen=True, slots=True)
+class NestedLeaves:
+    """
+    Leaves as values, one root each.
+
+    A position carrying no value merkleizes as a zero leaf.
+    """
+
+    values: tuple[SSZType | None, ...]
+    """The nested values, one per leaf, or None where the position carries none."""
+
+    def __len__(self) -> int:
+        """Leaves held, one per position, whether or not it carries a value."""
+        return len(self.values)
+
+
+type Leaves = PackedLeaves | NestedLeaves
+"""What a shape puts under its tree: data sharing chunks, or values with roots of their own."""
+
+
+@dataclass(frozen=True, slots=True)
 class MerkleLayout:
     """
     The subtree one value merkleizes into, before any of it is hashed.
@@ -101,11 +137,8 @@ class MerkleLayout:
     Leaves past the last are the zero padding the tree shape supplies.
     """
 
-    packed: tuple[bytes, ...]
-    """Leaves as data, where elements share a chunk and nothing below it can be addressed."""
-
-    nested: tuple[SSZType | None, ...] | None
-    """Leaves as values, one root each and None for a zero leaf, or None where the shape packs."""
+    leaves: Leaves
+    """What the shape put under the tree, and which of the two ways it did it."""
 
     limit: int | None
     """Chunk capacity of the bounded tree over the leaves, or None for a progressive spine."""
@@ -118,19 +151,20 @@ class MerkleLayout:
         cls, chunks: Sequence[bytes], *, limit: int | None, mixin: Chunk | None = None
     ) -> MerkleLayout:
         """A layout whose leaves are packed data."""
-        return cls(packed=tuple(chunks), nested=None, limit=limit, mixin=mixin)
+        return cls(leaves=PackedLeaves(tuple(chunks)), limit=limit, mixin=mixin)
 
     @classmethod
     def nesting(
         cls, values: Iterable[SSZType | None], *, limit: int | None, mixin: Chunk | None = None
     ) -> MerkleLayout:
         """A layout whose leaves are the roots of nested values."""
-        return cls(packed=(), nested=tuple(values), limit=limit, mixin=mixin)
+        return cls(leaves=NestedLeaves(tuple(values)), limit=limit, mixin=mixin)
 
     @property
     def leaf_count(self) -> int:
         """Leaves the shape produced, before any zero padding."""
-        return len(self.packed) if self.nested is None else len(self.nested)
+        # Either variant holds one entry per leaf, so neither has to be told apart to count.
+        return len(self.leaves)
 
 
 @singledispatch
