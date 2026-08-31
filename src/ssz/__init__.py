@@ -7,6 +7,7 @@ An alphabetical listing scrambles that order.
     exceptions    the two ways SSZ refuses something, and every reason for each
     base          pydantic glue shared by the types
     ssz_base      the abstract bases every SSZ type stands on
+    offsets       the table a variable-size shape puts in front of its bodies
 
     boolean       a true or false value
     uint          the unsigned integers, and the byte

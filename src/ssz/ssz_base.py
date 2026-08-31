@@ -1,10 +1,9 @@
-"""Abstract bases for the SSZ type system, and the offset table sequences and structs share."""
+"""Abstract bases for the SSZ type system."""
 
 import io
 from abc import ABC, abstractmethod
 from collections.abc import Iterator, Sequence
 from copy import copy as shallow_copy
-from itertools import pairwise
 from typing import IO, TYPE_CHECKING, Any, ClassVar, Final, Self, cast, final, overload, override
 
 from pydantic import ConfigDict, Field
@@ -18,61 +17,11 @@ if TYPE_CHECKING:
     # Wanted for one annotation, which is never evaluated.
     from ssz.chunks import Root
 
-BYTES_PER_LENGTH_OFFSET: Final = 4
-"""Width of an SSZ offset prefixing each variable-size element, a little-endian uint32."""
-
 _CAPACITY_NAMES: Final = ("LENGTH", "LIMIT")
 """The class attributes a shape declares its element count with."""
 
 _COLD_CACHE: Final = {"_version": 0, "_root_memo": None}
 """What each cache slot holds before anything has touched it."""
-
-
-def offset_table_spans(offsets: Sequence[int], scope: int, steps: Sequence[str | int]) -> list[int]:
-    """
-    Check a whole offset table closes over its budget, and return the width of each body.
-
-    Appending the budget gives one boundary more than there are bodies.
-    Consecutive pairs are then exactly the spans to read:
-
-        offsets       12       17       20
-        boundaries    12       17       20       27
-        spans         12..17   17..20   20..27
-
-    A pair that decreases is a body of negative width.
-    The pair closed by the budget is a body reaching past the input.
-
-    The whole table is settled here before a caller reads one byte of a body.
-    So a corrupt table is refused as one, not as whatever a body made of a bad span.
-
-    Args:
-        offsets: Where each body starts, in wire order.
-        scope: Byte budget the payload spans, which closes the last body.
-        steps: What to name each body on the path of a refusal, in the same order.
-
-    Returns:
-        The width of each body, in wire order.
-
-    Raises:
-        SSZValueError: When an offset is above the one after it.
-        SSZValueError: When the last offset runs past the budget.
-    """
-    boundaries = [*offsets, scope]
-
-    # The last pair is the only one closed by the budget rather than an offset.
-    last = len(offsets) - 1
-
-    spans: list[int] = []
-    for index, ((start, end), step) in enumerate(zip(pairwise(boundaries), steps, strict=True)):
-        if end < start:
-            if index == last:
-                error = SSZValueError(ValueFault.OFFSET_PAST_SCOPE, offset=start, scope=end)
-            else:
-                error = SSZValueError(ValueFault.OFFSET_UNORDERED, offset=start, next=end)
-            error.at(step)
-            raise error
-        spans.append(end - start)
-    return spans
 
 
 class SSZType(ABC):
@@ -345,6 +294,31 @@ class SSZType(ABC):
         self.serialize(stream)
         return stream.getvalue()
 
+    @classmethod
+    def decode_bytes(cls, data: bytes) -> Self:
+        """
+        Decode SSZ bytes into a new instance.
+
+        Rejects trailing bytes, because a spec decoder accepts one encoding per value.
+
+        Args:
+            data: SSZ-encoded bytes containing exactly one value.
+
+        Returns:
+            A new instance reconstructed from the input.
+
+        Raises:
+            SSZValueError: If the input carries bytes past the decoded value.
+        """
+        stream = io.BytesIO(data)
+        instance = cls.deserialize(stream, len(data))
+
+        # Unread bytes mean the input either over-allocated or carries noise.
+        leftover = len(data) - stream.tell()
+        if leftover:
+            raise SSZValueError(ValueFault.TRAILING_BYTES, leftover=leftover)
+        return instance
+
     @final
     def hash_tree_root(self) -> "Root":
         """
@@ -384,31 +358,6 @@ class SSZType(ABC):
         from ssz.roots import hash_tree_root
 
         return hash_tree_root(self)
-
-    @classmethod
-    def decode_bytes(cls, data: bytes) -> Self:
-        """
-        Decode SSZ bytes into a new instance.
-
-        Rejects trailing bytes, because a spec decoder accepts one encoding per value.
-
-        Args:
-            data: SSZ-encoded bytes containing exactly one value.
-
-        Returns:
-            A new instance reconstructed from the input.
-
-        Raises:
-            SSZValueError: If the input carries bytes past the decoded value.
-        """
-        stream = io.BytesIO(data)
-        instance = cls.deserialize(stream, len(data))
-
-        # Unread bytes mean the input either over-allocated or carries noise.
-        leftover = len(data) - stream.tell()
-        if leftover:
-            raise SSZValueError(ValueFault.TRAILING_BYTES, leftover=leftover)
-        return instance
 
 
 class SSZModel(StrictBaseModel, SSZType, ABC):
@@ -506,17 +455,12 @@ class SSZModel(StrictBaseModel, SSZType, ABC):
         return duplicate
 
     def __len__(self) -> int:
-        """Element count for a collection, field count for every other shape."""
-        # The base class decides, not the field name, since a union is not a collection.
-        if isinstance(self, SSZCollection):
-            return len(self.data)
+        """How many fields this shape declares."""
         return len(type(self).model_fields)
 
     def __repr__(self) -> str:
-        """Show a collection's contents, and any other shape's fields by name."""
+        """Show the fields by name."""
         cls_name = type(self).__name__
-        if isinstance(self, SSZCollection):
-            return f"{cls_name}(data={list(self.data)!r})"
         field_strs = [f"{name}={getattr(self, name)!r}" for name in type(self).model_fields]
         return f"{cls_name}({' '.join(field_strs)})"
 
@@ -577,6 +521,16 @@ class SSZCollection[T](SSZModel, Sequence[T], ABC):
         The parent Pydantic model would otherwise yield field name and value pairs.
         """
         return iter(self.data)
+
+    @override
+    def __len__(self) -> int:
+        """How many elements this shape holds, which is what a sequence counts."""
+        return len(self.data)
+
+    @override
+    def __repr__(self) -> str:
+        """Show the contents, since the fields are one sequence under one name."""
+        return f"{type(self).__name__}(data={list(self.data)!r})"
 
     @overload
     def __getitem__(self, index: int) -> T: ...
