@@ -455,17 +455,12 @@ class SSZModel(StrictBaseModel, SSZType, ABC):
         return duplicate
 
     def __len__(self) -> int:
-        """Element count for a collection, field count for every other shape."""
-        # The base class decides, not the field name, since a union is not a collection.
-        if isinstance(self, SSZCollection):
-            return len(self.data)
+        """How many fields this shape declares."""
         return len(type(self).model_fields)
 
     def __repr__(self) -> str:
-        """Show a collection's contents, and any other shape's fields by name."""
+        """Show the fields by name."""
         cls_name = type(self).__name__
-        if isinstance(self, SSZCollection):
-            return f"{cls_name}(data={list(self.data)!r})"
         field_strs = [f"{name}={getattr(self, name)!r}" for name in type(self).model_fields]
         return f"{cls_name}({' '.join(field_strs)})"
 
@@ -526,6 +521,16 @@ class SSZCollection[T](SSZModel, Sequence[T], ABC):
         The parent Pydantic model would otherwise yield field name and value pairs.
         """
         return iter(self.data)
+
+    @override
+    def __len__(self) -> int:
+        """How many elements this shape holds, which is what a sequence counts."""
+        return len(self.data)
+
+    @override
+    def __repr__(self) -> str:
+        """Show the contents, since the fields are one sequence under one name."""
+        return f"{type(self).__name__}(data={list(self.data)!r})"
 
     @overload
     def __getitem__(self, index: int) -> T: ...
