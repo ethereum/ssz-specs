@@ -1,4 +1,8 @@
-"""The words a shape hashes its contents against, and the mixing itself."""
+"""
+The words a shape hashes its contents against, and the mixing itself.
+
+Each is built at the chunk width, which yields exactly that width or raises.
+"""
 
 from collections.abc import Sequence
 from hashlib import sha256
@@ -18,11 +22,10 @@ def length_word(length: int) -> Chunk:
     The element count a variable-size shape mixes in, as one 32-byte little-endian word.
 
     Raises:
-        SSZValueError: If the length is negative.
+        SSZValueError: A negative length.
     """
     if length < 0:
         raise SSZValueError(ValueFault.NEGATIVE_LENGTH, length=length)
-    # Invariant: to_bytes yields exactly the requested width, or raises OverflowError.
     return Chunk._trusted(length.to_bytes(BYTES_PER_CHUNK, "little"))
 
 
@@ -30,14 +33,11 @@ def active_fields_word(active_fields: Sequence[int]) -> Chunk:
     """
     The field layout a progressive container mixes in, as one 32-byte word.
 
-    One bit per position, lowest bit first, so at most 256 positions fit the word:
+    One bit per position, lowest bit first, so at most 256 fit, a bound the type enforces:
 
         [1, 0, 1]  ->  05 00 00 ... 00
-
-    The bound of 256 is enforced by the type that declares the layout, not here.
     """
     packed_bits = sum(1 << i for i, bit in enumerate(active_fields) if bit)
-    # Invariant: to_bytes yields exactly the requested width, or raises OverflowError.
     return Chunk._trusted(packed_bits.to_bytes(BYTES_PER_CHUNK, "little"))
 
 
@@ -50,11 +50,10 @@ def selector_word(selector: int) -> Chunk:
         selector 1  ->  01 00 00 ... 00
 
     Raises:
-        SSZValueError: If the selector does not fit one byte.
+        SSZValueError: A selector that does not fit one byte.
     """
     if not 0 <= selector <= 0xFF:
         raise SSZValueError(ValueFault.SELECTOR_BYTE, selector=selector)
-    # Invariant: to_bytes yields exactly the requested width, or raises OverflowError.
     return Chunk._trusted(selector.to_bytes(BYTES_PER_CHUNK, "little"))
 
 
@@ -62,8 +61,7 @@ def mix_in_length(root: Root, length: int) -> Root:
     """
     Mix a length into a Merkle root via the SSZ uint256 little-endian encoding.
 
-    Two lists holding identical elements under different lengths must root differently.
-    The count is what separates them.
+    Two lists of identical elements under different lengths must root differently.
 
     Raises:
         SSZValueError: A negative length.
@@ -72,13 +70,7 @@ def mix_in_length(root: Root, length: int) -> Root:
 
 
 def mix_in_active_fields(root: Root, active_fields: Sequence[int]) -> Root:
-    """
-    Mix a field layout into a Merkle root, per EIP-7495.
-
-    Mixing it in is what keeps a cleared position distinct from a field holding zero.
-    Both leave a zero leaf.
-    A version that drops a field would otherwise root exactly like one that zeroed it.
-    """
+    """Mix a layout in, per EIP-7495, so a dropped field and a zeroed one differ."""
     return mix_in(root, active_fields_word(active_fields))
 
 
