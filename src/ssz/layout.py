@@ -199,29 +199,32 @@ def _layout_bytes(value: bytes) -> MerkleLayout:
 
 @merkle_layout.register
 def _layout_bytelist(value: ByteList) -> MerkleLayout:
+    cls = type(value)
     serialized_bytes = value.encode_bytes()
     # The count mixed in is the byte count.
     # That is also the element count here.
     return MerkleLayout.packing(
         _pack_bytes(serialized_bytes),
-        limit=(type(value).declared_limit() + BYTES_PER_CHUNK - 1) // BYTES_PER_CHUNK,
+        limit=(cls.declared_limit() + BYTES_PER_CHUNK - 1) // BYTES_PER_CHUNK,
         mixin=length_word(len(serialized_bytes)),
     )
 
 
 @merkle_layout.register
 def _layout_bitvector(value: BitVector) -> MerkleLayout:
+    cls = type(value)
     return MerkleLayout.packing(
         _pack_bits(value.data),
-        limit=(type(value).declared_length() + BITS_PER_CHUNK - 1) // BITS_PER_CHUNK,
+        limit=(cls.declared_length() + BITS_PER_CHUNK - 1) // BITS_PER_CHUNK,
     )
 
 
 @merkle_layout.register
 def _layout_bitlist(value: BitList) -> MerkleLayout:
+    cls = type(value)
     return MerkleLayout.packing(
         _pack_bits(value.data),
-        limit=(type(value).declared_limit() + BITS_PER_CHUNK - 1) // BITS_PER_CHUNK,
+        limit=(cls.declared_limit() + BITS_PER_CHUNK - 1) // BITS_PER_CHUNK,
         mixin=length_word(len(value.data)),
     )
 
@@ -230,14 +233,17 @@ def _layout_bitlist(value: BitList) -> MerkleLayout:
 def _layout_progressive_bitlist(value: ProgressiveBitList) -> MerkleLayout:
     # The count mixed in is the bit count, not the number of packed chunks.
     return MerkleLayout.packing(
-        _pack_bits(value.data), limit=None, mixin=length_word(len(value.data))
+        _pack_bits(value.data),
+        limit=None,
+        mixin=length_word(len(value.data)),
     )
 
 
 @merkle_layout.register
 def _layout_vector(value: Vector) -> MerkleLayout:
     cls = type(value)
-    element_type, length = cls.ELEMENT_TYPE, cls.declared_length()
+    element_type = cls.ELEMENT_TYPE
+    length = cls.declared_length()
     if issubclass(element_type, (BaseUint, Boolean)):
         # Basic elements pack their serialized bytes into a single byte stream before chunking.
         element_size = element_type.get_byte_length()
@@ -252,7 +258,8 @@ def _layout_vector(value: Vector) -> MerkleLayout:
 @merkle_layout.register
 def _layout_list(value: List) -> MerkleLayout:
     cls = type(value)
-    element_type, limit = cls.ELEMENT_TYPE, cls.declared_limit()
+    element_type = cls.ELEMENT_TYPE
+    limit = cls.declared_limit()
     mixin = length_word(len(value))
     if issubclass(element_type, (BaseUint, Boolean)):
         element_size = element_type.get_byte_length()
@@ -266,15 +273,17 @@ def _layout_list(value: List) -> MerkleLayout:
 
 @merkle_layout.register
 def _layout_progressive_list(value: ProgressiveList) -> MerkleLayout:
-    element_type = type(value).ELEMENT_TYPE
+    cls = type(value)
+    element_type = cls.ELEMENT_TYPE
+    mixin = length_word(len(value))
     # No capacity bounds the chunk count: the tree grows to hold whatever was packed.
     #
     # The count mixed in is the element count, not the number of packed chunks.
     # A hundred eight-byte elements pack into 25 chunks, and 100 is the number mixed in.
-    mixin = length_word(len(value))
     if issubclass(element_type, (BaseUint, Boolean)):
+        element_size = element_type.get_byte_length()
         return MerkleLayout.packing(
-            _pack_basic_elements(value.data, element_type.get_byte_length()),
+            _pack_basic_elements(value.data, element_size),
             limit=None,
             mixin=mixin,
         )
@@ -283,9 +292,10 @@ def _layout_progressive_list(value: ProgressiveList) -> MerkleLayout:
 
 @merkle_layout.register
 def _layout_progressive_container(value: ProgressiveContainer) -> MerkleLayout:
+    cls = type(value)
     # One leaf per layout position, not per field, though the spec's formula reads that way.
     # A cleared bit keeps its zero leaf, the gap that holds every other field still.
-    cls = type(value)
+    #
     # A layout is declared as bits and never coerced, so a list of them arrives as one.
     names, word = progressive_container_plan(tuple(cls.ACTIVE_FIELDS), field_names(cls))
     return MerkleLayout.nesting(
@@ -300,13 +310,21 @@ def _layout_compatible_union(value: CompatibleUnion) -> MerkleLayout:
     # The union adds no leaf of its own: the option's own root is the whole tree below.
     # One leaf of capacity is a tree of no depth.
     # The contained root is therefore the left child itself.
-    return MerkleLayout.nesting((value.data,), limit=1, mixin=selector_word(int(value.selector)))
+    return MerkleLayout.nesting(
+        (value.data,),
+        limit=1,
+        mixin=selector_word(int(value.selector)),
+    )
 
 
 @merkle_layout.register
 def _layout_container(value: Container) -> MerkleLayout:
-    names = field_names(type(value))
-    return MerkleLayout.nesting([getattr(value, name) for name in names], limit=len(names))
+    cls = type(value)
+    names = field_names(cls)
+    return MerkleLayout.nesting(
+        [getattr(value, name) for name in names],
+        limit=len(names),
+    )
 
 
 @cache
