@@ -102,18 +102,10 @@ class MerkleLayout:
     """
 
     packed: tuple[bytes, ...]
-    """
-    Leaves as data, where elements share a chunk with their neighbours.
-
-    The chunk is the leaf, so nothing below it can be addressed.
-    """
+    """Leaves as data, where elements share a chunk and nothing below it can be addressed."""
 
     nested: tuple[SSZType | None, ...] | None
-    """
-    Leaves as values, one root each, or None for a shape that packs instead.
-
-    A position carrying no value merkleizes as a zero leaf.
-    """
+    """Leaves as values, one root each and None for a zero leaf, or None where the shape packs."""
 
     limit: int | None
     """Chunk capacity of the bounded tree over the leaves, or None for a progressive spine."""
