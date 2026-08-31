@@ -189,26 +189,7 @@ class BaseUint(int, SSZType):
 
     @classmethod
     def _resolve_type(cls, other: Any, op_symbol: str) -> type[Self] | NotImplementedType:
-        """
-        Decide which type an operation between two different types produces.
-
-        Two uints may meet only when inheritance relates them, and the more derived type
-        wins, so a unit survives contact with the width it is built on:
-
-            Slot(37) % Uint64(8)   ->  Slot     the base carries no unit of its own
-            Uint64(1) + Slot(2)    ->  Slot     order does not change which unit wins
-            Epoch(5) + 1           ->  Epoch    a literal carries no unit either
-            Slot(1) + Epoch(2)     ->  refused  siblings, and a slot is not an epoch
-            Uint64(1) + Uint32(2)  ->  refused  siblings, and the widths disagree
-            Slot(1) + True         ->  refused  a bool counts nothing
-
-        Returns:
-            The type to wrap the result in, or NotImplemented to leave the operation to
-            the other operand.
-
-        Raises:
-            TypeError: When the operand is a number that no inheritance relates.
-        """
+        """The type an operation produces: the more derived of the two, or NotImplemented."""
         other_cls = type(other)
         # A plain int is the one non-uint operand allowed through, by identity so bool stays out.
         if other_cls is int:

@@ -125,18 +125,8 @@ class Boolean(int, SSZType):
         """
         Decode a single SSZ byte into a boolean.
 
-        Input must be exactly one byte with value 0x00 or 0x01.
-
-        Args:
-            data: SSZ-encoded byte.
-
-        Returns:
-            A boolean wrapping the decoded value.
-
         Raises:
-            SSZValueError:
-                - When the input length is not 1.
-                - When the byte value is outside the 0x00 / 0x01 set.
+            SSZValueError: If the input is not exactly one byte of value 0x00 or 0x01.
         """
         if len(data) != 1:
             raise SSZValueError(
@@ -163,17 +153,8 @@ class Boolean(int, SSZType):
         """
         Read one SSZ byte from a stream and decode into a boolean.
 
-        Args:
-            stream: Source binary stream.
-            scope: Number of bytes the caller has allocated for this value (must be 1).
-
-        Returns:
-            A boolean wrapping the decoded value.
-
         Raises:
-            SSZValueError:
-                - When scope is not 1.
-                - When the underlying byte decode fails.
+            SSZValueError: If the scope is not one byte, or the byte is not 0x00 or 0x01.
         """
         if scope != 1:
             raise SSZValueError(ValueFault.SCOPE, type=cls.__name__, expected=1, actual=scope)
