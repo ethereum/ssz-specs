@@ -121,6 +121,7 @@ A fixed number of elements.
 class Color(Vector[Uint8]):
     LENGTH = 3
 
+
 Color(data=[255, 128, 0])
 ```
 
@@ -131,6 +132,7 @@ A variable number of elements up to a limit.
 ```python
 class Scores(List[Uint64]):
     LIMIT = 8
+
 
 Scores(data=[10, 20, 30])
 ```
@@ -143,6 +145,7 @@ A fixed number of bytes.
 class Serial(ByteVector):
     LENGTH = 4
 
+
 Serial(b"\x01\x02\x03\x04")
 ```
 
@@ -153,6 +156,7 @@ A variable number of bytes up to a limit.
 ```python
 class Message(ByteList):
     LIMIT = 32
+
 
 Message(data=b"hello")
 ```
@@ -165,6 +169,7 @@ A fixed number of bits.
 class Weekdays(BitVector):
     LENGTH = 7
 
+
 Weekdays(data=[1, 0, 0, 1, 0, 1, 0])
 ```
 
@@ -176,6 +181,7 @@ A variable number of bits up to a limit.
 class Answers(BitList):
     LIMIT = 20
 
+
 Answers(data=[1, 0, 1])
 ```
 
@@ -186,6 +192,7 @@ A variable number of elements with no limit.
 ```python
 class Temperatures(ProgressiveList[Uint16]):
     pass
+
 
 Temperatures(data=[20, 21, 19])
 ```
@@ -207,6 +214,7 @@ class Point(Container):
     x: Uint64
     y: Uint64
 
+
 Point(x=1, y=2)
 ```
 
@@ -218,8 +226,9 @@ Named fields that keep their positions as the set changes.
 class Square(ProgressiveContainer):
     ACTIVE_FIELDS = (1, 0, 1)
 
-    side: Uint16   # position 0
-    color: Uint8   # position 2
+    side: Uint16  # position 0
+    color: Uint8  # position 2
+
 
 Square(side=0x1234, color=0x42)
 ```
@@ -234,6 +243,7 @@ A choice between options that share one tree shape.
 ```python
 class Shape(CompatibleUnion):
     OPTIONS = {1: Square, 2: Circle}
+
 
 Shape(selector=1, data=Square(side=0x1234, color=0x42))
 ```
