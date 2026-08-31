@@ -20,13 +20,8 @@ class FixtureCollector:
         self.fixtures: list[tuple[str, Any, str]] = []
 
     def fixture_output_file(self, test_nodeid: str, fixture_format: str) -> Path:
-        """
-        Compute the fixture file for one test function.
-
-        Raises if the test file is not under the filler tests.
-        """
-        # A nodeid is the file, then the names within it, then the parametrization.
-        # The file is named for the function, so every case of one function shares one file.
+        """The fixture file for one test function, which must sit under the filler tests."""
+        # Every case of one function shares one file, so the file is named for the function.
         test_file_path, _, name_within_file = test_nodeid.partition("::")
         base_function_name = name_within_file.split("[")[0].rpartition("::")[2]
 
@@ -47,8 +42,7 @@ class FixtureCollector:
         """Add a fixture to the collection, and record its path on the test that produced it."""
         self.fixtures.append((fixture_format, fixture, item.nodeid))
 
-        # The path belongs to this test, so it is stashed on the item rather than on the
-        # session-wide config, which would hand it to every test that runs afterwards.
+        # Stashed on the item, not the session-wide config, which would leak to later tests.
         fixture_path = self.fixture_output_file(item.nodeid, fixture_format)
         item.stash[FIXTURE_PATH_ABSOLUTE_KEY] = str(fixture_path.absolute())
         item.stash[FIXTURE_PATH_RELATIVE_KEY] = str(fixture_path.relative_to(self.output_directory))
@@ -105,12 +99,7 @@ def pytest_addoption(parser: pytest.Parser) -> None:
 
 
 def pytest_ignore_collect(collection_path: Path, config: pytest.Config) -> bool | None:
-    """
-    Ignore paths outside the filler tests.
-
-    Skipping unit tests during fill cuts collection overhead sharply.
-    The tests live under the configured root, not under wherever the command was typed.
-    """
+    """Ignore paths outside the filler tests, which sit under the configured root."""
     try:
         relative_path = collection_path.relative_to(config.rootpath / "tests")
     except ValueError:
@@ -128,12 +117,7 @@ def pytest_ignore_collect(collection_path: Path, config: pytest.Config) -> bool 
 
 
 def pytest_sessionstart(session: pytest.Session) -> None:
-    """
-    Setup the fixture generation session.
-
-    Not the configure hook, which also runs for --collect-only and --help.
-    Those preview a fill rather than perform one, and must leave the last fill's vectors alone.
-    """
+    """Set up the session here, since the configure hook also runs for a preview."""
     config = session.config
     if config.option.collectonly:
         return

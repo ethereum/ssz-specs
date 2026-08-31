@@ -133,8 +133,7 @@ def test_the_collection_filter_follows_the_root_not_the_directory_it_was_run_fro
     """Filling from a subdirectory skips the unit tests, exactly as filling from the root does."""
     fill(project, "--clean", "--collect-only", "-q").stdout.fnmatch_lines(["2 tests collected*"])
 
-    # From anywhere but the root, pytest collects the directory it was run from instead of
-    # testpaths, and the filter has to recognise it as the tests directory all the same.
+    # From anywhere but the root, pytest collects the directory it was run from instead.
     monkeypatch.chdir(project.path / "tests")
 
     fill(project, "--clean", "--collect-only", "-q").stdout.fnmatch_lines(["2 tests collected*"])

@@ -15,8 +15,7 @@ from ssz_testing.fixtures import (
 class SSZTestFiller(Protocol):
     """Type of the ssz_test fixture: builds, generates, and collects an SSZ vector."""
 
-    # Spelled out rather than left as a callable of any arguments, so that a misspelled
-    # keyword or a missing one is a type error at the call site rather than at fill time.
+    # Spelled out rather than a callable of any arguments, so a bad call is a type error.
     def __call__(
         self,
         *,
