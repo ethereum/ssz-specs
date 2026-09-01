@@ -422,14 +422,7 @@ class TestVectorClassMetadata:
         )
 
     def test_a_contradicted_element_type_no_longer_splits_validation_from_coercion(self) -> None:
-        """
-        One declaration read two ways stored a value of neither of them.
-
-        Validation followed ELEMENT_TYPE and the field's own schema followed the bracket, so
-        `data=[1]` and `data=[Uint64(1)]` were both accepted and both stored as `Uint8`, while
-        `data=[Uint8(1)]` was refused for not being a `Uint64`. The one byte that came out
-        decoded back through neither reading: a budget of 1 does not divide by a width of 8.
-        """
+        """One declaration read two ways stored a value of neither, and decoded as neither."""
         with pytest.raises(SSZTypeError) as exception_info:
 
             class Contradiction(List[Uint8]):

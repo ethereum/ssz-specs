@@ -2016,22 +2016,7 @@ def library_restatements() -> list[tuple[str, str, Any]]:
 
 
 class TestARestatedTypeParameter:
-    """
-    Tests for a subclass changing what a base already fixed its tree with.
-
-    A field holds a subclass of what it declares, deliberately, so an application's own class
-    can sit where the shape it refines is named. That is sound only while the subclass
-    merkleizes the way the declared class does, and five class attributes decide that:
-    LENGTH, LIMIT, ELEMENT_TYPE, ACTIVE_FIELDS and OPTIONS.
-
-    A subclass changing one of them made hash_tree_root a function of the object graph rather
-    than of the declared type and the value. One encoding then had two roots, a generalized
-    index named a position the value held elsewhere, and a value rooted under a selector its
-    own bytes decode back to nothing.
-
-    Restating the same value says nothing new, and is permitted. Setting one over the None an
-    abstract base leaves is what every concrete shape does.
-    """
+    """Tests for a subclass changing a tree parameter its base already fixed."""
 
     def test_a_narrower_capacity_no_longer_gives_one_encoding_two_roots(self) -> None:
         """A limit sets how far a value pads before it is hashed, so the two roots differed."""

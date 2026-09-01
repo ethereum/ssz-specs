@@ -309,17 +309,7 @@ def test_a_value_mutated_back_reports_the_root_it_had_before() -> None:
 
 
 def test_a_leaf_field_holding_a_subclass_of_what_it_declares_still_follows_it() -> None:
-    """
-    A field is dropped from the witness by what it declares, and it may hold a subclass.
-
-    That is sound because every dropped class is immutable, and so is any subclass of one:
-    the only way such a field changes is being replaced, which raises its holder's version.
-    A subclass also lays out the tree its base does, since a declaration holds every parameter
-    a base fixed, so the root does not turn on which of the two classes is the one held.
-
-    Checked against a value whose annotations name the classes actually held, which roots
-    the same way because a struct's tree is its field values and their number.
-    """
+    """A dropped field may hold a subclass, since every dropped class is immutable."""
     header = Header(slot=Gwei(7), state_root=NamedRoot(b"\x01" * 32))
     # The premise: nothing narrows either value back to the class its field declares.
     assert (type(header.slot), type(header.state_root)) == (Gwei, NamedRoot)

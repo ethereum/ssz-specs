@@ -45,10 +45,7 @@ def _narrowed_capacity(cls: type, name: str, declared: Any) -> int:
         SSZTypeError: A capacity that is not a whole number at or above zero.
     """
     if type(declared) is not int:
-        # A boolean is a flag rather than a count.
-        # Narrowing one would make a nonsensical declaration a capacity of 1.
-        #
-        # A boolean of this library's own narrows, every integer here taking one.
+        # A boolean is a flag, not a count, so narrowing one would read True as a capacity of 1.
         if not isinstance(declared, int) or isinstance(declared, bool):
             raise SSZTypeError(
                 TypeFault.NOT_AN_INTEGER,
