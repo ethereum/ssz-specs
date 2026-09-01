@@ -17,20 +17,23 @@ keywords = [
     "ethereum",
     "specifications",
 ]
+license = "MIT"
+license-files = ["LICENSE"]
 classifiers = [
-    "License :: OSI Approved :: MIT License",
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Operating System :: OS Independent",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
     "Programming Language :: Python :: 3.14",
+    "Topic :: Software Development :: Libraries",
+    "Typing :: Typed",
 ]
 requires-python = ">=3.12"
 dependencies = [
     "pydantic>=2.12.0,<3",
 ]
-
-[project.license]
-file = "LICENSE"
 
 [project.urls]
 Homepage = "https://github.com/ethereum/ssz-specs"
@@ -126,10 +129,6 @@ branch = true
 
 [tool.coverage.report]
 fail_under = 100
-
-[tool.mdformat]
-number = true
-wrap = 80
 
 [tool.uv]
 required-version = ">=0.7.0"

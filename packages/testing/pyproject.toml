@@ -1,6 +1,6 @@
 [build-system]
-requires = ["setuptools>=77.0.3", "wheel"]
-build-backend = "setuptools.build_meta"
+requires = ["hatchling>=1.25.0,<2"]
+build-backend = "hatchling.build"
 
 [project]
 name = "ssz-testing"
@@ -12,11 +12,15 @@ authors = [
 ]
 keywords = ["ssz", "simple-serialize", "ethereum", "testing", "conformance"]
 classifiers = [
-    "License :: OSI Approved :: MIT License",
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Operating System :: OS Independent",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
     "Programming Language :: Python :: 3.14",
+    "Topic :: Software Development :: Testing",
+    "Typing :: Typed",
 ]
 requires-python = ">=3.12"
 dependencies = [
@@ -26,7 +30,8 @@ dependencies = [
     "click>=8.1.0,<9",
 ]
 
-license = { text = "MIT" }
+license = "MIT"
+license-files = ["LICENSE"]
 
 [project.urls]
 Homepage = "https://github.com/ethereum/ssz-specs"
@@ -37,11 +42,8 @@ Issues = "https://github.com/ethereum/ssz-specs/issues"
 [project.scripts]
 fill = "ssz_testing.cli:fill"
 
-[tool.setuptools.packages.find]
-where = ["src"]
-
-[tool.setuptools.package-data]
-ssz_testing = ["py.typed", "pytest_ini_files/*.ini"]
+[tool.hatch.build.targets.wheel]
+packages = ["src/ssz_testing"]
 
 [tool.uv.sources]
 eth-ssz-specs = { workspace = true }
