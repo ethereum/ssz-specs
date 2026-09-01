@@ -390,8 +390,8 @@ class Boolean(int, SSZType):
         self._raise_type_error(other, ">=")
 
     def __repr__(self) -> str:
-        """Return the official form: Boolean(True) or Boolean(False)."""
-        return f"Boolean({bool(self)})"
+        """Return the official form: the class's own name around True or False."""
+        return f"{type(self).__name__}({bool(self)})"
 
     def __str__(self) -> str:
         """Return the user-facing form: True or False."""

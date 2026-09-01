@@ -393,6 +393,19 @@ def test_repr_and_str() -> None:
     assert repr(Boolean(False)) == "Boolean(False)"
 
 
+def test_repr_names_the_class_the_value_was_built_from() -> None:
+    """A named boolean reports itself, rather than the type it was declared from."""
+
+    class Flag(Boolean):
+        """A named spelling of the boolean type."""
+
+    assert repr(Flag(True)) == "Flag(True)"
+    assert repr(Flag(False)) == "Flag(False)"
+    # Both spellings of the base name one class, so the base reports the long name either way.
+    assert repr(Boolean(True)) == "Boolean(True)"
+    assert repr(Bit(True)) == "Boolean(True)"
+
+
 def test_hash() -> None:
     """Tests that a boolean hashes exactly as the bit it holds."""
     assert hash(Boolean(True)) == hash(True)
