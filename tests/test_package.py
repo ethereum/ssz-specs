@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import ast
+import importlib.metadata
 import pathlib
 import re
 
@@ -91,3 +92,50 @@ def test_the_exports_are_sorted() -> None:
 def test_the_type_marker_ships_with_the_package() -> None:
     """Without the marker a consumer's type checker reads every export as untyped."""
     assert (PACKAGE / "py.typed").is_file()
+
+
+# Names a module defines without a leading underscore, and deliberately does not publish.
+# Every one is machinery another module reaches for, not vocabulary the specification uses.
+UNPUBLISHED = {
+    "INTERN_BELOW",
+    "PARANOID_ROOTS",
+    "StrictBaseModel",
+    "ZERO_CHUNK",
+    "field_names",
+    "layout_chunks",
+    "mix_in",
+    "offset_table_spans",
+    "progressive_container_plan",
+    "wrapping_schema",
+}
+
+
+def module_level_public_names() -> set[str]:
+    """Every name a shipped module binds at its top level without a leading underscore."""
+    found: set[str] = set()
+    for path in PACKAGE.glob("*.py"):
+        if path.stem == "__init__":
+            continue
+        for node in ast.parse(path.read_text()).body:
+            if isinstance(node, ast.FunctionDef | ast.ClassDef):
+                found.add(node.name)
+            elif isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name):
+                found.add(node.target.id)
+            elif isinstance(node, ast.Assign):
+                found |= {t.id for t in node.targets if isinstance(t, ast.Name)}
+    return {name for name in found if not name.startswith("_")}
+
+
+def test_every_public_name_is_published_or_listed_as_unpublished() -> None:
+    """A name left in neither set is a decision nobody made, which is how a surface drifts."""
+    assert module_level_public_names() - set(ssz.__all__) == UNPUBLISHED
+
+
+def test_nothing_listed_as_unpublished_is_also_published() -> None:
+    """A name in both sets means the list stopped describing the package."""
+    assert UNPUBLISHED.isdisjoint(ssz.__all__)
+
+
+def test_the_version_matches_the_distribution() -> None:
+    """A version read from anywhere but the distribution is one that can disagree with it."""
+    assert ssz.__version__ == importlib.metadata.version("eth-ssz-specs")

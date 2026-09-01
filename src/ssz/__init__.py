@@ -32,15 +32,25 @@ Serialization, deserialization and the JSON mapping have no module of their own.
 Each type carries them as methods, since every shape encodes itself.
 """
 
+from importlib.metadata import version
+
 from ssz.bitfields import BitList, BitVector, ProgressiveBitList
 from ssz.boolean import Bit, Boolean
 from ssz.byte_arrays import (
     ByteList,
     ByteVector,
 )
-from ssz.chunks import BITS_PER_CHUNK, BYTES_PER_CHUNK, ZERO_ROOT, Chunk, Root
+from ssz.chunks import (
+    BITS_PER_CHUNK,
+    BYTES_PER_CHUNK,
+    ZERO_ROOT,
+    Chunk,
+    Root,
+    next_pow2,
+    zero_tree_root,
+)
 from ssz.collections import List, ProgressiveList, Vector
-from ssz.container import Container, ProgressiveContainer, active_fields
+from ssz.container import MAX_ACTIVE_FIELDS, Container, ProgressiveContainer, active_fields
 from ssz.exceptions import (
     SSZError,
     SSZTypeError,
@@ -72,6 +82,7 @@ from ssz.mixins import (
     mix_in_selector,
     selector_word,
 )
+from ssz.offsets import BYTES_PER_LENGTH_OFFSET
 from ssz.paths import (
     ACTIVE_FIELDS_KEY,
     LENGTH_KEY,
@@ -86,10 +97,10 @@ from ssz.paths import (
 )
 from ssz.proofs import build_multiproof, build_proof, node_root
 from ssz.roots import hash_tree_root
-from ssz.ssz_base import SSZType
+from ssz.ssz_base import SSZCollection, SSZModel, SSZType
 from ssz.trees import merkleize, merkleize_progressive
-from ssz.uint import Byte, Uint8, Uint16, Uint32, Uint64, Uint128, Uint256
-from ssz.union import CompatibleUnion
+from ssz.uint import BaseUint, Byte, Uint8, Uint16, Uint32, Uint64, Uint128, Uint256
+from ssz.union import MAX_SELECTOR, MIN_SELECTOR, CompatibleUnion, is_compatible
 from ssz.verification import (
     calculate_merkle_root,
     calculate_multi_merkle_root,
@@ -97,10 +108,15 @@ from ssz.verification import (
     verify_merkle_proof,
 )
 
+__version__ = version("eth-ssz-specs")
+"""Version of the distribution this package was installed from."""
+
 __all__ = [
     "ACTIVE_FIELDS_KEY",
     "BITS_PER_CHUNK",
     "BYTES_PER_CHUNK",
+    "BYTES_PER_LENGTH_OFFSET",
+    "BaseUint",
     "Bit",
     "BitList",
     "BitVector",
@@ -115,6 +131,9 @@ __all__ = [
     "LENGTH_KEY",
     "Leaves",
     "List",
+    "MAX_ACTIVE_FIELDS",
+    "MAX_SELECTOR",
+    "MIN_SELECTOR",
     "MerkleLayout",
     "NestedLeaves",
     "PackedLeaves",
@@ -124,7 +143,9 @@ __all__ = [
     "ProgressiveList",
     "Root",
     "SELECTOR_KEY",
+    "SSZCollection",
     "SSZError",
+    "SSZModel",
     "SSZType",
     "SSZTypeError",
     "SSZValueError",
@@ -161,6 +182,7 @@ __all__ = [
     "gindex_rebase",
     "gindex_sibling",
     "hash_tree_root",
+    "is_compatible",
     "item_length",
     "length_word",
     "merkle_layout",
@@ -169,9 +191,11 @@ __all__ = [
     "mix_in_active_fields",
     "mix_in_length",
     "mix_in_selector",
+    "next_pow2",
     "node_root",
     "progressive_chunk_gindex",
     "selector_word",
     "verify_merkle_multiproof",
     "verify_merkle_proof",
+    "zero_tree_root",
 ]
