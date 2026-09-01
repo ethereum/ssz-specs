@@ -5,6 +5,7 @@ from itertools import accumulate, repeat
 from typing import Final
 
 from ssz.byte_arrays import ByteVector
+from ssz.exceptions import SSZValueError, ValueFault
 
 BYTES_PER_CHUNK: Final = 32
 """Width of a Merkle leaf chunk in bytes."""
@@ -66,10 +67,13 @@ def zero_tree_root(width: int) -> Root:
     """
     Root of the all-zero perfect binary tree spanning the given leaf count.
 
-    Invariant: every caller passes a power of two, the width of a perfect tree.
+    Raises:
+        SSZValueError: A width off a power of two, or one past the deepest cached tree.
     """
-    # Subtracting one before the bit length maps such a width to its own depth:
-    # 1 -> 0, 2 -> 1, 4 -> 2, 1024 -> 10.
-    #
-    # Indexing the cache by depth skips materializing 2**d zero leaves and the layers above them.
-    return _ZERO_ROOTS[(width - 1).bit_length()]
+    # Subtracting one before the bit length maps a power of two to its own depth: 1 -> 0, 8 -> 3.
+    depth = (width - 1).bit_length()
+    # Any other width rounds up to a depth it does not span, and a depth past the table has no root.
+    if width != 1 << depth or depth >= len(_ZERO_ROOTS):
+        raise SSZValueError(ValueFault.ZERO_TREE_WIDTH, depth=len(_ZERO_ROOTS) - 1, width=width)
+    # Indexing by depth skips materializing 2**depth zero leaves and the layers above them.
+    return _ZERO_ROOTS[depth]

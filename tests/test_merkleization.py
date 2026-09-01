@@ -27,7 +27,7 @@ from ssz import (
 )
 from ssz.bitfields import BitList, BitVector, ProgressiveBitList
 from ssz.boolean import Boolean
-from ssz.chunks import BYTES_PER_CHUNK, next_pow2
+from ssz.chunks import BYTES_PER_CHUNK, next_pow2, zero_tree_root
 from ssz.collections import List, ProgressiveList, Vector
 from ssz.container import Container, ProgressiveContainer
 from ssz.layout import NestedLeaves, PackedLeaves, _pack_basic_elements, _pack_bytes, merkle_layout
@@ -465,6 +465,69 @@ def test_mix_in_selector_separates_two_selectors_over_one_root() -> None:
 def test_empty_payload_takes_the_cached_zero_tree_root(depth: int) -> None:
     """The cached zero-subtree shortcut agrees with hashing 2**depth zero leaves by hand."""
     assert merkleize([], limit=2**depth) == Z[depth]
+
+
+def test_the_zero_subtree_cache_answers_every_depth_it_holds() -> None:
+    """Depths 0 through 64, hashed up from the zero leaf rather than read off the table."""
+    zero_subtree = ZERO_ROOT
+    for depth in range(65):
+        assert zero_tree_root(2**depth) == zero_subtree
+        zero_subtree = h(zero_subtree, zero_subtree)
+
+
+@pytest.mark.parametrize("width", [2**65, 2**70, 2**128])
+def test_a_width_past_the_deepest_cached_tree_is_refused(width: int) -> None:
+    """One leaf past depth 64 has no cached root, and indexing for it ran off the table."""
+    with pytest.raises(SSZValueError, match=r"^a zero subtree spans a power of two"):
+        zero_tree_root(width)
+
+
+@pytest.mark.parametrize("width", [0, 3, 5, 100, -8])
+def test_a_width_off_a_power_of_two_is_refused(width: int) -> None:
+    """Such a width spans no perfect tree, and rounding it up answers for a different one."""
+    with pytest.raises(SSZValueError, match=r"^a zero subtree spans a power of two"):
+        zero_tree_root(width)
+
+
+@pytest.mark.parametrize("payload", [[], [Chunk(bytes(BYTES_PER_CHUNK))], [sample_chunks[1]]])
+def test_merkleize_refuses_a_capacity_past_the_deepest_cached_tree(payload: list[Chunk]) -> None:
+    """A capacity this wide is a public argument, and it left through the padding table."""
+    with pytest.raises(SSZValueError, match=r"^a zero subtree spans a power of two"):
+        merkleize(payload, limit=2**70)
+
+
+def test_a_declared_capacity_past_the_deepest_cached_tree_is_refused_at_the_root() -> None:
+    """A capacity of any size declares, so the refusal has to be made where the tree is built."""
+
+    class Uint8ListPastTheCache(List[Uint8]):
+        """A list whose declared capacity is wider than any cached zero subtree."""
+
+        LIMIT = 2**70
+
+    with pytest.raises(SSZValueError, match=r"^a zero subtree spans a power of two"):
+        Uint8ListPastTheCache(data=[]).hash_tree_root()
+
+
+def test_no_width_the_library_computes_for_itself_is_refused(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The precondition went unchecked, so this sweeps the widths the internal callers pass."""
+    widths: list[int] = []
+
+    def recording(width: int) -> Root:
+        widths.append(width)
+        return zero_tree_root(width)
+
+    monkeypatch.setattr("ssz.trees.zero_tree_root", recording)
+    for count in range(35):
+        merkleize_progressive(chunk_run(count))
+        for limit in (None, 1, 5, 33, 64, 100, 1024):
+            if limit is None or limit >= count:
+                merkleize(chunk_run(count), limit=limit)
+
+    # A power of two no wider than the deepest cached tree is exactly what the guard admits.
+    assert widths
+    assert all(width == next_pow2(width) and width <= 2**64 for width in widths)
 
 
 def test_merkleize_progressive_empty_is_the_plain_zero_chunk() -> None:
