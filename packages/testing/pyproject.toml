@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "ssz-testing"
-version = "0.0.1.dev2"
+version = "0.1.0"
 description = "SSZ conformance test-vector generation for the Ethereum SSZ spec"
 readme = "README.md"
 authors = [
