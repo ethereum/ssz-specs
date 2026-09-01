@@ -1,6 +1,7 @@
 """SSZ compatible union, per EIP-8016."""
 
 from collections.abc import Callable, Mapping
+from types import MappingProxyType
 from typing import IO, Any, ClassVar, Final, Self, override
 
 from pydantic import ConfigDict, model_validator
@@ -28,6 +29,8 @@ class CompatibleUnion(SSZModel):
     One tree position per field is what lets a proof verify against any option declaring it.
     """
 
+    # Two doors: the mutation door refuses an assignment, and frozen refuses a deletion.
+    MUTABLE = False
     model_config = ConfigDict(frozen=True)
 
     KIND = "compatible union"
@@ -82,6 +85,9 @@ class CompatibleUnion(SSZModel):
                     raise SSZTypeError(
                         TypeFault.UNION_INCOMPATIBLE, selector=selector, other=other_selector
                     )
+
+        # A snapshot, since nothing above holds for a mapping the caller can still write to.
+        cls.OPTIONS = MappingProxyType(dict(cls.OPTIONS))
 
     @model_validator(mode="before")
     @classmethod
@@ -262,13 +268,26 @@ def _layouts_agree(left: type[ProgressiveContainer], right: type[ProgressiveCont
 def _fields_by_position(
     ssz_type: type[ProgressiveContainer],
 ) -> dict[int, tuple[str, type[SSZType]]] | None:
-    """Each set position of a layout mapped to the field standing there, or None if undeclared."""
+    """
+    Each set position of a layout mapped to the field standing there, or None if undeclared.
+
+    Raises:
+        SSZTypeError: A layout that does not pair with the fields one to one.
+    """
     layout = getattr(ssz_type, "ACTIVE_FIELDS", None)
     if layout is None:
         return None
-    # A field belongs to the n-th set position, so layout (1, 0, 1) puts its fields at 0 and 2.
-    set_positions = (position for position, bit in enumerate(layout) if bit)
-    return dict(zip(set_positions, ssz_type._FIELD_TYPES, strict=True))
+    # Deferred, since the layout module imports this one for the union's own merkleization.
+    from ssz.layout import progressive_container_plan
+
+    # The plan already places every field, and already refuses a pairing that does not hold.
+    field_types = dict(ssz_type._FIELD_TYPES)
+    names, _ = progressive_container_plan(tuple(layout), tuple(field_types))
+    return {
+        position: (name, field_types[name])
+        for position, name in enumerate(names)
+        if name is not None
+    }
 
 
 def _options_agree(left: type[CompatibleUnion], right: type[CompatibleUnion]) -> bool:

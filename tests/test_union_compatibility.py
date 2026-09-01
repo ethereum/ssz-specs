@@ -831,6 +831,28 @@ def test_progressive_layouts_pin_a_shared_name_to_one_position() -> None:
     assert is_compatible(square_color, moved_color)
 
 
+def test_a_layout_that_does_not_pair_with_its_fields_is_refused_through_the_catalogue() -> None:
+    """The relation asks the plan where the fields sit, so it refuses the way rooting does."""
+
+    class Rewritten(ProgressiveContainer):
+        """Two fields at the two positions its declared layout sets, which is what was checked."""
+
+        ACTIVE_FIELDS = (1, 1)
+
+        first: Uint16
+        second: Uint8
+
+    # A layout is a plain class attribute, so a rewrite of it arrives everywhere unchecked.
+    Rewritten.ACTIVE_FIELDS = (1, 1, 1)  # ty: ignore[invalid-assignment]
+
+    pairing = r"^the layout sets 3 positions, and the struct declares 2$"
+    with pytest.raises(SSZTypeError, match=pairing):
+        is_compatible(Rewritten, Square)
+    # Rooting one refuses the same way, which is what asking the same plan buys.
+    with pytest.raises(SSZTypeError, match=pairing):
+        Rewritten(first=Uint16(1), second=Uint8(2)).hash_tree_root()
+
+
 # --------------------------------------------------------------------------------------
 # Types that declare no shape
 # --------------------------------------------------------------------------------------
