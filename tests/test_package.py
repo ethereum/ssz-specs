@@ -102,6 +102,7 @@ UNPUBLISHED = {
     "StrictBaseModel",
     "ZERO_CHUNK",
     "field_names",
+    "hold_to_bases",
     "layout_chunks",
     "mix_in",
     "offset_table_spans",
