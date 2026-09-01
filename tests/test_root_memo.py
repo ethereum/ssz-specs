@@ -39,10 +39,8 @@ class Bytes48(ByteVector):
     LENGTH = 48
 
 
-class Bytes64(Bytes32):
-    """A leaf class twice as wide as the one it subclasses, to be held where that is declared."""
-
-    LENGTH = 64
+class NamedRoot(Bytes32):
+    """A leaf class to be held where only the class it subclasses is declared."""
 
 
 class Gwei(Uint64):
@@ -106,7 +104,7 @@ class WideHeader(Container):
     """Header's shape, with the classes a Header can end up holding declared honestly."""
 
     slot: Gwei
-    state_root: Bytes64
+    state_root: NamedRoot
 
 
 class Summary(ProgressiveContainer):
@@ -311,31 +309,21 @@ def test_a_value_mutated_back_reports_the_root_it_had_before() -> None:
 
 
 def test_a_leaf_field_holding_a_subclass_of_what_it_declares_still_follows_it() -> None:
-    """
-    A field is dropped from the witness by what it declares, and it may hold a subclass.
-
-    That is sound because every dropped class is immutable, and so is any subclass of one:
-    the only way such a field changes is being replaced, which raises its holder's version.
-    The subclass held here is twice as wide as the class declared, so a root taken from the
-    annotation rather than from the value held would not survive.
-
-    Checked against a value whose annotations name the classes actually held, which roots
-    the same way because a struct's tree is its field values and their number.
-    """
-    header = Header(slot=Gwei(7), state_root=Bytes64(b"\x01" * 64))
+    """A dropped field may hold a subclass, since every dropped class is immutable."""
+    header = Header(slot=Gwei(7), state_root=NamedRoot(b"\x01" * 32))
     # The premise: nothing narrows either value back to the class its field declares.
-    assert (type(header.slot), type(header.state_root)) == (Gwei, Bytes64)
+    assert (type(header.slot), type(header.state_root)) == (Gwei, NamedRoot)
     # A struct of leaves alone is witnessed by its version and nothing else.
     assert _root_witness(header) == 0
 
     before = header.hash_tree_root()
-    assert before == round_trip_root(WideHeader(slot=Gwei(7), state_root=Bytes64(b"\x01" * 64)))
+    assert before == round_trip_root(WideHeader(slot=Gwei(7), state_root=NamedRoot(b"\x01" * 32)))
 
     header.slot = Gwei(8)
-    header.state_root = Bytes64(b"\x02" * 64)
+    header.state_root = NamedRoot(b"\x02" * 32)
     assert header.hash_tree_root() != before
     assert header.hash_tree_root() == round_trip_root(
-        WideHeader(slot=Gwei(8), state_root=Bytes64(b"\x02" * 64))
+        WideHeader(slot=Gwei(8), state_root=NamedRoot(b"\x02" * 32))
     )
 
 

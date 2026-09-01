@@ -2,7 +2,7 @@
 
 import io
 from abc import ABC, abstractmethod
-from collections.abc import Iterator, Sequence
+from collections.abc import Iterator, Mapping, Sequence
 from copy import copy as shallow_copy
 from typing import IO, TYPE_CHECKING, Any, ClassVar, Final, Self, cast, final, overload, override
 
@@ -20,8 +20,69 @@ if TYPE_CHECKING:
 _CAPACITY_NAMES: Final = ("LENGTH", "LIMIT")
 """The class attributes a shape declares its element count with."""
 
+_TYPE_PARAMETERS: Final = (*_CAPACITY_NAMES, "ELEMENT_TYPE", "ACTIVE_FIELDS", "OPTIONS")
+"""Everything a declaration fixes its tree with, which a subclass may restate but not change."""
+
 _COLD_CACHE: Final = {"_version": 0, "_root_memo": None}
 """What each cache slot holds before anything has touched it."""
+
+
+def _as_written(value: Any) -> str:
+    """A type parameter the way a declaration writes it, a type by name and a map by its entries."""
+    if isinstance(value, type):
+        return value.__name__
+    if isinstance(value, Mapping):
+        entries = ", ".join(f"{key}: {_as_written(option)}" for key, option in value.items())
+        return f"{{{entries}}}"
+    return repr(value)
+
+
+def _narrowed_capacity(cls: type, name: str, declared: Any) -> int:
+    """
+    A declared capacity as the plain integer this library stores, compares and reports.
+
+    Raises:
+        SSZTypeError: A capacity that is not a whole number at or above zero.
+    """
+    if type(declared) is not int:
+        # A boolean is a flag, not a count, so narrowing one would read True as a capacity of 1.
+        if not isinstance(declared, int) or isinstance(declared, bool):
+            raise SSZTypeError(
+                TypeFault.NOT_AN_INTEGER,
+                type=cls.__name__,
+                field=name,
+                got=type(declared).__name__,
+            )
+
+        declared = int(declared)
+        setattr(cls, name, declared)
+
+    # A capacity counts what a shape holds, and nothing is held a negative number of times.
+    if declared < 0:
+        raise SSZTypeError(TypeFault.CAPACITY_NEGATIVE, type=cls.__name__, field=name, got=declared)
+    return declared
+
+
+def hold_to_bases(cls: type, name: str, declared: Any) -> None:
+    """
+    Hold a type parameter to every value a base already fixed it to.
+
+    Raises:
+        SSZTypeError: When a base fixes this parameter to another value.
+    """
+    # Every base is asked, rather than the nearest one: two of them may disagree with each other.
+    for base in cls.__mro__[1:]:
+        # An absent parameter and an abstract base's None placeholder are both nothing fixed.
+        fixed = base.__dict__.get(name)
+        if fixed is not None and declared != fixed:
+            raise SSZTypeError(
+                TypeFault.REBOUND,
+                type=cls.__name__,
+                field=name,
+                got=_as_written(declared),
+                source=base.__name__,
+                fixed=_as_written(fixed),
+            )
 
 
 class SSZType(ABC):
@@ -62,11 +123,12 @@ class SSZType(ABC):
 
     def __init_subclass__(cls, **kwargs: Any) -> None:
         """
-        Narrow a declared capacity, and refuse a root of the type's own, where each is declared.
+        Narrow a declared capacity, refuse a root of the type's own, and hold every restatement.
 
         Raises:
             SSZTypeError: A capacity that is not a whole number at or above zero.
             SSZTypeError: A type that declares a root of its own.
+            SSZTypeError: A type parameter changed from what a base already fixed it to.
         """
         super().__init_subclass__(**kwargs)
 
@@ -78,33 +140,18 @@ class SSZType(ABC):
         ):
             raise SSZTypeError(TypeFault.OWN_ROOT, type=cls.__name__)
 
-        for name in _CAPACITY_NAMES:
-            # An inherited capacity was already narrowed when its own class was created.
-            if name not in cls.__dict__:
-                continue
+        for name in _TYPE_PARAMETERS:
+            if name in cls.__dict__:
+                declared = cls.__dict__[name]
+                if name in _CAPACITY_NAMES:
+                    declared = _narrowed_capacity(cls, name, declared)
 
-            declared = cls.__dict__[name]
-            if type(declared) is not int:
-                # A boolean is a flag rather than a count.
-                # Narrowing one would make a nonsensical declaration a capacity of 1.
-                #
-                # A boolean of this library's own narrows, every integer here taking one.
-                if not isinstance(declared, int) or isinstance(declared, bool):
-                    raise SSZTypeError(
-                        TypeFault.NOT_AN_INTEGER,
-                        type=cls.__name__,
-                        field=name,
-                        got=type(declared).__name__,
-                    )
+            # Nothing of its own leaves the MRO to pick which base's value the shape presents.
+            else:
+                declared = getattr(cls, name, None)
 
-                declared = int(declared)
-                setattr(cls, name, declared)
-
-            # A capacity counts what a shape holds, and nothing is held a negative number of times.
-            if declared < 0:
-                raise SSZTypeError(
-                    TypeFault.CAPACITY_NEGATIVE, type=cls.__name__, field=name, got=declared
-                )
+            # A shape merkleizes by these, so a second value for one of them is a second tree.
+            hold_to_bases(cls, name, declared)
 
     @classmethod
     @abstractmethod

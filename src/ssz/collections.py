@@ -38,6 +38,7 @@ from ssz.ssz_base import (
     SSZCollection,
     SSZModel,
     SSZType,
+    hold_to_bases,
 )
 from ssz.uint import Uint32
 
@@ -64,7 +65,12 @@ class _SSZSequence[T: SSZType](SSZCollection[T], ABC):
 
     @classmethod
     def __pydantic_init_subclass__(cls, **kwargs: Any) -> None:
-        """Read the element type from the generic parameter, then classify it."""
+        """
+        Read the element type from the generic parameter, then classify it.
+
+        Raises:
+            SSZTypeError: When the generic argument is not what a base fixed the shape to hold.
+        """
         super().__pydantic_init_subclass__(**kwargs)
 
         # A shape naming its element type by hand has nothing left to infer.
@@ -88,6 +94,8 @@ class _SSZSequence[T: SSZType](SSZCollection[T], ABC):
                     None,
                 )
                 if inferred is not None:
+                    # The shared hook ran before this value existed, so it is held here.
+                    hold_to_bases(cls, "ELEMENT_TYPE", inferred)
                     cls.ELEMENT_TYPE = inferred
                     break
 

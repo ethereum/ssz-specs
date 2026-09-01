@@ -7,7 +7,7 @@ import pytest
 from hypothesis import given, strategies as st
 from pydantic import BaseModel, ValidationError
 
-from ssz import Uint8, Uint16, Uint32
+from ssz import Uint8, Uint16, Uint32, Uint64
 from ssz.bitfields import BitVector
 from ssz.boolean import Boolean
 from ssz.byte_arrays import ByteVector
@@ -17,6 +17,7 @@ from ssz.exceptions import (
     SSZTypeError,
     SSZValueError,
 )
+from ssz.ssz_base import SSZType
 from ssz.union import CompatibleUnion
 
 
@@ -399,14 +400,54 @@ class TestVectorClassMetadata:
 
         assert LocalVector.ELEMENT_TYPE is Uint16
 
-    def test_init_subclass_preserves_explicit_element_type(self) -> None:
-        """An explicit ELEMENT_TYPE in the class body wins over generic inference."""
+    def test_init_subclass_keeps_an_explicit_element_type_the_bracket_agrees_with(self) -> None:
+        """A shape may name its element type by hand, saying what the bracket already says."""
 
         class LocalVector(Vector[Uint8]):
-            ELEMENT_TYPE = Uint16
+            ELEMENT_TYPE = Uint8
             LENGTH = 1
 
-        assert LocalVector.ELEMENT_TYPE is Uint16
+        assert LocalVector.ELEMENT_TYPE is Uint8
+
+    def test_an_explicit_element_type_the_bracket_contradicts_is_refused(self) -> None:
+        """A parameterized base is a class that fixes what it holds, so the two must agree."""
+        with pytest.raises(SSZTypeError) as exception_info:
+
+            class LocalVector(Vector[Uint8]):
+                ELEMENT_TYPE = Uint16
+                LENGTH = 1
+
+        assert str(exception_info.value) == (
+            "LocalVector sets ELEMENT_TYPE to Uint16, and Vector[Uint8] fixes it to Uint8"
+        )
+
+    def test_a_contradicted_element_type_no_longer_splits_validation_from_coercion(self) -> None:
+        """One declaration read two ways stored a value of neither, and decoded as neither."""
+        with pytest.raises(SSZTypeError) as exception_info:
+
+            class Contradiction(List[Uint8]):
+                ELEMENT_TYPE = Uint64
+                LIMIT = 8
+
+        assert str(exception_info.value) == (
+            "Contradiction sets ELEMENT_TYPE to Uint64, and List[Uint8] fixes it to Uint8"
+        )
+
+    def test_a_bracket_that_contradicts_a_fixed_element_type_is_refused(self) -> None:
+        """A bracketed argument is read after the shared hook, so it is held to the base there."""
+
+        class Layer[T: SSZType](List[T]):
+            """A generic layer stating what it holds before anything parameterizes it."""
+
+            ELEMENT_TYPE = Uint64
+            LIMIT = 4
+
+        with pytest.raises(SSZTypeError) as exception_info:
+            _ = Layer[Uint8]
+
+        assert str(exception_info.value) == (
+            "Layer[Uint8] sets ELEMENT_TYPE to Uint8, and Layer fixes it to Uint64"
+        )
 
     def test_instantiate_raw_type_raises_error(self) -> None:
         """The raw Vector base cannot be instantiated as a Pydantic model."""
