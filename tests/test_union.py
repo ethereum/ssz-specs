@@ -273,6 +273,36 @@ class TestOptionDeclaration:
         # The fault is the rule, as a tag rather than as prose to match on.
         assert exception_info.value.fault is TypeFault.UNION_EMPTY
 
+    def test_the_option_map_is_stored_as_a_snapshot(self) -> None:
+        """A union keeps a copy, so the mapping the caller still holds is not the one in force."""
+        declared = {1: Square, 2: Circle}
+
+        class Snapshot(CompatibleUnion):
+            """Union declared from a mapping the caller keeps a reference to."""
+
+            OPTIONS = declared
+
+        assert Snapshot.OPTIONS == declared
+        assert Snapshot.OPTIONS is not declared
+        # Tail shares no position with either option, so the addition would have been legal.
+        declared[3] = Tail
+        assert 3 not in Snapshot.OPTIONS
+
+    def test_the_stored_option_map_cannot_be_written_to(self) -> None:
+        """An option added after the pairwise check would never be checked against the others."""
+
+        class Rewritten(CompatibleUnion):
+            """Union of one option, to which a second is added below."""
+
+            OPTIONS = {1: Uint16List4}
+
+        # Declared together the two are refused, so a rewrite must not be the way in.
+        with pytest.raises(SSZTypeError, match=r"^options 1 and 2 merkleize differently$"):
+            type("Clashing", (CompatibleUnion,), {"OPTIONS": {1: Uint16List4, 2: Uint32List4}})
+        with pytest.raises(TypeError, match=r"does not support item assignment"):
+            Rewritten.OPTIONS[2] = Uint32List4  # ty: ignore[invalid-assignment]
+        assert dict(Rewritten.OPTIONS) == {1: Uint16List4}
+
     def test_a_union_of_unions_is_a_legal_declaration(self) -> None:
         """A union option may itself be a union, checked by the same relation one level down."""
         assert NestedShape.OPTIONS == {1: Shape, 2: SquareOnly}
@@ -300,11 +330,13 @@ class TestConstruction:
         assert len(value) == 2
 
     def test_a_value_rejects_attribute_assignment(self) -> None:
-        """A union declares itself frozen, so neither half changes after construction."""
+        """A write reaches the library's own mutation door, which this shape has shut."""
         value = ScalarUnion(selector=Uint8(1), data=Uint8(7))
-        with pytest.raises(ValidationError):
+        with pytest.raises(SSZTypeError, match=r"^ScalarUnion is immutable$") as exception_info:
             # A frozen field reads as read-only, and the write refused here is the test.
             value.selector = Uint8(1)  # ty: ignore[invalid-assignment]
+        # A caller catching SSZError catches this, as it does every other refusal to mutate.
+        assert exception_info.value.fault is TypeFault.IMMUTABLE
 
     def test_a_value_holds_its_selector_and_its_data(self) -> None:
         """Construction keeps both halves exactly as given."""
@@ -350,12 +382,22 @@ class TestConstruction:
         with pytest.raises(SSZTypeError, match=r"^expected Circle, got Square$"):
             Shape(selector=Uint8(2), data=SQUARE)
 
-    def test_a_value_is_frozen(self) -> None:
-        """The selector and the payload are fixed at construction, as for every SSZ type."""
+    def test_a_refused_write_leaves_the_remembered_root_alone(self) -> None:
+        """The door refuses before the mutation counter moves, so the root a value took stands."""
         value = Shape(selector=Uint8(1), data=SQUARE)
-        with pytest.raises(Exception, match=r"frozen"):
-            # A frozen field reads as read-only, and the write refused here is the test.
+        root = value.hash_tree_root()
+        with pytest.raises(SSZTypeError):
             value.selector = Uint8(2)  # ty: ignore[invalid-assignment]
+        # A counter bumped by a write that never happened would discard a root that is still true.
+        assert value._version == 0
+        assert value.hash_tree_root() == root
+
+    def test_a_value_rejects_attribute_deletion(self) -> None:
+        """Deletion is the one write the mutation door does not see, and frozen still refuses it."""
+        value = Shape(selector=Uint8(1), data=SQUARE)
+        with pytest.raises(ValidationError, match=r"frozen"):
+            del value.selector
+        assert value.selector == Uint8(1)
 
 
 class TestNoDefaultValue:
