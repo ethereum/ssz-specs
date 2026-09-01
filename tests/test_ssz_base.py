@@ -1,6 +1,6 @@
 """Tests for SSZModel and SSZType base class behavior."""
 
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
 from decimal import Decimal
 from typing import IO, Any, cast
 
@@ -20,13 +20,13 @@ from ssz import (
 from ssz.bitfields import BitList, BitVector, ProgressiveBitList
 from ssz.boolean import Boolean
 from ssz.byte_arrays import ByteList, ByteVector
-from ssz.chunks import ZERO_ROOT, Root
+from ssz.chunks import ZERO_ROOT, Chunk, Root
 from ssz.collections import List, ProgressiveList, Vector
 from ssz.container import Container, ProgressiveContainer
 from ssz.exceptions import SSZError
 from ssz.paths import chunk_count
 from ssz.roots import hash_tree_root
-from ssz.ssz_base import SSZCollection, SSZModel, SSZType
+from ssz.ssz_base import _TYPE_PARAMETERS, SSZCollection, SSZModel, SSZType
 from ssz.uint import BaseUint
 from ssz.union import CompatibleUnion
 
@@ -1643,11 +1643,12 @@ class TestDeclaredCapacity:
     def test_a_redeclared_capacity_is_narrowed_again(self) -> None:
         """Every declaration is checked, however deep in a hierarchy it sits."""
 
-        class Wider(TypedLimitList):
-            LIMIT = Uint8(8)
+        # A restatement says what the base said, so the count is the parent's and the width is not.
+        class Restated(TypedLimitList):
+            LIMIT = Uint8(4)
 
-        assert Wider.LIMIT == 8
-        assert type(Wider.LIMIT) is int
+        assert Restated.LIMIT == 4
+        assert type(Restated.LIMIT) is int
 
     def test_a_subclass_that_declares_nothing_inherits_a_narrowed_capacity(self) -> None:
         """Inheriting a capacity reaches the value the parent already narrowed."""
@@ -1985,3 +1986,196 @@ class TestFinalHashTreeRoot:
                 hash_tree_root: Uint16  # ty: ignore[override-of-final-method]
 
         assert str(exception_info.value) == "Odd declares a hash_tree_root of its own"
+
+
+class TwoActiveFields(ProgressiveContainer):
+    """A struct whose layout sets both of its positions, so a restatement has one to repeat."""
+
+    ACTIVE_FIELDS = (1, 1)
+    a: Uint64
+    b: Uint32
+
+
+def descendants(cls: type) -> Iterator[type]:
+    """Every class below this one, at any depth."""
+    for below in cls.__subclasses__():
+        yield below
+        yield from descendants(below)
+
+
+def library_restatements() -> list[tuple[str, str, Any]]:
+    """Every parameter a shape of this library restates over one a base already fixed."""
+    return [
+        (shape.__name__, name, shape.__dict__[name])
+        for shape in descendants(SSZType)
+        if shape.__module__.startswith("ssz.")
+        for name in _TYPE_PARAMETERS
+        if name in shape.__dict__
+        and any(base.__dict__.get(name) is not None for base in shape.__mro__[1:])
+    ]
+
+
+class TestARestatedTypeParameter:
+    """
+    Tests for a subclass changing what a base already fixed its tree with.
+
+    A field holds a subclass of what it declares, deliberately, so an application's own class
+    can sit where the shape it refines is named. That is sound only while the subclass
+    merkleizes the way the declared class does, and five class attributes decide that:
+    LENGTH, LIMIT, ELEMENT_TYPE, ACTIVE_FIELDS and OPTIONS.
+
+    A subclass changing one of them made hash_tree_root a function of the object graph rather
+    than of the declared type and the value. One encoding then had two roots, a generalized
+    index named a position the value held elsewhere, and a value rooted under a selector its
+    own bytes decode back to nothing.
+
+    Restating the same value says nothing new, and is permitted. Setting one over the None an
+    abstract base leaves is what every concrete shape does.
+    """
+
+    def test_a_narrower_capacity_no_longer_gives_one_encoding_two_roots(self) -> None:
+        """A limit sets how far a value pads before it is hashed, so the two roots differed."""
+
+        class K64(ByteList):
+            """A byte list padding to two chunks."""
+
+            LIMIT = 64
+
+        with pytest.raises(SSZTypeError) as exception_info:
+
+            class K32(K64):
+                """The same list padding to one, held wherever the first is declared."""
+
+                LIMIT = 32
+
+        assert str(exception_info.value) == "K32 sets LIMIT to 32, and K64 fixes it to 64"
+
+    def test_a_relaid_field_layout_is_refused(self) -> None:
+        """A layout decides where every field sits, which is what EIP-7495 promises it keeps."""
+
+        class PV1(ProgressiveContainer):
+            """Two fields in two positions."""
+
+            ACTIVE_FIELDS = (1, 1)
+            a: Uint64
+            b: Uint32
+
+        with pytest.raises(SSZTypeError) as exception_info:
+
+            class PV2(PV1):
+                """The same two fields with a gap between them, which moves the second."""
+
+                ACTIVE_FIELDS = (1, 0, 1)
+
+        assert str(exception_info.value) == (
+            "PV2 sets ACTIVE_FIELDS to (1, 0, 1), and PV1 fixes it to (1, 1)"
+        )
+
+    def test_an_added_option_is_refused(self) -> None:
+        """An option a base never admitted rooted a value the base's own decoder then refused."""
+
+        class Narrow(CompatibleUnion):
+            """A union of one option."""
+
+            OPTIONS = {1: Uint64}
+
+        with pytest.raises(SSZTypeError) as exception_info:
+
+            class Wide(Narrow):
+                """A union of two, whose second selector names nothing where the first is held."""
+
+                OPTIONS = {1: Uint64, 2: Uint64}
+
+        assert str(exception_info.value) == (
+            "Wide sets OPTIONS to {1: Uint64, 2: Uint64}, and Narrow fixes it to {1: Uint64}"
+        )
+
+    def test_the_pair_that_split_equality_from_hash_is_undeclarable(self) -> None:
+        """Byte-array equality spans an inheritance pair, so the two have to root alike."""
+
+        class Payload(ByteList):
+            """The class a field declares."""
+
+            LIMIT = 64
+
+        with pytest.raises(SSZTypeError) as exception_info:
+
+            class Narrow(Payload):
+                """A subclass that compared equal to it while hashing apart."""
+
+                LIMIT = 32
+
+        assert str(exception_info.value) == "Narrow sets LIMIT to 32, and Payload fixes it to 64"
+
+    def test_the_subclass_a_field_may_still_hold_keeps_equality_and_hash_in_step(self) -> None:
+        """What the rule leaves declarable is what equality already treated as one shape."""
+
+        class Payload(ByteList):
+            """The class the field declares."""
+
+            LIMIT = 64
+
+        class Named(Payload):
+            """A subclass changing no parameter, which is what a semantic type is."""
+
+        class Envelope(Container):
+            """A struct declaring the base and holding either."""
+
+            payload: Payload
+
+        left = Envelope(payload=Payload(data=b"x"))
+        right = Envelope(payload=Named(data=b"x"))
+        # Equality, the hash it must agree with, and the two containers a disagreement broke.
+        assert left == right
+        assert hash(left) == hash(right)
+        assert len({left, right}) == 1
+        assert right in {left: "held"}
+
+    @pytest.mark.parametrize(
+        "base, name, value",
+        [
+            pytest.param(PlainLengthVector, "LENGTH", 4, id="length"),
+            pytest.param(PlainLimitList, "LIMIT", 4, id="limit"),
+            pytest.param(Uint16List4, "ELEMENT_TYPE", Uint16, id="element_type"),
+            pytest.param(TwoActiveFields, "ACTIVE_FIELDS", (1, 1), id="active_fields"),
+            pytest.param(SmallUnion, "OPTIONS", {1: Uint8}, id="options"),
+        ],
+    )
+    def test_restating_the_same_value_is_permitted(
+        self, base: type[SSZType], name: str, value: Any
+    ) -> None:
+        """A repetition states nothing new, whichever of the five parameters repeats."""
+        # The module is named because pydantic reads it to place a class declared in a class body.
+        restated = type("Restated", (base,), {"__module__": __name__, name: value})
+        assert restated.__dict__[name] == value
+
+    def test_setting_a_parameter_over_an_abstract_bases_placeholder_is_permitted(self) -> None:
+        """A None is the absence of a value, so the shape below states the first one."""
+        # Both cases the library itself relies on, one of each kind.
+        assert SSZType.__dict__["LENGTH"] is None
+        assert Chunk.__dict__["LENGTH"] == 32
+        assert Root.__dict__["LENGTH"] == 32
+
+    def test_the_library_restates_one_parameter_and_changes_none(self) -> None:
+        """The rule costs this library one repetition across every shape it declares."""
+        assert library_restatements() == [("Root", "LENGTH", 32)]
+
+    def test_two_bases_that_fix_one_parameter_differently_are_refused(self) -> None:
+        """Changing a parameter takes no restatement: the MRO would pick one of the two."""
+
+        class Four(List[Uint8]):
+            """A list of four."""
+
+            LIMIT = 4
+
+        class Eight(List[Uint8]):
+            """A list of eight."""
+
+            LIMIT = 8
+
+        with pytest.raises(SSZTypeError) as exception_info:
+
+            class Both(Four, Eight):
+                """A shape whose bases disagree about how much it holds."""
+
+        assert str(exception_info.value) == "Both sets LIMIT to 4, and Eight fixes it to 8"

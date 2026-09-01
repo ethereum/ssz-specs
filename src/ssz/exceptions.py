@@ -12,6 +12,7 @@ class TypeFault(Enum):
     NOT_AN_SSZ_TYPE = "{type}.{field} must be an SSZ type, got {got}"
     NOT_AN_INTEGER = "{type}.{field} must be a plain integer, got {got}"
     CAPACITY_NEGATIVE = "{type}.{field} counts what a shape holds, and {got} is not a count"
+    REBOUND = "{type} sets {field} to {got}, and {source} fixes it to {fixed}"
     OWN_ROOT = "{type} declares a hash_tree_root of its own"
     IMMUTABLE = "{type} is immutable"
     NO_DEFAULT = "{type} has no default value"
