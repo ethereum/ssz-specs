@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import math
+import struct
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from functools import cache, singledispatch
+from typing import Final
 
 from ssz.bitfields import BitList, BitVector, ProgressiveBitList
 from ssz.boolean import Boolean
@@ -33,10 +35,11 @@ def _pack_bytes(data: bytes) -> list[bytes]:
     Only the trailing chunk is padded, so every chunk is exactly 32 bytes.
     They are plain bytes, nothing reading them but a hash.
     """
-    return [
-        data[i : i + BYTES_PER_CHUNK].ljust(BYTES_PER_CHUNK, b"\x00")
-        for i in range(0, len(data), BYTES_PER_CHUNK)
-    ]
+    # Only the last chunk was ever short, so the run is padded once here
+    # rather than every chunk being padded again as it is cut.
+    whole_chunks = (len(data) + BYTES_PER_CHUNK - 1) // BYTES_PER_CHUNK
+    padded = data.ljust(whole_chunks * BYTES_PER_CHUNK, b"\x00")
+    return [padded[i : i + BYTES_PER_CHUNK] for i in range(0, len(padded), BYTES_PER_CHUNK)]
 
 
 def _pack_bits(bits: Sequence[Boolean]) -> list[bytes]:
@@ -68,6 +71,10 @@ def _pack_bits(bits: Sequence[Boolean]) -> list[bytes]:
     return _pack_bytes(bytes(packed))
 
 
+_BATCH_FORMAT: Final = {2: "H", 4: "I", 8: "Q"}
+"""Widths the standard library writes in one call, little-endian and exactly this wide."""
+
+
 def _pack_basic_elements(elements: Sequence[int], element_size: int) -> list[bytes]:
     """
     Serialize a sequence of basic elements, then split the result into chunks.
@@ -81,7 +88,12 @@ def _pack_basic_elements(elements: Sequence[int], element_size: int) -> list[byt
     """
     if element_size == 1:
         return _pack_bytes(bytes(elements))
-    # A list rather than a generator, so the join can size its result in one pass.
+    code = _BATCH_FORMAT.get(element_size)
+    if code is not None:
+        # One call for the whole sequence, rather than one per element.
+        # A long list of basic elements spends most of its rooting here.
+        return _pack_bytes(struct.pack(f"<{len(elements)}{code}", *elements))
+    # The two widest have no format code of their own, so they are written one at a time.
     return _pack_bytes(b"".join([int.to_bytes(e, element_size, "little") for e in elements]))
 
 
