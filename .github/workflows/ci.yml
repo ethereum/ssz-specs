@@ -125,6 +125,47 @@ jobs:
       - name: Run tests with coverage gate
         run: just test-cov-gate
 
+  lean:
+    name: Lean specification and proofs
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout ssz-specs
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+        with:
+          enable-cache: true
+          cache-dependency-glob: "**/uv.lock"
+
+      - name: Install just
+        uses: taiki-e/install-action@1ed6d7be6168f6c9046541087ff549b6bc581fdf # v2.87.2
+        with:
+          tool: just
+
+      - name: Build the Lean specification and audit its axioms
+        uses: leanprover/lean-action@50fcf42d2e460296f1a34b402e990d1b24f8b596 # v1
+        with:
+          lake-package-directory: lean
+          auto-config: false
+          build: true
+          # Recheck the proofs from source on every run.
+          use-github-cache: false
+
+      - name: Generate SSZ conformance test vectors
+        run: just fill
+
+      - name: Check fixtures and independent Lean regressions
+        run: just lean-test
+
+      - name: Compare Lean and Python on generated cases
+        run: just lean-parity
+
   fill:
     name: Fill SSZ test vectors - Python 3.12
     runs-on: ubuntu-latest
