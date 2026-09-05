@@ -33,7 +33,7 @@ from pydantic import Field, field_serializer, field_validator
 
 from ssz.byte_arrays import ByteVector
 from ssz.exceptions import SSZError, SSZTypeError, SSZValueError, TypeFault, ValueFault
-from ssz.offsets import BYTES_PER_LENGTH_OFFSET, offset_table_spans
+from ssz.offsets import BYTES_PER_LENGTH_OFFSET, check_composite_size, offset_table_spans
 from ssz.ssz_base import (
     SSZCollection,
     SSZModel,
@@ -214,12 +214,13 @@ class _SSZSequence[T: SSZType](SSZCollection[T], ABC):
 
         # The first offset points just past the whole table.
         offset = len(self.data) * BYTES_PER_LENGTH_OFFSET
+        check_composite_size(offset)
 
-        # An offset written here comes from arithmetic and could exceed the width.
-        # Its range check is a real spec rule, while reading needs no such check.
+        # The total includes the last body, even though no later offset points past it.
         for element in self.data:
             Uint32(offset).serialize(stream)
             offset += element.serialize(bodies)
+            check_composite_size(offset)
 
         stream.write(bodies.getvalue())
         return offset
@@ -413,7 +414,10 @@ class Vector[T: SSZType](_SSZSequence[T]):
     def serialize(self, stream: IO[bytes]) -> int:
         """Write the SSZ encoding to a binary stream, and return the byte count."""
         if self.ELEMENT_TYPE.is_fixed_size():
-            return sum(element.serialize(stream) for element in self.data)
+            total = sum(element.serialize(stream) for element in self.data)
+            # Fixed-size composites obey the same total-size rule as offset tables.
+            check_composite_size(total)
+            return total
         return self._write_variable_payload(stream)
 
     @classmethod
@@ -428,6 +432,7 @@ class Vector[T: SSZType](_SSZSequence[T]):
         """
         # A decode is built past the validator that asks this, so the decoder asks it.
         cls._check_declaration()
+        check_composite_size(scope)
 
         # Fixed-size case: the budget is the element width times the count, exactly.
         if cls.is_fixed_size():
@@ -539,7 +544,10 @@ class _SSZList[T: SSZType](_SSZSequence[T]):
         # No length prefix either way.
         # The count is recovered on decode from the budget, or from the table.
         if self.ELEMENT_TYPE.is_fixed_size():
-            return sum(element.serialize(stream) for element in self.data)
+            total = sum(element.serialize(stream) for element in self.data)
+            # Fixed-size composites obey the same total-size rule as offset tables.
+            check_composite_size(total)
+            return total
         return self._write_variable_payload(stream)
 
     @classmethod
@@ -559,6 +567,7 @@ class _SSZList[T: SSZType](_SSZSequence[T]):
         """
         # A decode is built past the validator that asks this, so the decoder asks it.
         cls._check_declaration()
+        check_composite_size(scope)
 
         # A negative budget divides into a negative count, which reads as no elements at all.
         if scope < 0:

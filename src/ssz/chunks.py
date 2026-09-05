@@ -59,7 +59,8 @@ Roots of perfect zero subtrees, indexed by depth.
 - Index 0 is the all-zero leaf.
 - Index d is the root of a perfect binary tree of 2**d zero leaves.
 
-Depth 64 covers any chunk count the protocol uses.
+Depth 64 covers common capacities without further hashing.
+Larger trees extend the final cached root as needed.
 """
 
 
@@ -68,12 +69,19 @@ def zero_tree_root(width: int) -> Root:
     Root of the all-zero perfect binary tree spanning the given leaf count.
 
     Raises:
-        SSZValueError: A width off a power of two, or one past the deepest cached tree.
+        SSZValueError: A width that is not a positive power of two.
     """
     # Subtracting one before the bit length maps a power of two to its own depth: 1 -> 0, 8 -> 3.
     depth = (width - 1).bit_length()
-    # Any other width rounds up to a depth it does not span, and a depth past the table has no root.
-    if width != 1 << depth or depth >= len(_ZERO_ROOTS):
-        raise SSZValueError(ValueFault.ZERO_TREE_WIDTH, depth=len(_ZERO_ROOTS) - 1, width=width)
+    # Any other width rounds up to a depth it does not span.
+    if width != 1 << depth:
+        raise SSZValueError(ValueFault.ZERO_TREE_WIDTH, width=width)
     # Indexing by depth skips materializing 2**depth zero leaves and the layers above them.
-    return _ZERO_ROOTS[depth]
+    if depth < len(_ZERO_ROOTS):
+        return _ZERO_ROOTS[depth]
+    # SSZ capacities have no depth-64 bound, so continue from the deepest cached subtree.
+    root = _ZERO_ROOTS[-1]
+    for _ in range(len(_ZERO_ROOTS) - 1, depth):
+        # Each parent doubles the leaf count by joining two identical zero subtrees.
+        root = Root(sha256(root + root).digest())
+    return root

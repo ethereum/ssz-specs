@@ -144,7 +144,7 @@ class ByteVector(bytes, SSZType):
 
         A caller outside that contract gets an instance whose width contradicts its own type.
 
-        Nothing downstream reads the width again, so the contradiction is never reported.
+        Subsequent operations may rely on that width without checking it again.
 
         Args:
             data: Exactly the declared number of bytes.

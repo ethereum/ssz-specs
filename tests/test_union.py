@@ -8,6 +8,8 @@ import pytest
 from pydantic import ValidationError
 
 from ssz import (
+    Boolean,
+    ByteVector,
     CompatibleUnion,
     Container,
     List,
@@ -668,3 +670,40 @@ class TestNesting:
         expected_bytes = "080000000c00000001341242" + "02341242"
         assert value.encode_bytes().hex() == expected_bytes
         assert ShapeProgressiveList.decode_bytes(value.encode_bytes()) == value
+
+
+class ByteVector4(ByteVector):
+    """Four opaque bytes, spelled as a hexadecimal string."""
+
+    LENGTH = 4
+
+
+class ByteVector4Alias(ByteVector4):
+    """The same four bytes under another name, so the union has two options."""
+
+
+class Opaque(CompatibleUnion):
+    """Union over an option that spells itself as hexadecimal rather than as text."""
+
+    OPTIONS = {1: ByteVector4, 2: ByteVector4Alias}
+
+
+class Flag(CompatibleUnion):
+    """Union over an option that spells itself as a JSON boolean."""
+
+    OPTIONS = {1: Boolean, 2: Boolean}
+
+
+def test_a_union_writes_its_option_the_way_that_option_spells_itself() -> None:
+    """The field is annotated with the base every option shares, which spells nothing."""
+    # Bytes that are not text at all, and would refuse to decode as any.
+    written = Opaque(selector=Uint8(1), data=ByteVector4(bytes([0xFF, 0x00, 0x41, 0x42])))
+    assert written.model_dump(mode="json") == {"selector": 1, "data": "0xff004142"}
+    # Bytes that happen to read as text, which is how the spelling went unnoticed.
+    readable = Opaque(selector=Uint8(1), data=ByteVector4(b"abcd"))
+    assert readable.model_dump(mode="json") == {"selector": 1, "data": "0x61626364"}
+    # A boolean option is a JSON boolean, not the number its own storage uses.
+    assert Flag(selector=Uint8(1), data=Boolean(True)).model_dump(mode="json") == {
+        "selector": 1,
+        "data": True,
+    }

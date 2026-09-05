@@ -416,6 +416,18 @@ class ContainerWithUnion(Container):
     body: TagUnion
 
 
+@pytest.mark.parametrize("container_type", [TwoUint64, LeadingGapProgressive])
+def test_container_rejects_undeclared_values(container_type: type[_SSZContainer]) -> None:
+    # Declared fields have defaults, but an extra value has no wire or tree position.
+    with pytest.raises(ValidationError) as error:
+        container_type.model_validate({"extra": Uint8(1)})
+
+    # A progressive layout's gaps are absent fields, not places for additional values.
+    assert [(item["type"], item["loc"]) for item in error.value.errors()] == [
+        ("extra_forbidden", ("extra",))
+    ]
+
+
 class TestFixedContainer:
     """Fixed-size container metadata, encoding, and roundtrip behavior."""
 

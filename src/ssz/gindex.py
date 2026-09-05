@@ -63,7 +63,14 @@ def gindex_concat(outer: int, inner: int) -> int:
         outer 2, inner 24  ->  40, not 48
 
     An inner root is a depth of no levels, so it splices onto the outer position unmoved.
+
+    Raises:
+        SSZValueError: Either position is not a generalized index.
     """
+    # Both paths start at a root, whose leading bit makes every valid index positive.
+    if outer < 1:
+        raise SSZValueError(ValueFault.NOT_A_GINDEX, index=outer)
+    # The inner path contributes its turns, without its leading root bit.
     depth = gindex_depth(inner)
     return (outer << depth) | (inner - (1 << depth))
 

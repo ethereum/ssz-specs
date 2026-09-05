@@ -494,6 +494,17 @@ class TestGindexArithmetic:
         assert gindex_concat(5, 1) == 5
         assert gindex_concat(1, 1) == 1
 
+    @pytest.mark.parametrize("invalid", [0, -1])
+    @pytest.mark.parametrize("outer_is_invalid", [True, False])
+    def test_rebasing_requires_two_valid_indices(
+        self, invalid: int, outer_is_invalid: bool
+    ) -> None:
+        # Fixture state: index 3 is a right child, while zero and negative indices name no node.
+        outer, inner = (invalid, 3) if outer_is_invalid else (3, invalid)
+        # Neither path may lose the leading root bit when the two paths are joined.
+        with pytest.raises(SSZValueError, match=rf"^{invalid} is not a generalized index$"):
+            gindex_concat(outer, inner)
+
     def test_the_root_has_a_depth_but_no_branch(self) -> None:
         """A depth of no levels is a measurement; a branch of no nodes is no branch at all."""
         assert gindex_depth(1) == 0
@@ -1484,6 +1495,41 @@ class TestMultiproofVerification:
         # It would then reach for a root that was never built.
         with pytest.raises(SSZValueError, match=r"^a request holds at least one index$"):
             calculate_multi_merkle_root([], [], [])
+
+
+class TestProofNodeWidths:
+    """Every leaf and sibling has its own 32-byte boundary."""
+
+    @pytest.mark.parametrize("left_size", [0, 31, 33, 64])
+    @pytest.mark.parametrize("index", [2, 3])
+    def test_moving_the_boundary_cannot_preserve_a_valid_proof(
+        self, left_size: int, index: int
+    ) -> None:
+        # Fixture state: two 32-byte children authenticate the same 64-byte concatenation.
+        data = bytes(range(64))
+        root = h(data[:32], data[32:])
+        # Mutation: shift the boundary without changing a single byte of the hash input.
+        #     32 + 32 -> 31 + 33, for example.
+        # Casts deliberately bypass construction to exercise malformed runtime inputs.
+        left, right = cast(Chunk, data[:left_size]), cast(Chunk, data[left_size:])
+        leaf, sibling = (left, right) if index == 2 else (right, left)
+        # Both proof forms must reject this split even though the hash would match.
+        with pytest.raises(SSZValueError, match=r"^Chunk holds exactly 32 bytes, got "):
+            verify_merkle_proof(leaf, [sibling], index, root)
+        with pytest.raises(SSZValueError, match=r"^Chunk holds exactly 32 bytes, got "):
+            verify_merkle_multiproof([leaf], [sibling], [index], root)
+
+    @pytest.mark.parametrize("size", [0, 31, 33])
+    @pytest.mark.parametrize("bad_leaf", [True, False])
+    def test_each_node_is_validated_independently(self, size: int, bad_leaf: bool) -> None:
+        # Fixture state: one malformed runtime input alongside one well-formed zero node.
+        malformed = cast(Chunk, bytes(size))
+        leaf, sibling = (malformed, ZERO_ROOT) if bad_leaf else (ZERO_ROOT, malformed)
+        # A valid neighbour cannot excuse the wrong width, in either proof form.
+        with pytest.raises(SSZValueError, match=rf"^Chunk holds exactly 32 bytes, got {size}$"):
+            verify_merkle_proof(leaf, [sibling], 2, ZERO_ROOT)
+        with pytest.raises(SSZValueError, match=rf"^Chunk holds exactly 32 bytes, got {size}$"):
+            verify_merkle_multiproof([leaf], [sibling], [2], ZERO_ROOT)
 
 
 class TestNodeRoot:

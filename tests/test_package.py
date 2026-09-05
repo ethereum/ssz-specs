@@ -101,11 +101,13 @@ UNPUBLISHED = {
     "PARANOID_ROOTS",
     "StrictBaseModel",
     "ZERO_CHUNK",
+    "check_composite_size",
     "field_names",
     "hold_to_bases",
     "layout_chunks",
     "mix_in",
     "offset_table_spans",
+    "option_writer",
     "progressive_container_plan",
     "wrapping_schema",
 }

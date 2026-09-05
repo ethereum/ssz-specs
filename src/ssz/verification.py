@@ -16,6 +16,8 @@ from ssz.gindex import (
 
 def _hash_pair(left: bytes, right: bytes) -> Root:
     """Join two nodes into their parent."""
+    # Each node must be 32 bytes: a 31 + 33 split would hash like a different 32 + 32 pair.
+    left, right = Chunk(left), Chunk(right)
     # Invariant: a digest is exactly the chunk width.
     return Root._trusted(sha256(left + right).digest())
 
@@ -27,7 +29,7 @@ def calculate_merkle_root(leaf: Chunk, proof: Sequence[Chunk], index: int) -> Ro
     Each bit of the index, read from the leaf upward, says which side the branch node joins on.
 
     Raises:
-        SSZValueError: A branch whose length is not the depth of the index.
+        SSZValueError: A branch of the wrong depth, or a node whose width is not 32 bytes.
     """
     depth = gindex_length(index)
     if len(proof) != depth:
@@ -45,6 +47,7 @@ def calculate_merkle_root(leaf: Chunk, proof: Sequence[Chunk], index: int) -> Ro
 
 def verify_merkle_proof(leaf: Chunk, proof: Sequence[Chunk], index: int, root: Root) -> bool:
     """Whether one leaf and its branch rebuild the expected root, raising if it is malformed."""
+    # A well-formed proof succeeds exactly when its rebuilt root matches that commitment.
     return calculate_merkle_root(leaf, proof, index) == root
 
 
@@ -58,6 +61,7 @@ def calculate_multi_merkle_root(
 
     Raises:
         SSZValueError: A request whose indices, leaves and proof do not agree.
+        SSZValueError: A node whose width is not 32 bytes.
     """
     if len(leaves) != len(indices):
         raise SSZValueError(ValueFault.LEAF_COUNT, expected=len(indices), actual=len(leaves))
@@ -89,4 +93,5 @@ def verify_merkle_multiproof(
     leaves: Sequence[Chunk], proof: Sequence[Chunk], indices: Sequence[int], root: Root
 ) -> bool:
     """Whether several leaves and their nodes rebuild the expected root, raising if malformed."""
+    # Shared branches must rebuild the same commitment as an ordinary proof.
     return calculate_multi_merkle_root(leaves, proof, indices) == root
