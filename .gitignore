@@ -167,3 +167,6 @@ fixtures/
 # Packaged release test vectors
 ssz-test-vectors-*.tar.gz
 ssz-test-vectors-*.tar.gz.sha256
+
+# Lean build output
+lean/.lake/
