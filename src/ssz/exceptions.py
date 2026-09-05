@@ -64,6 +64,7 @@ class ValueFault(Enum):
     TRAILING_BYTES = "{leftover} byte(s) past the end of the value"
 
     FIRST_OFFSET = "the first offset is {actual}, and the fixed part ends at {expected}"
+    OFFSET_OVERFLOW = "a composite encoding of {size} bytes does not fit four-byte offsets"
     OFFSET_UNORDERED = "offset {offset} is above the offset after it, {next}"
     OFFSET_PAST_SCOPE = "offset {offset} runs past the budget of {scope}"
     OFFSET_UNALIGNED = "the first offset {offset} is not a multiple of {width}"
@@ -96,7 +97,7 @@ class ValueFault(Enum):
     PATH_PAST_SPINE = "the path lies past the end of the progressive spine of {type}"
 
     MERKLEIZE_LIMIT = "{count} chunks exceed a limit of {limit}"
-    ZERO_TREE_WIDTH = "a zero subtree spans a power of two up to 2**{depth} leaves, got {width}"
+    ZERO_TREE_WIDTH = "a zero subtree spans a positive power of two leaves, got {width}"
     STALE_ROOT = "stale remembered root for {type}"
     NEGATIVE_LENGTH = "a mixed-in length is not negative, got {length}"
     SELECTOR_BYTE = "selector {selector} does not fit one byte"

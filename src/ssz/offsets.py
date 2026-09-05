@@ -10,6 +10,18 @@ BYTES_PER_LENGTH_OFFSET: Final = 4
 """Width of an SSZ offset prefixing each variable-size element, a little-endian uint32."""
 
 
+_COMPOSITE_SIZE_LIMIT: Final = 1 << (8 * BYTES_PER_LENGTH_OFFSET)
+"""Exclusive size ceiling for composite encodings, including their final body."""
+
+
+def check_composite_size(size: int) -> None:
+    """Require the whole composite encoding to fit the four-byte offset range."""
+    # The SSZ serialization rule bounds all fixed parts and variable bodies together.
+    # https://ethereum.github.io/consensus-specs/ssz/simple-serialize/#serialization
+    if size >= _COMPOSITE_SIZE_LIMIT:
+        raise SSZValueError(ValueFault.OFFSET_OVERFLOW, size=size)
+
+
 def offset_table_spans(offsets: Sequence[int], scope: int, steps: Sequence[str | int]) -> list[int]:
     """
     Check a whole offset table closes over its budget, and return the width of each body.

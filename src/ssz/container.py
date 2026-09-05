@@ -18,7 +18,7 @@ from pydantic.functional_validators import ModelWrapValidatorHandler
 from pydantic_core import PydanticUndefined
 
 from ssz.exceptions import SSZError, SSZTypeError, SSZValueError, TypeFault, ValueFault
-from ssz.offsets import BYTES_PER_LENGTH_OFFSET, offset_table_spans
+from ssz.offsets import BYTES_PER_LENGTH_OFFSET, check_composite_size, offset_table_spans
 from ssz.ssz_base import SSZModel, SSZType
 from ssz.uint import Uint32
 
@@ -167,6 +167,7 @@ class _SSZContainer(SSZModel):
         # The declaration fixes the leading width, so the first payload's start needs no counting.
         # The same running count ends as the total written.
         offset = self._LEADING_WIDTH
+        check_composite_size(offset)
 
         # Variable payloads stage in a buffer while the output takes the fixed part.
         tail = io.BytesIO()
@@ -177,6 +178,8 @@ class _SSZContainer(SSZModel):
             else:
                 Uint32(offset).serialize(stream)
                 offset += field_value.serialize(tail)
+                # The final body is included even when no later field needs its end offset.
+                check_composite_size(offset)
         stream.write(tail.getvalue())
         return offset
 
@@ -184,6 +187,8 @@ class _SSZContainer(SSZModel):
     @override
     def deserialize(cls, stream: IO[bytes], scope: int) -> Self:
         """Read the fixed part with offsets, then each variable payload by its offset window."""
+        # Refuse an unrepresentable composite before consuming any field bytes.
+        check_composite_size(scope)
         fields: dict[str, SSZType] = {}
         variable_fields: list[tuple[str, type[SSZType]]] = []
         offsets: list[int] = []
