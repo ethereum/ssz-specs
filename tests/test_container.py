@@ -113,23 +113,10 @@ class SignedAttestation(Attestation):
     signature: Uint64
 
 
-class EmptyContainer(Container):
-    """Zero-field container, exercises the all-fixed sum over an empty iterator."""
-
-
 class OneByte(Container):
     """Smallest non-empty fixed container, used for hex helpers."""
 
     a: Uint8
-
-
-class HoldsANothingField(Container):
-    """A field of no width at all, between fields that have one and a field that has none."""
-
-    a: Uint8
-    nothing: EmptyContainer
-    b: Uint16List4
-    c: Uint8
 
 
 class Uint16ProgressiveList(ProgressiveList[Uint16]):
@@ -458,12 +445,6 @@ class TestFixedContainer:
         original = TwoUint64(a=Uint64(a), b=Uint64(b))
         assert TwoUint64.decode_bytes(original.encode_bytes()) == original
 
-    def test_empty_container_has_zero_byte_length(self) -> None:
-        """A container with no fields has a fixed byte length of zero."""
-        assert EmptyContainer.is_fixed_size() is True
-        assert EmptyContainer.get_byte_length() == 0
-        assert EmptyContainer().encode_bytes() == b""
-
 
 class TestVariableContainer:
     """All-variable container shape and metadata."""
@@ -545,21 +526,6 @@ class TestMixedContainer:
         expected_encoding = bytes.fromhex("ddccbbaa0000000014000000ffee000018000000010002000300")
         assert original.encode_bytes() == expected_encoding
         assert Mixed.decode_bytes(expected_encoding) == original
-
-
-class TestZeroWidthFixedField:
-    """A fixed field of no width is a fixed field, and never an offset."""
-
-    def test_a_field_of_no_width_occupies_no_slot_and_reads_back_as_itself(self) -> None:
-        """Zero is a width a fixed field can have, and the only one that is also falsy."""
-        # Fixed part: a (1) + nothing (0) + the offset for b (4) + c (1) = 6 bytes.
-        # A decoder reading the zero-width field as an offset would spend four bytes on it.
-        # It would then reject the offset that follows.
-        original = HoldsANothingField(
-            a=Uint8(1), nothing=EmptyContainer(), b=Uint16List4(data=[Uint16(2)]), c=Uint8(3)
-        )
-        assert original.encode_bytes() == bytes.fromhex("0106000000030200")
-        assert HoldsANothingField.decode_bytes(original.encode_bytes()) == original
 
 
 class TestNestedContainer:
@@ -846,17 +812,6 @@ class TestFromHex:
         """Hex parsing tolerates the 0x prefix and mixed case alike."""
         assert OneByte.from_hex(hex_input) == OneByte(a=Uint8(0xAB))
 
-    @pytest.mark.parametrize(
-        "hex_input",
-        [
-            pytest.param("", id="empty"),
-            pytest.param("0x", id="prefix_only"),
-        ],
-    )
-    def test_from_hex_empty_string_decodes_empty_container(self, hex_input: str) -> None:
-        """An empty hex string decodes to a zero-field container."""
-        assert EmptyContainer.from_hex(hex_input) == EmptyContainer()
-
     def test_from_hex_bad_hex_raises_value_error(self) -> None:
         """Non-hex characters are refused by the shape reading them, and it names itself."""
         with pytest.raises(SSZValueError) as exception_info:
@@ -880,10 +835,6 @@ class TestHexStringValidator:
     def test_validates_hex_string(self, hex_input: str) -> None:
         """Pydantic validation tolerates the 0x prefix and mixed case alike."""
         assert OneByte.model_validate(hex_input) == OneByte(a=Uint8(0xAB))
-
-    def test_validates_empty_string_as_empty_container(self) -> None:
-        """An empty hex string validates to a zero-field container."""
-        assert EmptyContainer.model_validate("") == EmptyContainer()
 
     def test_dict_input_routes_to_field_validation(self) -> None:
         """A dict input goes through field-by-field validation, not hex decoding."""
@@ -921,6 +872,22 @@ class TestHexStringValidator:
             }
         )
         assert outer == OuterFixedNested(z=Uint64(7), inner=InnerFixed(x=Uint64(1), y=Uint64(2)))
+
+
+class TestZeroFieldStruct:
+    """The specification lists a struct with no fields among the types it calls illegal."""
+
+    def test_a_struct_with_no_field_is_refused_at_declaration(self) -> None:
+        """A struct of no fields is refused where it is written, not where it is used."""
+        # A struct of no fields spans no bytes, so every one of them encodes to the same nothing.
+        #
+        # A list of four such values and a list of none would then share one encoding.
+        #
+        # Refusing the declaration is what keeps an encoding readable back to one value.
+        with pytest.raises(SSZTypeError, match=r"^a struct declares at least one field$"):
+
+            class Nothing(Container):
+                pass
 
 
 class TestProgressiveContainerLayoutRules:
@@ -1879,10 +1846,6 @@ class TestContainerDefaults:
         """A default reads as zeroed and any other value of the same type does not."""
         assert default_value.is_zero() is True
         assert non_default_value.is_zero() is False
-
-    def test_a_struct_with_no_field_at_all_is_zeroed(self) -> None:
-        """A zero-field struct has one value, which is therefore its default."""
-        assert EmptyContainer().is_zero() is True
 
     @pytest.mark.parametrize(
         "default_value, expected_hex",

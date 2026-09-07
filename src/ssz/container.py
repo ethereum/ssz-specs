@@ -257,6 +257,22 @@ class Container(_SSZContainer):
     The Merkle tree holds one leaf per field, padded to the next power of two.
     """
 
+    @classmethod
+    def __pydantic_init_subclass__(cls, **kwargs: Any) -> None:
+        """
+        Refuse a struct that names nothing.
+
+        Raises:
+            SSZTypeError: When the declaration holds no field.
+        """
+        super().__pydantic_init_subclass__(**kwargs)
+
+        # A struct of no fields spans no bytes, so any number of them encode to one nothing.
+        #
+        # A list of them then has no count to recover from what it was given.
+        if not cls.model_fields:
+            raise SSZTypeError(TypeFault.CONTAINER_EMPTY)
+
 
 class ProgressiveContainer(_SSZContainer):
     """

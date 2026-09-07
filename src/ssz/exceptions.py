@@ -19,7 +19,8 @@ class TypeFault(Enum):
     NO_MERKLE_LAYOUT = "{type} has no Merkle layout"
     NOT_FIXED_SIZE = "{type} is a variable-size {kind}, and has no one byte length"
 
-    VECTOR_EMPTY = "a vector holds at least one element, got a length of {length}"
+    VECTOR_EMPTY = "{type} declares a length of zero, and a fixed count is at least one"
+    CONTAINER_EMPTY = "a struct declares at least one field"
     NOT_ENTITLED = "{type} declares a {capacity} its shape has none of"
 
     LAYOUT_NOT_BITS = "a field layout holds only 0 and 1"
@@ -59,7 +60,6 @@ class ValueFault(Enum):
     SCOPE_TOO_SMALL = "{type} needs at least {expected} bytes, and the budget is {actual}"
     SCOPE_NEGATIVE = "a budget of {scope} is not a byte count"
     SCOPE_UNDIVIDED = "a budget of {scope} does not divide by an element width of {width}"
-    SCOPE_WIDTHLESS = "{type} holds elements of no width, so a budget of {scope} counts none"
     TRUNCATED = "{type} needs {expected} bytes, the input holds {actual}"
     TRAILING_BYTES = "{leftover} byte(s) past the end of the value"
 

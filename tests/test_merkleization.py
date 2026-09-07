@@ -951,10 +951,6 @@ class ProgressiveVar(Container):
     C: Uint8
 
 
-class EmptyContainer(Container):
-    """Container with zero fields."""
-
-
 class OneFieldProgressive(ProgressiveContainer):
     """Progressive container occupying the single position its layout declares."""
 
@@ -1572,11 +1568,6 @@ def test_hash_tree_root_progressive_list_distinguishes_by_length() -> None:
     short_list = Uint16ProgressiveList(data=(Uint16(1), Uint16(2)))
     long_list = Uint16ProgressiveList(data=(Uint16(1), Uint16(2), Uint16(0)))
     assert hash_tree_root(short_list) != hash_tree_root(long_list)
-
-
-def test_hash_tree_root_container_empty() -> None:
-    """A container with no fields hashes to the empty-input merkle root."""
-    assert hash_tree_root(EmptyContainer()) == Z[0]
 
 
 def test_hash_tree_root_container_single_field() -> None:
@@ -2778,7 +2769,6 @@ def every_shape() -> list[object]:
         Uint8ProgressiveList(data=()),
         Uint8ProgressiveList(data=tuple(Uint8(index) for index in range(100))),
         ChunkProgressiveList(data=tuple(sample_chunks[:3])),
-        EmptyContainer(),
         SingleField(A=Uint8(9)),
         Fixed(A=Uint8(1), B=Uint64(2), C=Uint32(3)),
         Var(A=Uint16(1), B=Uint16List1024(data=(Uint16(2),)), C=Uint8(3)),

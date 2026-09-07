@@ -43,6 +43,7 @@ def _narrowed_capacity(cls: type, name: str, declared: Any) -> int:
 
     Raises:
         SSZTypeError: A capacity that is not a whole number at or above zero.
+        SSZTypeError: An exact count of zero, which pins a shape to holding nothing.
     """
     if type(declared) is not int:
         # A boolean is a flag, not a count, so narrowing one would read True as a capacity of 1.
@@ -60,6 +61,13 @@ def _narrowed_capacity(cls: type, name: str, declared: Any) -> int:
     # A capacity counts what a shape holds, and nothing is held a negative number of times.
     if declared < 0:
         raise SSZTypeError(TypeFault.CAPACITY_NEGATIVE, type=cls.__name__, field=name, got=declared)
+
+    # An exact count of zero pins a shape to holding nothing, so it spans no bytes.
+    # Any number of such values then sit at the same place in an encoding.
+    #
+    # A bound of zero is a different declaration, and a legal one: it admits the empty value.
+    if name == "LENGTH" and declared == 0:
+        raise SSZTypeError(TypeFault.VECTOR_EMPTY, type=cls.__name__)
     return declared
 
 
