@@ -39,6 +39,18 @@ example (left right : Bytes) :
 def main : IO Unit := do
   -- A splice cannot turn a nonexistent outer node into a valid index.
   expect "zero outer index" ((gindexConcat 0 3).isOk == false)
+  -- A fixed shape of no width encodes to nothing, so no count of them could be recovered.
+  expect "zero-width bit vector" ((Desc.bitVector 0).wellFormed.isOk == false)
+  expect "zero-width byte array" ((Desc.byteVector 0).wellFormed.isOk == false)
+  expect "zero-length vector" ((Desc.vector .bool 0).wellFormed.isOk == false)
+  -- The refusal follows the shape wherever it is nested, since the width is what is missing.
+  expect "zero-width element" ((Desc.list (.byteVector 0) 4).wellFormed.isOk == false)
+  expect "zero-width field" ((Desc.container ["a"] [.bitVector 0]).wellFormed.isOk == false)
+  -- A struct of no fields spans no bytes, which the specification lists as illegal too.
+  expect "zero-field struct" ((Desc.container [] []).wellFormed.isOk == false)
+  -- A capacity of zero bounds what a shape may hold, and bounds nothing about its width.
+  expect "zero-capacity bit list" ((Desc.bitList 0).wellFormed.isOk == true)
+  expect "zero-capacity list" ((Desc.list .bool 0).wellFormed.isOk == true)
   -- Field names and selectors are declaration keys, so duplicates are invalid.
   expect "duplicate field names"
     ((Desc.container ["flag", "flag"] [.bool, .bool]).wellFormed.isOk == false)
