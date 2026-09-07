@@ -351,7 +351,6 @@ class Vector[T: SSZType](_SSZSequence[T]):
 
         Raises:
             SSZTypeError: When the shape declares a bound, which a vector has none of.
-            SSZTypeError: When the declared length is zero or negative.
         """
         super().__pydantic_init_subclass__(**kwargs)
 
@@ -363,16 +362,6 @@ class Vector[T: SSZType](_SSZSequence[T]):
         # Building a value from it fails its own declaration check instead.
         if not hasattr(cls, "ELEMENT_TYPE") or cls.LENGTH is None:
             return
-
-        # The spec writes a vector as Vector[type, N] with N > 0.
-        # A vector of no elements has no offset table to read a body from.
-        #
-        # Zero is the only count left to refuse here.
-        #
-        # A negative one is not a count at all.
-        # Every shape refuses that where the type is declared.
-        if cls.LENGTH == 0:
-            raise SSZTypeError(TypeFault.VECTOR_EMPTY, length=cls.LENGTH)
 
         element_type, length = cls.ELEMENT_TYPE, cls.LENGTH
         if cls.IMMUTABLE_ELEMENTS:
@@ -580,11 +569,9 @@ class _SSZList[T: SSZType](_SSZSequence[T]):
 
         # Fixed-size case: the count is the budget divided by the element width.
         if cls.ELEMENT_TYPE.is_fixed_size():
+            # Every shape a declaration may name spans at least one byte, so the budget divides.
             element_size = cls.ELEMENT_TYPE.get_byte_length()
 
-            # Elements of no width pack to nothing, so no count of them spends a byte.
-            if element_size == 0:
-                raise SSZValueError(ValueFault.SCOPE_WIDTHLESS, type=cls.__name__, scope=scope)
             if scope % element_size != 0:
                 raise SSZValueError(ValueFault.SCOPE_UNDIVIDED, scope=scope, width=element_size)
             num_elements = scope // element_size

@@ -1443,6 +1443,51 @@ class TestDeclaredCapacity:
             f"Below.{capacity} counts what a shape holds, and -1 is not a count"
         )
 
+    @pytest.mark.parametrize(
+        "base",
+        [
+            pytest.param(Vector[Uint8], id="vector"),
+            pytest.param(BitVector, id="bitvector"),
+            pytest.param(ByteVector, id="bytevector"),
+        ],
+    )
+    def test_an_exact_count_of_zero_is_refused_by_every_shape(self, base: type[SSZType]) -> None:
+        """A shape that pins how much it holds pins at least one, whichever shape it is."""
+        # A count of zero spans no bytes, so any number of such values encode to one nothing.
+        #
+        # A reader given that nothing has no count to recover from it.
+        #
+        # A bound of zero is a different declaration, and a legal one: it admits the empty value.
+        with pytest.raises(SSZTypeError) as exception_info:
+            type("Nothing", (base,), {"LENGTH": 0})
+
+        assert str(exception_info.value) == (
+            "Nothing declares a length of zero, and a fixed count is at least one"
+        )
+
+    @pytest.mark.parametrize(
+        "base, encoding",
+        [
+            # A bit list closes with a delimiter bit, so even an empty one spends a byte.
+            pytest.param(BitList, b"\x01", id="bitlist"),
+            pytest.param(ByteList, b"", id="bytelist"),
+            pytest.param(List[Uint8], b"", id="list"),
+        ],
+    )
+    def test_a_bound_of_zero_is_accepted_by_every_shape_that_takes_one(
+        self, base: type[SSZType], encoding: bytes
+    ) -> None:
+        """A bound of zero admits the empty value, which is a value like any other."""
+        # A bound says how much a shape may hold, and holding nothing is something to hold.
+        #
+        # A variable-size shape is reached through an offset, so no count is read off its width.
+        #
+        # That is what separates a bound of zero from a fixed count of zero.
+        bounded = type("Bounded", (base,), {"LIMIT": 0})
+
+        assert bounded().encode_bytes() == encoding
+        assert bounded.decode_bytes(encoding) == bounded()
+
     def test_a_capacity_below_zero_cannot_split_the_two_constructors(self) -> None:
         """A refused declaration is what keeps a default and an explicit value in step."""
         # A fixed byte array builds its default by repeating the zero byte.
