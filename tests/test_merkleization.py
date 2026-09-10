@@ -244,6 +244,31 @@ def test_merkleize_refuses_a_capacity_that_is_no_capacity(limit: int) -> None:
         merkleize([], limit=limit)
 
 
+NON_CHUNK_WIDTHS = [
+    pytest.param(0, id="no_bytes"),
+    pytest.param(BYTES_PER_CHUNK - 1, id="one_byte_short"),
+    pytest.param(BYTES_PER_CHUNK + 1, id="one_byte_over"),
+    pytest.param(BYTES_PER_CHUNK * 2, id="two_chunks_in_one"),
+]
+
+
+@pytest.mark.parametrize("width", NON_CHUNK_WIDTHS)
+def test_merkleize_refuses_a_chunk_that_is_not_a_chunk(width: int) -> None:
+    """
+    A leaf of any other width refuses, on the one-leaf shortcut and on the layer walk alike.
+    """
+    stray = bytes(width)
+    refusal = rf"^Chunk holds exactly {BYTES_PER_CHUNK} bytes, got {width}$"
+    with pytest.raises(SSZValueError, match=refusal):
+        merkleize([stray])
+    with pytest.raises(SSZValueError, match=refusal):
+        merkleize([stray], limit=1)
+    with pytest.raises(SSZValueError, match=refusal):
+        merkleize([stray, stray])
+    with pytest.raises(SSZValueError, match=refusal):
+        merkleize([*sample_chunks[0:3], stray], limit=8)
+
+
 # Chunk counts and capacities for an all-zero payload.
 # These are the shapes where the closed form for a zero tree and the layer walk agree.
 #
@@ -739,6 +764,18 @@ def test_merkleize_progressive_positions_are_stable_as_data_grows() -> None:
     assert merkleize_progressive(six_chunks) == h(
         level_1, h(level_4, h(perfect_tree_root(six_chunks[5:6], 16), Z[0]))
     )
+
+
+@pytest.mark.parametrize("width", NON_CHUNK_WIDTHS)
+def test_merkleize_progressive_refuses_a_chunk_that_is_not_a_chunk(width: int) -> None:
+    """Every level of the spine measures its own chunks, however far down the stray one sits."""
+    stray = bytes(width)
+    refusal = rf"^Chunk holds exactly {BYTES_PER_CHUNK} bytes, got {width}$"
+    with pytest.raises(SSZValueError, match=refusal):
+        merkleize_progressive([stray])
+    # Index five opens the third level, past the one chunk and the four before it.
+    with pytest.raises(SSZValueError, match=refusal):
+        merkleize_progressive([*chunk_run(5), stray])
 
 
 class Bytes48(ByteVector):
@@ -2758,7 +2795,7 @@ def every_shape() -> list[object]:
     ]
     # Widths on both sides of the chunk boundary, and exactly upon it.
     byte_array_values: list[object] = [
-        byte_array_type(byte * byte_array_type.LENGTH)
+        byte_array_type(byte * byte_array_type.declared_length())
         for byte_array_type in (Bytes1, Bytes31, Bytes32, Bytes33, Bytes48, Bytes96)
         for byte in (b"\x00", b"\xff", b"\x5a")
     ]
