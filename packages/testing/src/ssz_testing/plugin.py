@@ -12,6 +12,11 @@ import pytest
 from ssz_testing.fixtures import FIXTURE_FORMATS, BaseConsensusFixture, FixtureInfo
 
 
+def fixture_test_id(test_nodeid: str, fixture_format: str) -> str:
+    """The key one vector is stored under within its fixture file."""
+    return f"{test_nodeid}[{fixture_format}]"
+
+
 class FixtureCollector:
     """Collects generated fixtures and writes them to disk."""
 
@@ -20,6 +25,7 @@ class FixtureCollector:
         self.output_directory = output_directory
         self.fixtures: list[tuple[str, Any, str]] = []
         self.type_shapes: dict[str, tuple[str, str]] = {}
+        self.collected_test_ids: set[str] = set()
 
     def fixture_output_file(self, test_nodeid: str, fixture_format: str) -> Path:
         """The fixture file for one test function, which must sit under the filler tests."""
@@ -61,8 +67,23 @@ class FixtureCollector:
                 )
 
     def add_fixture(self, fixture_format: str, fixture: Any, item: pytest.Item) -> None:
-        """Add a fixture to the collection, and record its path on the test that produced it."""
+        """
+        Add a fixture to the collection, and record its path on the test that produced it.
+
+        Raises:
+            ValueError: If the test already produced a vector of this format.
+            ValueError: If one type name stands for two different shapes.
+        """
+        test_id = fixture_test_id(item.nodeid, fixture_format)
+        if test_id in self.collected_test_ids:
+            raise ValueError(
+                f"test '{item.nodeid}' already produced a '{fixture_format}' vector, and a "
+                "second one would replace it. Parametrize the test or split it, so that every "
+                "vector is written under its own test id."
+            )
+        self.collected_test_ids.add(test_id)
         self.claim_type_names(fixture, item.nodeid)
+
         self.fixtures.append((fixture_format, fixture, item.nodeid))
 
         # Stashed on the item, not the session-wide config, which would leak to later tests.
@@ -84,8 +105,9 @@ class FixtureCollector:
 
             all_tests = {}
             for fixture_format, fixture, test_nodeid in fixtures_list:
-                test_id = f"{test_nodeid}[{fixture_format}]"
-                all_tests[test_id] = fixture.json_dict_with_info()
+                all_tests[fixture_test_id(test_nodeid, fixture_format)] = (
+                    fixture.json_dict_with_info()
+                )
 
             with output_file.open("w") as output_handle:
                 json.dump(all_tests, output_handle, indent=4)
