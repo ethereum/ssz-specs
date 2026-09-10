@@ -178,6 +178,7 @@ def test_progressive_container_square(ssz_test: SSZTestFiller) -> None:
     - the decoded value equals the original.
     """
     ssz_test(
+        case_id="progressive_container/interior_gap",
         type_name="SampleSquare",
         value=SampleSquare(side=Uint16(0x1234), color=Uint8(0x56)),
     )
@@ -203,6 +204,7 @@ def test_progressive_container_circle(ssz_test: SSZTestFiller) -> None:
     - the decoded value equals the original.
     """
     ssz_test(
+        case_id="progressive_container/leading_gap",
         type_name="SampleCircle",
         value=SampleCircle(radius=Uint16(0x1234), color=Uint8(0x56)),
     )
@@ -226,6 +228,7 @@ def test_progressive_container_single_field(ssz_test: SSZTestFiller) -> None:
     - the decoded value equals the original.
     """
     ssz_test(
+        case_id="progressive_container/single_field",
         type_name="SampleOneField",
         value=SampleOneField(a=Uint16(0xBEEF)),
     )
@@ -251,6 +254,7 @@ def test_progressive_container_leading_gaps(ssz_test: SSZTestFiller) -> None:
     - the decoded value equals the original.
     """
     ssz_test(
+        case_id="progressive_container/two_leading_gaps",
         type_name="SampleLeadingGaps",
         value=SampleLeadingGaps(c=Uint32(0x11223344)),
     )
@@ -276,6 +280,7 @@ def test_progressive_container_multiple_gaps(ssz_test: SSZTestFiller) -> None:
     - the decoded value equals the original.
     """
     ssz_test(
+        case_id="progressive_container/mixed_gap_widths",
         type_name="SampleMultipleGaps",
         value=SampleMultipleGaps(a=Uint8(1), b=Uint16(0x0203), c=Uint32(0x04050607)),
     )
@@ -301,6 +306,7 @@ def test_progressive_container_widest_layout(ssz_test: SSZTestFiller) -> None:
     - the decoded value equals the original.
     """
     ssz_test(
+        case_id="progressive_container/widest_layout",
         type_name="SampleWidestLayout",
         value=SampleWidestLayout(tail=Uint8(0xAB)),
     )
@@ -325,6 +331,7 @@ def test_progressive_container_opens_the_fourth_level(ssz_test: SSZTestFiller) -
     - the decoded value equals the original.
     """
     ssz_test(
+        case_id="progressive_container/crosses_spine_level",
         type_name="SampleLevelBoundary",
         value=SampleLevelBoundary(first=Uint16(0x1234), last=Uint8(0x56)),
     )
@@ -349,6 +356,7 @@ def test_progressive_container_with_bounded_list_field(ssz_test: SSZTestFiller) 
     - the decoded value equals the original.
     """
     ssz_test(
+        case_id="progressive_container/bounded_list_field",
         type_name="SampleBoundedListField",
         value=SampleBoundedListField(
             head=Uint64(7),
@@ -375,6 +383,7 @@ def test_progressive_container_with_empty_variable_field(ssz_test: SSZTestFiller
     - the decoded value equals the original.
     """
     ssz_test(
+        case_id="progressive_container/empty_variable_field",
         type_name="SampleBoundedListField",
         value=SampleBoundedListField(head=Uint64(7), body=SampleUint16List4(data=[])),
     )
@@ -399,6 +408,7 @@ def test_progressive_container_with_progressive_fields(ssz_test: SSZTestFiller) 
     - the decoded value equals the original.
     """
     ssz_test(
+        case_id="progressive_container/progressive_fields",
         type_name="SampleProgressiveFields",
         value=SampleProgressiveFields(
             head=Uint64(7),
@@ -427,6 +437,7 @@ def test_nested_progressive_containers(ssz_test: SSZTestFiller) -> None:
     - the decoded value equals the original.
     """
     ssz_test(
+        case_id="progressive_container/nested",
         type_name="SampleOuterShape",
         value=SampleOuterShape(
             head=Uint8(1),
@@ -454,6 +465,7 @@ def test_progressive_list_of_progressive_containers(ssz_test: SSZTestFiller) -> 
     - the decoded value equals the original.
     """
     ssz_test(
+        case_id="progressive_container/in_progressive_list",
         type_name="SampleSquareProgressiveList",
         value=SampleSquareProgressiveList(
             data=[
@@ -483,6 +495,7 @@ def test_container_holding_a_progressive_container(ssz_test: SSZTestFiller) -> N
     - the decoded value equals the original.
     """
     ssz_test(
+        case_id="progressive_container/in_container",
         type_name="SampleSquareContainer",
         value=SampleSquareContainer(
             tag=Uint8(0xFF),
@@ -510,6 +523,7 @@ def test_progressive_container_decode_failure_trailing_byte(ssz_test: SSZTestFil
     - the reason is that a shape of fixed-size fields spans exactly its own width.
     """
     ssz_test(
+        case_id="progressive_container/invalid/trailing_byte",
         type_name="SampleSquare",
         value=SampleSquare(side=Uint16(0x1234), color=Uint8(0x56)),
         raw_bytes="0x34125600",
@@ -539,6 +553,7 @@ def test_progressive_container_decode_failure_first_offset(ssz_test: SSZTestFill
     - the reason is that the first offset must end the fixed part exactly.
     """
     ssz_test(
+        case_id="progressive_container/invalid/first_offset_gap",
         type_name="SampleBoundedListField",
         value=SampleBoundedListField(head=Uint64(7), body=SampleUint16List4(data=[])),
         raw_bytes="0x07000000000000000d000000",

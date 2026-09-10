@@ -19,6 +19,7 @@ class SSZTestFiller(Protocol):
     def __call__(
         self,
         *,
+        case_id: str,
         type_name: str,
         value: SSZType,
         raw_bytes: str | None = None,

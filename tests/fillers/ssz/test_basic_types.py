@@ -101,7 +101,7 @@ def test_boolean_false(ssz_test: SSZTestFiller) -> None:
     - the encoding is the byte 0x00.
     - the decoded value equals the original.
     """
-    ssz_test(type_name="Boolean", value=Boolean(False))
+    ssz_test(case_id="boolean/false", type_name="Boolean", value=Boolean(False))
 
 
 def test_boolean_true(ssz_test: SSZTestFiller) -> None:
@@ -121,7 +121,7 @@ def test_boolean_true(ssz_test: SSZTestFiller) -> None:
     - the encoding is the byte 0x01.
     - the decoded value equals the original.
     """
-    ssz_test(type_name="Boolean", value=Boolean(True))
+    ssz_test(case_id="boolean/true", type_name="Boolean", value=Boolean(True))
 
 
 def test_uint8_zero(ssz_test: SSZTestFiller) -> None:
@@ -140,7 +140,7 @@ def test_uint8_zero(ssz_test: SSZTestFiller) -> None:
     ----
     - the decoded value equals the original.
     """
-    ssz_test(type_name="Uint8", value=Uint8(0))
+    ssz_test(case_id="uint8/zero", type_name="Uint8", value=Uint8(0))
 
 
 def test_uint8_one(ssz_test: SSZTestFiller) -> None:
@@ -159,7 +159,7 @@ def test_uint8_one(ssz_test: SSZTestFiller) -> None:
     ----
     - the decoded value equals the original.
     """
-    ssz_test(type_name="Uint8", value=Uint8(1))
+    ssz_test(case_id="uint8/one", type_name="Uint8", value=Uint8(1))
 
 
 def test_uint8_mid(ssz_test: SSZTestFiller) -> None:
@@ -178,7 +178,7 @@ def test_uint8_mid(ssz_test: SSZTestFiller) -> None:
     ----
     - the decoded value equals the original.
     """
-    ssz_test(type_name="Uint8", value=Uint8(128))
+    ssz_test(case_id="uint8/high_bit", type_name="Uint8", value=Uint8(128))
 
 
 def test_uint8_max(ssz_test: SSZTestFiller) -> None:
@@ -197,7 +197,7 @@ def test_uint8_max(ssz_test: SSZTestFiller) -> None:
     ----
     - the decoded value equals the original.
     """
-    ssz_test(type_name="Uint8", value=Uint8(2**8 - 1))
+    ssz_test(case_id="uint8/max", type_name="Uint8", value=Uint8(2**8 - 1))
 
 
 def test_uint16_zero(ssz_test: SSZTestFiller) -> None:
@@ -216,7 +216,7 @@ def test_uint16_zero(ssz_test: SSZTestFiller) -> None:
     ----
     - the decoded value equals the original.
     """
-    ssz_test(type_name="Uint16", value=Uint16(0))
+    ssz_test(case_id="uint16/zero", type_name="Uint16", value=Uint16(0))
 
 
 def test_uint16_one(ssz_test: SSZTestFiller) -> None:
@@ -235,7 +235,7 @@ def test_uint16_one(ssz_test: SSZTestFiller) -> None:
     ----
     - the decoded value equals the original.
     """
-    ssz_test(type_name="Uint16", value=Uint16(1))
+    ssz_test(case_id="uint16/one", type_name="Uint16", value=Uint16(1))
 
 
 def test_uint16_mid(ssz_test: SSZTestFiller) -> None:
@@ -255,7 +255,7 @@ def test_uint16_mid(ssz_test: SSZTestFiller) -> None:
     - the decoded value equals the original.
     - the little-endian byte order is preserved.
     """
-    ssz_test(type_name="Uint16", value=Uint16(32768))
+    ssz_test(case_id="uint16/high_bit", type_name="Uint16", value=Uint16(32768))
 
 
 def test_uint16_max(ssz_test: SSZTestFiller) -> None:
@@ -274,7 +274,7 @@ def test_uint16_max(ssz_test: SSZTestFiller) -> None:
     ----
     - the decoded value equals the original.
     """
-    ssz_test(type_name="Uint16", value=Uint16(2**16 - 1))
+    ssz_test(case_id="uint16/max", type_name="Uint16", value=Uint16(2**16 - 1))
 
 
 def test_uint32_zero(ssz_test: SSZTestFiller) -> None:
@@ -293,7 +293,7 @@ def test_uint32_zero(ssz_test: SSZTestFiller) -> None:
     ----
     - the decoded value equals the original.
     """
-    ssz_test(type_name="Uint32", value=Uint32(0))
+    ssz_test(case_id="uint32/zero", type_name="Uint32", value=Uint32(0))
 
 
 def test_uint32_one(ssz_test: SSZTestFiller) -> None:
@@ -312,7 +312,7 @@ def test_uint32_one(ssz_test: SSZTestFiller) -> None:
     ----
     - the decoded value equals the original.
     """
-    ssz_test(type_name="Uint32", value=Uint32(1))
+    ssz_test(case_id="uint32/one", type_name="Uint32", value=Uint32(1))
 
 
 def test_uint32_mid(ssz_test: SSZTestFiller) -> None:
@@ -332,7 +332,7 @@ def test_uint32_mid(ssz_test: SSZTestFiller) -> None:
     - the decoded value equals the original.
     - the four-byte little-endian layout is preserved.
     """
-    ssz_test(type_name="Uint32", value=Uint32(2147483648))
+    ssz_test(case_id="uint32/high_bit", type_name="Uint32", value=Uint32(2147483648))
 
 
 def test_uint32_max(ssz_test: SSZTestFiller) -> None:
@@ -351,7 +351,7 @@ def test_uint32_max(ssz_test: SSZTestFiller) -> None:
     ----
     - the decoded value equals the original.
     """
-    ssz_test(type_name="Uint32", value=Uint32(2**32 - 1))
+    ssz_test(case_id="uint32/max", type_name="Uint32", value=Uint32(2**32 - 1))
 
 
 def test_uint64_zero(ssz_test: SSZTestFiller) -> None:
@@ -370,7 +370,7 @@ def test_uint64_zero(ssz_test: SSZTestFiller) -> None:
     ----
     - the decoded value equals the original.
     """
-    ssz_test(type_name="Uint64", value=Uint64(0))
+    ssz_test(case_id="uint64/zero", type_name="Uint64", value=Uint64(0))
 
 
 def test_uint64_one(ssz_test: SSZTestFiller) -> None:
@@ -389,7 +389,7 @@ def test_uint64_one(ssz_test: SSZTestFiller) -> None:
     ----
     - the decoded value equals the original.
     """
-    ssz_test(type_name="Uint64", value=Uint64(1))
+    ssz_test(case_id="uint64/one", type_name="Uint64", value=Uint64(1))
 
 
 def test_uint64_mid(ssz_test: SSZTestFiller) -> None:
@@ -409,7 +409,7 @@ def test_uint64_mid(ssz_test: SSZTestFiller) -> None:
     - the decoded value equals the original.
     - the eight-byte little-endian layout is preserved.
     """
-    ssz_test(type_name="Uint64", value=Uint64(2**63))
+    ssz_test(case_id="uint64/high_bit", type_name="Uint64", value=Uint64(2**63))
 
 
 def test_uint64_max(ssz_test: SSZTestFiller) -> None:
@@ -429,7 +429,7 @@ def test_uint64_max(ssz_test: SSZTestFiller) -> None:
     - the decoded value equals the original.
     - the encoding is eight bytes of 0xff.
     """
-    ssz_test(type_name="Uint64", value=Uint64(2**64 - 1))
+    ssz_test(case_id="uint64/max", type_name="Uint64", value=Uint64(2**64 - 1))
 
 
 def test_uint128_zero(ssz_test: SSZTestFiller) -> None:
@@ -448,7 +448,7 @@ def test_uint128_zero(ssz_test: SSZTestFiller) -> None:
     ----
     - the decoded value equals the original.
     """
-    ssz_test(type_name="Uint128", value=Uint128(0))
+    ssz_test(case_id="uint128/zero", type_name="Uint128", value=Uint128(0))
 
 
 def test_uint128_one(ssz_test: SSZTestFiller) -> None:
@@ -467,7 +467,7 @@ def test_uint128_one(ssz_test: SSZTestFiller) -> None:
     ----
     - the decoded value equals the original.
     """
-    ssz_test(type_name="Uint128", value=Uint128(1))
+    ssz_test(case_id="uint128/one", type_name="Uint128", value=Uint128(1))
 
 
 def test_uint128_mid(ssz_test: SSZTestFiller) -> None:
@@ -487,7 +487,7 @@ def test_uint128_mid(ssz_test: SSZTestFiller) -> None:
     - the decoded value equals the original.
     - the sixteen-byte little-endian layout is preserved.
     """
-    ssz_test(type_name="Uint128", value=Uint128(2**127))
+    ssz_test(case_id="uint128/high_bit", type_name="Uint128", value=Uint128(2**127))
 
 
 def test_uint128_max(ssz_test: SSZTestFiller) -> None:
@@ -507,7 +507,7 @@ def test_uint128_max(ssz_test: SSZTestFiller) -> None:
     - the decoded value equals the original.
     - the encoding is sixteen bytes of 0xff.
     """
-    ssz_test(type_name="Uint128", value=Uint128(2**128 - 1))
+    ssz_test(case_id="uint128/max", type_name="Uint128", value=Uint128(2**128 - 1))
 
 
 def test_uint256_zero(ssz_test: SSZTestFiller) -> None:
@@ -526,7 +526,7 @@ def test_uint256_zero(ssz_test: SSZTestFiller) -> None:
     ----
     - the decoded value equals the original.
     """
-    ssz_test(type_name="Uint256", value=Uint256(0))
+    ssz_test(case_id="uint256/zero", type_name="Uint256", value=Uint256(0))
 
 
 def test_uint256_one(ssz_test: SSZTestFiller) -> None:
@@ -545,7 +545,7 @@ def test_uint256_one(ssz_test: SSZTestFiller) -> None:
     ----
     - the decoded value equals the original.
     """
-    ssz_test(type_name="Uint256", value=Uint256(1))
+    ssz_test(case_id="uint256/one", type_name="Uint256", value=Uint256(1))
 
 
 def test_uint256_mid(ssz_test: SSZTestFiller) -> None:
@@ -565,7 +565,7 @@ def test_uint256_mid(ssz_test: SSZTestFiller) -> None:
     - the decoded value equals the original.
     - the thirty-two-byte little-endian layout is preserved.
     """
-    ssz_test(type_name="Uint256", value=Uint256(2**255))
+    ssz_test(case_id="uint256/high_bit", type_name="Uint256", value=Uint256(2**255))
 
 
 def test_uint256_max(ssz_test: SSZTestFiller) -> None:
@@ -585,7 +585,7 @@ def test_uint256_max(ssz_test: SSZTestFiller) -> None:
     - the decoded value equals the original.
     - the encoding is thirty-two bytes of 0xff.
     """
-    ssz_test(type_name="Uint256", value=Uint256(2**256 - 1))
+    ssz_test(case_id="uint256/max", type_name="Uint256", value=Uint256(2**256 - 1))
 
 
 def test_bytes4_zero(ssz_test: SSZTestFiller) -> None:
@@ -604,7 +604,7 @@ def test_bytes4_zero(ssz_test: SSZTestFiller) -> None:
     ----
     - the decoded value equals the original.
     """
-    ssz_test(type_name="Bytes4", value=Bytes4(b"\x00" * 4))
+    ssz_test(case_id="bytes4/zero", type_name="Bytes4", value=Bytes4(b"\x00" * 4))
 
 
 def test_bytes4_typical(ssz_test: SSZTestFiller) -> None:
@@ -623,7 +623,7 @@ def test_bytes4_typical(ssz_test: SSZTestFiller) -> None:
     ----
     - the decoded value equals the original.
     """
-    ssz_test(type_name="Bytes4", value=Bytes4(b"\xde\xad\xbe\xef"))
+    ssz_test(case_id="bytes4/nonzero", type_name="Bytes4", value=Bytes4(b"\xde\xad\xbe\xef"))
 
 
 def test_bytes32_zero(ssz_test: SSZTestFiller) -> None:
@@ -642,7 +642,7 @@ def test_bytes32_zero(ssz_test: SSZTestFiller) -> None:
     ----
     - the decoded value equals the original.
     """
-    ssz_test(type_name="Bytes32", value=Bytes32.zero())
+    ssz_test(case_id="bytes32/zero", type_name="Bytes32", value=Bytes32.zero())
 
 
 def test_bytes32_typical(ssz_test: SSZTestFiller) -> None:
@@ -661,7 +661,7 @@ def test_bytes32_typical(ssz_test: SSZTestFiller) -> None:
     ----
     - the decoded value equals the original.
     """
-    ssz_test(type_name="Bytes32", value=Bytes32(b"\xab" * 32))
+    ssz_test(case_id="bytes32/uniform", type_name="Bytes32", value=Bytes32(b"\xab" * 32))
 
 
 def test_bytes32_incremental(ssz_test: SSZTestFiller) -> None:
@@ -681,7 +681,7 @@ def test_bytes32_incremental(ssz_test: SSZTestFiller) -> None:
     ----
     - the decoded value equals the original.
     """
-    ssz_test(type_name="Bytes32", value=Bytes32(bytes(range(32))))
+    ssz_test(case_id="bytes32/incremental", type_name="Bytes32", value=Bytes32(bytes(range(32))))
 
 
 def test_bytes52_zero(ssz_test: SSZTestFiller) -> None:
@@ -700,7 +700,7 @@ def test_bytes52_zero(ssz_test: SSZTestFiller) -> None:
     ----
     - the decoded value equals the original.
     """
-    ssz_test(type_name="Bytes52", value=Bytes52.zero())
+    ssz_test(case_id="bytes52/zero", type_name="Bytes52", value=Bytes52.zero())
 
 
 def test_bytes52_typical(ssz_test: SSZTestFiller) -> None:
@@ -719,7 +719,7 @@ def test_bytes52_typical(ssz_test: SSZTestFiller) -> None:
     ----
     - the decoded value equals the original.
     """
-    ssz_test(type_name="Bytes52", value=Bytes52(b"\xcd" * 52))
+    ssz_test(case_id="bytes52/uniform", type_name="Bytes52", value=Bytes52(b"\xcd" * 52))
 
 
 def test_bytes64_zero(ssz_test: SSZTestFiller) -> None:
@@ -738,7 +738,7 @@ def test_bytes64_zero(ssz_test: SSZTestFiller) -> None:
     ----
     - the decoded value equals the original.
     """
-    ssz_test(type_name="Bytes64", value=Bytes64.zero())
+    ssz_test(case_id="bytes64/zero", type_name="Bytes64", value=Bytes64.zero())
 
 
 def test_bytes64_typical(ssz_test: SSZTestFiller) -> None:
@@ -757,7 +757,7 @@ def test_bytes64_typical(ssz_test: SSZTestFiller) -> None:
     ----
     - the decoded value equals the original.
     """
-    ssz_test(type_name="Bytes64", value=Bytes64(b"\xef" * 64))
+    ssz_test(case_id="bytes64/uniform", type_name="Bytes64", value=Bytes64(b"\xef" * 64))
 
 
 def test_bytelist_empty(ssz_test: SSZTestFiller) -> None:
@@ -776,7 +776,9 @@ def test_bytelist_empty(ssz_test: SSZTestFiller) -> None:
     ----
     - the decoded value equals the original.
     """
-    ssz_test(type_name="ByteList512KiB", value=ByteList512KiB(data=b""))
+    ssz_test(
+        case_id="bytelist512kib/empty", type_name="ByteList512KiB", value=ByteList512KiB(data=b"")
+    )
 
 
 def test_bytelist_small(ssz_test: SSZTestFiller) -> None:
@@ -795,7 +797,11 @@ def test_bytelist_small(ssz_test: SSZTestFiller) -> None:
     ----
     - the decoded value equals the original.
     """
-    ssz_test(type_name="ByteList512KiB", value=ByteList512KiB(data=b"\x01\x02\x03\x04"))
+    ssz_test(
+        case_id="bytelist512kib/four_bytes",
+        type_name="ByteList512KiB",
+        value=ByteList512KiB(data=b"\x01\x02\x03\x04"),
+    )
 
 
 def test_bytelist_medium(ssz_test: SSZTestFiller) -> None:
@@ -814,7 +820,11 @@ def test_bytelist_medium(ssz_test: SSZTestFiller) -> None:
     ----
     - the decoded value equals the original.
     """
-    ssz_test(type_name="ByteList512KiB", value=ByteList512KiB(data=bytes(range(256))))
+    ssz_test(
+        case_id="bytelist512kib/all_byte_values",
+        type_name="ByteList512KiB",
+        value=ByteList512KiB(data=bytes(range(256))),
+    )
 
 
 def test_bitvector8_all_zero(ssz_test: SSZTestFiller) -> None:
@@ -835,6 +845,7 @@ def test_bitvector8_all_zero(ssz_test: SSZTestFiller) -> None:
     - the encoding is the byte 0x00.
     """
     ssz_test(
+        case_id="bitvector8/all_clear",
         type_name="SampleBitVector8",
         value=SampleBitVector8(data=[Boolean(False)] * 8),
     )
@@ -858,6 +869,7 @@ def test_bitvector8_all_one(ssz_test: SSZTestFiller) -> None:
     - the encoding is the byte 0xff.
     """
     ssz_test(
+        case_id="bitvector8/all_set",
         type_name="SampleBitVector8",
         value=SampleBitVector8(data=[Boolean(True)] * 8),
     )
@@ -881,6 +893,7 @@ def test_bitvector8_mixed(ssz_test: SSZTestFiller) -> None:
     - the encoding is the byte 0x55.
     """
     ssz_test(
+        case_id="bitvector8/alternating",
         type_name="SampleBitVector8",
         value=SampleBitVector8(
             data=[
@@ -915,6 +928,7 @@ def test_bitvector64_all_zero(ssz_test: SSZTestFiller) -> None:
     - the encoding is eight zero bytes.
     """
     ssz_test(
+        case_id="bitvector64/all_clear",
         type_name="SampleBitVector64",
         value=SampleBitVector64(data=[Boolean(False)] * 64),
     )
@@ -938,6 +952,7 @@ def test_bitvector64_all_one(ssz_test: SSZTestFiller) -> None:
     - the encoding is eight bytes of 0xff.
     """
     ssz_test(
+        case_id="bitvector64/all_set",
         type_name="SampleBitVector64",
         value=SampleBitVector64(data=[Boolean(True)] * 64),
     )
@@ -961,6 +976,7 @@ def test_bitvector64_mixed(ssz_test: SSZTestFiller) -> None:
     - bit ordering is preserved across byte boundaries.
     """
     ssz_test(
+        case_id="bitvector64/alternating",
         type_name="SampleBitVector64",
         value=SampleBitVector64(data=[Boolean(i % 2 == 0) for i in range(64)]),
     )
@@ -984,6 +1000,7 @@ def test_bitlist_empty(ssz_test: SSZTestFiller) -> None:
     - the encoding is the sentinel-only byte 0x01.
     """
     ssz_test(
+        case_id="bitlist16/empty",
         type_name="SampleBitList16",
         value=SampleBitList16(data=[]),
     )
@@ -1007,6 +1024,7 @@ def test_bitlist_single_true(ssz_test: SSZTestFiller) -> None:
     - the sentinel immediately follows the data bit.
     """
     ssz_test(
+        case_id="bitlist16/one_bit_set",
         type_name="SampleBitList16",
         value=SampleBitList16(data=[Boolean(True)]),
     )
@@ -1030,6 +1048,7 @@ def test_bitlist_single_false(ssz_test: SSZTestFiller) -> None:
     - the sentinel is the only set bit in the byte.
     """
     ssz_test(
+        case_id="bitlist16/one_bit_clear",
         type_name="SampleBitList16",
         value=SampleBitList16(data=[Boolean(False)]),
     )
@@ -1053,6 +1072,7 @@ def test_bitlist_at_limit(ssz_test: SSZTestFiller) -> None:
     - the sentinel lands in a new byte.
     """
     ssz_test(
+        case_id="bitlist16/at_limit",
         type_name="SampleBitList16",
         value=SampleBitList16(data=[Boolean(True)] * 16),
     )
@@ -1075,6 +1095,7 @@ def test_bitlist_mixed(ssz_test: SSZTestFiller) -> None:
     - the decoded value equals the original.
     """
     ssz_test(
+        case_id="bitlist16/partially_filled",
         type_name="SampleBitList16",
         value=SampleBitList16(
             data=[
@@ -1105,6 +1126,7 @@ def test_uint16_vector3_zero(ssz_test: SSZTestFiller) -> None:
     - the decoded value equals the original.
     """
     ssz_test(
+        case_id="uint16_vector3/zero",
         type_name="SampleUint16Vector3",
         value=SampleUint16Vector3(data=[Uint16(0), Uint16(0), Uint16(0)]),
     )
@@ -1128,6 +1150,7 @@ def test_uint16_vector3_typical(ssz_test: SSZTestFiller) -> None:
     - the decoded value equals the original.
     """
     ssz_test(
+        case_id="uint16_vector3/mixed",
         type_name="SampleUint16Vector3",
         value=SampleUint16Vector3(data=[Uint16(100), Uint16(200), Uint16(65535)]),
     )
@@ -1150,6 +1173,7 @@ def test_uint64_vector4_zero(ssz_test: SSZTestFiller) -> None:
     - the decoded value equals the original.
     """
     ssz_test(
+        case_id="uint64_vector4/zero",
         type_name="SampleUint64Vector4",
         value=SampleUint64Vector4(data=[Uint64(0), Uint64(0), Uint64(0), Uint64(0)]),
     )
@@ -1172,6 +1196,7 @@ def test_uint64_vector4_typical(ssz_test: SSZTestFiller) -> None:
     - the decoded value equals the original.
     """
     ssz_test(
+        case_id="uint64_vector4/mixed",
         type_name="SampleUint64Vector4",
         value=SampleUint64Vector4(
             data=[
@@ -1201,6 +1226,7 @@ def test_uint32_list_empty(ssz_test: SSZTestFiller) -> None:
     - the decoded value equals the original.
     """
     ssz_test(
+        case_id="uint32_list16/empty",
         type_name="SampleUint32List16",
         value=SampleUint32List16(data=[]),
     )
@@ -1223,6 +1249,7 @@ def test_uint32_list_single(ssz_test: SSZTestFiller) -> None:
     - the decoded value equals the original.
     """
     ssz_test(
+        case_id="uint32_list16/one_element",
         type_name="SampleUint32List16",
         value=SampleUint32List16(data=[Uint32(42)]),
     )
@@ -1245,6 +1272,7 @@ def test_uint32_list_multiple(ssz_test: SSZTestFiller) -> None:
     - the decoded value equals the original.
     """
     ssz_test(
+        case_id="uint32_list16/three_elements",
         type_name="SampleUint32List16",
         value=SampleUint32List16(data=[Uint32(0), Uint32(100), Uint32(2**32 - 1)]),
     )
@@ -1267,6 +1295,7 @@ def test_bytes32_list_empty(ssz_test: SSZTestFiller) -> None:
     - the decoded value equals the original.
     """
     ssz_test(
+        case_id="bytes32_list8/empty",
         type_name="SampleBytes32List8",
         value=SampleBytes32List8(data=[]),
     )
@@ -1289,6 +1318,7 @@ def test_bytes32_list_single(ssz_test: SSZTestFiller) -> None:
     - the decoded value equals the original.
     """
     ssz_test(
+        case_id="bytes32_list8/one_element",
         type_name="SampleBytes32List8",
         value=SampleBytes32List8(data=[Bytes32(b"\xaa" * 32)]),
     )
@@ -1311,6 +1341,7 @@ def test_bytes32_list_multiple(ssz_test: SSZTestFiller) -> None:
     - the decoded value equals the original.
     """
     ssz_test(
+        case_id="bytes32_list8/three_elements",
         type_name="SampleBytes32List8",
         value=SampleBytes32List8(
             data=[

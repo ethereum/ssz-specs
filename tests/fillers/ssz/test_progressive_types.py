@@ -77,6 +77,7 @@ def test_progressive_list_empty(ssz_test: SSZTestFiller) -> None:
     - the decoded value equals the original.
     """
     ssz_test(
+        case_id="progressive_list/empty",
         type_name="SampleUint64ProgressiveList",
         value=SampleUint64ProgressiveList(data=[]),
     )
@@ -100,6 +101,7 @@ def test_progressive_list_single_element(ssz_test: SSZTestFiller) -> None:
     - the decoded value equals the original.
     """
     ssz_test(
+        case_id="progressive_list/single_element",
         type_name="SampleUint64ProgressiveList",
         value=SampleUint64ProgressiveList(data=[Uint64(1)]),
     )
@@ -124,6 +126,7 @@ def test_progressive_list_fills_first_level(ssz_test: SSZTestFiller) -> None:
     - the decoded value equals the original.
     """
     ssz_test(
+        case_id="progressive_list/fills_first_level",
         type_name="SampleUint64ProgressiveList",
         value=SampleUint64ProgressiveList(data=[Uint64(value) for value in range(4)]),
     )
@@ -148,6 +151,7 @@ def test_progressive_list_opens_second_level(ssz_test: SSZTestFiller) -> None:
     - the decoded value equals the original.
     """
     ssz_test(
+        case_id="progressive_list/opens_second_level",
         type_name="SampleUint64ProgressiveList",
         value=SampleUint64ProgressiveList(data=[Uint64(value) for value in range(5)]),
     )
@@ -172,6 +176,7 @@ def test_progressive_list_fills_second_level(ssz_test: SSZTestFiller) -> None:
     - the decoded value equals the original.
     """
     ssz_test(
+        case_id="progressive_list/fills_second_level",
         type_name="SampleUint64ProgressiveList",
         value=SampleUint64ProgressiveList(data=[Uint64(value) for value in range(20)]),
     )
@@ -196,6 +201,7 @@ def test_progressive_list_opens_third_level(ssz_test: SSZTestFiller) -> None:
     - the decoded value equals the original.
     """
     ssz_test(
+        case_id="progressive_list/opens_third_level",
         type_name="SampleUint64ProgressiveList",
         value=SampleUint64ProgressiveList(data=[Uint64(value) for value in range(21)]),
     )
@@ -220,6 +226,7 @@ def test_progressive_list_fills_third_level(ssz_test: SSZTestFiller) -> None:
     - the decoded value equals the original.
     """
     ssz_test(
+        case_id="progressive_list/fills_third_level",
         type_name="SampleUint64ProgressiveList",
         value=SampleUint64ProgressiveList(data=[Uint64(value) for value in range(84)]),
     )
@@ -244,6 +251,7 @@ def test_progressive_list_opens_fourth_level(ssz_test: SSZTestFiller) -> None:
     - the decoded value equals the original.
     """
     ssz_test(
+        case_id="progressive_list/opens_fourth_level",
         type_name="SampleUint64ProgressiveList",
         value=SampleUint64ProgressiveList(data=[Uint64(value) for value in range(85)]),
     )
@@ -267,6 +275,7 @@ def test_progressive_list_of_composites_empty(ssz_test: SSZTestFiller) -> None:
     - the decoded value equals the original.
     """
     ssz_test(
+        case_id="progressive_list/composites/empty",
         type_name="SampleBytes32ProgressiveList",
         value=SampleBytes32ProgressiveList(data=[]),
     )
@@ -290,6 +299,7 @@ def test_progressive_list_of_composites_single(ssz_test: SSZTestFiller) -> None:
     - the decoded value equals the original.
     """
     ssz_test(
+        case_id="progressive_list/composites/single_element",
         type_name="SampleBytes32ProgressiveList",
         value=SampleBytes32ProgressiveList(data=[Bytes32(b"\xaa" * 32)]),
     )
@@ -314,6 +324,7 @@ def test_progressive_list_of_composites_crosses_a_level(ssz_test: SSZTestFiller)
     - the decoded value equals the original.
     """
     ssz_test(
+        case_id="progressive_list/composites/crosses_level",
         type_name="SampleBytes32ProgressiveList",
         value=SampleBytes32ProgressiveList(
             data=[Bytes32(bytes([value]) * 32) for value in range(1, 7)]
@@ -340,6 +351,7 @@ def test_progressive_list_of_variable_size_elements(ssz_test: SSZTestFiller) -> 
     - the decoded value equals the original.
     """
     ssz_test(
+        case_id="progressive_list/variable_size_elements",
         type_name="SampleNestedProgressiveList",
         value=SampleNestedProgressiveList(
             data=[
@@ -369,6 +381,7 @@ def test_progressive_bitlist_empty(ssz_test: SSZTestFiller) -> None:
     - the decoded value equals the original.
     """
     ssz_test(
+        case_id="progressive_bitlist/empty",
         type_name="ProgressiveBitList",
         value=ProgressiveBitList(data=[]),
     )
@@ -393,6 +406,7 @@ def test_progressive_bitlist_small(ssz_test: SSZTestFiller) -> None:
     - the decoded value equals the original.
     """
     ssz_test(
+        case_id="progressive_bitlist/three_bits",
         type_name="ProgressiveBitList",
         value=ProgressiveBitList(data=[Boolean(True), Boolean(False), Boolean(True)]),
     )
@@ -417,6 +431,7 @@ def test_progressive_bitlist_fills_one_chunk(ssz_test: SSZTestFiller) -> None:
     - the decoded value equals the original.
     """
     ssz_test(
+        case_id="progressive_bitlist/fills_one_chunk",
         type_name="ProgressiveBitList",
         value=ProgressiveBitList(data=[Boolean(True)] * 256),
     )
@@ -441,6 +456,7 @@ def test_progressive_bitlist_opens_second_level(ssz_test: SSZTestFiller) -> None
     - the decoded value equals the original.
     """
     ssz_test(
+        case_id="progressive_bitlist/opens_second_level",
         type_name="ProgressiveBitList",
         value=ProgressiveBitList(data=[Boolean(True)] * PROGRESSIVE_BITLIST_LEVEL_BITS),
     )
@@ -465,6 +481,7 @@ def test_container_with_progressive_list_field(ssz_test: SSZTestFiller) -> None:
     - the decoded value equals the original.
     """
     ssz_test(
+        case_id="progressive_list/in_container/populated",
         type_name="SampleContainerWithProgressiveList",
         value=SampleContainerWithProgressiveList(
             a=Uint16(0xABCD),
@@ -492,6 +509,7 @@ def test_container_with_empty_progressive_list_field(ssz_test: SSZTestFiller) ->
     - the decoded value equals the original.
     """
     ssz_test(
+        case_id="progressive_list/in_container/empty",
         type_name="SampleContainerWithProgressiveList",
         value=SampleContainerWithProgressiveList(
             a=Uint16(0xABCD),

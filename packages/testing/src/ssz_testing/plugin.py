@@ -1,20 +1,19 @@
 """Pytest plugin for generating SSZ conformance test fixtures."""
 
 import json
+import re
 import shutil
 from collections import defaultdict
 from inspect import cleandoc
 from pathlib import Path
-from typing import Any
+from typing import Any, Final
 
 import pytest
 
 from ssz_testing.fixtures import FIXTURE_FORMATS, BaseConsensusFixture, FixtureInfo
 
-
-def fixture_test_id(test_nodeid: str, fixture_format: str) -> str:
-    """The key one vector is stored under within its fixture file."""
-    return f"{test_nodeid}[{fixture_format}]"
+CASE_ID_PATTERN: Final = re.compile(r"[a-z0-9]+(?:_[a-z0-9]+)*(?:/[a-z0-9]+(?:_[a-z0-9]+)*)*")
+"""A case id: slash-separated segments of lowercase words, such as `uint64/max`."""
 
 
 class FixtureCollector:
@@ -23,9 +22,9 @@ class FixtureCollector:
     def __init__(self, output_directory: Path):
         """Initialize the fixture collector."""
         self.output_directory = output_directory
-        self.fixtures: list[tuple[str, Any, str]] = []
+        self.fixtures: list[tuple[Path, str, Any]] = []
         self.type_shapes: dict[str, tuple[str, str]] = {}
-        self.collected_test_ids: set[str] = set()
+        self.case_producers: dict[str, str] = {}
 
     def fixture_output_file(self, test_nodeid: str, fixture_format: str) -> Path:
         """The fixture file for one test function, which must sit under the filler tests."""
@@ -66,51 +65,61 @@ class FixtureCollector:
                     f"  {test_nodeid}: {shape}"
                 )
 
-    def add_fixture(self, fixture_format: str, fixture: Any, item: pytest.Item) -> None:
+    def claim_case_id(self, case_id: str, test_nodeid: str) -> None:
+        """
+        Hold every case id the run emits to one vector, it being how a consumer names the case.
+
+        Args:
+            case_id: The identifier the filler authored for this case.
+            test_nodeid: The test that produced it, named in the refusal.
+
+        Raises:
+            ValueError: When the id is not spelled as slash-separated lowercase words.
+            ValueError: When an earlier vector was already emitted under this id.
+        """
+        if not CASE_ID_PATTERN.fullmatch(case_id):
+            raise ValueError(
+                f"case id '{case_id}' is not spelled as slash-separated lowercase words, "
+                "the way 'uint64/max' and 'bitlist16/invalid/over_limit' are"
+            )
+        claimed_by = self.case_producers.get(case_id)
+        if claimed_by is not None:
+            raise ValueError(
+                f"case id '{case_id}' names two different vectors:\n  {claimed_by}\n  {test_nodeid}"
+            )
+        self.case_producers[case_id] = test_nodeid
+
+    def add_fixture(
+        self, fixture_format: str, fixture: Any, item: pytest.Item, case_id: str
+    ) -> None:
         """
         Add a fixture to the collection, and record its path on the test that produced it.
 
         Raises:
-            ValueError: If the test already produced a vector of this format.
+            ValueError: If the case id is malformed, or already names another vector.
             ValueError: If one type name stands for two different shapes.
         """
-        test_id = fixture_test_id(item.nodeid, fixture_format)
-        if test_id in self.collected_test_ids:
-            raise ValueError(
-                f"test '{item.nodeid}' already produced a '{fixture_format}' vector, and a "
-                "second one would replace it. Parametrize the test or split it, so that every "
-                "vector is written under its own test id."
-            )
-        self.collected_test_ids.add(test_id)
+        self.claim_case_id(case_id, item.nodeid)
         self.claim_type_names(fixture, item.nodeid)
 
-        self.fixtures.append((fixture_format, fixture, item.nodeid))
+        fixture_path = self.fixture_output_file(item.nodeid, fixture_format)
+        self.fixtures.append((fixture_path, case_id, fixture))
 
         # Stashed on the item, not the session-wide config, which would leak to later tests.
-        fixture_path = self.fixture_output_file(item.nodeid, fixture_format)
         item.stash[FIXTURE_PATH_ABSOLUTE_KEY] = str(fixture_path.absolute())
         item.stash[FIXTURE_PATH_RELATIVE_KEY] = str(fixture_path.relative_to(self.output_directory))
         item.stash[FIXTURE_FORMAT_KEY] = fixture_format
 
     def write_fixtures(self) -> None:
         """Write all collected fixtures to disk, grouped by test function."""
-        grouped: dict[Path, list[tuple[str, Any, str]]] = defaultdict(list)
+        grouped: dict[Path, dict[str, Any]] = defaultdict(dict)
+        for output_file, case_id, fixture in self.fixtures:
+            grouped[output_file][case_id] = fixture.json_dict_with_info()
 
-        for fixture_format, fixture, test_nodeid in self.fixtures:
-            output_file = self.fixture_output_file(test_nodeid, fixture_format)
-            grouped[output_file].append((fixture_format, fixture, test_nodeid))
-
-        for output_file, fixtures_list in grouped.items():
+        for output_file, cases in grouped.items():
             output_file.parent.mkdir(parents=True, exist_ok=True)
-
-            all_tests = {}
-            for fixture_format, fixture, test_nodeid in fixtures_list:
-                all_tests[fixture_test_id(test_nodeid, fixture_format)] = (
-                    fixture.json_dict_with_info()
-                )
-
             with output_file.open("w") as output_handle:
-                json.dump(all_tests, output_handle, indent=4)
+                json.dump(cases, output_handle, indent=4)
                 output_handle.write("\n")
 
 
@@ -269,13 +278,14 @@ def base_spec_filler_parametrizer(spec_class: Any) -> Any:
     ) -> Any:
         """Fixture whose value builds the spec, generates, and collects the result."""
 
-        def fill_and_collect(**spec_fields: Any) -> Any:
+        def fill_and_collect(*, case_id: str, **spec_fields: Any) -> Any:
             test_spec = spec_class(**spec_fields)
             generated_fixture = test_spec.generate()
 
             filled_fixture = generated_fixture.with_info(
                 info=FixtureInfo(
-                    test_id=request.node.nodeid,
+                    test_id=case_id,
+                    generated_by=request.node.nodeid,
                     description=test_case_description,
                     fixture_format=spec_class.format_name,
                 )
@@ -285,6 +295,7 @@ def base_spec_filler_parametrizer(spec_class: Any) -> Any:
                 fixture_format=spec_class.format_name,
                 fixture=filled_fixture,
                 item=request.node,
+                case_id=case_id,
             )
             return filled_fixture
 

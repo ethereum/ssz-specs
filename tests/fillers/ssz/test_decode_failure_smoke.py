@@ -31,6 +31,7 @@ def test_ssz_decode_failure_bitlist_exceeds_limit(ssz_test: SSZTestFiller) -> No
     - the reason is that the implied bit-length exceeds the limit.
     """
     ssz_test(
+        case_id="bitlist8/invalid/over_limit",
         type_name="SmokeBitList8",
         value=SmokeBitList8(data=[Boolean(False)]),
         raw_bytes="0x0010",
