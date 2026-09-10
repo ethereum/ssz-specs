@@ -480,7 +480,7 @@ def test_a_vector_file_ends_with_a_newline(project: pytest.Pytester) -> None:
 
 
 def test_one_type_name_for_two_shapes_fails_the_fill(project: pytest.Pytester) -> None:
-    """A name is all a vector says about its type, so a second shape under one is refused."""
+    """A name indexes a vector, so a second declaration under one is refused."""
     project.makepyfile(**{"tests/fillers/test_collision": SHAPE_COLLISION_MODULE})
 
     refused = fill(project, "--clean")
@@ -488,9 +488,9 @@ def test_one_type_name_for_two_shapes_fails_the_fill(project: pytest.Pytester) -
     refused.assert_outcomes(passed=3, failed=1)
     refused.stdout.fnmatch_lines(
         [
-            "*ValueError: type name 'Shape' stands for two different shapes:*",
-            "*tests/fillers/test_collision.py::test_narrow: Container(a: Uint8())*",
-            "*tests/fillers/test_collision.py::test_wide: Container(a: Uint16())*",
+            "*ValueError: type name 'Shape' stands for two different declarations:*",
+            '*test_collision.py::test_narrow: *"name": "a", "type": *"bits": 8*',
+            '*test_collision.py::test_wide: *"name": "a", "type": *"bits": 16*',
         ]
     )
 

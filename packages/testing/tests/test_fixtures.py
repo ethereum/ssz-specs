@@ -21,7 +21,7 @@ from ssz_testing.fixtures import (
     FixtureInfo,
     SSZFixture,
     SSZTest,
-    type_shape,
+    describe_type,
 )
 from ssz_testing.hex_codec import from_hex, to_hex
 
@@ -197,6 +197,7 @@ def test_a_decode_failure_emits_the_type_the_bytes_and_the_fault_that_fired() ->
     assert fixture.rejection_reason is ValueFault.SCOPE
     assert fixture.json_dict == {
         "typeName": "Uint8",
+        "typeDescriptor": {"kind": "Uint8", "bits": 8},
         "serialized": "0x0000",
         "rejectionReason": "SCOPE",
         "valid": False,
@@ -209,6 +210,7 @@ def test_a_vector_a_decoder_must_accept_reads_as_valid_and_carries_its_value() -
 
     assert fixture.json_dict == {
         "typeName": "Uint8",
+        "typeDescriptor": {"kind": "Uint8", "bits": 8},
         "serialized": "0x01",
         "value": "1",
         "root": "0x01" + "00" * 31,
@@ -272,34 +274,62 @@ def test_a_fixture_hashes_the_same_way_twice() -> None:
     assert json.loads(expected)["root"] == fixture.root
 
 
-def test_a_shape_is_read_off_the_declaration_and_not_off_the_class_name() -> None:
-    """Two spellings of one declaration share a shape, and any changed parameter parts them."""
-    assert type_shape(Bytes2) == "ByteVector(LENGTH=2)"
-    assert type_shape(Bytes2Again) == type_shape(Bytes2)
-    assert type_shape(Bytes3) != type_shape(Bytes2)
-
-    assert type_shape(Pair) == "Container(number: Uint8(), flag: Boolean())"
-    assert type_shape(Swapped) != type_shape(Pair)
+UINT8 = {"kind": "Uint8", "bits": 8}
 
 
-def test_a_shape_writes_out_every_parameter_a_declaration_fixes() -> None:
+def test_a_declaration_is_read_off_the_class_and_not_off_its_name() -> None:
+    """Two spellings of one declaration describe alike, and any changed parameter parts them."""
+    assert describe_type(Bytes2).to_json(exclude_none=True) == {"kind": "ByteVector", "length": 2}
+    assert describe_type(Bytes2Again) == describe_type(Bytes2)
+    assert describe_type(Bytes3) != describe_type(Bytes2)
+
+    assert describe_type(Pair).to_json(exclude_none=True) == {
+        "kind": "Container",
+        "fields": [
+            {"name": "number", "type": UINT8},
+            {"name": "flag", "type": {"kind": "Boolean"}},
+        ],
+    }
+    assert describe_type(Swapped) != describe_type(Pair)
+
+
+def test_a_declaration_writes_out_every_parameter_it_fixes() -> None:
     """A capacity, an element type, a field layout and a union's options all read out."""
-    assert type_shape(Numbers) == "List(LIMIT=4, ELEMENT_TYPE=Uint8())"
-    assert type_shape(Square) == (
-        "ProgressiveContainer(ACTIVE_FIELDS=(1, 0, 1), side: Uint8(), color: Uint8())"
-    )
-    assert type_shape(Shape) == (
-        "CompatibleUnion(OPTIONS={"
-        "1: ProgressiveContainer(ACTIVE_FIELDS=(1, 0, 1), side: Uint8(), color: Uint8()), "
-        "2: ProgressiveContainer(ACTIVE_FIELDS=(0, 1, 1), radius: Uint8(), color: Uint8())})"
-    )
+    assert describe_type(Numbers).to_json(exclude_none=True) == {
+        "kind": "List",
+        "limit": 4,
+        "elementType": UINT8,
+    }
+    square = {
+        "kind": "ProgressiveContainer",
+        "activeFields": [1, 0, 1],
+        "fields": [{"name": "side", "type": UINT8}, {"name": "color", "type": UINT8}],
+    }
+    assert describe_type(Square).to_json(exclude_none=True) == square
+    assert describe_type(Shape).to_json(exclude_none=True) == {
+        "kind": "CompatibleUnion",
+        "options": [
+            {"selector": 1, "type": square},
+            {
+                "selector": 2,
+                "type": {
+                    "kind": "ProgressiveContainer",
+                    "activeFields": [0, 1, 1],
+                    "fields": [
+                        {"name": "radius", "type": UINT8},
+                        {"name": "color", "type": UINT8},
+                    ],
+                },
+            },
+        ],
+    }
 
 
-def test_a_vector_claims_its_type_name_for_the_shape_of_its_value() -> None:
-    """The name a vector emits is claimed against the declared shape of the value under test."""
+def test_a_vector_claims_its_type_name_for_the_declaration_of_its_value() -> None:
+    """The name a vector emits is claimed against the declaration of the value under test."""
     fixture = SSZTest(type_name="Pair", value=Pair(number=Uint8(1), flag=Boolean(True))).generate()
 
-    assert fixture.declared_type_shapes() == {"Pair": "Container(number: Uint8(), flag: Boolean())"}
+    assert fixture.declared_types() == {"Pair": describe_type(Pair)}
 
 
 def test_a_decode_failure_claims_its_type_name_with_no_value_to_read_it_off() -> None:
@@ -312,13 +342,13 @@ def test_a_decode_failure_claims_its_type_name_with_no_value_to_read_it_off() ->
     ).generate()
 
     assert fixture.value is None
-    assert fixture.declared_type_shapes() == {"Pair": "Container(number: Uint8(), flag: Boolean())"}
+    assert fixture.declared_types() == {"Pair": describe_type(Pair)}
 
 
 def test_a_fixture_format_that_names_no_type_claims_nothing() -> None:
-    """A format emitting no type name holds no name to a shape."""
+    """A format emitting no type name holds no name to a declaration."""
 
     class Bare(BaseConsensusFixture):
         pass
 
-    assert Bare().declared_type_shapes() == {}
+    assert Bare().declared_types() == {}

@@ -10,7 +10,12 @@ from typing import Any, Final
 
 import pytest
 
-from ssz_testing.fixtures import FIXTURE_FORMATS, BaseConsensusFixture, FixtureInfo
+from ssz_testing.fixtures import (
+    FIXTURE_FORMATS,
+    BaseConsensusFixture,
+    FixtureInfo,
+    TypeDescriptor,
+)
 
 CASE_ID_PATTERN: Final = re.compile(r"[a-z0-9]+(?:_[a-z0-9]+)*(?:/[a-z0-9]+(?:_[a-z0-9]+)*)*")
 """A case id: slash-separated segments of lowercase words, such as `uint64/max`."""
@@ -23,7 +28,7 @@ class FixtureCollector:
         """Initialize the fixture collector."""
         self.output_directory = output_directory
         self.fixtures: list[tuple[Path, str, Any]] = []
-        self.type_shapes: dict[str, tuple[str, str]] = {}
+        self.type_declarations: dict[str, tuple[str, TypeDescriptor]] = {}
         self.case_producers: dict[str, str] = {}
 
     def fixture_output_file(self, test_nodeid: str, fixture_format: str) -> Path:
@@ -47,22 +52,24 @@ class FixtureCollector:
 
     def claim_type_names(self, fixture: BaseConsensusFixture, test_nodeid: str) -> None:
         """
-        Hold every type name the run emits to one shape, it being all a vector says about its type.
+        Hold every type name the run emits to one declaration, a name being how a vector is indexed.
 
         Args:
             fixture: The fixture whose type names are being claimed.
             test_nodeid: The test that produced it, named in the refusal.
 
         Raises:
-            ValueError: When an earlier vector emitted this name for a different shape.
+            ValueError: When an earlier vector emitted this name for a different declaration.
         """
-        for type_name, shape in fixture.declared_type_shapes().items():
-            claimed_by, claimed_shape = self.type_shapes.setdefault(type_name, (test_nodeid, shape))
-            if claimed_shape != shape:
+        for type_name, declared in fixture.declared_types().items():
+            claimed_by, claimed = self.type_declarations.setdefault(
+                type_name, (test_nodeid, declared)
+            )
+            if claimed != declared:
                 raise ValueError(
-                    f"type name '{type_name}' stands for two different shapes:\n"
-                    f"  {claimed_by}: {claimed_shape}\n"
-                    f"  {test_nodeid}: {shape}"
+                    f"type name '{type_name}' stands for two different declarations:\n"
+                    f"  {claimed_by}: {json.dumps(claimed.to_json(exclude_none=True))}\n"
+                    f"  {test_nodeid}: {json.dumps(declared.to_json(exclude_none=True))}"
                 )
 
     def claim_case_id(self, case_id: str, test_nodeid: str) -> None:
@@ -97,7 +104,7 @@ class FixtureCollector:
 
         Raises:
             ValueError: If the case id is malformed, or already names another vector.
-            ValueError: If one type name stands for two different shapes.
+            ValueError: If one type name stands for two different declarations.
         """
         self.claim_case_id(case_id, item.nodeid)
         self.claim_type_names(fixture, item.nodeid)
