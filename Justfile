@@ -54,10 +54,10 @@ lock-check:
         exit 1
     fi
 
-# Generate SSZ conformance test vectors under fixtures/
+# Generate SSZ conformance test vectors under fixtures/, every remembered root recomputed
 [group('fill')]
 fill *args:
-    uv run --locked --group test fill --clean "$@"
+    SSZ_PARANOID_ROOTS=1 uv run --locked --group test fill --clean "$@"
 
 # Run unit tests in parallel, over every path testpaths names
 [group('tests')]

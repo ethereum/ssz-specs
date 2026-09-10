@@ -368,7 +368,7 @@ class SSZTest(BaseTestSpec):
     """Hex malformed input, consulted only in decode-failure mode."""
 
     def generate(self) -> SSZFixture:
-        """Verify SSZ roundtrip or decode-failure and produce the reference output."""
+        """Verify SSZ roundtrip and re-encoding, or decode-failure, and produce the output."""
         if self.expected_rejection is not None:
             return self._generate_decode_failure()
 
@@ -380,6 +380,15 @@ class SSZTest(BaseTestSpec):
             f"original != decoded\n"
             f"Original: {self.value}\n"
             f"Decoded: {decoded}"
+        )
+
+        # Re-encoding an accepted value must reproduce its bytes, or one value has two encodings.
+        reencoded = decoded.encode_bytes()
+        assert reencoded == ssz_bytes, (
+            f"SSZ encoding is not canonical for {self.type_name}: "
+            f"re-encoding the decoded value gave other bytes\n"
+            f"Encoded: {to_hex(ssz_bytes)}\n"
+            f"Re-encoded: {to_hex(reencoded)}"
         )
 
         root = hash_tree_root(self.value)
