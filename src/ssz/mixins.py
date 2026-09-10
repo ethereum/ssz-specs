@@ -7,7 +7,7 @@ Each is built at the chunk width, which yields exactly that width or raises.
 from collections.abc import Sequence
 from hashlib import sha256
 
-from ssz.chunks import BYTES_PER_CHUNK, Chunk, Root
+from ssz.chunks import BITS_PER_CHUNK, BYTES_PER_CHUNK, Chunk, Root
 from ssz.exceptions import SSZValueError, ValueFault
 
 
@@ -22,10 +22,10 @@ def length_word(length: int) -> Chunk:
     The element count a variable-size shape mixes in, as one 32-byte little-endian word.
 
     Raises:
-        SSZValueError: A negative length.
+        SSZValueError: A length the word cannot hold.
     """
-    if length < 0:
-        raise SSZValueError(ValueFault.NEGATIVE_LENGTH, length=length)
+    if not 0 <= length < 1 << BITS_PER_CHUNK:
+        raise SSZValueError(ValueFault.LENGTH_WORD, length=length)
     return Chunk._trusted(length.to_bytes(BYTES_PER_CHUNK, "little"))
 
 
@@ -70,7 +70,7 @@ def mix_in_length(root: Root, length: int) -> Root:
     Two lists of identical elements under different lengths must root differently.
 
     Raises:
-        SSZValueError: A negative length.
+        SSZValueError: A length the word cannot hold.
     """
     return mix_in(root, length_word(length))
 
