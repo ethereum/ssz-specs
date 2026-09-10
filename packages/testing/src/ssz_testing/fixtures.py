@@ -7,7 +7,7 @@ from collections.abc import Mapping
 from functools import cached_property
 from typing import Any, ClassVar, Final, Self
 
-from pydantic import BaseModel, ConfigDict, Field, field_serializer
+from pydantic import BaseModel, ConfigDict, Field, computed_field, field_serializer
 from pydantic.alias_generators import to_camel
 
 from ssz.base import json_writer
@@ -144,6 +144,12 @@ class BaseConsensusFixture(CamelModel):
 
     rejection_reason: ValueFault | None = None
     """The fault a negative vector's input is rejected with, and the field clients assert on."""
+
+    @computed_field
+    @property
+    def valid(self) -> bool:
+        """Whether a decoder must accept this vector's input, stated rather than inferred."""
+        return self.rejection_reason is None
 
     @field_serializer("rejection_reason", when_used="json-unless-none")
     def serialize_rejection_reason(self, fault: ValueFault) -> str:
@@ -326,26 +332,26 @@ class SSZFixture(BaseConsensusFixture):
     type_name: str
     """SSZ type class name."""
 
-    value: SSZType
-    """The SSZ value under test."""
-
-    raw_bytes: str | None = None
-    """Hex malformed input, present in decode-failure mode only."""
+    ssz_type: type[SSZType] = Field(exclude=True)
+    """The declaration the vector is about, which the type name has to stand for."""
 
     serialized: str
-    """Hex SSZ bytes, or the malformed input verbatim on decode failure."""
+    """Hex bytes handed to the decoder: the encoding of the value, or the input it must refuse."""
 
-    root: str
-    """Hex tree root, empty in decode-failure mode."""
+    value: SSZType | None = None
+    """The SSZ value under test, absent on a vector whose bytes decode to no value."""
 
-    @field_serializer("value", when_used="json")
+    root: str | None = None
+    """Hex tree root, absent on a vector whose bytes decode to no value."""
+
+    @field_serializer("value", when_used="json-unless-none")
     def serialize_value(self, ssz_value: SSZType) -> Any:
         """Render the value as the SSZ JSON mapping of its own type spells it."""
         return json_writer(type(ssz_value)).dump_python(ssz_value, mode="json")
 
     def declared_type_shapes(self) -> Mapping[str, str]:
-        """The one name this vector emits, against the shape of the value it was filled with."""
-        return {self.type_name: type_shape(type(self.value))}
+        """The one name this vector emits, against the shape of the declaration it was filled."""
+        return {self.type_name: type_shape(self.ssz_type)}
 
 
 class SSZTest(BaseTestSpec):
@@ -395,17 +401,17 @@ class SSZTest(BaseTestSpec):
 
         return SSZFixture(
             type_name=self.type_name,
-            value=self.value,
-            raw_bytes=self.raw_bytes,
+            ssz_type=type(self.value),
             serialized=to_hex(ssz_bytes),
+            value=self.value,
             root=to_hex(root),
         )
 
     def _generate_decode_failure(self) -> SSZFixture:
         """
-        Assert decoding the malformed bytes raises.
+        Assert decoding the malformed bytes raises, and emit the type, those bytes and the fault.
 
-        The bytes are emitted verbatim so consumers can reproduce the rejected input.
+        Nothing decoded, so the vector carries no value and no root to compare against.
         """
         if self.raw_bytes is None:
             raise ValueError("raw_bytes is required when expected_rejection is set")
@@ -421,10 +427,8 @@ class SSZTest(BaseTestSpec):
 
         return SSZFixture(
             type_name=self.type_name,
-            value=self.value,
-            raw_bytes=self.raw_bytes,
+            ssz_type=decoder,
             serialized=to_hex(raw),
-            root="",
             rejection_reason=self.assert_decode_rejection(
                 exception_raised, f"{decoder.__name__}.decode_bytes"
             ),

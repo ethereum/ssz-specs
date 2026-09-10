@@ -178,8 +178,8 @@ def test_a_flaw_that_goes_undetected_fails_the_fill() -> None:
         expectant.assert_expected_outcome(None)
 
 
-def test_a_decode_failure_emits_the_fault_that_fired() -> None:
-    """The vector carries the rejected bytes verbatim and the name of the fault they raised."""
+def test_a_decode_failure_emits_the_type_the_bytes_and_the_fault_that_fired() -> None:
+    """Nothing decoded, so the vector carries no value and no root, and its bytes appear once."""
     fixture = SSZTest(
         type_name="Uint8",
         value=Uint8(0),
@@ -190,10 +190,25 @@ def test_a_decode_failure_emits_the_fault_that_fired() -> None:
     ).generate()
 
     assert fixture.rejection_reason is ValueFault.SCOPE
-    assert fixture.json_dict["rejectionReason"] == "SCOPE"
-    assert fixture.json_dict["rawBytes"] == "0x0000"
-    assert fixture.json_dict["serialized"] == "0x0000"
-    assert fixture.json_dict["root"] == ""
+    assert fixture.json_dict == {
+        "typeName": "Uint8",
+        "serialized": "0x0000",
+        "rejectionReason": "SCOPE",
+        "valid": False,
+    }
+
+
+def test_a_vector_a_decoder_must_accept_reads_as_valid_and_carries_its_value() -> None:
+    """A positive vector states its validity too, and holds no rejection reason to assert on."""
+    fixture = SSZTest(type_name="Uint8", value=Uint8(1)).generate()
+
+    assert fixture.json_dict == {
+        "typeName": "Uint8",
+        "serialized": "0x01",
+        "value": "1",
+        "root": "0x01" + "00" * 31,
+        "valid": True,
+    }
 
 
 def test_a_decode_failure_vector_needs_bytes_to_reject() -> None:
@@ -279,6 +294,19 @@ def test_a_vector_claims_its_type_name_for_the_shape_of_its_value() -> None:
     """The name a vector emits is claimed against the declared shape of the value under test."""
     fixture = SSZTest(type_name="Pair", value=Pair(number=Uint8(1), flag=Boolean(True))).generate()
 
+    assert fixture.declared_type_shapes() == {"Pair": "Container(number: Uint8(), flag: Boolean())"}
+
+
+def test_a_decode_failure_claims_its_type_name_with_no_value_to_read_it_off() -> None:
+    """The shape a negative vector's name stands for comes from the decoder it was refused by."""
+    fixture = SSZTest(
+        type_name="Pair",
+        value=Pair(number=Uint8(1), flag=Boolean(True)),
+        raw_bytes="0x010101",
+        expected_rejection=ExpectedRejection(reason=ValueFault.SCOPE),
+    ).generate()
+
+    assert fixture.value is None
     assert fixture.declared_type_shapes() == {"Pair": "Container(number: Uint8(), flag: Boolean())"}
 
 

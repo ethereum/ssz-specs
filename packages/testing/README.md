@@ -34,12 +34,13 @@ Vectors are written under `fixtures/<format>/<test-path>/<function>.json`. Every
 carries:
 
 - `typeName` — the SSZ type under test.
-- `serialized` — the 0x-prefixed SSZ bytes.
-- `root` — the 0x-prefixed `hash_tree_root` (empty for decode-failure vectors).
+- `serialized` — the 0x-prefixed bytes handed to the decoder.
+- `valid` — whether a decoder has to accept those bytes.
 - `_info` — provenance metadata, including a content `hash`.
 
-Decode-failure vectors additionally carry `rawBytes` (the rejected input) and a
-`rejectionReason`, the name of the `ValueFault` the decoder raised.
+A valid vector also carries `value`, the value the bytes decode to, and `root`, the
+0x-prefixed `hash_tree_root`. An invalid one carries neither, and carries
+`rejectionReason` instead: the name of the `ValueFault` the decoder has to raise.
 
 `--output` names a directory inside the workspace, and `--clean` removes it in full, so a
 path the workspace does not contain is refused rather than deleted.
