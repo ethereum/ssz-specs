@@ -1,7 +1,6 @@
 # SSZ conformance vectors
 
 Every case here is generated from the Python reference implementation in this repository, by `just fill`.
-They succeed the `ssz_generic` suite that consensus-specs removed in [PR #5524](https://github.com/ethereum/consensus-specs/pull/5524).
 
 Read [What a passing run proves](#what-a-passing-run-proves) before you rely on them.
 
