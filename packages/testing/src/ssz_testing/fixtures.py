@@ -163,8 +163,8 @@ class BaseConsensusFixture(CamelModel):
         """Return a copy carrying the metadata envelope."""
         return self.model_copy(update={"info": info})
 
-    def declared_type_shapes(self) -> Mapping[str, str]:
-        """Every type name this fixture emits, against the shape that name has to stand for."""
+    def declared_types(self) -> "Mapping[str, TypeDescriptor]":
+        """Every type name this fixture emits, against the declaration it has to stand for."""
         return {}
 
     @cached_property
@@ -293,38 +293,97 @@ class BaseTestSpec(CamelModel):
         return expected
 
 
-_SHAPE_PARAMETERS: Final = ("LENGTH", "LIMIT", "ELEMENT_TYPE", "ACTIVE_FIELDS", "OPTIONS")
+class TypeDescriptor(CamelModel):
+    """An SSZ type declaration in the form a consumer rebuilds the type from."""
+
+    model_config = CamelModel.model_config | {"extra": "forbid", "frozen": True}
+
+    kind: str
+    """The SSZ shape this declaration is one of."""
+
+    bits: int | None = None
+    """Width of an unsigned integer."""
+
+    length: int | None = None
+    """Exact element count of a vector, a bitvector or a byte vector."""
+
+    limit: int | None = None
+    """Maximum element count of a list, a bitlist or a byte list."""
+
+    element_type: "TypeDescriptor | None" = None
+    """Declaration of what a sequence holds."""
+
+    active_fields: tuple[int, ...] | None = None
+    """Layout of a progressive container, one bit per position, set where a field sits."""
+
+    fields: "tuple[DeclaredField, ...] | None" = None
+    """A container's fields, in the declaration order the wire format follows."""
+
+    options: "tuple[DeclaredOption, ...] | None" = None
+    """A union's options, each against the selector that names it."""
+
+
+class DeclaredField(CamelModel):
+    """One field of a container, against the declaration of what it holds."""
+
+    model_config = CamelModel.model_config | {"extra": "forbid", "frozen": True}
+
+    name: str
+    """The field's name, which the JSON value mapping keys it by."""
+
+    type: TypeDescriptor
+    """The field's declared type."""
+
+
+class DeclaredOption(CamelModel):
+    """One option of a union, against the selector byte that names it."""
+
+    model_config = CamelModel.model_config | {"extra": "forbid", "frozen": True}
+
+    selector: int
+    """The selector byte an encoding of this option leads with."""
+
+    type: TypeDescriptor
+    """The option's declared type."""
+
+
+TypeDescriptor.model_rebuild()
+
+_TYPE_PARAMETERS: Final = ("BITS", "LENGTH", "LIMIT", "ELEMENT_TYPE", "ACTIVE_FIELDS", "OPTIONS")
 """Everything a declaration fixes its wire format and its tree with, beyond its fields."""
 
 
-def _rendered(declared: Any) -> str:
-    """Render one type parameter, resolving a nested type to the shape it stands for."""
-    if isinstance(declared, type) and issubclass(declared, SSZType):
-        return type_shape(declared)
-    if isinstance(declared, Mapping):
-        entries = ", ".join(f"{key}: {_rendered(option)}" for key, option in declared.items())
-        return f"{{{entries}}}"
-    return repr(declared)
+def _declared(parameter: Any) -> Any:
+    """One type parameter as a descriptor carries it, a nested type recursing into its own."""
+    if isinstance(parameter, type) and issubclass(parameter, SSZType):
+        return describe_type(parameter)
+    if isinstance(parameter, Mapping):
+        return [
+            DeclaredOption(selector=selector, type=describe_type(option))
+            for selector, option in parameter.items()
+        ]
+    return parameter
 
 
-def type_shape(ssz_type: type[SSZType]) -> str:
-    """The structure a type declares: two render alike when either can read the other's vector."""
+def describe_type(ssz_type: type[SSZType]) -> TypeDescriptor:
+    """The declaration a consumer rebuilds this type from, read off the class and nothing else."""
     kind = next(
         base.__name__
         for base in ssz_type.__mro__
         # A parametrized base names its element, which ELEMENT_TYPE below already writes out.
         if base.__module__.split(".")[0] == "ssz" and "[" not in base.__name__
     )
-    written = [
-        f"{name}={_rendered(declared)}"
-        for name in _SHAPE_PARAMETERS
-        if (declared := getattr(ssz_type, name, None)) is not None
-    ]
-    written += [
-        f"{field_name}: {type_shape(field_type)}"
-        for field_name, field_type in getattr(ssz_type, "_FIELD_TYPES", ())
-    ]
-    return f"{kind}({', '.join(written)})"
+    declared: dict[str, Any] = {
+        name.lower(): _declared(parameter)
+        for name in _TYPE_PARAMETERS
+        if (parameter := getattr(ssz_type, name, None)) is not None
+    }
+    if (field_types := getattr(ssz_type, "_FIELD_TYPES", None)) is not None:
+        declared["fields"] = [
+            DeclaredField(name=field_name, type=describe_type(field_type))
+            for field_name, field_type in field_types
+        ]
+    return TypeDescriptor(kind=kind, **declared)
 
 
 class SSZFixture(BaseConsensusFixture):
@@ -352,9 +411,15 @@ class SSZFixture(BaseConsensusFixture):
         """Render the value as the SSZ JSON mapping of its own type spells it."""
         return json_writer(type(ssz_value)).dump_python(ssz_value, mode="json")
 
-    def declared_type_shapes(self) -> Mapping[str, str]:
-        """The one name this vector emits, against the shape of the declaration it was filled."""
-        return {self.type_name: type_shape(self.ssz_type)}
+    @computed_field
+    @property
+    def type_descriptor(self) -> TypeDescriptor:
+        """The declaration of that type, read off the class so no vector can misstate it."""
+        return describe_type(self.ssz_type)
+
+    def declared_types(self) -> Mapping[str, TypeDescriptor]:
+        """The one name this vector emits, against the declaration it was filled from."""
+        return {self.type_name: self.type_descriptor}
 
 
 class SSZTest(BaseTestSpec):
