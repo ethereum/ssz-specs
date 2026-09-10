@@ -2,6 +2,8 @@
 
 from typing import ClassVar
 
+import pytest
+
 from ssz import (
     BitList,
     BitVector,
@@ -181,6 +183,7 @@ def test_uint8_mid(ssz_test: SSZTestFiller) -> None:
     ssz_test(case_id="uint8/high_bit", type_name="Uint8", value=Uint8(128))
 
 
+@pytest.mark.tags("boundary")
 def test_uint8_max(ssz_test: SSZTestFiller) -> None:
     """
     A one-byte uint at its upper bound round-trips unchanged.
@@ -258,6 +261,7 @@ def test_uint16_mid(ssz_test: SSZTestFiller) -> None:
     ssz_test(case_id="uint16/high_bit", type_name="Uint16", value=Uint16(32768))
 
 
+@pytest.mark.tags("boundary")
 def test_uint16_max(ssz_test: SSZTestFiller) -> None:
     """
     A two-byte uint at its upper bound round-trips unchanged.
@@ -335,6 +339,7 @@ def test_uint32_mid(ssz_test: SSZTestFiller) -> None:
     ssz_test(case_id="uint32/high_bit", type_name="Uint32", value=Uint32(2147483648))
 
 
+@pytest.mark.tags("boundary")
 def test_uint32_max(ssz_test: SSZTestFiller) -> None:
     """
     A four-byte uint at its upper bound round-trips unchanged.
@@ -412,6 +417,7 @@ def test_uint64_mid(ssz_test: SSZTestFiller) -> None:
     ssz_test(case_id="uint64/high_bit", type_name="Uint64", value=Uint64(2**63))
 
 
+@pytest.mark.tags("boundary")
 def test_uint64_max(ssz_test: SSZTestFiller) -> None:
     """
     An eight-byte uint at its upper bound round-trips unchanged.
@@ -490,6 +496,7 @@ def test_uint128_mid(ssz_test: SSZTestFiller) -> None:
     ssz_test(case_id="uint128/high_bit", type_name="Uint128", value=Uint128(2**127))
 
 
+@pytest.mark.tags("boundary")
 def test_uint128_max(ssz_test: SSZTestFiller) -> None:
     """
     A sixteen-byte uint at its upper bound round-trips unchanged.
@@ -568,6 +575,7 @@ def test_uint256_mid(ssz_test: SSZTestFiller) -> None:
     ssz_test(case_id="uint256/high_bit", type_name="Uint256", value=Uint256(2**255))
 
 
+@pytest.mark.tags("boundary")
 def test_uint256_max(ssz_test: SSZTestFiller) -> None:
     """
     A thirty-two-byte uint at its upper bound round-trips unchanged.
@@ -760,6 +768,7 @@ def test_bytes64_typical(ssz_test: SSZTestFiller) -> None:
     ssz_test(case_id="bytes64/uniform", type_name="Bytes64", value=Bytes64(b"\xef" * 64))
 
 
+@pytest.mark.tags("empty")
 def test_bytelist_empty(ssz_test: SSZTestFiller) -> None:
     """
     An empty byte list round-trips unchanged.
@@ -982,6 +991,7 @@ def test_bitvector64_mixed(ssz_test: SSZTestFiller) -> None:
     )
 
 
+@pytest.mark.tags("empty")
 def test_bitlist_empty(ssz_test: SSZTestFiller) -> None:
     """
     An empty bitlist round-trips unchanged.
@@ -1054,6 +1064,7 @@ def test_bitlist_single_false(ssz_test: SSZTestFiller) -> None:
     )
 
 
+@pytest.mark.tags("boundary", "limit")
 def test_bitlist_at_limit(ssz_test: SSZTestFiller) -> None:
     """
     A bitlist filled to its limit round-trips unchanged.
@@ -1209,6 +1220,7 @@ def test_uint64_vector4_typical(ssz_test: SSZTestFiller) -> None:
     )
 
 
+@pytest.mark.tags("empty")
 def test_uint32_list_empty(ssz_test: SSZTestFiller) -> None:
     """
     An empty uint list round-trips unchanged.
@@ -1278,6 +1290,7 @@ def test_uint32_list_multiple(ssz_test: SSZTestFiller) -> None:
     )
 
 
+@pytest.mark.tags("empty")
 def test_bytes32_list_empty(ssz_test: SSZTestFiller) -> None:
     """
     An empty 32-byte-element list round-trips unchanged.

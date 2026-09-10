@@ -2,8 +2,12 @@
 
 from typing import ClassVar
 
+import pytest
+
 from ssz import BitList, BitVector, Boolean, List, Uint64
 from ssz_testing import SSZTestFiller
+
+pytestmark = pytest.mark.tags("boundary")
 
 
 class BoundaryBitVector1(BitVector):
@@ -202,6 +206,7 @@ def test_bitvector_length_257_all_set(ssz_test: SSZTestFiller) -> None:
     )
 
 
+@pytest.mark.tags("limit")
 def test_bitlist_filled_to_chunk_boundary_limit(ssz_test: SSZTestFiller) -> None:
     """
     A bitlist filled to a chunk-edge limit merkleizes to a stable root.

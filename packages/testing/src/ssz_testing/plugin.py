@@ -1,9 +1,11 @@
 """Pytest plugin for generating SSZ conformance test fixtures."""
 
+import hashlib
 import json
 import re
 import shutil
-from collections import defaultdict
+from dataclasses import dataclass
+from importlib.metadata import version
 from inspect import cleandoc
 from pathlib import Path
 from typing import Any, Final
@@ -20,6 +22,34 @@ from ssz_testing.fixtures import (
 CASE_ID_PATTERN: Final = re.compile(r"[a-z0-9]+(?:_[a-z0-9]+)*(?:/[a-z0-9]+(?:_[a-z0-9]+)*)*")
 """A case id: slash-separated segments of lowercase words, such as `uint64/max`."""
 
+FIXTURE_FORMAT_VERSION: Final = 1
+"""Shape of the emitted tree, bumped whenever a consumer has to change to keep reading it."""
+
+GENERATOR: Final = "eth-ssz-specs"
+"""What produced the vectors, named in the manifest so a consumer can say where they came from."""
+
+
+def case_tags(item: pytest.Item) -> tuple[str, ...]:
+    """The theme of the filler that authored a case, and every tag the filler declared on it."""
+    filler_module = Path(item.nodeid.partition("::")[0]).stem.removeprefix("test_")
+    declared = {tag for marker in item.iter_markers("tags") for tag in marker.args}
+    return tuple(sorted(declared | {filler_module.replace("_", "-")}))
+
+
+def json_document(payload: Any) -> str:
+    """The text one emitted JSON file holds: indented, and terminated like any POSIX line."""
+    return json.dumps(payload, indent=4) + "\n"
+
+
+@dataclass(frozen=True, slots=True)
+class CollectedCase:
+    """One filled vector, with the file it is written to and what the index says about it."""
+
+    fixture: BaseConsensusFixture
+    case_id: str
+    tags: tuple[str, ...]
+    output_file: Path
+
 
 class FixtureCollector:
     """Collects generated fixtures and writes them to disk."""
@@ -27,28 +57,39 @@ class FixtureCollector:
     def __init__(self, output_directory: Path):
         """Initialize the fixture collector."""
         self.output_directory = output_directory
-        self.fixtures: list[tuple[Path, str, Any]] = []
+        self.cases: list[CollectedCase] = []
         self.type_declarations: dict[str, tuple[str, TypeDescriptor]] = {}
         self.case_producers: dict[str, str] = {}
 
-    def fixture_output_file(self, test_nodeid: str, fixture_format: str) -> Path:
-        """The fixture file for one test function, which must sit under the filler tests."""
-        # Every case of one function shares one file, so the file is named for the function.
-        test_file_path, _, name_within_file = test_nodeid.partition("::")
-        base_function_name = name_within_file.split("[")[0].rpartition("::")[2]
+    def fixture_output_file(
+        self,
+        fixture: BaseConsensusFixture,
+        test_nodeid: str,
+        fixture_format: str,
+        case_id: str,
+    ) -> Path:
+        """
+        The file one vector is written to, named by its case id under its kind and its validity.
 
-        try:
-            relative_path = Path(test_file_path).relative_to("tests/fillers")
-        except ValueError as exception:
+        A dash joins the id's segments, a character no case id holds, so no two ids name one file.
+
+        Raises:
+            ValueError: When the test does not sit under the filler tests.
+        """
+        test_file_path, _, _ = test_nodeid.partition("::")
+        if not Path(test_file_path).is_relative_to("tests/fillers"):
             raise ValueError(
                 f"cannot derive a fixture output path for '{test_nodeid}': "
                 f"test file '{test_file_path}' is not under tests/fillers"
-            ) from exception
+            )
 
-        test_path = relative_path.with_suffix("")
-
-        format_directory = fixture_format.removesuffix("_test")
-        return self.output_directory / format_directory / test_path / f"{base_function_name}.json"
+        return (
+            self.output_directory
+            / fixture_format.removesuffix("_test")
+            / fixture.case_kind()
+            / ("valid" if fixture.valid else "invalid")
+            / f"{case_id.replace('/', '-')}.json"
+        )
 
     def claim_type_names(self, fixture: BaseConsensusFixture, test_nodeid: str) -> None:
         """
@@ -109,8 +150,15 @@ class FixtureCollector:
         self.claim_case_id(case_id, item.nodeid)
         self.claim_type_names(fixture, item.nodeid)
 
-        fixture_path = self.fixture_output_file(item.nodeid, fixture_format)
-        self.fixtures.append((fixture_path, case_id, fixture))
+        fixture_path = self.fixture_output_file(fixture, item.nodeid, fixture_format, case_id)
+        self.cases.append(
+            CollectedCase(
+                fixture=fixture,
+                case_id=case_id,
+                tags=case_tags(item),
+                output_file=fixture_path,
+            )
+        )
 
         # Stashed on the item, not the session-wide config, which would leak to later tests.
         item.stash[FIXTURE_PATH_ABSOLUTE_KEY] = str(fixture_path.absolute())
@@ -118,16 +166,38 @@ class FixtureCollector:
         item.stash[FIXTURE_FORMAT_KEY] = fixture_format
 
     def write_fixtures(self) -> None:
-        """Write all collected fixtures to disk, grouped by test function."""
-        grouped: dict[Path, dict[str, Any]] = defaultdict(dict)
-        for output_file, case_id, fixture in self.fixtures:
-            grouped[output_file][case_id] = fixture.json_dict_with_info()
+        """Write every vector to its own file, then the index and the manifest describing them."""
+        index_rows = []
+        for case in sorted(self.cases, key=lambda collected: collected.output_file):
+            case.output_file.parent.mkdir(parents=True, exist_ok=True)
+            document = json_document(case.fixture.json_dict_with_info())
+            case.output_file.write_text(document, encoding="utf-8")
+            index_rows.append(
+                {
+                    "id": case.case_id,
+                    "path": case.output_file.relative_to(self.output_directory).as_posix(),
+                    "typeName": case.fixture.case_type_name(),
+                    "kind": case.fixture.case_kind(),
+                    "valid": case.fixture.valid,
+                    "tags": list(case.tags),
+                    "sha256": hashlib.sha256(document.encode("utf-8")).hexdigest(),
+                }
+            )
 
-        for output_file, cases in grouped.items():
-            output_file.parent.mkdir(parents=True, exist_ok=True)
-            with output_file.open("w") as output_handle:
-                json.dump(cases, output_handle, indent=4)
-                output_handle.write("\n")
+        (self.output_directory / "index.json").write_text(
+            json_document({"cases": index_rows}), encoding="utf-8"
+        )
+        (self.output_directory / "manifest.json").write_text(
+            json_document(
+                {
+                    "formatVersion": FIXTURE_FORMAT_VERSION,
+                    "specVersion": version("eth-ssz-specs"),
+                    "generator": GENERATOR,
+                    "caseCount": len(index_rows),
+                }
+            ),
+            encoding="utf-8",
+        )
 
 
 FIXTURE_COLLECTOR_KEY: pytest.StashKey[FixtureCollector] = pytest.StashKey()
@@ -206,7 +276,7 @@ def pytest_sessionstart(session: pytest.Session) -> None:
 
     if output_directory.exists() and any(output_directory.iterdir()):
         if not config.getoption("--clean"):
-            leftover_fixture_paths = list(output_directory.iterdir())
+            leftover_fixture_paths = sorted(output_directory.iterdir())
             leftover_names_preview = ", ".join(
                 leftover_path.name for leftover_path in leftover_fixture_paths[:5]
             )

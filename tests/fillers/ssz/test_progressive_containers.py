@@ -1,5 +1,7 @@
 """SSZ conformance test vectors for the EIP-7495 progressive container."""
 
+import pytest
+
 from ssz import (
     Boolean,
     Container,
@@ -312,6 +314,7 @@ def test_progressive_container_widest_layout(ssz_test: SSZTestFiller) -> None:
     )
 
 
+@pytest.mark.tags("multi-level")
 def test_progressive_container_opens_the_fourth_level(ssz_test: SSZTestFiller) -> None:
     """
     A progressive container whose leaves cross a spine level round-trips unchanged.
@@ -365,6 +368,7 @@ def test_progressive_container_with_bounded_list_field(ssz_test: SSZTestFiller) 
     )
 
 
+@pytest.mark.tags("empty")
 def test_progressive_container_with_empty_variable_field(ssz_test: SSZTestFiller) -> None:
     """
     A progressive container whose list field is empty round-trips unchanged.

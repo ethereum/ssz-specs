@@ -1,11 +1,17 @@
-"""What the fill plugin collects, what it remembers per test, and what it deletes."""
+"""What the fill plugin collects, where it writes it, and what it says about it."""
 
+import hashlib
 import json
+import tomllib
 from pathlib import Path
 
 import pytest
 
+from ssz import Uint8
+from ssz_testing import SSZTest
 from ssz_testing.plugin import FixtureCollector
+
+REPOSITORY_ROOT = Path(__file__).parents[3]
 
 FILLER_MODULE = '''
 """Two tests, one of which never calls the filler."""
@@ -56,6 +62,55 @@ def test_undocumented(ssz_test: SSZTestFiller) -> None:
 def test_parametrized(ssz_test: SSZTestFiller, number: int) -> None:
     """Two cases of one function, each naming itself."""
     ssz_test(case_id=f"parametrized/{number}", type_name="Uint8", value=Uint8(number))
+'''
+
+
+KINDS_MODULE = '''
+"""One vector of each shape the emitted tree files apart."""
+
+import pytest
+
+from ssz import BitList, Boolean, Container, Uint8
+from ssz_testing import ExpectedRejection, SSZTestFiller, ValueFault
+
+
+class Small(BitList):
+    """A bitlist capped at eight bits."""
+
+    LIMIT = 8
+
+
+class Pair(Container):
+    """One number and one flag."""
+
+    number: Uint8
+    flag: Boolean
+
+
+@pytest.mark.tags("boundary")
+def test_a_number(ssz_test: SSZTestFiller) -> None:
+    """The widest one-byte value."""
+    ssz_test(case_id="uint8/max", type_name="Uint8", value=Uint8(255))
+
+
+def test_a_container(ssz_test: SSZTestFiller) -> None:
+    """A composite of two basic fields."""
+    ssz_test(
+        case_id="pair/typical",
+        type_name="Pair",
+        value=Pair(number=Uint8(1), flag=Boolean(True)),
+    )
+
+
+def test_a_refusal(ssz_test: SSZTestFiller) -> None:
+    """Bytes the specification refuses."""
+    ssz_test(
+        case_id="bitlist8/invalid/over_limit",
+        type_name="Small",
+        value=Small(data=[Boolean(False)]),
+        raw_bytes="0x0010",
+        expected_rejection=ExpectedRejection(reason=ValueFault.LIMIT),
+    )
 '''
 
 
@@ -204,10 +259,10 @@ def test_each_test_reports_only_the_vector_it_wrote(project: pytest.Pytester) ->
         if report.when == "call"
     }
 
-    vector = project.path / "fixtures" / "ssz" / "test_two" / "test_writes_a_vector.json"
+    vector = project.path / "fixtures" / "ssz" / "uint8" / "valid" / "uint8-one.json"
     assert reported["tests/fillers/test_two.py::test_writes_a_vector"] == {
         "fixture_path_absolute": str(vector),
-        "fixture_path_relative": "ssz/test_two/test_writes_a_vector.json",
+        "fixture_path_relative": "ssz/uint8/valid/uint8-one.json",
         "fixture_format": "ssz_test",
     }
     assert reported["tests/fillers/test_two.py::test_writes_nothing"] == {}
@@ -216,7 +271,7 @@ def test_each_test_reports_only_the_vector_it_wrote(project: pytest.Pytester) ->
 def test_a_preview_deletes_nothing(project: pytest.Pytester) -> None:
     """--collect-only and --help preview a fill, so the vectors of the last real fill survive."""
     fill(project, "--clean").assert_outcomes(passed=2)
-    vector = project.path / "fixtures" / "ssz" / "test_two" / "test_writes_a_vector.json"
+    vector = project.path / "fixtures" / "ssz" / "uint8" / "valid" / "uint8-one.json"
     assert vector.exists()
 
     assert fill(project, "--clean", "--collect-only").ret == pytest.ExitCode.OK
@@ -248,7 +303,7 @@ def test_an_output_directory_the_project_does_not_contain_is_refused(
 def test_a_distributed_fill_is_refused(project: pytest.Pytester, distribution_option: str) -> None:
     """Every worker cleans the output directory, so the vectors the others wrote would go."""
     fill(project, "--clean").assert_outcomes(passed=2)
-    vector = project.path / "fixtures" / "ssz" / "test_two" / "test_writes_a_vector.json"
+    vector = project.path / "fixtures" / "ssz" / "uint8" / "valid" / "uint8-one.json"
 
     refused = fill(project, "--clean", distribution_option)
 
@@ -282,7 +337,7 @@ def test_a_non_empty_output_directory_is_never_written_over(project: pytest.Pyte
 
     refused = fill(project)
     assert refused.ret == pytest.ExitCode.USAGE_ERROR
-    refused.stderr.fnmatch_lines(["*is not empty*Contains: ssz.*"])
+    refused.stderr.fnmatch_lines(["*is not empty*Contains: index.json, manifest.json, ssz.*"])
 
     fill(project, "--clean").assert_outcomes(passed=2)
 
@@ -311,48 +366,115 @@ def test_a_test_carries_its_documentation_into_its_vector(project: pytest.Pytest
 
     fill(project, "--clean").assert_outcomes(passed=8)
 
-    written = json.loads(
-        (project.path / "fixtures" / "ssz" / "test_described")
-        .joinpath("test_documented.json")
-        .read_text(encoding="utf-8")
-    )
-    descriptions = {case_id: entry["_info"]["description"] for case_id, entry in written.items()}
+    written = project.path / "fixtures" / "ssz" / "uint8" / "valid"
+    descriptions = {
+        vector.name: json.loads(vector.read_text(encoding="utf-8"))["_info"]["description"]
+        for vector in written.iterdir()
+    }
     assert descriptions == {
-        "documented/in_class": (
+        "uint8-one.json": "An honest value.",
+        "documented-at_module.json": "The function documentation.",
+        "documented-in_class.json": (
             "Test class documentation:\nThe class documentation.\n\nThe function documentation."
         ),
-        "documented/at_module": "The function documentation.",
+        "undocumented-at_module.json": (
+            "No description available - add a docstring to the python test class or function."
+        ),
+        "undocumented-in_class.json": "Test class documentation:\nThe class documentation.",
+        "parametrized-5.json": "Two cases of one function, each naming itself.",
+        "parametrized-6.json": "Two cases of one function, each naming itself.",
     }
 
-    undocumented = json.loads(
-        (project.path / "fixtures" / "ssz" / "test_described")
-        .joinpath("test_undocumented.json")
-        .read_text(encoding="utf-8")
-    )
-    assert undocumented["undocumented/at_module"]["_info"]["description"] == (
-        "No description available - add a docstring to the python test class or function."
-    )
-    assert (
-        undocumented["undocumented/in_class"]["_info"]["description"]
-        == "Test class documentation:\nThe class documentation."
-    )
 
-
-def test_every_case_of_one_function_shares_one_file(project: pytest.Pytester) -> None:
-    """Parametrization picks the entries inside a file, never the file."""
+def test_every_case_of_one_function_gets_its_own_file(project: pytest.Pytester) -> None:
+    """A file holds one case, so parametrization picks files rather than entries within one."""
     project.makepyfile(**{"tests/fillers/test_described": DESCRIPTION_MODULE})
 
     fill(project, "--clean").assert_outcomes(passed=8)
 
-    written = json.loads(
-        (project.path / "fixtures" / "ssz" / "test_described" / "test_parametrized.json").read_text(
-            encoding="utf-8"
-        )
-    )
-    assert sorted(written) == ["parametrized/5", "parametrized/6"]
-    assert {entry["_info"]["generatedBy"] for entry in written.values()} == {
-        "tests/fillers/test_described.py::test_parametrized[5]",
-        "tests/fillers/test_described.py::test_parametrized[6]",
+    written = project.path / "fixtures" / "ssz" / "uint8" / "valid"
+    fifth = json.loads((written / "parametrized-5.json").read_text(encoding="utf-8"))
+    assert fifth["value"] == "5"
+    assert fifth["_info"]["testId"] == "parametrized/5"
+    assert fifth["_info"]["generatedBy"] == "tests/fillers/test_described.py::test_parametrized[5]"
+    assert (written / "parametrized-6.json").exists()
+
+
+def test_a_vector_is_filed_under_its_format_its_kind_and_its_validity(
+    project: pytest.Pytester,
+) -> None:
+    """The tree a consumer walks is the SSZ kind and whether the input is one the spec accepts."""
+    project.makepyfile(**{"tests/fillers/test_kinds": KINDS_MODULE})
+
+    fill(project, "--clean").assert_outcomes(passed=5)
+
+    fixtures = project.path / "fixtures"
+    assert {path.relative_to(fixtures).as_posix() for path in fixtures.rglob("*.json")} == {
+        "index.json",
+        "manifest.json",
+        "ssz/uint8/valid/uint8-one.json",
+        "ssz/uint8/valid/uint8-max.json",
+        "ssz/container/valid/pair-typical.json",
+        "ssz/bit_list/invalid/bitlist8-invalid-over_limit.json",
+    }
+
+
+def test_the_index_and_the_manifest_describe_exactly_what_was_written(
+    project: pytest.Pytester,
+) -> None:
+    """Every emitted case is one row carrying its own digest, and the manifest counts them."""
+    project.makepyfile(**{"tests/fillers/test_kinds": KINDS_MODULE})
+
+    fill(project, "--clean").assert_outcomes(passed=5)
+
+    fixtures = project.path / "fixtures"
+    index = json.loads((fixtures / "index.json").read_text(encoding="utf-8"))
+    manifest = json.loads((fixtures / "manifest.json").read_text(encoding="utf-8"))
+    written = {path.relative_to(fixtures).as_posix() for path in fixtures.rglob("*.json")} - {
+        "index.json",
+        "manifest.json",
+    }
+
+    assert [row["path"] for row in index["cases"]] == sorted(written)
+    assert manifest == {
+        "formatVersion": 1,
+        "specVersion": tomllib.loads(
+            (REPOSITORY_ROOT / "pyproject.toml").read_text(encoding="utf-8")
+        )["project"]["version"],
+        "generator": "eth-ssz-specs",
+        "caseCount": len(written),
+    }
+    for row in index["cases"]:
+        assert row["sha256"] == hashlib.sha256((fixtures / row["path"]).read_bytes()).hexdigest()
+
+
+def test_an_indexed_row_says_what_one_case_is_about(project: pytest.Pytester) -> None:
+    """A row carries the id, the type, the kind, the validity and the themes of one case."""
+    project.makepyfile(**{"tests/fillers/test_kinds": KINDS_MODULE})
+
+    fill(project, "--clean").assert_outcomes(passed=5)
+
+    index = json.loads((project.path / "fixtures" / "index.json").read_text(encoding="utf-8"))
+    rows = {
+        row["path"]: {key: value for key, value in row.items() if key != "sha256"}
+        for row in index["cases"]
+    }
+
+    assert rows["ssz/uint8/valid/uint8-max.json"] == {
+        "id": "uint8/max",
+        "path": "ssz/uint8/valid/uint8-max.json",
+        "typeName": "Uint8",
+        "kind": "uint8",
+        "valid": True,
+        "tags": ["boundary", "kinds"],
+    }
+    assert rows["ssz/bit_list/invalid/bitlist8-invalid-over_limit.json"] == {
+        "id": "bitlist8/invalid/over_limit",
+        "path": "ssz/bit_list/invalid/bitlist8-invalid-over_limit.json",
+        "typeName": "Small",
+        "kind": "bit_list",
+        "valid": False,
+        "tags": ["kinds"],
     }
 
 
@@ -375,11 +497,11 @@ def test_a_description_carries_no_source_indentation(project: pytest.Pytester) -
     fill(project, "--clean").assert_outcomes(passed=3)
 
     written = json.loads(
-        (project.path / "fixtures" / "ssz" / "test_indented")
-        .joinpath("test_indented.json")
-        .read_text(encoding="utf-8")
+        (project.path / "fixtures" / "ssz" / "uint8" / "valid" / "uint8-indented.json").read_text(
+            encoding="utf-8"
+        )
     )
-    description = next(iter(written.values()))["_info"]["description"]
+    description = written["_info"]["description"]
     assert description == "A summary line.\n\nA continuation line, indented in the source."
 
 
@@ -389,16 +511,12 @@ def test_one_function_may_fill_a_family_of_vectors(project: pytest.Pytester) -> 
 
     fill(project, "--clean").assert_outcomes(passed=3)
 
-    written = json.loads(
-        (
-            project.path
-            / "fixtures"
-            / "ssz"
-            / "test_repeated"
-            / "test_many_calls_one_function.json"
-        ).read_text(encoding="utf-8")
-    )
-    assert sorted(written) == ["uint16/1", "uint16/2", "uint16/3"]
+    written = project.path / "fixtures" / "ssz" / "uint16" / "valid"
+    assert sorted(vector.name for vector in written.iterdir()) == [
+        "uint16-1.json",
+        "uint16-2.json",
+        "uint16-3.json",
+    ]
 
 
 def test_two_vectors_under_one_case_id_fail_the_fill(project: pytest.Pytester) -> None:
@@ -429,22 +547,21 @@ def test_a_case_id_that_is_not_slash_separated_words_is_refused(project: pytest.
 
 def test_an_authored_id_survives_renaming_the_filler(project: pytest.Pytester) -> None:
     """The author names a case, so renaming the function that fills it renames nothing."""
-    renamed = project.path / "fixtures" / "ssz" / "test_renamed"
+    vector = project.path / "fixtures" / "ssz" / "uint64" / "valid" / "uint64-max.json"
     project.makepyfile(
         **{"tests/fillers/test_renamed": RENAMED_MODULE.format(filler_name="uint64_at_its_top")}
     )
     fill(project, "--clean").assert_outcomes(passed=3)
-    before = json.loads((renamed / "test_uint64_at_its_top.json").read_text(encoding="utf-8"))
+    before = json.loads(vector.read_text(encoding="utf-8"))
 
     project.makepyfile(
         **{"tests/fillers/test_renamed": RENAMED_MODULE.format(filler_name="the_largest_uint64")}
     )
     fill(project, "--clean").assert_outcomes(passed=3)
-    after = json.loads((renamed / "test_the_largest_uint64.json").read_text(encoding="utf-8"))
+    after = json.loads(vector.read_text(encoding="utf-8"))
 
-    assert list(before) == list(after) == ["uint64/max"]
-    assert before["uint64/max"]["_info"]["testId"] == after["uint64/max"]["_info"]["testId"]
-    assert after["uint64/max"]["_info"]["generatedBy"] == (
+    assert before["_info"]["testId"] == after["_info"]["testId"] == "uint64/max"
+    assert after["_info"]["generatedBy"] == (
         "tests/fillers/test_renamed.py::test_the_largest_uint64"
     )
 
@@ -454,28 +571,29 @@ def test_a_vector_records_the_filler_that_produced_it(project: pytest.Pytester) 
     fill(project, "--clean").assert_outcomes(passed=2)
 
     written = json.loads(
-        (project.path / "fixtures" / "ssz" / "test_two" / "test_writes_a_vector.json").read_text(
+        (project.path / "fixtures" / "ssz" / "uint8" / "valid" / "uint8-one.json").read_text(
             encoding="utf-8"
         )
     )
-    assert written["uint8/one"]["_info"]["generatedBy"] == (
-        "tests/fillers/test_two.py::test_writes_a_vector"
-    )
+    assert written["_info"]["generatedBy"] == "tests/fillers/test_two.py::test_writes_a_vector"
 
 
 def test_a_test_outside_the_filler_tree_has_nowhere_to_write(tmp_path: Path) -> None:
-    """The output path is derived from the path under tests/fillers, so only those have one."""
+    """Only a test under tests/fillers may emit a vector, wherever the tree would file it."""
     collector = FixtureCollector(tmp_path)
+    fixture = SSZTest(type_name="Uint8", value=Uint8(1)).generate()
 
     with pytest.raises(ValueError, match="is not under tests/fillers"):
-        collector.fixture_output_file("tests/test_unit.py::test_unit", "ssz_test")
+        collector.fixture_output_file(
+            fixture, "tests/test_unit.py::test_unit", "ssz_test", "uint8/one"
+        )
 
 
 def test_a_vector_file_ends_with_a_newline(project: pytest.Pytester) -> None:
     """A vector is a POSIX text file, so its last line is terminated like any other."""
     fill(project, "--clean").assert_outcomes(passed=2)
 
-    vector = project.path / "fixtures" / "ssz" / "test_two" / "test_writes_a_vector.json"
+    vector = project.path / "fixtures" / "ssz" / "uint8" / "valid" / "uint8-one.json"
     assert vector.read_text(encoding="utf-8").endswith("}\n")
 
 
