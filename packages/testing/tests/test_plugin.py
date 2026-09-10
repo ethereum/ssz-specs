@@ -337,7 +337,9 @@ def test_a_non_empty_output_directory_is_never_written_over(project: pytest.Pyte
 
     refused = fill(project)
     assert refused.ret == pytest.ExitCode.USAGE_ERROR
-    refused.stderr.fnmatch_lines(["*is not empty*Contains: index.json, manifest.json, ssz.*"])
+    refused.stderr.fnmatch_lines(
+        ["*is not empty*Contains: README.md, index.json, manifest.json, ssz.*"]
+    )
 
     fill(project, "--clean").assert_outcomes(passed=2)
 
