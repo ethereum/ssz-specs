@@ -26,7 +26,7 @@ from ssz import (
     Uint256,
     Vector,
 )
-from ssz.exceptions import SSZTypeError, SSZValueError
+from ssz.exceptions import SSZTypeError, SSZValueError, ValueFault
 from ssz.roots import hash_tree_root
 from ssz.uint import BaseUint
 
@@ -533,16 +533,17 @@ class TestUintSSZ:
 
     @pytest.mark.parametrize("uint_class", ALL_UINT_TYPES)
     def test_decode_bytes_invalid_length(self, uint_class: Type[BaseUint]) -> None:
-        """Tests that decode_bytes raises SSZValueError for wrong length data."""
+        """A wrong byte count is read as the budget mismatch it is."""
         # Create byte string that is one byte too short.
         expected_length = uint_class.get_byte_length()
         invalid_data = b"\x00" * (expected_length - 1)
         expected_message = (
-            f"{uint_class.__name__} needs {expected_length} bytes, "
-            + f"the input holds {expected_length - 1}"
+            f"{uint_class.__name__} spans {expected_length} bytes, "
+            + f"and the budget is {expected_length - 1}"
         )
         with pytest.raises(SSZValueError) as exception_info:
             uint_class.decode_bytes(invalid_data)
+        assert exception_info.value.fault is ValueFault.SCOPE
         assert str(exception_info.value) == expected_message
 
     @pytest.mark.parametrize("uint_class", ALL_UINT_TYPES)
@@ -575,6 +576,7 @@ class TestUintSSZ:
         )
         with pytest.raises(SSZValueError) as exception_info:
             uint_class.deserialize(stream, scope=invalid_scope)
+        assert exception_info.value.fault is ValueFault.SCOPE
         assert str(exception_info.value) == expected_message
 
     @pytest.mark.parametrize("uint_class", ALL_UINT_TYPES)
@@ -588,6 +590,7 @@ class TestUintSSZ:
         )
         with pytest.raises(SSZValueError) as exception_info:
             uint_class.deserialize(stream, scope=byte_length)
+        assert exception_info.value.fault is ValueFault.TRUNCATED
         assert str(exception_info.value) == expected_message
 
 
@@ -620,11 +623,13 @@ class TestTheDeclaredWidthIsTheWireWidth:
 
     def test_a_payload_of_the_wrong_width_is_refused_against_the_declared_width(self) -> None:
         """A payload of the accessor's four bytes is short of the width, and reported as such."""
-        with pytest.raises(
-            SSZValueError,
-            match=r"^AccessorNarrowerThanTheWidth needs 8 bytes, the input holds 4$",
-        ):
+        with pytest.raises(SSZValueError) as exception_info:
             AccessorNarrowerThanTheWidth.decode_bytes(b"\x00" * 4)
+        assert exception_info.value.fault is ValueFault.SCOPE
+        assert (
+            str(exception_info.value)
+            == "AccessorNarrowerThanTheWidth spans 8 bytes, and the budget is 4"
+        )
 
     def test_a_scope_of_the_wrong_width_is_refused_against_the_declared_width(self) -> None:
         """A stream read is scoped by the declared width too, and says which width it wanted."""

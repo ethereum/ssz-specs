@@ -56,10 +56,12 @@ class ValueFault(Enum):
     LIMIT = "{type} holds at most {limit} {unit}, got {actual}"
     NOT_HEX = "{type} reads a string as hex digits, and this one holds something else"
 
+    # A budget mismatch in either direction, a whole input being a budget of its own length.
     SCOPE = "{type} spans {expected} bytes, and the budget is {actual}"
     SCOPE_TOO_SMALL = "{type} needs at least {expected} bytes, and the budget is {actual}"
     SCOPE_NEGATIVE = "a budget of {scope} is not a byte count"
     SCOPE_UNDIVIDED = "a budget of {scope} does not divide by an element width of {width}"
+    # A stream that ran out under a budget nothing had checked it against.
     TRUNCATED = "{type} needs {expected} bytes, the input holds {actual}"
     TRAILING_BYTES = "{leftover} byte(s) past the end of the value"
 

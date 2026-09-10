@@ -212,8 +212,20 @@ class ByteVector(bytes, SSZType):
     @classmethod
     @override
     def decode_bytes(cls, data: bytes) -> Self:
-        """Parse SSZ bytes into an instance — the constructor enforces the declared length."""
-        return cls(data)
+        """
+        Parse SSZ bytes into an instance.
+
+        Raises:
+            SSZTypeError: When the input is not one the shape reads as bytes.
+            SSZValueError: When the byte count is not the declared width.
+        """
+        length = cls.declared_length()
+        coerced_bytes = _coerced_bytes(cls.__name__, data)
+        if len(coerced_bytes) != length:
+            raise SSZValueError(
+                ValueFault.SCOPE, type=cls.__name__, expected=length, actual=len(coerced_bytes)
+            )
+        return cls._trusted(coerced_bytes)
 
     @classmethod
     def __get_pydantic_core_schema__(

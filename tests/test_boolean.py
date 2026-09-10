@@ -11,7 +11,7 @@ from pydantic import BaseModel, ValidationError
 import ssz
 from ssz import Bit, Container
 from ssz.boolean import Boolean
-from ssz.exceptions import SSZTypeError, SSZValueError
+from ssz.exceptions import SSZTypeError, SSZValueError, ValueFault
 
 
 class BooleanModel(BaseModel):
@@ -455,13 +455,15 @@ class TestBooleanSSZ:
         assert isinstance(decoded, Boolean)
 
     def test_decode_invalid_length(self) -> None:
-        """Tests that decode_bytes fails with incorrect byte length."""
+        """A wrong byte count is read as the budget mismatch it is."""
         with pytest.raises(SSZValueError) as exception_info:
             Boolean.decode_bytes(b"")
-        assert str(exception_info.value) == "Boolean needs 1 bytes, the input holds 0"
+        assert exception_info.value.fault is ValueFault.SCOPE
+        assert str(exception_info.value) == "Boolean spans 1 bytes, and the budget is 0"
         with pytest.raises(SSZValueError) as exception_info:
             Boolean.decode_bytes(b"\x00\x01")
-        assert str(exception_info.value) == "Boolean needs 1 bytes, the input holds 2"
+        assert exception_info.value.fault is ValueFault.SCOPE
+        assert str(exception_info.value) == "Boolean spans 1 bytes, and the budget is 2"
 
     def test_decode_invalid_value(self) -> None:
         """Tests that decode_bytes fails with an invalid byte value."""
@@ -498,6 +500,7 @@ class TestBooleanSSZ:
         stream.seek(0)
         with pytest.raises(SSZValueError) as exception_info:
             Boolean.deserialize(stream, scope=2)
+        assert exception_info.value.fault is ValueFault.SCOPE
         assert str(exception_info.value) == "Boolean spans 1 bytes, and the budget is 2"
 
     def test_deserialize_premature_stream_end(self) -> None:
@@ -505,6 +508,7 @@ class TestBooleanSSZ:
         stream = io.BytesIO(b"")  # Empty stream
         with pytest.raises(SSZValueError) as exception_info:
             Boolean.deserialize(stream, scope=1)
+        assert exception_info.value.fault is ValueFault.TRUNCATED
         assert str(exception_info.value) == "Boolean needs 1 bytes, the input holds 0"
 
 

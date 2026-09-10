@@ -9,7 +9,7 @@ from pydantic import BaseModel, ValidationError
 
 from ssz.bitfields import BitList, BitVector, ProgressiveBitList
 from ssz.boolean import Boolean
-from ssz.exceptions import SSZTypeError, SSZValueError
+from ssz.exceptions import SSZTypeError, SSZValueError, ValueFault
 
 # Errors that may be raised either directly or wrapped by Pydantic at construction time.
 ValueOrValidationError = (SSZValueError, ValidationError)
@@ -684,14 +684,15 @@ class TestBitfieldSSZ:
         assert decoded2 == instance
 
     def test_bitvector_decode_invalid_length(self) -> None:
-        """BitVector.decode_bytes rejects inputs whose byte count is wrong."""
+        """A wrong byte count is read as the budget mismatch it is."""
 
         class BitVector8(BitVector):
             LENGTH = 8
 
         with pytest.raises(SSZValueError) as exception_info:
             BitVector8.decode_bytes(b"\x01\x02")
-        assert str(exception_info.value) == "BitVector8 needs 1 bytes, the input holds 2"
+        assert exception_info.value.fault is ValueFault.SCOPE
+        assert str(exception_info.value) == "BitVector8 spans 1 bytes, and the budget is 2"
 
     def test_bitvector_decode_rejects_non_zero_padding_bits(self) -> None:
         """BitVector.decode_bytes rejects a final byte with set bits above the data bits."""
@@ -723,6 +724,7 @@ class TestBitfieldSSZ:
         stream = io.BytesIO(b"\xff")
         with pytest.raises(SSZValueError) as exception_info:
             BitVector8.deserialize(stream, scope=2)
+        assert exception_info.value.fault is ValueFault.SCOPE
         assert str(exception_info.value) == "BitVector8 spans 1 bytes, and the budget is 2"
 
     def test_bitvector_deserialize_premature_end(self) -> None:
@@ -734,6 +736,7 @@ class TestBitfieldSSZ:
         stream = io.BytesIO(b"\xff")
         with pytest.raises(SSZValueError) as exception_info:
             BitVector16.deserialize(stream, scope=2)
+        assert exception_info.value.fault is ValueFault.TRUNCATED
         assert str(exception_info.value) == "BitVector16 needs 2 bytes, the input holds 1"
 
     def test_bitlist_decode_empty_bytes(self) -> None:
