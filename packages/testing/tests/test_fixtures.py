@@ -4,13 +4,24 @@ import json
 
 import pytest
 
-from ssz import Boolean, ByteVector, Container, Uint8, ValueFault
+from ssz import (
+    Boolean,
+    ByteVector,
+    CompatibleUnion,
+    Container,
+    List,
+    ProgressiveContainer,
+    Uint8,
+    ValueFault,
+)
 from ssz_testing.fixtures import (
+    BaseConsensusFixture,
     CamelModel,
     ExpectedRejection,
     FixtureInfo,
     SSZFixture,
     SSZTest,
+    type_shape,
 )
 from ssz_testing.hex_codec import from_hex, to_hex
 
@@ -26,6 +37,56 @@ class Pair(Container):
 
     number: Uint8
     flag: Boolean
+
+
+class Bytes2Again(ByteVector):
+    """The same two-byte string under another class name."""
+
+    LENGTH = 2
+
+
+class Bytes3(ByteVector):
+    """A byte longer, so a different shape."""
+
+    LENGTH = 3
+
+
+class Swapped(Container):
+    """The fields of Pair in the other order, so a different shape."""
+
+    flag: Boolean
+    number: Uint8
+
+
+class Numbers(List[Uint8]):
+    """A bounded list, for the capacity and element-type parameters."""
+
+    LIMIT = 4
+    ELEMENT_TYPE = Uint8
+
+
+class Square(ProgressiveContainer):
+    """A field layout with an interior gap, for the layout parameter."""
+
+    ACTIVE_FIELDS = (1, 0, 1)
+
+    side: Uint8
+    color: Uint8
+
+
+class Circle(ProgressiveContainer):
+    """The compatible layout, sharing the position of the second field."""
+
+    ACTIVE_FIELDS = (0, 1, 1)
+
+    radius: Uint8
+    color: Uint8
+
+
+class Shape(CompatibleUnion):
+    """A union of the two layouts, for the options parameter."""
+
+    OPTIONS = {1: Square, 2: Circle}
 
 
 INFO = FixtureInfo(test_id="tests/fillers/test_x.py::test_x", description="", fixture_format="ssz")
@@ -189,3 +250,42 @@ def test_a_fixture_hashes_the_same_way_twice() -> None:
     assert fixture.hash.startswith("0x")
     assert len(fixture.hash) == 66
     assert json.loads(expected)["root"] == fixture.root
+
+
+def test_a_shape_is_read_off_the_declaration_and_not_off_the_class_name() -> None:
+    """Two spellings of one declaration share a shape, and any changed parameter parts them."""
+    assert type_shape(Bytes2) == "ByteVector(LENGTH=2)"
+    assert type_shape(Bytes2Again) == type_shape(Bytes2)
+    assert type_shape(Bytes3) != type_shape(Bytes2)
+
+    assert type_shape(Pair) == "Container(number: Uint8(), flag: Boolean())"
+    assert type_shape(Swapped) != type_shape(Pair)
+
+
+def test_a_shape_writes_out_every_parameter_a_declaration_fixes() -> None:
+    """A capacity, an element type, a field layout and a union's options all read out."""
+    assert type_shape(Numbers) == "List(LIMIT=4, ELEMENT_TYPE=Uint8())"
+    assert type_shape(Square) == (
+        "ProgressiveContainer(ACTIVE_FIELDS=(1, 0, 1), side: Uint8(), color: Uint8())"
+    )
+    assert type_shape(Shape) == (
+        "CompatibleUnion(OPTIONS={"
+        "1: ProgressiveContainer(ACTIVE_FIELDS=(1, 0, 1), side: Uint8(), color: Uint8()), "
+        "2: ProgressiveContainer(ACTIVE_FIELDS=(0, 1, 1), radius: Uint8(), color: Uint8())})"
+    )
+
+
+def test_a_vector_claims_its_type_name_for_the_shape_of_its_value() -> None:
+    """The name a vector emits is claimed against the declared shape of the value under test."""
+    fixture = SSZTest(type_name="Pair", value=Pair(number=Uint8(1), flag=Boolean(True))).generate()
+
+    assert fixture.declared_type_shapes() == {"Pair": "Container(number: Uint8(), flag: Boolean())"}
+
+
+def test_a_fixture_format_that_names_no_type_claims_nothing() -> None:
+    """A format emitting no type name holds no name to a shape."""
+
+    class Bare(BaseConsensusFixture):
+        pass
+
+    assert Bare().declared_type_shapes() == {}

@@ -151,7 +151,7 @@ class SampleSquareProgressiveList(ProgressiveList[SampleSquare]):
     ELEMENT_TYPE = SampleSquare
 
 
-class SampleShapeContainer(Container):
+class SampleSquareContainer(Container):
     """Ordinary container holding a progressive container as its second field."""
 
     tag: Uint8
@@ -483,8 +483,8 @@ def test_container_holding_a_progressive_container(ssz_test: SSZTestFiller) -> N
     - the decoded value equals the original.
     """
     ssz_test(
-        type_name="SampleShapeContainer",
-        value=SampleShapeContainer(
+        type_name="SampleSquareContainer",
+        value=SampleSquareContainer(
             tag=Uint8(0xFF),
             shape=SampleSquare(side=Uint16(0x1234), color=Uint8(0x56)),
         ),

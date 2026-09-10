@@ -9,7 +9,7 @@ from typing import Any
 
 import pytest
 
-from ssz_testing.fixtures import FIXTURE_FORMATS, FixtureInfo
+from ssz_testing.fixtures import FIXTURE_FORMATS, BaseConsensusFixture, FixtureInfo
 
 
 class FixtureCollector:
@@ -19,6 +19,7 @@ class FixtureCollector:
         """Initialize the fixture collector."""
         self.output_directory = output_directory
         self.fixtures: list[tuple[str, Any, str]] = []
+        self.type_shapes: dict[str, tuple[str, str]] = {}
 
     def fixture_output_file(self, test_nodeid: str, fixture_format: str) -> Path:
         """The fixture file for one test function, which must sit under the filler tests."""
@@ -39,8 +40,29 @@ class FixtureCollector:
         format_directory = fixture_format.removesuffix("_test")
         return self.output_directory / format_directory / test_path / f"{base_function_name}.json"
 
+    def claim_type_names(self, fixture: BaseConsensusFixture, test_nodeid: str) -> None:
+        """
+        Hold every type name the run emits to one shape, it being all a vector says about its type.
+
+        Args:
+            fixture: The fixture whose type names are being claimed.
+            test_nodeid: The test that produced it, named in the refusal.
+
+        Raises:
+            ValueError: When an earlier vector emitted this name for a different shape.
+        """
+        for type_name, shape in fixture.declared_type_shapes().items():
+            claimed_by, claimed_shape = self.type_shapes.setdefault(type_name, (test_nodeid, shape))
+            if claimed_shape != shape:
+                raise ValueError(
+                    f"type name '{type_name}' stands for two different shapes:\n"
+                    f"  {claimed_by}: {claimed_shape}\n"
+                    f"  {test_nodeid}: {shape}"
+                )
+
     def add_fixture(self, fixture_format: str, fixture: Any, item: pytest.Item) -> None:
         """Add a fixture to the collection, and record its path on the test that produced it."""
+        self.claim_type_names(fixture, item.nodeid)
         self.fixtures.append((fixture_format, fixture, item.nodeid))
 
         # Stashed on the item, not the session-wide config, which would leak to later tests.

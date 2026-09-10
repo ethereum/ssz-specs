@@ -3,8 +3,9 @@
 import hashlib
 import json
 from abc import abstractmethod
+from collections.abc import Mapping
 from functools import cached_property
-from typing import Any, ClassVar, Self
+from typing import Any, ClassVar, Final, Self
 
 from pydantic import BaseModel, ConfigDict, Field, field_serializer
 from pydantic.alias_generators import to_camel
@@ -153,6 +154,10 @@ class BaseConsensusFixture(CamelModel):
         """Return a copy carrying the metadata envelope."""
         return self.model_copy(update={"info": info})
 
+    def declared_type_shapes(self) -> Mapping[str, str]:
+        """Every type name this fixture emits, against the shape that name has to stand for."""
+        return {}
+
     @cached_property
     def json_dict(self) -> dict[str, Any]:
         """JSON representation of the fixture, excluding the metadata envelope."""
@@ -279,6 +284,40 @@ class BaseTestSpec(CamelModel):
         return expected
 
 
+_SHAPE_PARAMETERS: Final = ("LENGTH", "LIMIT", "ELEMENT_TYPE", "ACTIVE_FIELDS", "OPTIONS")
+"""Everything a declaration fixes its wire format and its tree with, beyond its fields."""
+
+
+def _rendered(declared: Any) -> str:
+    """Render one type parameter, resolving a nested type to the shape it stands for."""
+    if isinstance(declared, type) and issubclass(declared, SSZType):
+        return type_shape(declared)
+    if isinstance(declared, Mapping):
+        entries = ", ".join(f"{key}: {_rendered(option)}" for key, option in declared.items())
+        return f"{{{entries}}}"
+    return repr(declared)
+
+
+def type_shape(ssz_type: type[SSZType]) -> str:
+    """The structure a type declares: two render alike when either can read the other's vector."""
+    kind = next(
+        base.__name__
+        for base in ssz_type.__mro__
+        # A parametrized base names its element, which ELEMENT_TYPE below already writes out.
+        if base.__module__.split(".")[0] == "ssz" and "[" not in base.__name__
+    )
+    written = [
+        f"{name}={_rendered(declared)}"
+        for name in _SHAPE_PARAMETERS
+        if (declared := getattr(ssz_type, name, None)) is not None
+    ]
+    written += [
+        f"{field_name}: {type_shape(field_type)}"
+        for field_name, field_type in getattr(ssz_type, "_FIELD_TYPES", ())
+    ]
+    return f"{kind}({', '.join(written)})"
+
+
 class SSZFixture(BaseConsensusFixture):
     """Emitted vector for SSZ conformance."""
 
@@ -303,6 +342,10 @@ class SSZFixture(BaseConsensusFixture):
     def serialize_value(self, ssz_value: SSZType) -> Any:
         """Render the value as the SSZ JSON mapping of its own type spells it."""
         return json_writer(type(ssz_value)).dump_python(ssz_value, mode="json")
+
+    def declared_type_shapes(self) -> Mapping[str, str]:
+        """The one name this vector emits, against the shape of the value it was filled with."""
+        return {self.type_name: type_shape(type(self.value))}
 
 
 class SSZTest(BaseTestSpec):
