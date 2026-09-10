@@ -67,6 +67,7 @@ class FixtureCollector:
 
             with output_file.open("w") as output_handle:
                 json.dump(all_tests, output_handle, indent=4)
+                output_handle.write("\n")
 
 
 FIXTURE_COLLECTOR_KEY: pytest.StashKey[FixtureCollector] = pytest.StashKey()

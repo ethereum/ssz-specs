@@ -260,3 +260,11 @@ def test_a_test_outside_the_filler_tree_has_nowhere_to_write(tmp_path: Path) -> 
 
     with pytest.raises(ValueError, match="is not under tests/fillers"):
         collector.fixture_output_file("tests/test_unit.py::test_unit", "ssz_test")
+
+
+def test_a_vector_file_ends_with_a_newline(project: pytest.Pytester) -> None:
+    """A vector is a POSIX text file, so its last line is terminated like any other."""
+    fill(project, "--clean").assert_outcomes(passed=2)
+
+    vector = project.path / "fixtures" / "ssz" / "test_two" / "test_writes_a_vector.json"
+    assert vector.read_text(encoding="utf-8").endswith("}\n")
