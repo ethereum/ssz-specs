@@ -227,6 +227,33 @@ def test_every_case_of_one_function_shares_one_file(project: pytest.Pytester) ->
     ]
 
 
+INDENTED_DESCRIPTION_MODULE = """
+def test_indented(ssz_test):
+    \"\"\"A summary line.
+
+    A continuation line, indented in the source.
+    \"\"\"
+    from ssz.uint import Uint8
+
+    ssz_test(type_name="Uint8", value=Uint8(1))
+"""
+
+
+def test_a_description_carries_no_source_indentation(project: pytest.Pytester) -> None:
+    """From Python 3.13 the compiler dedents docstrings, so a vector must not depend on it."""
+    project.makepyfile(**{"tests/fillers/test_indented": INDENTED_DESCRIPTION_MODULE})
+
+    fill(project, "--clean").assert_outcomes(passed=3)
+
+    written = json.loads(
+        (project.path / "fixtures" / "ssz" / "test_indented")
+        .joinpath("test_indented.json")
+        .read_text(encoding="utf-8")
+    )
+    description = next(iter(written.values()))["_info"]["description"]
+    assert description == "A summary line.\n\nA continuation line, indented in the source."
+
+
 def test_a_test_outside_the_filler_tree_has_nowhere_to_write(tmp_path: Path) -> None:
     """The output path is derived from the path under tests/fillers, so only those have one."""
     collector = FixtureCollector(tmp_path)
