@@ -3,7 +3,15 @@
 from collections.abc import Sequence
 from hashlib import sha256
 
-from ssz.chunks import ZERO_CHUNK, ZERO_ROOT, Root, next_pow2, zero_tree_root
+from ssz.chunks import (
+    BYTES_PER_CHUNK,
+    ZERO_CHUNK,
+    ZERO_ROOT,
+    Chunk,
+    Root,
+    next_pow2,
+    zero_tree_root,
+)
 from ssz.exceptions import SSZValueError, ValueFault
 
 
@@ -24,13 +32,24 @@ def merkleize(chunks: Sequence[bytes], limit: int | None = None) -> Root:
 
     Every node below the root is plain bytes.
     The root alone carries a type.
-    Every chunk is exactly 32 bytes wide, and one of any other width is not diagnosed.
 
     Three shortcuts skip the layer walk, marked below where each is taken.
 
     Raises:
+        SSZValueError: A chunk whose width is not 32 bytes.
         SSZValueError: A capacity below the chunk count, or one that is no count at all.
     """
+    # The fold joins raw bytes, so a chunk of another width silently changes the tree.
+    for chunk in chunks:
+        if len(chunk) != BYTES_PER_CHUNK:
+            raise SSZValueError(
+                ValueFault.COUNT,
+                type=Chunk.__name__,
+                expected=BYTES_PER_CHUNK,
+                actual=len(chunk),
+                unit=Chunk.UNIT,
+            )
+
     chunk_count = len(chunks)
     if limit is None:
         width = next_pow2(chunk_count)
@@ -43,13 +62,7 @@ def merkleize(chunks: Sequence[bytes], limit: int | None = None) -> Root:
         width = next_pow2(limit)
     if chunk_count == 0:
         return zero_tree_root(width) if limit is not None else ZERO_ROOT
-    # A one-leaf tree has no parent to hash: the leaf is the root.
-    #
-    # Invariant: a chunk is exactly the chunk width, which the caller states.
-    #
-    # Every other root below is a digest, and so 32 bytes whatever it was folded from.
-    #
-    # This one is handed back rather than hashed, so the caller's own width reaches it.
+    # A one-leaf tree has no parent to hash: the leaf is already a chunk-wide root.
     if width == 1:
         return Root._trusted(chunks[0])
 
@@ -138,6 +151,9 @@ def merkleize_progressive(chunks: Sequence[bytes], num_leaves: int = 1) -> Root:
 
     The capacity argument is the current level's width, quadrupling as the recursion descends.
     Callers keep the default of one.
+
+    Raises:
+        SSZValueError: A chunk whose width is not 32 bytes.
     """
     # An exhausted input terminates the spine with a zero node.
     #
