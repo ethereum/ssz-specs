@@ -36,7 +36,7 @@ class _Omitted(Enum):
     TOKEN = "omitted"
 
 
-def _coerced_bytes(type_name: str, value: Any) -> bytes:
+def coerced_bytes(type_name: str, value: Any) -> bytes:
     r"""
     Read one constructor input as the byte string it stands for.
 
@@ -108,17 +108,17 @@ class ByteVector(bytes, SSZType):
         if value is _Omitted.TOKEN:
             return cls._trusted(b"\x00" * cls.LENGTH)
 
-        coerced_bytes = _coerced_bytes(cls.__name__, value)
-        if len(coerced_bytes) != cls.LENGTH:
+        data = coerced_bytes(cls.__name__, value)
+        if len(data) != cls.LENGTH:
             raise SSZValueError(
                 ValueFault.COUNT,
                 type=cls.__name__,
                 expected=cls.LENGTH,
-                actual=len(coerced_bytes),
+                actual=len(data),
                 unit=cls.UNIT,
             )
 
-        return super().__new__(cls, coerced_bytes)
+        return super().__new__(cls, data)
 
     def __setattr__(self, name: str, value: Any) -> NoReturn:
         """
@@ -327,16 +327,16 @@ class ByteList(SSZCollection[int]):
             raise SSZTypeError(TypeFault.UNDECLARED, type=cls.__name__, requirement="LIMIT")
 
         # Coerce the input first, then enforce the upper bound.
-        coerced_bytes = _coerced_bytes(cls.__name__, value)
-        if len(coerced_bytes) > cls.LIMIT:
+        data = coerced_bytes(cls.__name__, value)
+        if len(data) > cls.LIMIT:
             raise SSZValueError(
                 ValueFault.LIMIT,
                 type=cls.__name__,
                 limit=cls.LIMIT,
-                actual=len(coerced_bytes),
+                actual=len(data),
                 unit=cls.UNIT,
             )
-        return coerced_bytes
+        return data
 
     @field_serializer("data", when_used="json")
     def _serialize_data(self, value: bytes) -> str:

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from numbers import Number
 from types import NotImplementedType
-from typing import IO, Any, ClassVar, NoReturn, Self, SupportsInt, TypeAlias, overload, override
+from typing import IO, Any, ClassVar, Final, NoReturn, Self, SupportsInt, overload, override
 
 from pydantic.annotated_handlers import GetCoreSchemaHandler
 from pydantic_core import core_schema
@@ -15,6 +15,12 @@ from ssz.ssz_base import SSZType
 
 INTERN_BELOW = 256
 """How many of the smallest values each width shares, covering where consensus arithmetic stays."""
+
+_DECIMAL_STRING: Final = r"^(0|[1-9][0-9]*)$"
+"""The decimal digits the JSON mapping spells a number with, no sign, padding or separator."""
+
+_HEX_BYTE_STRING: Final = r"^0x[0-9a-fA-F]{2}$"
+"""The hex byte string the JSON mapping spells eight bits of opaque data with."""
 
 
 class BaseUint(int, SSZType):
@@ -111,12 +117,22 @@ class BaseUint(int, SSZType):
         """
         Hook into Pydantic's validation system.
 
-        A field holds a uint as an instance or as a strict int within the unsigned range.
+        A field holds a uint as an instance, as a strict int within the unsigned range,
+        or as the decimal string the JSON mapping spells it with.
         """
+        # Digits in a string, because a JSON number holds a uint64 as a double and rounds it.
+        in_range = core_schema.int_schema(ge=0, lt=2**cls.BITS, strict=True)
         return wrapping_schema(
             cls,
-            core_schema.int_schema(ge=0, lt=2**cls.BITS, strict=True),
-            to_json=int,
+            in_range,
+            core_schema.chain_schema(
+                [
+                    core_schema.str_schema(pattern=_DECIMAL_STRING),
+                    core_schema.no_info_plain_validator_function(int),
+                    in_range,
+                ]
+            ),
+            to_json=str,
         )
 
     @classmethod
@@ -533,5 +549,32 @@ class Uint256(BaseUint):
     BITS = 256
 
 
-Byte: TypeAlias = Uint8
-"""Eight bits of opaque data, which the spec encodes and hashes as an eight-bit number."""
+class Byte(Uint8):
+    """
+    Eight bits of opaque data, which the spec encodes and hashes as an eight-bit number.
+
+    The JSON mapping is the one place the two part company: hex here, decimal digits there.
+    """
+
+    @classmethod
+    @override
+    def __get_pydantic_core_schema__(
+        cls, source_type: Any, handler: GetCoreSchemaHandler
+    ) -> core_schema.CoreSchema:
+        """
+        Hook into Pydantic's validation system.
+
+        A field holds a byte as an instance, as a strict int within the unsigned range,
+        or as the hex byte string the JSON mapping spells it with.
+        """
+        return wrapping_schema(
+            cls,
+            core_schema.int_schema(ge=0, lt=2**cls.BITS, strict=True),
+            core_schema.chain_schema(
+                [
+                    core_schema.str_schema(pattern=_HEX_BYTE_STRING),
+                    core_schema.no_info_plain_validator_function(lambda text: int(text, 16)),
+                ]
+            ),
+            to_json=lambda instance: f"0x{instance:02x}",
+        )

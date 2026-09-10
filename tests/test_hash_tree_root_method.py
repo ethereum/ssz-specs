@@ -254,8 +254,8 @@ FAMILY_ROOTS = [
     pytest.param(Uint128(0x1234), pad(b"\x34\x12"), id="uint128"),
     # A uint256 fills the chunk exactly, leaving no padding to hide a width mistake.
     pytest.param(Uint256(2**256 - 1), Root(b"\xff" * 32), id="uint256"),
-    # The spec's opaque byte is the eight-bit uint under another name, and roots alike.
-    pytest.param(Byte(0xFF), pad(b"\xff"), id="byte_alias"),
+    # The spec's opaque byte is the eight-bit uint with its own JSON form, and roots alike.
+    pytest.param(Byte(0xFF), pad(b"\xff"), id="opaque_byte"),
     # A fixed byte array packs the same way, over as many chunks as it spans.
     pytest.param(Bytes4(b"\xde\xad\xbe\xef"), pad(b"\xde\xad\xbe\xef"), id="byte_vector_4"),
     pytest.param(Bytes32(bytes(range(32))), Root(bytes(range(32))), id="byte_vector_32"),

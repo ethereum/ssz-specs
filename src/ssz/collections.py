@@ -31,6 +31,7 @@ from typing import IO, Any, ClassVar, Self, cast, overload, override
 
 from pydantic import Field, field_serializer, field_validator
 
+from ssz.base import json_writer
 from ssz.byte_arrays import ByteVector
 from ssz.exceptions import SSZError, SSZTypeError, SSZValueError, TypeFault, ValueFault
 from ssz.offsets import BYTES_PER_LENGTH_OFFSET, check_composite_size, offset_table_spans
@@ -40,7 +41,7 @@ from ssz.ssz_base import (
     SSZType,
     hold_to_bases,
 )
-from ssz.uint import Uint32
+from ssz.uint import BaseUint, Uint32
 
 
 class _SSZSequence[T: SSZType](SSZCollection[T], ABC):
@@ -144,16 +145,7 @@ class _SSZSequence[T: SSZType](SSZCollection[T], ABC):
     @override
     def _validate_element(cls, value: Any) -> SSZType:
         """
-        Coerce one value into the declared element type.
-
-        The last two arms are what this type's own JSON rendering produces.
-        Accepting them is what makes that rendering readable back in:
-
-            Vector[Point]    ->  {"data": [{"x": 1, "y": 2}]}
-            Vector[Bytes4]   ->  {"data": ["0x01020304"]}
-
-        Each is as narrow as the rendering it mirrors.
-        So a hex string with no prefix stays refused.
+        Coerce one value into the declared element type, including its JSON rendering.
 
         Raises:
             SSZError: The refusal the element type itself raised, where it raised one.
@@ -175,6 +167,10 @@ class _SSZSequence[T: SSZType](SSZCollection[T], ABC):
             # A mapping is how a Pydantic-backed element renders, and how it reads back.
             if isinstance(value, Mapping) and issubclass(element_type, SSZModel):
                 return element_type.model_validate(value)
+
+            # A number renders as a string, and its own declaration is what reads one back.
+            if isinstance(value, str) and issubclass(element_type, BaseUint):
+                return json_writer(element_type).validate_python(value)
 
             # A 0x-prefixed string is how a fixed byte array renders, and nothing else.
             if (
@@ -303,21 +299,10 @@ class _SSZSequence[T: SSZType](SSZCollection[T], ABC):
 
     @field_serializer("data", when_used="json")
     def _serialize_data(self, value: Sequence[T]) -> list[Any]:
-        """Render the elements as a JSON-friendly list."""
-        # Pydantic does not flatten SSZ leaf types into JSON primitives on its own.
-        serialized_elements: list[Any] = []
-        for element in value:
-            if isinstance(element, ByteVector):
-                serialized_elements.append("0x" + element.hex())
-
-            # A boolean also subclasses int, and is excluded so it stays true or false.
-            elif isinstance(element, int) and not isinstance(element, bool):
-                serialized_elements.append(int(element))
-
-            # Nested containers and primitives are left to Pydantic.
-            else:
-                serialized_elements.append(element)
-        return serialized_elements
+        """Render each element as the JSON mapping of the declared element type spells it."""
+        # The field is annotated with a type variable, so pydantic has no element type to use.
+        write = json_writer(type(self).ELEMENT_TYPE)
+        return [write.dump_python(element, mode="json") for element in value]
 
 
 class Vector[T: SSZType](_SSZSequence[T]):
