@@ -144,6 +144,15 @@ def pytest_addoption(parser: pytest.Parser) -> None:
     )
 
 
+def pytest_configure(config: pytest.Config) -> None:
+    """Refuse a distributed fill, where each worker would clean away what the others wrote."""
+    if getattr(config.option, "numprocesses", None) or getattr(config.option, "dist", "no") != "no":
+        raise pytest.UsageError(
+            "fill does not run distributed: every worker cleans the output directory and "
+            "writes only the vectors it filled. Drop -n and --dist."
+        )
+
+
 def pytest_ignore_collect(collection_path: Path, config: pytest.Config) -> bool | None:
     """Ignore paths outside the filler tests, which sit under the configured root."""
     try:

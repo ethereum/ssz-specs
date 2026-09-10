@@ -199,6 +199,19 @@ def test_an_output_directory_the_project_does_not_contain_is_refused(
     assert (project.path / "pyproject.toml").exists() or (project.path / "tox.ini").exists()
 
 
+@pytest.mark.parametrize("distribution_option", ["-n2", "--dist=load"])
+def test_a_distributed_fill_is_refused(project: pytest.Pytester, distribution_option: str) -> None:
+    """Every worker cleans the output directory, so the vectors the others wrote would go."""
+    fill(project, "--clean").assert_outcomes(passed=2)
+    vector = project.path / "fixtures" / "ssz" / "test_two" / "test_writes_a_vector.json"
+
+    refused = fill(project, "--clean", distribution_option)
+
+    assert refused.ret == pytest.ExitCode.USAGE_ERROR
+    refused.stderr.fnmatch_lines(["*does not run distributed*"])
+    assert vector.exists()
+
+
 def test_the_collection_filter_follows_the_root_not_the_directory_it_was_run_from(
     project: pytest.Pytester, monkeypatch: pytest.MonkeyPatch
 ) -> None:

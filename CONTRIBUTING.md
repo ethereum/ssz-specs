@@ -52,6 +52,9 @@ and create the `pypi` environment in the GitHub repository settings.
 Reproduce the artifacts locally with `just build` and `just pack-fixtures <tag>`
 (macOS: `brew install gnu-tar coreutils`).
 
+The vector tarball records neither timestamps nor the umask it was packed under,
+so a local build hashes to the same sha256 as the published asset.
+
 ## Questions?
 
 - Check existing [issues](https://github.com/ethereum/ssz-specs/issues)

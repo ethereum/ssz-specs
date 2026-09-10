@@ -99,7 +99,7 @@ pack-fixtures tag: fill
         command -v sha256sum >/dev/null || SHA256="shasum -a 256"
     fi
     "$TAR" --sort=name --owner=0 --group=0 --numeric-owner \
-        --mtime='@0' --format=gnu \
+        --mtime='@0' --mode='go-w,a+rX' --format=gnu \
         --use-compress-program='gzip --no-name' \
         --create --file="ssz-test-vectors-{{tag}}.tar.gz" fixtures
     $SHA256 "ssz-test-vectors-{{tag}}.tar.gz" > "ssz-test-vectors-{{tag}}.tar.gz.sha256"
