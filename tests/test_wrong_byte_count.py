@@ -62,6 +62,7 @@ LEAF_TYPES: Final[tuple[type[SSZType], ...]] = (
     Uint64,
     Uint128,
     Uint256,
+    Byte,
     Boolean,
     Bytes4,
     BitVector8,
@@ -129,6 +130,6 @@ def test_a_struct_reads_its_fields_before_it_can_measure_its_budget() -> None:
     assert str(short) == "flag: Boolean needs 1 bytes, the input holds 0"
 
 
-def test_the_aliases_name_the_types_this_property_was_established_over() -> None:
+def test_the_alias_and_the_subtype_this_property_also_covers() -> None:
     assert Bit is Boolean
-    assert Byte is Uint8
+    assert issubclass(Byte, Uint8)

@@ -220,12 +220,12 @@ class ByteVector(bytes, SSZType):
             SSZValueError: When the byte count is not the declared width.
         """
         length = cls.declared_length()
-        coerced_bytes = _coerced_bytes(cls.__name__, data)
-        if len(coerced_bytes) != length:
+        payload = coerced_bytes(cls.__name__, data)
+        if len(payload) != length:
             raise SSZValueError(
-                ValueFault.SCOPE, type=cls.__name__, expected=length, actual=len(coerced_bytes)
+                ValueFault.SCOPE, type=cls.__name__, expected=length, actual=len(payload)
             )
-        return cls._trusted(coerced_bytes)
+        return cls._trusted(payload)
 
     @classmethod
     def __get_pydantic_core_schema__(
