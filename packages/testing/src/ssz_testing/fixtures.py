@@ -61,7 +61,10 @@ class FixtureInfo(CamelModel):
     """Provenance note for consumers."""
 
     test_id: str
-    """Unique identifier for the test case."""
+    """The case's authored identifier, unique across the run."""
+
+    generated_by: str
+    """Node id of the filler that produced the case, for a maintainer tracing it back."""
 
     description: str
     """Human-readable description of the test."""

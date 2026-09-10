@@ -76,6 +76,7 @@ def test_bitvector_length_one_all_set(ssz_test: SSZTestFiller) -> None:
     - the root matches the minimal single-chunk layout.
     """
     ssz_test(
+        case_id="bitvector1/all_set",
         type_name="BoundaryBitVector1",
         value=BoundaryBitVector1(data=[Boolean(True)]),
     )
@@ -99,6 +100,7 @@ def test_bitvector_length_seven_all_set(ssz_test: SSZTestFiller) -> None:
     - the root matches the expected single-chunk layout.
     """
     ssz_test(
+        case_id="bitvector7/all_set",
         type_name="BoundaryBitVector7",
         value=BoundaryBitVector7(data=[Boolean(True)] * 7),
     )
@@ -122,6 +124,7 @@ def test_bitvector_length_nine_all_set(ssz_test: SSZTestFiller) -> None:
     - the root matches the expected two-byte layout.
     """
     ssz_test(
+        case_id="bitvector9/all_set",
         type_name="BoundaryBitVector9",
         value=BoundaryBitVector9(data=[Boolean(True)] * 9),
     )
@@ -145,6 +148,7 @@ def test_bitvector_length_255_all_set(ssz_test: SSZTestFiller) -> None:
     - the root matches the expected single-chunk layout.
     """
     ssz_test(
+        case_id="bitvector255/all_set",
         type_name="BoundaryBitVector255",
         value=BoundaryBitVector255(data=[Boolean(True)] * 255),
     )
@@ -168,6 +172,7 @@ def test_bitvector_length_256_all_set(ssz_test: SSZTestFiller) -> None:
     - the root matches the exact single-chunk layout.
     """
     ssz_test(
+        case_id="bitvector256/all_set",
         type_name="BoundaryBitVector256",
         value=BoundaryBitVector256(data=[Boolean(True)] * 256),
     )
@@ -191,6 +196,7 @@ def test_bitvector_length_257_all_set(ssz_test: SSZTestFiller) -> None:
     - the root matches the expected two-chunk layout.
     """
     ssz_test(
+        case_id="bitvector257/all_set",
         type_name="BoundaryBitVector257",
         value=BoundaryBitVector257(data=[Boolean(True)] * 257),
     )
@@ -214,6 +220,7 @@ def test_bitlist_filled_to_chunk_boundary_limit(ssz_test: SSZTestFiller) -> None
     - the root matches the expected length-mixin ordering.
     """
     ssz_test(
+        case_id="bitlist256/at_limit",
         type_name="BoundaryBitList256",
         value=BoundaryBitList256(data=[Boolean(True)] * 256),
     )
@@ -237,6 +244,7 @@ def test_uint64_list_with_misaligned_chunk_count(ssz_test: SSZTestFiller) -> Non
     - the root matches the expected zero-pad and length-mixin layout.
     """
     ssz_test(
+        case_id="uint64_list32/three_elements",
         type_name="BoundaryUint64List32",
         value=BoundaryUint64List32(data=[Uint64(1), Uint64(2), Uint64(3)]),
     )

@@ -16,7 +16,7 @@ from ssz_testing import SSZTestFiller
 
 def test_writes_a_vector(ssz_test: SSZTestFiller) -> None:
     """An honest value."""
-    ssz_test(type_name="Uint8", value=Uint8(1))
+    ssz_test(case_id="uint8/one", type_name="Uint8", value=Uint8(1))
 
 
 def test_writes_nothing(ssz_test: SSZTestFiller) -> None:
@@ -37,25 +37,25 @@ class TestDocumented:
 
     def test_documented(self, ssz_test: SSZTestFiller) -> None:
         """The function documentation."""
-        ssz_test(type_name="Uint8", value=Uint8(1))
+        ssz_test(case_id="documented/in_class", type_name="Uint8", value=Uint8(1))
 
     def test_undocumented(self, ssz_test: SSZTestFiller) -> None:
-        ssz_test(type_name="Uint8", value=Uint8(2))
+        ssz_test(case_id="undocumented/in_class", type_name="Uint8", value=Uint8(2))
 
 
 def test_documented(ssz_test: SSZTestFiller) -> None:
     """The function documentation."""
-    ssz_test(type_name="Uint8", value=Uint8(3))
+    ssz_test(case_id="documented/at_module", type_name="Uint8", value=Uint8(3))
 
 
 def test_undocumented(ssz_test: SSZTestFiller) -> None:
-    ssz_test(type_name="Uint8", value=Uint8(4))
+    ssz_test(case_id="undocumented/at_module", type_name="Uint8", value=Uint8(4))
 
 
 @pytest.mark.parametrize("number", [5, 6])
 def test_parametrized(ssz_test: SSZTestFiller, number: int) -> None:
-    """Two cases of one function."""
-    ssz_test(type_name="Uint8", value=Uint8(number))
+    """Two cases of one function, each naming itself."""
+    ssz_test(case_id=f"parametrized/{number}", type_name="Uint8", value=Uint8(number))
 '''
 
 
@@ -80,12 +80,12 @@ class Wide(Container):
 
 def test_narrow(ssz_test: SSZTestFiller) -> None:
     """The first claim on the name."""
-    ssz_test(type_name="Shape", value=Narrow())
+    ssz_test(case_id="shape/narrow", type_name="Shape", value=Narrow())
 
 
 def test_wide(ssz_test: SSZTestFiller) -> None:
     """A second shape under the name the first claimed."""
-    ssz_test(type_name="Shape", value=Wide())
+    ssz_test(case_id="shape/wide", type_name="Shape", value=Wide())
 '''
 
 SHAPE_AGREEMENT_MODULE = '''
@@ -109,12 +109,12 @@ class Elsewhere(Container):
 
 def test_here(ssz_test: SSZTestFiller) -> None:
     """The first of the two."""
-    ssz_test(type_name="Shape", value=Here())
+    ssz_test(case_id="shape/here", type_name="Shape", value=Here())
 
 
 def test_elsewhere(ssz_test: SSZTestFiller) -> None:
     """The second, claiming the same name for the same shape."""
-    ssz_test(type_name="Shape", value=Elsewhere())
+    ssz_test(case_id="shape/elsewhere", type_name="Shape", value=Elsewhere())
 '''
 
 REPEATED_CALL_MODULE = '''
@@ -125,9 +125,54 @@ from ssz_testing import SSZTestFiller
 
 
 def test_many_calls_one_function(ssz_test: SSZTestFiller) -> None:
-    """Three values, one test id."""
+    """Three values, each under its own case id."""
     for number in (1, 2, 3):
-        ssz_test(type_name="Uint16", value=Uint16(number))
+        ssz_test(case_id=f"uint16/{number}", type_name="Uint16", value=Uint16(number))
+'''
+
+DUPLICATE_CASE_ID_MODULE = '''
+"""Two fillers reaching for one case id."""
+
+from ssz import Uint16
+from ssz_testing import SSZTestFiller
+
+
+def test_first(ssz_test: SSZTestFiller) -> None:
+    """The first claim on the id."""
+    ssz_test(case_id="uint16/one", type_name="Uint16", value=Uint16(1))
+
+
+def test_second(ssz_test: SSZTestFiller) -> None:
+    """A second vector under the id the first claimed."""
+    ssz_test(case_id="uint16/one", type_name="Uint16", value=Uint16(2))
+'''
+
+MALFORMED_CASE_ID_MODULE = '''
+"""A case id spelled as the node id it replaces."""
+
+from ssz import Uint16
+from ssz_testing import SSZTestFiller
+
+
+def test_malformed(ssz_test: SSZTestFiller) -> None:
+    """An id a consumer could not print in a failure report."""
+    ssz_test(
+        case_id="tests/fillers/test_malformed.py::test_malformed",
+        type_name="Uint16",
+        value=Uint16(1),
+    )
+'''
+
+RENAMED_MODULE = '''
+"""One case, filled by a function that gets renamed between fills."""
+
+from ssz import Uint64
+from ssz_testing import SSZTestFiller
+
+
+def test_{filler_name}(ssz_test: SSZTestFiller) -> None:
+    """The largest uint64."""
+    ssz_test(case_id="uint64/max", type_name="Uint64", value=Uint64(2**64 - 1))
 '''
 
 
@@ -271,12 +316,12 @@ def test_a_test_carries_its_documentation_into_its_vector(project: pytest.Pytest
         .joinpath("test_documented.json")
         .read_text(encoding="utf-8")
     )
-    descriptions = {test_id: entry["_info"]["description"] for test_id, entry in written.items()}
+    descriptions = {case_id: entry["_info"]["description"] for case_id, entry in written.items()}
     assert descriptions == {
-        "tests/fillers/test_described.py::TestDocumented::test_documented[ssz_test]": (
+        "documented/in_class": (
             "Test class documentation:\nThe class documentation.\n\nThe function documentation."
         ),
-        "tests/fillers/test_described.py::test_documented[ssz_test]": "The function documentation.",
+        "documented/at_module": "The function documentation.",
     }
 
     undocumented = json.loads(
@@ -284,13 +329,11 @@ def test_a_test_carries_its_documentation_into_its_vector(project: pytest.Pytest
         .joinpath("test_undocumented.json")
         .read_text(encoding="utf-8")
     )
-    assert undocumented["tests/fillers/test_described.py::test_undocumented[ssz_test]"]["_info"][
-        "description"
-    ] == ("No description available - add a docstring to the python test class or function.")
+    assert undocumented["undocumented/at_module"]["_info"]["description"] == (
+        "No description available - add a docstring to the python test class or function."
+    )
     assert (
-        undocumented[
-            "tests/fillers/test_described.py::TestDocumented::test_undocumented[ssz_test]"
-        ]["_info"]["description"]
+        undocumented["undocumented/in_class"]["_info"]["description"]
         == "Test class documentation:\nThe class documentation."
     )
 
@@ -306,10 +349,11 @@ def test_every_case_of_one_function_shares_one_file(project: pytest.Pytester) ->
             encoding="utf-8"
         )
     )
-    assert sorted(written) == [
-        "tests/fillers/test_described.py::test_parametrized[5][ssz_test]",
-        "tests/fillers/test_described.py::test_parametrized[6][ssz_test]",
-    ]
+    assert sorted(written) == ["parametrized/5", "parametrized/6"]
+    assert {entry["_info"]["generatedBy"] for entry in written.values()} == {
+        "tests/fillers/test_described.py::test_parametrized[5]",
+        "tests/fillers/test_described.py::test_parametrized[6]",
+    }
 
 
 INDENTED_DESCRIPTION_MODULE = """
@@ -320,7 +364,7 @@ def test_indented(ssz_test):
     \"\"\"
     from ssz.uint import Uint8
 
-    ssz_test(type_name="Uint8", value=Uint8(1))
+    ssz_test(case_id="uint8/indented", type_name="Uint8", value=Uint8(1))
 """
 
 
@@ -339,20 +383,83 @@ def test_a_description_carries_no_source_indentation(project: pytest.Pytester) -
     assert description == "A summary line.\n\nA continuation line, indented in the source."
 
 
-def test_a_second_vector_from_one_test_is_refused(project: pytest.Pytester) -> None:
-    """A test id names one vector, so a repeated call would drop one and fails the fill instead."""
+def test_one_function_may_fill_a_family_of_vectors(project: pytest.Pytester) -> None:
+    """An id names a vector rather than a test, so a loop writes one entry per iteration."""
     project.makepyfile(**{"tests/fillers/test_repeated": REPEATED_CALL_MODULE})
+
+    fill(project, "--clean").assert_outcomes(passed=3)
+
+    written = json.loads(
+        (
+            project.path
+            / "fixtures"
+            / "ssz"
+            / "test_repeated"
+            / "test_many_calls_one_function.json"
+        ).read_text(encoding="utf-8")
+    )
+    assert sorted(written) == ["uint16/1", "uint16/2", "uint16/3"]
+
+
+def test_two_vectors_under_one_case_id_fail_the_fill(project: pytest.Pytester) -> None:
+    """An id is how a consumer names a case, so a second vector under one names both producers."""
+    project.makepyfile(**{"tests/fillers/test_duplicate": DUPLICATE_CASE_ID_MODULE})
+
+    refused = fill(project, "--clean")
+
+    refused.assert_outcomes(passed=3, failed=1)
+    refused.stdout.fnmatch_lines(
+        [
+            "E*ValueError: case id 'uint16/one' names two different vectors:",
+            "E*tests/fillers/test_duplicate.py::test_first",
+            "E*tests/fillers/test_duplicate.py::test_second",
+        ]
+    )
+
+
+def test_a_case_id_that_is_not_slash_separated_words_is_refused(project: pytest.Pytester) -> None:
+    """A vector is language-neutral, so its id may not spell out this repository's source layout."""
+    project.makepyfile(**{"tests/fillers/test_malformed": MALFORMED_CASE_ID_MODULE})
 
     refused = fill(project, "--clean")
 
     refused.assert_outcomes(passed=2, failed=1)
-    refused.stdout.fnmatch_lines(
-        [
-            "E*ValueError: test 'tests/fillers/test_repeated.py::test_many_calls_one_function' "
-            "already produced a 'ssz_test' vector, and a second one would replace it. "
-            "Parametrize the test or split it, so that every vector is written under its own "
-            "test id."
-        ]
+    refused.stdout.fnmatch_lines(["E*is not spelled as slash-separated lowercase words*"])
+
+
+def test_an_authored_id_survives_renaming_the_filler(project: pytest.Pytester) -> None:
+    """The author names a case, so renaming the function that fills it renames nothing."""
+    renamed = project.path / "fixtures" / "ssz" / "test_renamed"
+    project.makepyfile(
+        **{"tests/fillers/test_renamed": RENAMED_MODULE.format(filler_name="uint64_at_its_top")}
+    )
+    fill(project, "--clean").assert_outcomes(passed=3)
+    before = json.loads((renamed / "test_uint64_at_its_top.json").read_text(encoding="utf-8"))
+
+    project.makepyfile(
+        **{"tests/fillers/test_renamed": RENAMED_MODULE.format(filler_name="the_largest_uint64")}
+    )
+    fill(project, "--clean").assert_outcomes(passed=3)
+    after = json.loads((renamed / "test_the_largest_uint64.json").read_text(encoding="utf-8"))
+
+    assert list(before) == list(after) == ["uint64/max"]
+    assert before["uint64/max"]["_info"]["testId"] == after["uint64/max"]["_info"]["testId"]
+    assert after["uint64/max"]["_info"]["generatedBy"] == (
+        "tests/fillers/test_renamed.py::test_the_largest_uint64"
+    )
+
+
+def test_a_vector_records_the_filler_that_produced_it(project: pytest.Pytester) -> None:
+    """The node id stays on as provenance, so a maintainer can find the filler behind a case."""
+    fill(project, "--clean").assert_outcomes(passed=2)
+
+    written = json.loads(
+        (project.path / "fixtures" / "ssz" / "test_two" / "test_writes_a_vector.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    assert written["uint8/one"]["_info"]["generatedBy"] == (
+        "tests/fillers/test_two.py::test_writes_a_vector"
     )
 
 

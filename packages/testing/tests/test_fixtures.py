@@ -89,7 +89,12 @@ class Shape(CompatibleUnion):
     OPTIONS = {1: Square, 2: Circle}
 
 
-INFO = FixtureInfo(test_id="tests/fillers/test_x.py::test_x", description="", fixture_format="ssz")
+INFO = FixtureInfo(
+    test_id="uint8/one",
+    generated_by="tests/fillers/test_x.py::test_x",
+    description="",
+    fixture_format="ssz",
+)
 
 
 def test_the_json_mapping_is_pinned_to_camel_case() -> None:

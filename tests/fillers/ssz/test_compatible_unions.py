@@ -140,6 +140,7 @@ def test_compatible_union_first_option(ssz_test: SSZTestFiller) -> None:
     - the decoded value equals the original.
     """
     ssz_test(
+        case_id="compatible_union/first_option",
         type_name="SampleShape",
         value=SampleShape(
             selector=Uint8(1),
@@ -167,6 +168,7 @@ def test_compatible_union_second_option(ssz_test: SSZTestFiller) -> None:
     - the decoded value equals the original.
     """
     ssz_test(
+        case_id="compatible_union/second_option",
         type_name="SampleShape",
         value=SampleShape(
             selector=Uint8(2),
@@ -195,6 +197,7 @@ def test_compatible_union_highest_selector(ssz_test: SSZTestFiller) -> None:
     - the decoded value equals the original.
     """
     ssz_test(
+        case_id="compatible_union/selector_127",
         type_name="SampleShape",
         value=SampleShape(
             selector=Uint8(127),
@@ -222,6 +225,7 @@ def test_compatible_union_variable_size_option(ssz_test: SSZTestFiller) -> None:
     - the decoded value equals the original.
     """
     ssz_test(
+        case_id="compatible_union/variable_size_option",
         type_name="SampleNumbers",
         value=SampleNumbers(
             selector=Uint8(1),
@@ -248,6 +252,7 @@ def test_compatible_union_empty_variable_size_option(ssz_test: SSZTestFiller) ->
     - the decoded value equals the original.
     """
     ssz_test(
+        case_id="compatible_union/empty_variable_size_option",
         type_name="SampleNumbers",
         value=SampleNumbers(selector=Uint8(2), data=SampleUint16List4Alias(data=[])),
     )
@@ -277,6 +282,7 @@ def test_compatible_union_empty_list_options_separated_by_the_selector(
     - the decoded value equals the original.
     """
     ssz_test(
+        case_id="compatible_union/colliding_empty_options/first",
         type_name="SampleEmptyProne",
         value=SampleEmptyProne(selector=Uint8(1), data=SampleSquareProgressiveList(data=[])),
     )
@@ -301,6 +307,7 @@ def test_compatible_union_other_empty_list_option(ssz_test: SSZTestFiller) -> No
     - the decoded value equals the original.
     """
     ssz_test(
+        case_id="compatible_union/colliding_empty_options/second",
         type_name="SampleEmptyProne",
         value=SampleEmptyProne(selector=Uint8(2), data=SampleCircleProgressiveList(data=[])),
     )
@@ -326,6 +333,7 @@ def test_compatible_union_of_unions(ssz_test: SSZTestFiller) -> None:
     - the decoded value equals the original.
     """
     ssz_test(
+        case_id="compatible_union/union_option",
         type_name="SampleNestedShape",
         value=SampleNestedShape(
             selector=Uint8(1),
@@ -357,6 +365,7 @@ def test_container_holding_a_compatible_union(ssz_test: SSZTestFiller) -> None:
     - the decoded value equals the original.
     """
     ssz_test(
+        case_id="compatible_union/in_container",
         type_name="SampleShapeContainer",
         value=SampleShapeContainer(
             tag=Uint64(7),
@@ -387,6 +396,7 @@ def test_progressive_container_holding_a_compatible_union(ssz_test: SSZTestFille
     - the decoded value equals the original.
     """
     ssz_test(
+        case_id="compatible_union/in_progressive_container",
         type_name="SampleShapeProgressiveContainer",
         value=SampleShapeProgressiveContainer(
             tag=Uint64(7),
@@ -417,6 +427,7 @@ def test_progressive_list_of_compatible_unions(ssz_test: SSZTestFiller) -> None:
     - the decoded value equals the original.
     """
     ssz_test(
+        case_id="compatible_union/in_progressive_list",
         type_name="SampleShapeProgressiveList",
         value=SampleShapeProgressiveList(
             data=[
@@ -446,6 +457,7 @@ def test_compatible_union_decode_failure_empty_input(ssz_test: SSZTestFiller) ->
     - the reason is that the budget holds no selector at all.
     """
     ssz_test(
+        case_id="compatible_union/invalid/empty_input",
         type_name="SampleShape",
         value=SampleShape(
             selector=Uint8(1),
@@ -478,6 +490,7 @@ def test_compatible_union_decode_failure_undeclared_selector(ssz_test: SSZTestFi
     - the reason is that the selector names no option of this union.
     """
     ssz_test(
+        case_id="compatible_union/invalid/undeclared_selector",
         type_name="SampleShape",
         value=SampleShape(
             selector=Uint8(1),
@@ -510,6 +523,7 @@ def test_compatible_union_decode_failure_reserved_zero_selector(ssz_test: SSZTes
       pass as a valid one.
     """
     ssz_test(
+        case_id="compatible_union/invalid/reserved_selector_zero",
         type_name="SampleShape",
         value=SampleShape(
             selector=Uint8(1),
@@ -543,6 +557,7 @@ def test_compatible_union_decode_failure_trailing_byte(ssz_test: SSZTestFiller) 
     - the rest of the budget belongs to the option, so the option reports the surplus.
     """
     ssz_test(
+        case_id="compatible_union/invalid/trailing_byte",
         type_name="SampleShape",
         value=SampleShape(
             selector=Uint8(1),
@@ -575,6 +590,7 @@ def test_compatible_union_decode_failure_truncated_payload(ssz_test: SSZTestFill
     - the reason surfaces from the option itself, since the rest of the budget is its own.
     """
     ssz_test(
+        case_id="compatible_union/invalid/truncated_payload",
         type_name="SampleShape",
         value=SampleShape(
             selector=Uint8(1),
