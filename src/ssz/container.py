@@ -189,6 +189,16 @@ class _SSZContainer(SSZModel):
         """Read the fixed part with offsets, then each variable payload by its offset window."""
         # Refuse an unrepresentable composite before consuming any field bytes.
         check_composite_size(scope)
+
+        # A fixed part wider than the window would read a sibling's bytes.
+        if not cls.is_fixed_size() and scope < cls._LEADING_WIDTH:
+            raise SSZValueError(
+                ValueFault.SCOPE_TOO_SMALL,
+                type=cls.__name__,
+                expected=cls._LEADING_WIDTH,
+                actual=scope,
+            )
+
         fields: dict[str, SSZType] = {}
         variable_fields: list[tuple[str, type[SSZType]]] = []
         offsets: list[int] = []

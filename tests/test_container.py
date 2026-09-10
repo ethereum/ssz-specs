@@ -20,8 +20,9 @@ from ssz.container import (
     _SSZContainer,
     active_fields,
 )
-from ssz.exceptions import SSZTypeError, SSZValueError, TypeFault
+from ssz.exceptions import SSZTypeError, SSZValueError, TypeFault, ValueFault
 from ssz.mixins import mix_in_active_fields
+from ssz.offsets import BYTES_PER_LENGTH_OFFSET
 from ssz.roots import hash_tree_root
 from ssz.ssz_base import SSZType
 from ssz.trees import merkleize_progressive
@@ -401,6 +402,24 @@ class ContainerWithUnion(Container):
 
     tag: Uint8
     body: TagUnion
+
+
+class InnerVarList3(List[InnerVar]):
+    """A bounded sequence of variable-size structs, each read inside a window of its own."""
+
+    LIMIT = 3
+
+
+class InnerVarVector2(Vector[InnerVar]):
+    """Two variable-size structs, each read inside a window of its own."""
+
+    LENGTH = 2
+
+
+class InnerVarUnion(CompatibleUnion):
+    """A union whose one option is a variable-size struct, read inside the rest of the budget."""
+
+    OPTIONS = {1: InnerVar}
 
 
 @pytest.mark.parametrize("container_type", [TwoUint64, LeadingGapProgressive])
@@ -795,6 +814,124 @@ class TestFixedSizeStructSpansItsOwnWidth:
 
         assert TwoUint64.deserialize(stream, 16) == TwoUint64.default()
         assert stream.tell() == 16
+
+
+def _smallest_inner_var() -> InnerVar:
+    """A struct with every variable field empty, so its encoding is exactly its fixed part."""
+    return InnerVar(a=Uint64(7), b=Uint16List4(data=[]))
+
+
+def _a_pair_of_structs() -> list[InnerVar]:
+    """Two ordinary structs, the first carrying a payload so the two differ in width."""
+    return [
+        InnerVar(a=Uint64(7), b=Uint16List4(data=[Uint16(9)])),
+        InnerVar(a=Uint64(8), b=Uint16List4(data=[])),
+    ]
+
+
+class TestAStructRefusesABudgetBelowItsFixedPart:
+    """A struct behind an offset is read inside its window, fixed part and all."""
+
+    @pytest.mark.parametrize(
+        "sequence_type",
+        [
+            pytest.param(InnerVarList3, id="list"),
+            pytest.param(InnerVarVector2, id="vector"),
+        ],
+    )
+    def test_an_element_window_below_the_fixed_part_is_refused(
+        self, sequence_type: type[SSZType]
+    ) -> None:
+        """The refusal counts the window the element was handed, not the bytes after it."""
+        pair = cast("Any", sequence_type)(data=_a_pair_of_structs())
+        encoded_bytes = pair.encode_bytes()
+        table_width = 2 * BYTES_PER_LENGTH_OFFSET
+        # Moving the second element two bytes into the first leaves the first a window of two.
+        narrowed_bytes = (
+            encoded_bytes[:BYTES_PER_LENGTH_OFFSET]
+            + (table_width + 2).to_bytes(BYTES_PER_LENGTH_OFFSET, "little")
+            + encoded_bytes[table_width:]
+        )
+        fixed_part_width = len(_smallest_inner_var().encode_bytes())
+
+        with pytest.raises(SSZValueError) as exception_info:
+            sequence_type.decode_bytes(narrowed_bytes)
+
+        assert exception_info.value.fault is ValueFault.SCOPE_TOO_SMALL
+        assert str(exception_info.value) == (
+            f"[0]: InnerVar needs at least {fixed_part_width} bytes, and the budget is 2"
+        )
+
+    def test_a_field_window_below_the_fixed_part_is_refused(self) -> None:
+        """A struct nested in a struct is held to the same rule, and names the field."""
+        whole = OuterVarNested(head=Uint64(7), inner=_smallest_inner_var())
+        outer_fixed_part = Uint64.get_byte_length() + BYTES_PER_LENGTH_OFFSET
+        # Only two bytes of the nested struct survive the cut.
+        truncated_bytes = whole.encode_bytes()[: outer_fixed_part + 2]
+        fixed_part_width = len(_smallest_inner_var().encode_bytes())
+
+        with pytest.raises(SSZValueError) as exception_info:
+            OuterVarNested.decode_bytes(truncated_bytes)
+
+        assert exception_info.value.fault is ValueFault.SCOPE_TOO_SMALL
+        assert str(exception_info.value) == (
+            f"inner: InnerVar needs at least {fixed_part_width} bytes, and the budget is 2"
+        )
+
+    def test_a_union_payload_below_the_fixed_part_is_refused(self) -> None:
+        """The option gets the rest of the budget, which here is under its fixed part."""
+        whole = InnerVarUnion(selector=Uint8(1), data=_smallest_inner_var())
+        # The selector byte, then two bytes of the option it names.
+        truncated_bytes = whole.encode_bytes()[:3]
+        fixed_part_width = len(_smallest_inner_var().encode_bytes())
+
+        with pytest.raises(SSZValueError) as exception_info:
+            InnerVarUnion.decode_bytes(truncated_bytes)
+
+        assert exception_info.value.fault is ValueFault.SCOPE_TOO_SMALL
+        assert str(exception_info.value) == (
+            f"[1]: InnerVar needs at least {fixed_part_width} bytes, and the budget is 2"
+        )
+
+    def test_a_budget_of_exactly_the_fixed_part_decodes(self) -> None:
+        """A struct with nothing in its variable fields is the smallest value there is."""
+        smallest = _smallest_inner_var()
+        encoded_bytes = smallest.encode_bytes()
+
+        assert InnerVar.decode_bytes(encoded_bytes) == smallest
+
+    def test_a_budget_one_byte_below_the_fixed_part_is_refused(self) -> None:
+        """One byte under, and no field is read: the stream is where the refusal found it."""
+        encoded_bytes = _smallest_inner_var().encode_bytes()
+        stream = io.BytesIO(encoded_bytes)
+
+        with pytest.raises(SSZValueError) as exception_info:
+            InnerVar.deserialize(stream, len(encoded_bytes) - 1)
+
+        assert exception_info.value.fault is ValueFault.SCOPE_TOO_SMALL
+        assert str(exception_info.value) == (
+            f"InnerVar needs at least {len(encoded_bytes)} bytes, "
+            f"and the budget is {len(encoded_bytes) - 1}"
+        )
+        assert stream.tell() == 0
+
+    def test_the_first_offset_is_still_judged_at_the_smallest_budget(self) -> None:
+        """A budget the fixed part fits in reaches the table, which answers for itself."""
+        encoded_bytes = _smallest_inner_var().encode_bytes()
+        beyond_the_fixed_part = len(encoded_bytes) + 1
+        # The table now points one byte past where the fixed part ends.
+        moved_bytes = encoded_bytes[: Uint64.get_byte_length()] + beyond_the_fixed_part.to_bytes(
+            BYTES_PER_LENGTH_OFFSET, "little"
+        )
+
+        with pytest.raises(SSZValueError) as exception_info:
+            InnerVar.decode_bytes(moved_bytes)
+
+        assert exception_info.value.fault is ValueFault.FIRST_OFFSET
+        assert str(exception_info.value) == (
+            f"the first offset is {beyond_the_fixed_part}, "
+            f"and the fixed part ends at {len(encoded_bytes)}"
+        )
 
 
 class TestFromHex:
@@ -1714,11 +1851,16 @@ class TestProgressiveContainerDecodeErrors:
         assert str(exception_info.value) == "numbers: offset 12 is above the offset after it, 11"
 
     def test_scope_shorter_than_the_fixed_part_raises(self) -> None:
-        """A scope that cannot even cover the offsets is rejected by the field decoder."""
+        """A scope that cannot even cover the offsets is refused before a field is read."""
         stream = io.BytesIO(bytes.fromhex("0700000000000000"))
         with pytest.raises(SSZValueError) as exception_info:
             ListFieldProgressive.deserialize(stream, 8)
-        assert str(exception_info.value) == "body: Uint32 needs 4 bytes, the input holds 0"
+        assert exception_info.value.fault is ValueFault.SCOPE_TOO_SMALL
+        assert str(exception_info.value) == (
+            f"ListFieldProgressive needs at least {ListFieldProgressive._LEADING_WIDTH} bytes, "
+            "and the budget is 8"
+        )
+        assert stream.tell() == 0
 
 
 class TestContainerUnaffectedByTheSharedBase:
