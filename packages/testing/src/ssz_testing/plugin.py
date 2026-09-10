@@ -200,6 +200,9 @@ class FixtureCollector:
         )
 
 
+_VECTOR_DOCUMENT: Final = Path(__file__).parent / "fixtures_readme.md"
+"""How to read a vector, copied into every fill as the output directory's README."""
+
 FIXTURE_COLLECTOR_KEY: pytest.StashKey[FixtureCollector] = pytest.StashKey()
 """Stash key for the session's fixture collector."""
 
@@ -291,6 +294,10 @@ def pytest_sessionstart(session: pytest.Session) -> None:
         shutil.rmtree(output_directory)
 
     output_directory.mkdir(parents=True, exist_ok=True)
+
+    # The output directory is gitignored, and --clean removes it whole.
+    # The document is copied in on every fill rather than tracked where it is read.
+    shutil.copyfile(_VECTOR_DOCUMENT, output_directory / "README.md")
 
     config.stash[FIXTURE_COLLECTOR_KEY] = FixtureCollector(output_directory)
 

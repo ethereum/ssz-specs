@@ -41,7 +41,7 @@ fill = "ssz_testing.cli:fill"
 where = ["src"]
 
 [tool.setuptools.package-data]
-ssz_testing = ["py.typed", "pytest_ini_files/*.ini"]
+ssz_testing = ["py.typed", "pytest_ini_files/*.ini", "fixtures_readme.md"]
 
 [tool.uv.sources]
 eth-ssz-specs = { workspace = true }
