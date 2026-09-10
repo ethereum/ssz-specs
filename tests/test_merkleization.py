@@ -23,11 +23,12 @@ from ssz import (
     Uint64,
     Uint128,
     Uint256,
+    ValueFault,
     roots,
 )
 from ssz.bitfields import BitList, BitVector, ProgressiveBitList
 from ssz.boolean import Boolean
-from ssz.chunks import BYTES_PER_CHUNK, next_pow2, zero_tree_root
+from ssz.chunks import BITS_PER_CHUNK, BYTES_PER_CHUNK, next_pow2, zero_tree_root
 from ssz.collections import List, ProgressiveList, Vector
 from ssz.container import Container, ProgressiveContainer
 from ssz.layout import NestedLeaves, PackedLeaves, _pack_basic_elements, _pack_bytes, merkle_layout
@@ -355,10 +356,28 @@ def test_mix_in_length_zero() -> None:
     assert mix_in_length(root, length) == expected_root
 
 
-def test_mix_in_length_error_on_negative() -> None:
-    """Rejects negative lengths."""
-    with pytest.raises(SSZValueError):
-        mix_in_length(Root(sample_chunks[0]), -1)
+def test_mix_in_length_widest() -> None:
+    """The widest count the word holds is a length like any other."""
+    root = Root(sample_chunks[0])
+    length = 2**BITS_PER_CHUNK - 1
+    expected_root = h(root, Chunk(b"\xff" * BYTES_PER_CHUNK))
+    assert mix_in_length(root, length) == expected_root
+
+
+@pytest.mark.parametrize(
+    "length",
+    [
+        pytest.param(-1, id="negative"),
+        pytest.param(2**BITS_PER_CHUNK, id="one_past_the_word"),
+        pytest.param(2**BITS_PER_CHUNK * 10**6, id="far_past_the_word"),
+    ],
+)
+def test_mix_in_length_error_outside_the_word(length: int) -> None:
+    """Rejects lengths at either end of what the word holds."""
+    with pytest.raises(SSZValueError) as exception_info:
+        mix_in_length(Root(sample_chunks[0]), length)
+    assert exception_info.value.fault is ValueFault.LENGTH_WORD
+    assert str(exception_info.value) == f"a mixed-in length {length} does not fit one 32-byte word"
 
 
 @pytest.mark.parametrize(
