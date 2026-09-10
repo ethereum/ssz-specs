@@ -79,13 +79,13 @@ def test_every_template_asks_for_each_field_once_and_by_name(
 
 
 def test_a_refusal_deep_inside_a_value_arrives_naming_where_it_happened() -> None:
-    """Four levels down, the path is what tells one Uint64 of the value from the other."""
+    """Four levels down, the path is what tells one list body of the value from the other."""
     # Fixture state: two shapes, each a Uint64 head and a list body.
     #
-    #     ff 05000000 08000000 16000000 07000000 00000000 0c000000 0100
-    #                                   ^ shapes[0] starts here
-    #        09000000 00000000 0c000000 0200
-    #        ^ shapes[1] starts here, at byte 25
+    #     ff 05000000 08000000 16000000 0700000000000000 0c000000 0100
+    #                                   ^ shapes[0] starts here, at byte 13
+    #        0900000000000000 0c000000 0200
+    #        ^ shapes[1] starts here, at byte 27
     value = Board(
         tag=Uint8(0xFF),
         shapes=Shapes(
@@ -97,13 +97,13 @@ def test_a_refusal_deep_inside_a_value_arrives_naming_where_it_happened() -> Non
     )
     encoded = value.encode_bytes()
 
-    # Mutation: two bytes cut from the end, which is the second head's final two.
+    # Mutation: one byte cut from the end, which leaves the second body half an element.
     with pytest.raises(SSZValueError) as exception_info:
-        Board.decode_bytes(encoded[:33])
+        Board.decode_bytes(encoded[:-1])
 
     # One step per level travelled out through: the field, the position, the field again.
     error = exception_info.value
-    assert error.loc == ("shapes", 1, "head")
-    assert error.fault is ValueFault.TRUNCATED
-    assert error.fields == {"type": "Uint64", "expected": 8, "actual": 6}
-    assert str(error) == "shapes[1].head: Uint64 needs 8 bytes, the input holds 6"
+    assert error.loc == ("shapes", 1, "body")
+    assert error.fault is ValueFault.SCOPE_UNDIVIDED
+    assert error.fields == {"scope": 1, "width": 2}
+    assert str(error) == "shapes[1].body: a budget of 1 does not divide by an element width of 2"
