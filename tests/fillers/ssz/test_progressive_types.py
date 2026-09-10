@@ -1,5 +1,7 @@
 """SSZ conformance test vectors for the EIP-7916 progressive types."""
 
+import pytest
+
 from ssz import (
     Boolean,
     ByteVector,
@@ -58,6 +60,7 @@ PROGRESSIVE_BITLIST_LEVEL_BITS = 257
 """Bit count that spills one bit past the first Merkle chunk, opening the second level."""
 
 
+@pytest.mark.tags("empty")
 def test_progressive_list_empty(ssz_test: SSZTestFiller) -> None:
     """
     An empty progressive list round-trips unchanged.
@@ -132,6 +135,7 @@ def test_progressive_list_fills_first_level(ssz_test: SSZTestFiller) -> None:
     )
 
 
+@pytest.mark.tags("multi-level")
 def test_progressive_list_opens_second_level(ssz_test: SSZTestFiller) -> None:
     """
     A progressive list one element past the first chunk round-trips unchanged.
@@ -157,6 +161,7 @@ def test_progressive_list_opens_second_level(ssz_test: SSZTestFiller) -> None:
     )
 
 
+@pytest.mark.tags("multi-level")
 def test_progressive_list_fills_second_level(ssz_test: SSZTestFiller) -> None:
     """
     A progressive list whose data fills two levels exactly round-trips unchanged.
@@ -182,6 +187,7 @@ def test_progressive_list_fills_second_level(ssz_test: SSZTestFiller) -> None:
     )
 
 
+@pytest.mark.tags("multi-level")
 def test_progressive_list_opens_third_level(ssz_test: SSZTestFiller) -> None:
     """
     A progressive list one element past the second level round-trips unchanged.
@@ -207,6 +213,7 @@ def test_progressive_list_opens_third_level(ssz_test: SSZTestFiller) -> None:
     )
 
 
+@pytest.mark.tags("multi-level")
 def test_progressive_list_fills_third_level(ssz_test: SSZTestFiller) -> None:
     """
     A progressive list whose data fills three levels exactly round-trips unchanged.
@@ -232,6 +239,7 @@ def test_progressive_list_fills_third_level(ssz_test: SSZTestFiller) -> None:
     )
 
 
+@pytest.mark.tags("multi-level")
 def test_progressive_list_opens_fourth_level(ssz_test: SSZTestFiller) -> None:
     """
     A progressive list one element past the third level round-trips unchanged.
@@ -257,6 +265,7 @@ def test_progressive_list_opens_fourth_level(ssz_test: SSZTestFiller) -> None:
     )
 
 
+@pytest.mark.tags("empty")
 def test_progressive_list_of_composites_empty(ssz_test: SSZTestFiller) -> None:
     """
     An empty progressive list of composite elements round-trips unchanged.
@@ -305,6 +314,7 @@ def test_progressive_list_of_composites_single(ssz_test: SSZTestFiller) -> None:
     )
 
 
+@pytest.mark.tags("multi-level")
 def test_progressive_list_of_composites_crosses_a_level(ssz_test: SSZTestFiller) -> None:
     """
     A progressive list of six composite elements round-trips unchanged.
@@ -363,6 +373,7 @@ def test_progressive_list_of_variable_size_elements(ssz_test: SSZTestFiller) -> 
     )
 
 
+@pytest.mark.tags("empty")
 def test_progressive_bitlist_empty(ssz_test: SSZTestFiller) -> None:
     """
     An empty progressive bitlist round-trips unchanged.
@@ -437,6 +448,7 @@ def test_progressive_bitlist_fills_one_chunk(ssz_test: SSZTestFiller) -> None:
     )
 
 
+@pytest.mark.tags("multi-level")
 def test_progressive_bitlist_opens_second_level(ssz_test: SSZTestFiller) -> None:
     """
     A progressive bitlist one bit past a chunk round-trips unchanged.
@@ -491,6 +503,7 @@ def test_container_with_progressive_list_field(ssz_test: SSZTestFiller) -> None:
     )
 
 
+@pytest.mark.tags("empty")
 def test_container_with_empty_progressive_list_field(ssz_test: SSZTestFiller) -> None:
     """
     A container embedding an empty progressive list round-trips unchanged.

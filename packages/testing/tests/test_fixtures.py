@@ -349,6 +349,10 @@ def test_a_fixture_format_that_names_no_type_claims_nothing() -> None:
     """A format emitting no type name holds no name to a declaration."""
 
     class Bare(BaseConsensusFixture):
-        pass
+        def case_type_name(self) -> str:
+            return "Bare"
+
+        def case_kind(self) -> str:
+            return "bare"
 
     assert Bare().declared_types() == {}

@@ -2,6 +2,7 @@
 
 import hashlib
 import json
+import re
 from abc import abstractmethod
 from collections.abc import Mapping
 from functools import cached_property
@@ -166,6 +167,14 @@ class BaseConsensusFixture(CamelModel):
     def declared_types(self) -> "Mapping[str, TypeDescriptor]":
         """Every type name this fixture emits, against the declaration it has to stand for."""
         return {}
+
+    @abstractmethod
+    def case_type_name(self) -> str:
+        """The declared type name this vector is about."""
+
+    @abstractmethod
+    def case_kind(self) -> str:
+        """The SSZ kind the emitted tree files this vector under."""
 
     @cached_property
     def json_dict(self) -> dict[str, Any]:
@@ -349,6 +358,9 @@ class DeclaredOption(CamelModel):
 
 TypeDescriptor.model_rebuild()
 
+_CAMEL_WORD_BREAK: Final = re.compile(r"(?<=[a-z0-9])(?=[A-Z])")
+"""Where a CamelCase kind parts into words, leaving the digits of Uint8 attached."""
+
 _TYPE_PARAMETERS: Final = ("BITS", "LENGTH", "LIMIT", "ELEMENT_TYPE", "ACTIVE_FIELDS", "OPTIONS")
 """Everything a declaration fixes its wire format and its tree with, beyond its fields."""
 
@@ -420,6 +432,14 @@ class SSZFixture(BaseConsensusFixture):
     def declared_types(self) -> Mapping[str, TypeDescriptor]:
         """The one name this vector emits, against the declaration it was filled from."""
         return {self.type_name: self.type_descriptor}
+
+    def case_type_name(self) -> str:
+        """The declared type name this vector is about."""
+        return self.type_name
+
+    def case_kind(self) -> str:
+        """The kind the declaration already states, spelled as a directory can hold it."""
+        return _CAMEL_WORD_BREAK.sub("_", self.type_descriptor.kind).lower()
 
 
 class SSZTest(BaseTestSpec):

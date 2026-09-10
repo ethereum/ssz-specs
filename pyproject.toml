@@ -117,6 +117,7 @@ addopts = [
 ]
 markers = [
     "slow: marks tests as slow (deselect with '-m \"not slow\"')",
+    "tags: themes a vector is indexed under, beyond its type and its validity",
 ]
 timeout = 600
 

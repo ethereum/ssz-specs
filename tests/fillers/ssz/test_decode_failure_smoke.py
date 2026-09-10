@@ -2,6 +2,8 @@
 
 from typing import ClassVar
 
+import pytest
+
 from ssz import BitList, Boolean
 from ssz_testing import ExpectedRejection, SSZTestFiller, ValueFault
 
@@ -12,6 +14,7 @@ class SmokeBitList8(BitList):
     LIMIT: ClassVar[int] = 8
 
 
+@pytest.mark.tags("limit")
 def test_ssz_decode_failure_bitlist_exceeds_limit(ssz_test: SSZTestFiller) -> None:
     """
     Decoding a bitlist whose contents imply too many bits is rejected.
