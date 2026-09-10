@@ -110,7 +110,7 @@ def test_a_flaw_that_goes_undetected_fails_the_fill() -> None:
         type_name="Uint8",
         value=Uint8(1),
         raw_bytes="0x0000",
-        expected_rejection=ExpectedRejection(reason=ValueFault.TRUNCATED),
+        expected_rejection=ExpectedRejection(reason=ValueFault.SCOPE),
     )
 
     with pytest.raises(AssertionError, match="but processing succeeded"):
@@ -124,12 +124,12 @@ def test_a_decode_failure_emits_the_fault_that_fired() -> None:
         value=Uint8(0),
         raw_bytes="0x0000",
         expected_rejection=ExpectedRejection(
-            reason=ValueFault.TRUNCATED, message_substring="the input holds 2"
+            reason=ValueFault.SCOPE, message_substring="and the budget is 2"
         ),
     ).generate()
 
-    assert fixture.rejection_reason is ValueFault.TRUNCATED
-    assert fixture.json_dict["rejectionReason"] == "TRUNCATED"
+    assert fixture.rejection_reason is ValueFault.SCOPE
+    assert fixture.json_dict["rejectionReason"] == "SCOPE"
     assert fixture.json_dict["rawBytes"] == "0x0000"
     assert fixture.json_dict["serialized"] == "0x0000"
     assert fixture.json_dict["root"] == ""
@@ -141,7 +141,7 @@ def test_a_decode_failure_vector_needs_bytes_to_reject() -> None:
         SSZTest(
             type_name="Uint8",
             value=Uint8(0),
-            expected_rejection=ExpectedRejection(reason=ValueFault.TRUNCATED),
+            expected_rejection=ExpectedRejection(reason=ValueFault.SCOPE),
         ).generate()
 
 
@@ -163,7 +163,7 @@ def test_bytes_a_decoder_accepts_are_not_a_decode_failure() -> None:
             type_name="Uint8",
             value=Uint8(0),
             raw_bytes="0x01",
-            expected_rejection=ExpectedRejection(reason=ValueFault.TRUNCATED),
+            expected_rejection=ExpectedRejection(reason=ValueFault.SCOPE),
         ).generate()
 
 

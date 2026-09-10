@@ -142,7 +142,7 @@ class BaseUint(int, SSZType):
         expected_length = cls.BYTE_LENGTH
         if len(data) != expected_length:
             raise SSZValueError(
-                ValueFault.TRUNCATED,
+                ValueFault.SCOPE,
                 type=cls.__name__,
                 expected=expected_length,
                 actual=len(data),

@@ -193,7 +193,7 @@ class BitVector(SSZCollection[Boolean]):
         expected_byte_count = cls.get_byte_length()
         if len(data) != expected_byte_count:
             raise SSZValueError(
-                ValueFault.TRUNCATED,
+                ValueFault.SCOPE,
                 type=cls.__name__,
                 expected=expected_byte_count,
                 actual=len(data),

@@ -129,9 +129,7 @@ class Boolean(int, SSZType):
             SSZValueError: If the input is not exactly one byte of value 0x00 or 0x01.
         """
         if len(data) != 1:
-            raise SSZValueError(
-                ValueFault.TRUNCATED, type=cls.__name__, expected=1, actual=len(data)
-            )
+            raise SSZValueError(ValueFault.SCOPE, type=cls.__name__, expected=1, actual=len(data))
         if data[0] not in (0, 1):
             raise SSZValueError(ValueFault.NOT_A_BIT, value=f"{data[0]:#04x}")
 
@@ -154,11 +152,14 @@ class Boolean(int, SSZType):
         Read one SSZ byte from a stream and decode into a boolean.
 
         Raises:
-            SSZValueError: If the scope is not one byte, or the byte is not 0x00 or 0x01.
+            SSZValueError: If the scope is not one byte, the stream ends, or the byte is not a bit.
         """
         if scope != 1:
             raise SSZValueError(ValueFault.SCOPE, type=cls.__name__, expected=1, actual=scope)
-        return cls.decode_bytes(stream.read(1))
+        serialized_bytes = stream.read(1)
+        if not serialized_bytes:
+            raise SSZValueError(ValueFault.TRUNCATED, type=cls.__name__, expected=1, actual=0)
+        return cls.decode_bytes(serialized_bytes)
 
     @classmethod
     def _raise_type_error(cls, other: Any, op_symbol: str) -> NoReturn:
