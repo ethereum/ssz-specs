@@ -1,0 +1,17 @@
+{
+    "tests/fillers/ssz/test_merkleization_boundaries.py::test_bitvector_length_one_all_set[ssz_test]": {
+        "typeName": "BoundaryBitVector1",
+        "value": {
+            "data": "0x01"
+        },
+        "serialized": "0x01",
+        "root": "0x0100000000000000000000000000000000000000000000000000000000000000",
+        "_info": {
+            "hash": "0xd6112208a20795d77509493e6c41521308051ce29dd160aa4a2b11cfc65afdda",
+            "comment": "`ssz-specs` generated test",
+            "testId": "tests/fillers/ssz/test_merkleization_boundaries.py::test_bitvector_length_one_all_set",
+            "description": "A one-bit vector merkleizes to a stable root.\n\nGiven\n-----\n- a one-bit vector with its only bit set.\n\nWhen\n----\n- the value is merkleized.\n\nThen\n----\n- the root matches the minimal single-chunk layout.",
+            "fixtureFormat": "ssz_test"
+        }
+    }
+}

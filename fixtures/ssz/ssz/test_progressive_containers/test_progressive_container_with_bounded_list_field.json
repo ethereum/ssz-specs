@@ -1,0 +1,23 @@
+{
+    "tests/fillers/ssz/test_progressive_containers.py::test_progressive_container_with_bounded_list_field[ssz_test]": {
+        "typeName": "SampleBoundedListField",
+        "value": {
+            "head": "7",
+            "body": {
+                "data": [
+                    "1",
+                    "2"
+                ]
+            }
+        },
+        "serialized": "0x07000000000000000c00000001000200",
+        "root": "0xabc61ac7614150aaab32d5a8ef1b71baa60a3d7f48a56e33599add004fbaa0ea",
+        "_info": {
+            "hash": "0x46adaa769b3fa3dceda75f37d9060fc16dfce8d53ce9692f6d39483924063565",
+            "comment": "`ssz-specs` generated test",
+            "testId": "tests/fillers/ssz/test_progressive_containers.py::test_progressive_container_with_bounded_list_field",
+            "description": "A progressive container holding a bounded list round-trips unchanged.\n\nGiven\n-----\n- a fixed-size field, a gap, and a bounded list of two-byte elements.\n\nWhen\n----\n- the value is encoded and then decoded.\n\nThen\n----\n- one offset follows the fixed part, pointing at the list body.\n- the list contributes its own length-mixed root as the leaf at position 2.\n- the decoded value equals the original.",
+            "fixtureFormat": "ssz_test"
+        }
+    }
+}

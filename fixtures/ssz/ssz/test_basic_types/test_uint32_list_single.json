@@ -1,0 +1,19 @@
+{
+    "tests/fillers/ssz/test_basic_types.py::test_uint32_list_single[ssz_test]": {
+        "typeName": "SampleUint32List16",
+        "value": {
+            "data": [
+                "42"
+            ]
+        },
+        "serialized": "0x2a000000",
+        "root": "0xce8fe301de280c5a7364836cf298c285ea47eef6ec3b48f22c43fe29bba02ac3",
+        "_info": {
+            "hash": "0xf9e32bdfed4a36c4d03921ee14a3366af51af20d80bf22a7859e6af2ea0d6a30",
+            "comment": "`ssz-specs` generated test",
+            "testId": "tests/fillers/ssz/test_basic_types.py::test_uint32_list_single",
+            "description": "A uint list with one element round-trips unchanged.\n\nGiven\n-----\n- a uint list holding a single four-byte element.\n\nWhen\n----\n- the value is encoded and then decoded.\n\nThen\n----\n- the decoded value equals the original.",
+            "fixtureFormat": "ssz_test"
+        }
+    }
+}

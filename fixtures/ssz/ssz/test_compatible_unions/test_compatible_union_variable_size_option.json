@@ -1,0 +1,23 @@
+{
+    "tests/fillers/ssz/test_compatible_unions.py::test_compatible_union_variable_size_option[ssz_test]": {
+        "typeName": "SampleNumbers",
+        "value": {
+            "selector": "1",
+            "data": {
+                "data": [
+                    "1",
+                    "2"
+                ]
+            }
+        },
+        "serialized": "0x0101000200",
+        "root": "0xbe99f656590374260ef37979561b6f1446a239b27b12a38ac96ff4cd119c1f0d",
+        "_info": {
+            "hash": "0x4bafac988b6ce22f66ae18b7f9aaf79fa90fc0fc2ba0e608e356c64c8372ebd3",
+            "comment": "`ssz-specs` generated test",
+            "testId": "tests/fillers/ssz/test_compatible_unions.py::test_compatible_union_variable_size_option",
+            "description": "A union holding a variable-size option round-trips unchanged.\n\nGiven\n-----\n- a union over a bounded list of two-byte elements.\n- a value holding two elements.\n\nWhen\n----\n- the value is encoded and then decoded.\n\nThen\n----\n- the list body follows the selector directly, with no offset between them.\n- the decoded value equals the original.",
+            "fixtureFormat": "ssz_test"
+        }
+    }
+}

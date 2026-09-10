@@ -1,0 +1,17 @@
+{
+    "tests/fillers/ssz/test_basic_types.py::test_bitlist_at_limit[ssz_test]": {
+        "typeName": "SampleBitList16",
+        "value": {
+            "data": "0xffff01"
+        },
+        "serialized": "0xffff01",
+        "root": "0xdc8212e2404720c98554dfddc81733f88cbbe307a1d4ca5eae4b88e55e382392",
+        "_info": {
+            "hash": "0x984fc8497913dcc2b15aad83dbcec9680ed47bf86d930da5e6b303c744e3f1b0",
+            "comment": "`ssz-specs` generated test",
+            "testId": "tests/fillers/ssz/test_basic_types.py::test_bitlist_at_limit",
+            "description": "A bitlist filled to its limit round-trips unchanged.\n\nGiven\n-----\n- a bitlist filled to its 16-bit limit.\n\nWhen\n----\n- the value is encoded and then decoded.\n\nThen\n----\n- the decoded value equals the original.\n- the sentinel lands in a new byte.",
+            "fixtureFormat": "ssz_test"
+        }
+    }
+}

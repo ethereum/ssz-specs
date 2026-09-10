@@ -1,0 +1,17 @@
+{
+    "tests/fillers/ssz/test_merkleization_boundaries.py::test_bitvector_length_257_all_set[ssz_test]": {
+        "typeName": "BoundaryBitVector257",
+        "value": {
+            "data": "0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff01"
+        },
+        "serialized": "0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff01",
+        "root": "0xe9bada28b960beb323e7992400b45875830bfce5a64f230c696cdddfafa551b8",
+        "_info": {
+            "hash": "0x1864706ba09944cb38a4afa01a46db3295d677dd0b24e0600fa5046162c34dec",
+            "comment": "`ssz-specs` generated test",
+            "testId": "tests/fillers/ssz/test_merkleization_boundaries.py::test_bitvector_length_257_all_set",
+            "description": "A 257-bit vector merkleizes to a stable root.\n\nGiven\n-----\n- a 257-bit vector with all bits set.\n- one bit that spills into a second chunk.\n\nWhen\n----\n- the value is merkleized.\n\nThen\n----\n- the root matches the expected two-chunk layout.",
+            "fixtureFormat": "ssz_test"
+        }
+    }
+}

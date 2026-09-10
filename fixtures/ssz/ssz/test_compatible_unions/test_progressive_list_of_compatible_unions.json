@@ -1,0 +1,32 @@
+{
+    "tests/fillers/ssz/test_compatible_unions.py::test_progressive_list_of_compatible_unions[ssz_test]": {
+        "typeName": "SampleShapeProgressiveList",
+        "value": {
+            "data": [
+                {
+                    "selector": "1",
+                    "data": {
+                        "side": "1",
+                        "color": "2"
+                    }
+                },
+                {
+                    "selector": "2",
+                    "data": {
+                        "radius": "3",
+                        "color": "4"
+                    }
+                }
+            ]
+        },
+        "serialized": "0x080000000c0000000101000202030004",
+        "root": "0x4a50402ee5cc21cf58de089711fff4ab8e6a672fd17d5fcf508b76cfe143cc6d",
+        "_info": {
+            "hash": "0x63b346056f3b5df0f7d25fcca151321f908484a2ea8f45d03232ba9c276f6f78",
+            "comment": "`ssz-specs` generated test",
+            "testId": "tests/fillers/ssz/test_compatible_unions.py::test_progressive_list_of_compatible_unions",
+            "description": "A progressive list of unions round-trips unchanged.\n\nGiven\n-----\n- a progressive list whose elements are unions, holding one option each.\n\nWhen\n----\n- the value is encoded and then decoded.\n\nThen\n----\n- the elements are variable-size, so an offset table precedes the bodies.\n- each element hands its own selector-mixed root to the spine as one leaf.\n- the decoded value equals the original.",
+            "fixtureFormat": "ssz_test"
+        }
+    }
+}

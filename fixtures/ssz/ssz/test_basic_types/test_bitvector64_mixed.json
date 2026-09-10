@@ -1,0 +1,17 @@
+{
+    "tests/fillers/ssz/test_basic_types.py::test_bitvector64_mixed[ssz_test]": {
+        "typeName": "SampleBitVector64",
+        "value": {
+            "data": "0x5555555555555555"
+        },
+        "serialized": "0x5555555555555555",
+        "root": "0x5555555555555555000000000000000000000000000000000000000000000000",
+        "_info": {
+            "hash": "0x0526115fa5f5c64e0a936d6a98a7d79106d96e74efe6a7d9fcd726171fc36dbf",
+            "comment": "`ssz-specs` generated test",
+            "testId": "tests/fillers/ssz/test_basic_types.py::test_bitvector64_mixed",
+            "description": "A 64-bit vector with alternating bits round-trips unchanged.\n\nGiven\n-----\n- a 64-bit vector with alternating set and clear bits.\n\nWhen\n----\n- the value is encoded and then decoded.\n\nThen\n----\n- the decoded value equals the original.\n- bit ordering is preserved across byte boundaries.",
+            "fixtureFormat": "ssz_test"
+        }
+    }
+}

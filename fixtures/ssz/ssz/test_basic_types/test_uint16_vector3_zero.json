@@ -1,0 +1,21 @@
+{
+    "tests/fillers/ssz/test_basic_types.py::test_uint16_vector3_zero[ssz_test]": {
+        "typeName": "SampleUint16Vector3",
+        "value": {
+            "data": [
+                "0",
+                "0",
+                "0"
+            ]
+        },
+        "serialized": "0x000000000000",
+        "root": "0x0000000000000000000000000000000000000000000000000000000000000000",
+        "_info": {
+            "hash": "0x6efb94caf2bdea2bf9bc406e0a09a09eb4c39468e93ac2ca05314b5925cc0612",
+            "comment": "`ssz-specs` generated test",
+            "testId": "tests/fillers/ssz/test_basic_types.py::test_uint16_vector3_zero",
+            "description": "A three-element uint vector of zeros round-trips unchanged.\n\nGiven\n-----\n- a vector of three two-byte uints, all zero.\n\nWhen\n----\n- the value is encoded and then decoded.\n\nThen\n----\n- the decoded value equals the original.",
+            "fixtureFormat": "ssz_test"
+        }
+    }
+}

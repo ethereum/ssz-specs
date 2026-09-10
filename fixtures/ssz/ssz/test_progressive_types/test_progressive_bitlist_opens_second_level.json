@@ -1,0 +1,17 @@
+{
+    "tests/fillers/ssz/test_progressive_types.py::test_progressive_bitlist_opens_second_level[ssz_test]": {
+        "typeName": "ProgressiveBitList",
+        "value": {
+            "data": "0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff03"
+        },
+        "serialized": "0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff03",
+        "root": "0xbe707c375a49431fdb06c00f7a4dcc9200d5613ea02999dc5e081913171bb8d0",
+        "_info": {
+            "hash": "0x4202e5062db0a2cbd47c0dc325cffc0f80b78e4f34ad8b8aa59e67f5a287a93e",
+            "comment": "`ssz-specs` generated test",
+            "testId": "tests/fillers/ssz/test_progressive_types.py::test_progressive_bitlist_opens_second_level",
+            "description": "A progressive bitlist one bit past a chunk round-trips unchanged.\n\nGiven\n-----\n- a progressive bitlist of 257 data bits, all set.\n- one bit spilling into a second chunk of packed data.\n\nWhen\n----\n- the value is encoded and then decoded.\n\nThen\n----\n- the second level opens and pads its lone chunk out to width four.\n- the decoded value equals the original.",
+            "fixtureFormat": "ssz_test"
+        }
+    }
+}

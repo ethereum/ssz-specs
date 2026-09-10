@@ -1,0 +1,17 @@
+{
+    "tests/fillers/ssz/test_progressive_types.py::test_progressive_bitlist_empty[ssz_test]": {
+        "typeName": "ProgressiveBitList",
+        "value": {
+            "data": "0x01"
+        },
+        "serialized": "0x01",
+        "root": "0xf5a5fd42d16a20302798ef6ed309979b43003d2320d9f0e8ea9831a92759fb4b",
+        "_info": {
+            "hash": "0xd2b4cf5b3ba3aa12845e83eb010fdfcf7de40a46f30beea5b2bf4513a3ab5ab9",
+            "comment": "`ssz-specs` generated test",
+            "testId": "tests/fillers/ssz/test_progressive_types.py::test_progressive_bitlist_empty",
+            "description": "An empty progressive bitlist round-trips unchanged.\n\nGiven\n-----\n- a progressive bitlist with no data bits.\n\nWhen\n----\n- the value is encoded and then decoded.\n\nThen\n----\n- the encoding is the single delimiter byte 0x01.\n- the decoded value equals the original.",
+            "fixtureFormat": "ssz_test"
+        }
+    }
+}

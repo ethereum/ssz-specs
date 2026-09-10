@@ -1,0 +1,17 @@
+{
+    "tests/fillers/ssz/test_merkleization_boundaries.py::test_bitvector_length_255_all_set[ssz_test]": {
+        "typeName": "BoundaryBitVector255",
+        "value": {
+            "data": "0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7f"
+        },
+        "serialized": "0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7f",
+        "root": "0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7f",
+        "_info": {
+            "hash": "0x4a5e295c8cff4482ef5061fb170c2c1246b017eb50448fcaf7832b2d2c3614ef",
+            "comment": "`ssz-specs` generated test",
+            "testId": "tests/fillers/ssz/test_merkleization_boundaries.py::test_bitvector_length_255_all_set",
+            "description": "A 255-bit vector merkleizes to a stable root.\n\nGiven\n-----\n- a 255-bit vector with all bits set.\n- one bit shy of a full 32-byte chunk.\n\nWhen\n----\n- the value is merkleized.\n\nThen\n----\n- the root matches the expected single-chunk layout.",
+            "fixtureFormat": "ssz_test"
+        }
+    }
+}

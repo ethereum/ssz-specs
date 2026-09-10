@@ -1,0 +1,17 @@
+{
+    "tests/fillers/ssz/test_merkleization_boundaries.py::test_bitlist_filled_to_chunk_boundary_limit[ssz_test]": {
+        "typeName": "BoundaryBitList256",
+        "value": {
+            "data": "0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff01"
+        },
+        "serialized": "0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff01",
+        "root": "0xbc16fae79b58a2e3dac0429d25b79cada399106276e08c5d3cfc3726db02b8ba",
+        "_info": {
+            "hash": "0x9dfcb2ec3fb01398b45614d56b355a43b077a631a2c703d13dde88b909f5d267",
+            "comment": "`ssz-specs` generated test",
+            "testId": "tests/fillers/ssz/test_merkleization_boundaries.py::test_bitlist_filled_to_chunk_boundary_limit",
+            "description": "A bitlist filled to a chunk-edge limit merkleizes to a stable root.\n\nGiven\n-----\n- a bitlist capped at 256 bits, filled to its limit.\n- a sentinel that lands at the start of a fresh byte.\n\nWhen\n----\n- the value is merkleized.\n\nThen\n----\n- the root matches the expected length-mixin ordering.",
+            "fixtureFormat": "ssz_test"
+        }
+    }
+}

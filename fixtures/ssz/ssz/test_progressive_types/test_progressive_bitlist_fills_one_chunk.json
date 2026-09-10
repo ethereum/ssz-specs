@@ -1,0 +1,17 @@
+{
+    "tests/fillers/ssz/test_progressive_types.py::test_progressive_bitlist_fills_one_chunk[ssz_test]": {
+        "typeName": "ProgressiveBitList",
+        "value": {
+            "data": "0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff01"
+        },
+        "serialized": "0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff01",
+        "root": "0xb3327406854ffab96af59832dfa3f690f72c4f898e2ffd4ef3e90cc2fb876b43",
+        "_info": {
+            "hash": "0x02aabac8e54779042caf4c61e651836a1169333b1cf13e2c6397379c379723c3",
+            "comment": "`ssz-specs` generated test",
+            "testId": "tests/fillers/ssz/test_progressive_types.py::test_progressive_bitlist_fills_one_chunk",
+            "description": "A progressive bitlist filling exactly one chunk round-trips unchanged.\n\nGiven\n-----\n- a progressive bitlist of 256 data bits, all set.\n- a delimiter bit that spills into a fresh byte.\n\nWhen\n----\n- the value is encoded and then decoded.\n\nThen\n----\n- the packed data occupies one chunk, so only the first level is occupied.\n- the decoded value equals the original.",
+            "fixtureFormat": "ssz_test"
+        }
+    }
+}

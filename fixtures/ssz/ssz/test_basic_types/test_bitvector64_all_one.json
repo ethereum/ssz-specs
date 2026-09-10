@@ -1,0 +1,17 @@
+{
+    "tests/fillers/ssz/test_basic_types.py::test_bitvector64_all_one[ssz_test]": {
+        "typeName": "SampleBitVector64",
+        "value": {
+            "data": "0xffffffffffffffff"
+        },
+        "serialized": "0xffffffffffffffff",
+        "root": "0xffffffffffffffff000000000000000000000000000000000000000000000000",
+        "_info": {
+            "hash": "0x5018d0aaf0044231d6b514110feb42da98d087e998a49cbb06bf6e130b6bcaad",
+            "comment": "`ssz-specs` generated test",
+            "testId": "tests/fillers/ssz/test_basic_types.py::test_bitvector64_all_one",
+            "description": "A 64-bit vector with all bits set round-trips unchanged.\n\nGiven\n-----\n- a 64-bit vector whose bits are all set.\n\nWhen\n----\n- the value is encoded and then decoded.\n\nThen\n----\n- the decoded value equals the original.\n- the encoding is eight bytes of 0xff.",
+            "fixtureFormat": "ssz_test"
+        }
+    }
+}

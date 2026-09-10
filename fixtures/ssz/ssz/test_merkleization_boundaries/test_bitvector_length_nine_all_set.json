@@ -1,0 +1,17 @@
+{
+    "tests/fillers/ssz/test_merkleization_boundaries.py::test_bitvector_length_nine_all_set[ssz_test]": {
+        "typeName": "BoundaryBitVector9",
+        "value": {
+            "data": "0xff01"
+        },
+        "serialized": "0xff01",
+        "root": "0xff01000000000000000000000000000000000000000000000000000000000000",
+        "_info": {
+            "hash": "0xf4cdbed9c01edd4773027eece6dfaa62c2ad1bdfb7802eb90fbe5ac8d8fac496",
+            "comment": "`ssz-specs` generated test",
+            "testId": "tests/fillers/ssz/test_merkleization_boundaries.py::test_bitvector_length_nine_all_set",
+            "description": "A nine-bit vector merkleizes to a stable root.\n\nGiven\n-----\n- a nine-bit vector with all bits set.\n- data that straddles the single-byte boundary.\n\nWhen\n----\n- the value is merkleized.\n\nThen\n----\n- the root matches the expected two-byte layout.",
+            "fixtureFormat": "ssz_test"
+        }
+    }
+}
