@@ -117,6 +117,19 @@ def test_elsewhere(ssz_test: SSZTestFiller) -> None:
     ssz_test(type_name="Shape", value=Elsewhere())
 '''
 
+REPEATED_CALL_MODULE = '''
+"""One test function filling a family of vectors in a loop."""
+
+from ssz import Uint16
+from ssz_testing import SSZTestFiller
+
+
+def test_many_calls_one_function(ssz_test: SSZTestFiller) -> None:
+    """Three values, one test id."""
+    for number in (1, 2, 3):
+        ssz_test(type_name="Uint16", value=Uint16(number))
+'''
+
 
 @pytest.fixture
 def project(pytester: pytest.Pytester) -> pytest.Pytester:
@@ -311,6 +324,23 @@ def test_a_description_carries_no_source_indentation(project: pytest.Pytester) -
     )
     description = next(iter(written.values()))["_info"]["description"]
     assert description == "A summary line.\n\nA continuation line, indented in the source."
+
+
+def test_a_second_vector_from_one_test_is_refused(project: pytest.Pytester) -> None:
+    """A test id names one vector, so a repeated call would drop one and fails the fill instead."""
+    project.makepyfile(**{"tests/fillers/test_repeated": REPEATED_CALL_MODULE})
+
+    refused = fill(project, "--clean")
+
+    refused.assert_outcomes(passed=2, failed=1)
+    refused.stdout.fnmatch_lines(
+        [
+            "E*ValueError: test 'tests/fillers/test_repeated.py::test_many_calls_one_function' "
+            "already produced a 'ssz_test' vector, and a second one would replace it. "
+            "Parametrize the test or split it, so that every vector is written under its own "
+            "test id."
+        ]
+    )
 
 
 def test_a_test_outside_the_filler_tree_has_nowhere_to_write(tmp_path: Path) -> None:
