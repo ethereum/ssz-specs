@@ -948,3 +948,79 @@ class TestBitVectorInputShapes:
             BitVector4(data=rejected)
 
         assert str(exception_info.value) == f"expected iterable, got {type_name}"
+
+
+class BitVector11(BitVector):
+    """Eleven bits, so the last byte is part padding and spans two bytes."""
+
+    LENGTH = 11
+
+
+class BitList20(BitList):
+    """Up to twenty bits, so a delimiter may sit anywhere in three bytes."""
+
+    LIMIT = 20
+
+
+BITFIELD_VALUES = [
+    pytest.param(BitVector4(data=bits_of(1, 0, 1, 0)), id="bitvector_within_one_byte"),
+    pytest.param(BitVector11(data=bits_of(1, 0, 1, 1, 0, 0, 0, 1, 1, 1, 0)), id="bitvector_padded"),
+    pytest.param(BitList20(data=()), id="bitlist_empty"),
+    pytest.param(BitList20(data=bits_of(1, 0, 1)), id="bitlist_within_one_byte"),
+    pytest.param(BitList20(data=bits_of(1, 1, 1, 1, 1, 1, 1, 1)), id="bitlist_delimiter_spills"),
+    pytest.param(ProgressiveBitList(data=bits_of(1, 0, 1)), id="progressive_bitlist"),
+    pytest.param(ProgressiveBitList(data=()), id="progressive_bitlist_empty"),
+]
+"""One value of each bitfield shape, including the two places a delimiter lands."""
+
+
+class TestTheJsonMapping:
+    """
+    The spec's JSON mapping for the three bitfield shapes: a hex byte string.
+
+    The bytes are the value's own SSZ encoding, delimiter included, or the count is lost.
+    """
+
+    @pytest.mark.parametrize("value", BITFIELD_VALUES)
+    def test_the_hex_is_the_serialization(self, value: BitVector | BitList) -> None:
+        """Derived from the encoding rather than retyped, so the two cannot drift apart."""
+        assert value.model_dump(mode="json") == {"data": "0x" + value.encode_bytes().hex()}
+
+    @pytest.mark.parametrize("value", BITFIELD_VALUES)
+    def test_decoding_reads_back_what_encoding_wrote(self, value: BitVector | BitList) -> None:
+        """The hex string rebuilds the same bits, the count recovered from the bytes."""
+        assert type(value).model_validate_json(value.model_dump_json()) == value
+
+    def test_the_bitlist_hex_carries_the_delimiter(self) -> None:
+        """Three data bits and the delimiter one place past them make the byte 0x0d."""
+        # 0x05, the three bits packed alone, would equally spell every zero-padded extension.
+        assert BitList20(data=bits_of(1, 0, 1)).model_dump(mode="json") == {"data": "0x0d"}
+        assert BitList20(data=bits_of(1, 0, 1, 0, 0)).model_dump(mode="json") == {"data": "0x25"}
+
+    def test_the_hex_a_bitvector_would_never_write_is_refused(self) -> None:
+        """Reading through the decoder is what holds a padding bit above the last one to zero."""
+        # The eleven declared bits leave five padding bits in the second byte.
+        assert BitVector11(data=bits_of(1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1)).model_dump(
+            mode="json"
+        ) == {"data": "0xff07"}
+
+        with pytest.raises(ValueOrValidationError):
+            BitVector11(data="0xffff")
+
+    def test_the_hex_a_bitlist_would_never_write_is_refused(self) -> None:
+        """A string with no delimiter names no bit count, and one past capacity is refused."""
+        with pytest.raises(ValueOrValidationError):
+            BitList20(data="0x00")
+
+        with pytest.raises(ValueOrValidationError):
+            BitList20(data="0x000000ff")
+
+    def test_a_string_that_is_not_a_hex_byte_string_stays_refused(self) -> None:
+        """The prefix is what tells the mapping's spelling from an iterable of bits."""
+        # Unprefixed, a string is not a spelling of a bitfield at all.
+        with pytest.raises((SSZTypeError, ValidationError)) as exception_info:
+            BitList20(data="0d")
+        assert str(exception_info.value) == "expected iterable, got str"
+
+        with pytest.raises(ValueOrValidationError):
+            BitList20(data="0xzz")

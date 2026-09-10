@@ -1,9 +1,10 @@
 """Reusable pydantic glue shared by the SSZ types."""
 
 from collections.abc import Callable
+from functools import cache
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, TypeAdapter
 from pydantic_core import core_schema
 
 
@@ -49,3 +50,9 @@ def wrapping_schema(
         ],
         serialization=core_schema.plain_serializer_function_ser_schema(to_json),
     )
+
+
+@cache
+def json_writer(ssz_type: type) -> TypeAdapter[Any]:
+    """The JSON mapping one type spells, built once per type."""
+    return TypeAdapter(ssz_type)

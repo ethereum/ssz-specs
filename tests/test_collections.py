@@ -1709,8 +1709,8 @@ class TestJsonSerialization:
 
         assert instance.model_dump(mode="json") == {"data": [True, False, True]}
 
-    def test_container_elements_pass_through_to_pydantic(self) -> None:
-        """Container elements fall through the else branch and recurse via Pydantic."""
+    def test_container_elements_render_as_objects(self) -> None:
+        """A container element renders as an object, its own fields spelled by their types."""
         instance = FixedContainerList2(
             data=[
                 FixedContainer(a=Uint8(1), b=Uint16(2)),
@@ -1718,7 +1718,9 @@ class TestJsonSerialization:
             ]
         )
 
-        assert instance.model_dump(mode="json") == {"data": [{"a": 1, "b": 2}, {"a": 3, "b": 4}]}
+        assert instance.model_dump(mode="json") == {
+            "data": [{"a": "1", "b": "2"}, {"a": "3", "b": "4"}]
+        }
 
 
 @given(values=st.lists(st.integers(min_value=0, max_value=2**16 - 1), max_size=4))

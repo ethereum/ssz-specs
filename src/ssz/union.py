@@ -1,12 +1,12 @@
 """SSZ compatible union, per EIP-8016."""
 
 from collections.abc import Callable, Mapping
-from functools import cache
 from types import MappingProxyType
 from typing import IO, Any, ClassVar, Final, Self, override
 
-from pydantic import ConfigDict, TypeAdapter, field_serializer, model_validator
+from pydantic import ConfigDict, field_serializer, model_validator
 
+from ssz.base import json_writer
 from ssz.bitfields import BitList, BitVector, ProgressiveBitList
 from ssz.boolean import Boolean
 from ssz.byte_arrays import ByteList, ByteVector
@@ -15,13 +15,6 @@ from ssz.container import Container, ProgressiveContainer
 from ssz.exceptions import SSZError, SSZTypeError, SSZValueError, TypeFault, ValueFault
 from ssz.ssz_base import SSZModel, SSZType
 from ssz.uint import BaseUint, Uint8
-
-
-@cache
-def option_writer(option: type[SSZType]) -> TypeAdapter[SSZType]:
-    """The JSON spelling one option declares, built once per option type."""
-    return TypeAdapter(option)
-
 
 MIN_SELECTOR: Final = 1
 """Lowest selector a union may declare, zero being reserved so an all-zero value names none."""
@@ -55,7 +48,7 @@ class CompatibleUnion(SSZModel):
     @field_serializer("data", when_used="json")
     def _serialize_data(self, value: SSZType) -> object:
         """Write the option through its own declaration, the field's naming no shape."""
-        return option_writer(type(value)).dump_python(value, mode="json")
+        return json_writer(type(value)).dump_python(value, mode="json")
 
     @classmethod
     def __pydantic_init_subclass__(cls, **kwargs: Any) -> None:

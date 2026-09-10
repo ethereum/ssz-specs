@@ -88,7 +88,7 @@ def test_a_value_is_emitted_the_way_its_shape_reads() -> None:
     }
 
     assert emitted == {
-        "Pair": {"number": 1, "flag": True},
+        "Pair": {"number": "1", "flag": True},
         "Bytes2": "0xabcd",
         "Boolean": False,
         "Uint8": "7",

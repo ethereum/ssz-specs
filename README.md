@@ -21,6 +21,11 @@ just fill   # Generate reference tests
 This project generates JSON reference tests, included in each release, that SSZ
 implementations can run to ensure compliance with the specifications.
 
+Each vector carries the value under test in the specification's JSON mapping.
+Integers are strings of decimal digits, so that a 64-bit value survives a parser
+that holds JSON numbers as doubles, and bitfields are hex byte strings holding
+exactly the bytes they serialize to.
+
 ## Releases
 
 Each release ships the `eth-ssz-specs` package on PyPI and the reference tests on the
@@ -60,6 +65,11 @@ Bit(1)
 ### `Byte`
 
 Eight bits of opaque data.
+
+It serializes and hashes exactly as an 8-bit unsigned integer does, and the two
+merkleize compatibly. Only the JSON mapping tells them apart: opaque data is
+written as a hex byte string, `"0xff"`, where a number is written as a string of
+decimal digits, `"255"`.
 
 ```python
 Byte(0xFF)

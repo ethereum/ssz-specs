@@ -9,10 +9,10 @@ from typing import Any, ClassVar, Self
 from pydantic import BaseModel, ConfigDict, Field, field_serializer
 from pydantic.alias_generators import to_camel
 
-from ssz.boolean import Boolean
+from ssz.base import json_writer
 from ssz.exceptions import SSZError, ValueFault
 from ssz.roots import hash_tree_root
-from ssz.ssz_base import SSZModel, SSZType
+from ssz.ssz_base import SSZType
 from ssz_testing.hex_codec import from_hex, to_hex
 
 
@@ -301,16 +301,8 @@ class SSZFixture(BaseConsensusFixture):
 
     @field_serializer("value", when_used="json")
     def serialize_value(self, ssz_value: SSZType) -> Any:
-        """Convert an SSZ value to a JSON-safe representation."""
-        # Collections and containers carry their contents in Pydantic fields.
-        if isinstance(ssz_value, SSZModel):
-            return ssz_value.model_dump(mode="json")
-        # A boolean carries JSON true or false, not the string the fallback would give.
-        if isinstance(ssz_value, Boolean):
-            return bool(ssz_value)
-        if isinstance(ssz_value, bytes):
-            return to_hex(ssz_value)
-        return str(ssz_value)
+        """Render the value as the SSZ JSON mapping of its own type spells it."""
+        return json_writer(type(ssz_value)).dump_python(ssz_value, mode="json")
 
 
 class SSZTest(BaseTestSpec):

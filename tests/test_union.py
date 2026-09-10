@@ -698,12 +698,12 @@ def test_a_union_writes_its_option_the_way_that_option_spells_itself() -> None:
     """The field is annotated with the base every option shares, which spells nothing."""
     # Bytes that are not text at all, and would refuse to decode as any.
     written = Opaque(selector=Uint8(1), data=ByteVector4(bytes([0xFF, 0x00, 0x41, 0x42])))
-    assert written.model_dump(mode="json") == {"selector": 1, "data": "0xff004142"}
+    assert written.model_dump(mode="json") == {"selector": "1", "data": "0xff004142"}
     # Bytes that happen to read as text, which is how the spelling went unnoticed.
     readable = Opaque(selector=Uint8(1), data=ByteVector4(b"abcd"))
-    assert readable.model_dump(mode="json") == {"selector": 1, "data": "0x61626364"}
+    assert readable.model_dump(mode="json") == {"selector": "1", "data": "0x61626364"}
     # A boolean option is a JSON boolean, not the number its own storage uses.
     assert Flag(selector=Uint8(1), data=Boolean(True)).model_dump(mode="json") == {
-        "selector": 1,
+        "selector": "1",
         "data": True,
     }

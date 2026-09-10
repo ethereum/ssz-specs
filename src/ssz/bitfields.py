@@ -23,9 +23,10 @@ from typing import (
     override,
 )
 
-from pydantic import Field, field_validator
+from pydantic import Field, field_serializer, field_validator
 
 from ssz.boolean import Boolean
+from ssz.byte_arrays import coerced_bytes
 from ssz.exceptions import SSZTypeError, SSZValueError, TypeFault, ValueFault
 from ssz.ssz_base import SSZCollection
 
@@ -98,6 +99,10 @@ class BitVector(SSZCollection[Boolean]):
         if cls.LENGTH is None:
             raise SSZTypeError(TypeFault.UNDECLARED, type=cls.__name__, requirement="LENGTH")
 
+        # The JSON mapping spells a bitfield as the hex of its own encoding.
+        if isinstance(bits_input, str) and bits_input.startswith("0x"):
+            bits_input = cls.decode_bytes(coerced_bytes(cls.__name__, bits_input)).data
+
         # Materialize a length-checkable sequence, refusing strings and non-iterables.
         #
         # Bytes are refused here as they are everywhere else.
@@ -114,6 +119,11 @@ class BitVector(SSZCollection[Boolean]):
         #
         # A named spelling is still converted, the test being on the exact class.
         return [bit if type(bit) is Boolean else Boolean(bit) for bit in bits]
+
+    @field_serializer("data", when_used="json")
+    def _serialize_data(self, _bits: Sequence[Boolean]) -> str:
+        """Render the bits as the hex byte string of their own SSZ encoding."""
+        return "0x" + self.encode_bytes().hex()
 
     @classmethod
     @override
@@ -280,6 +290,10 @@ class _SSZBitList(SSZCollection[Boolean]):
         # An undeclared limit cannot be told apart from the absence of one.
         cls._check_declaration()
 
+        # The JSON mapping spells a bitlist as the hex of its own encoding, delimiter included.
+        if isinstance(bits_input, str) and bits_input.startswith("0x"):
+            bits_input = cls.decode_bytes(coerced_bytes(cls.__name__, bits_input)).data
+
         # Materialize a length-checkable sequence, refusing strings and non-iterables.
         bits = cls._shape_input(bits_input)
 
@@ -291,6 +305,11 @@ class _SSZBitList(SSZCollection[Boolean]):
         # One already of exactly that class is the shared value for its bit.
         # Wrapping it again would only hand back the object it already is.
         return [bit if type(bit) is Boolean else Boolean(bit) for bit in bits]
+
+    @field_serializer("data", when_used="json")
+    def _serialize_data(self, _bits: Sequence[Boolean]) -> str:
+        """Render the bits as the hex byte string of their own SSZ encoding, delimiter included."""
+        return "0x" + self.encode_bytes().hex()
 
     @classmethod
     def _check_declaration(cls) -> None:

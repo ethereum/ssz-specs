@@ -68,6 +68,10 @@ class Uint256Model(UintModel):
     value: Uint256
 
 
+class ByteModel(UintModel):
+    value: Byte
+
+
 UINT_MODELS: dict[Type[BaseUint], Type[UintModel]] = {
     Uint8: Uint8Model,
     Uint16: Uint16Model,
@@ -90,7 +94,7 @@ def test_pydantic_validation_accepts_valid_int(uint_class: Type[BaseUint]) -> No
 
 
 @pytest.mark.parametrize("uint_class", ALL_UINT_TYPES)
-@pytest.mark.parametrize("invalid_value", [1.0, "1", True, False])
+@pytest.mark.parametrize("invalid_value", [1.0, True, False])
 def test_pydantic_strict_mode_rejects_invalid_types(
     uint_class: Type[BaseUint], invalid_value: Any
 ) -> None:
@@ -1294,6 +1298,112 @@ def test_encode_decode_round_trip_random_values(uint_class: Type[BaseUint], data
     assert uint_class.decode_bytes(instance.encode_bytes()) == instance
 
 
+class Uint256List4(List[Uint256]):
+    """A list of the widest unsigned integer, so a nested element is asked for too."""
+
+    LIMIT = 4
+
+
+class WideHolder(Container):
+    """One field of the widest unsigned integer, so a nested field is asked for too."""
+
+    amount: Uint256
+
+
+class TestTheJsonMapping:
+    """
+    The spec's JSON mapping for `uintN`: a string of decimal digits, everywhere.
+
+    Every value below 2**53 survives a JSON number, so a small number proves nothing here.
+    """
+
+    @pytest.mark.parametrize("uint_class", ALL_UINT_TYPES)
+    def test_a_field_of_every_width_is_written_as_decimal_digits(
+        self, uint_class: Type[BaseUint]
+    ) -> None:
+        """The widest value each type holds comes out as the digits of that value."""
+        model = UINT_MODELS[uint_class]
+        widest = uint_class.max_value()
+
+        assert model(value=widest).model_dump(mode="json") == {"value": str(int(widest))}
+
+    @pytest.mark.parametrize("uint_class", ALL_UINT_TYPES)
+    def test_a_field_of_every_width_reads_back_what_it_wrote(
+        self, uint_class: Type[BaseUint]
+    ) -> None:
+        """Decoding accepts the string encoding produced, and rebuilds the same value."""
+        model = UINT_MODELS[uint_class]
+        instance = model(value=uint_class.max_value())
+
+        assert model.model_validate_json(instance.model_dump_json()) == instance
+
+    def test_a_value_a_json_number_could_not_hold_survives_the_round_trip(self) -> None:
+        """The value the rule exists for: the first odd integer no double represents."""
+        beyond_a_double = 2**53 + 1
+        instance = Uint64Model(value=Uint64(beyond_a_double))
+
+        assert instance.model_dump_json() == '{"value":"9007199254740993"}'
+
+        # The same digits as a JSON number come back one lower, which is the loss guarded against.
+        assert int(float(beyond_a_double)) == beyond_a_double - 1
+
+        assert Uint64Model.model_validate_json(instance.model_dump_json()).value == Uint64(
+            beyond_a_double
+        )
+
+    def test_a_nested_field_is_written_as_decimal_digits(self) -> None:
+        """A field of a container is a string, the mapping reaching every nesting depth."""
+        holder = WideHolder(amount=Uint256(2**256 - 1))
+
+        assert holder.model_dump(mode="json") == {"amount": str(2**256 - 1)}
+        assert WideHolder.model_validate_json(holder.model_dump_json()) == holder
+
+    def test_a_nested_element_is_written_as_decimal_digits(self) -> None:
+        """A number inside a list is a string too, element rendering being the same rule."""
+        values = Uint256List4.of(0, 2**255, 2**256 - 1)
+
+        assert values.model_dump(mode="json") == {"data": ["0", str(2**255), str(2**256 - 1)]}
+        assert Uint256List4.model_validate_json(values.model_dump_json()) == values
+
+    @pytest.mark.parametrize(
+        "spelling",
+        [
+            pytest.param("007", id="leading_zeros"),
+            pytest.param("+7", id="signed"),
+            pytest.param("-7", id="negative"),
+            pytest.param(" 7", id="padded"),
+            pytest.param("1_0", id="separated"),
+            pytest.param("0x7", id="hex"),
+            pytest.param("", id="empty"),
+        ],
+    )
+    def test_a_string_the_mapping_would_never_write_is_refused(self, spelling: str) -> None:
+        """Decoding admits the one spelling encoding produces, not everything int() takes."""
+        with pytest.raises(ValidationError):
+            Uint64Model(value=spelling)
+
+    def test_a_string_out_of_range_is_refused(self) -> None:
+        """The range check applies to the digits as it does to an integer."""
+        with pytest.raises(ValidationError):
+            Uint8Model(value="256")
+
+    def test_the_opaque_byte_is_written_as_a_hex_byte_string(self) -> None:
+        """Where the eight-bit number writes its digits, eight bits of opaque data write hex."""
+        assert ByteModel(value=Byte(0)).model_dump(mode="json") == {"value": "0x00"}
+        assert Uint8Model(value=Uint8(0)).model_dump(mode="json") == {"value": "0"}
+
+        assert ByteModel(value=Byte(0xAB)).model_dump(mode="json") == {"value": "0xab"}
+
+    def test_the_opaque_byte_reads_back_the_hex_it_wrote(self) -> None:
+        """Decoding accepts the hex byte string, and refuses the digits it never writes."""
+        instance = ByteModel(value=Byte(0xAB))
+        assert ByteModel.model_validate_json(instance.model_dump_json()) == instance
+
+        # Two hex digits, always, so a single-digit spelling is not one the mapping writes.
+        with pytest.raises(ValidationError):
+            ByteModel(value="0xb")
+
+
 # The spec's eight bits of opaque data, and the shapes it aliases.
 #
 # Each shape below is declared twice, once with each spelling.
@@ -1337,35 +1447,14 @@ class OpaqueByteHolder(Container):
 
 
 class TestOpaqueByteSpelling:
-    """
-    The spec's eight bits of opaque data, against the eight-bit number beside it.
+    """The spec's eight bits of opaque data, against the eight-bit number beside it."""
 
-    Two things the spec says of the pair:
-
-    - They are equivalent in serialization and in hashing.
-    - Each is compatible with the other.
-
-    One type under two names satisfies both for free.
-    What follows pins that equivalence, and the alias shapes built on it.
-    The arithmetic and comparison surface belongs to the eight-bit number.
-    It is covered above rather than repeated here.
-    """
-
-    def test_the_two_spellings_name_one_type(self) -> None:
-        """One class stands behind both names, rather than one subclassing the other."""
-        # Why not a real subclass, measured with one declared over the eight-bit number:
-        #
-        #     Sub(5) == Uint8(5)      TypeError: Unsupported operand type(s) for ==
-        #     Uint8List4.of(Sub(5))   SSZTypeError: Expected Uint8, got Sub
-        #
-        # Integers here compare by exact class.
-        # Collections coerce their elements by exact class too.
-        # A subclass would be a type the spec calls interchangeable.
-        # This library would refuse to interchange it.
-        assert Byte is Uint8
-        # The visible cost of one class under two names.
-        # A value built through the opaque name shows the numeric name back.
-        assert repr(Byte(7)) == "Uint8(7)"
+    def test_the_opaque_spelling_is_its_own_type_below_the_number(self) -> None:
+        """A class of its own, so the JSON mapping can spell the two apart."""
+        # One class under two names cannot spell itself two ways, so this one is a subclass.
+        assert Byte is not Uint8
+        assert issubclass(Byte, Uint8)
+        assert repr(Byte(7)) == "Byte(7)"
 
     @pytest.mark.parametrize(
         "value, expected_wire",
@@ -1395,22 +1484,18 @@ class TestOpaqueByteSpelling:
         assert hash_tree_root(opaque) == Chunk(expected_wire + b"\x00" * 31)
         assert hash_tree_root(number) == hash_tree_root(opaque)
 
-    @pytest.mark.parametrize(
-        "declared_shape, element",
-        [
-            pytest.param(Uint8List4, Byte(5), id="numeric_shape_given_an_opaque_value"),
-            pytest.param(OpaqueByteList4, Uint8(5), id="opaque_shape_given_a_numeric_value"),
-        ],
-    )
-    def test_a_value_of_either_spelling_fits_a_shape_declared_with_the_other(
-        self, declared_shape: type[List[Uint8]], element: Uint8
-    ) -> None:
-        """A collection declared with one name accepts a value built with the other."""
+    def test_the_opaque_shape_accepts_the_number_it_is_built_from(self) -> None:
+        """A collection of opaque bytes takes the eight-bit number the type descends from."""
         # Element coercion admits the declared class and its ancestors, nothing else.
-        # Two names for one class therefore pass straight through, in either direction.
-        held = declared_shape.of(element)
-        assert held[0] == Uint8(5)
+        held = OpaqueByteList4.of(Uint8(5))
+        assert held[0] == Byte(5)
         assert held.encode_bytes() == b"\x05"
+
+    def test_the_numeric_shape_refuses_the_opaque_value_as_any_named_subtype(self) -> None:
+        """A shape declared over the number refuses a value of the type below it."""
+        # Every named subtype is refused here, and the spec's own spelling is now one of them.
+        with pytest.raises(SSZTypeError, match="expected Uint8, got Byte"):
+            Uint8List4.of(Byte(5))
 
     def test_the_fixed_byte_array_shape(self) -> None:
         """A four-byte array declared over the opaque spelling encodes and roots alike."""
@@ -1479,35 +1564,26 @@ class TestOpaqueByteSpelling:
         assert holder.encode_bytes() == bytes.fromhex("ab0201")
         assert OpaqueByteHolder.decode_bytes(holder.encode_bytes()) == holder
 
-    def test_json_output_does_not_follow_the_spec_mapping(self) -> None:
+    def test_the_two_spellings_render_the_one_value_two_ways_in_json(self) -> None:
+        """Opaque data is a hex byte string where a number is a string of decimal digits."""
+        holder = OpaqueByteHolder(payload=Byte(1), count=Uint16(1))
+        assert holder.model_dump_json() == '{"payload":"0x01","count":"1"}'
+        assert OpaqueByteHolder.model_validate_json(holder.model_dump_json()) == holder
+
+    def test_a_collection_of_opaque_bytes_wraps_its_hex_elements(self) -> None:
         """
-        Pin what JSON output looks like today, which records a gap rather than a decision.
+        Pin what a collection of opaque bytes writes, which is not yet what the spec asks.
 
-        The spec's mapping asks for three things, none of which appears below:
-
-        - A decimal string from an eight-bit number.
-        - A hex byte string from eight bits of opaque data.
-        - A bare hex byte string from any collection of them.
-
-        The mapping is unimplemented across this library.
-        No string asserted below is spec-correct.
-        Each is expected to change when the mapping lands.
+        The mapping asks for the bare string "0x11223344", not an object of one per element.
         """
-        # The spec asks for "1" from both of these fields.
-        assert (
-            OpaqueByteHolder(payload=Byte(1), count=Uint16(1)).model_dump_json()
-            == '{"payload":1,"count":1}'
-        )
-
-        # The spec asks for the bare string "0x11223344" from a byte collection.
-        # Each collection instead comes out as an object, keyed by the field holding its elements.
-        # Those elements are decimal numbers rather than hex.
         assert (
             OpaqueByteVector4.of(0x11, 0x22, 0x33, 0x44).model_dump_json()
-            == '{"data":[17,34,51,68]}'
+            == '{"data":["0x11","0x22","0x33","0x44"]}'
         )
-        assert OpaqueByteList4.of(0x11, 0x22).model_dump_json() == '{"data":[17,34]}'
-        assert OpaqueByteProgressiveList.of(0x11, 0x22).model_dump_json() == '{"data":[17,34]}'
+        assert OpaqueByteList4.of(0x11, 0x22).model_dump_json() == '{"data":["0x11","0x22"]}'
+        assert (
+            OpaqueByteProgressiveList.of(0x11, 0x22).model_dump_json() == '{"data":["0x11","0x22"]}'
+        )
 
     def test_the_package_exports_the_spelling(self) -> None:
         """The export list is what a star import and the documentation tooling read."""
