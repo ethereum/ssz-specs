@@ -59,6 +59,65 @@ def test_parametrized(ssz_test: SSZTestFiller, number: int) -> None:
 '''
 
 
+SHAPE_COLLISION_MODULE = '''
+"""One type name over two different shapes."""
+
+from ssz import Container, Uint8, Uint16
+from ssz_testing import SSZTestFiller
+
+
+class Narrow(Container):
+    """A one-byte field."""
+
+    a: Uint8
+
+
+class Wide(Container):
+    """The same field, two bytes wide."""
+
+    a: Uint16
+
+
+def test_narrow(ssz_test: SSZTestFiller) -> None:
+    """The first claim on the name."""
+    ssz_test(type_name="Shape", value=Narrow())
+
+
+def test_wide(ssz_test: SSZTestFiller) -> None:
+    """A second shape under the name the first claimed."""
+    ssz_test(type_name="Shape", value=Wide())
+'''
+
+SHAPE_AGREEMENT_MODULE = '''
+"""Two spellings of one shape, emitted under the one name they share."""
+
+from ssz import Container, Uint8
+from ssz_testing import SSZTestFiller
+
+
+class Here(Container):
+    """A one-byte field."""
+
+    a: Uint8
+
+
+class Elsewhere(Container):
+    """The same declaration, written a second time."""
+
+    a: Uint8
+
+
+def test_here(ssz_test: SSZTestFiller) -> None:
+    """The first of the two."""
+    ssz_test(type_name="Shape", value=Here())
+
+
+def test_elsewhere(ssz_test: SSZTestFiller) -> None:
+    """The second, claiming the same name for the same shape."""
+    ssz_test(type_name="Shape", value=Elsewhere())
+'''
+
+
 @pytest.fixture
 def project(pytester: pytest.Pytester) -> pytest.Pytester:
     """A project shaped like the repository: fillers, a unit test, and a test outside tests/."""
@@ -268,3 +327,26 @@ def test_a_vector_file_ends_with_a_newline(project: pytest.Pytester) -> None:
 
     vector = project.path / "fixtures" / "ssz" / "test_two" / "test_writes_a_vector.json"
     assert vector.read_text(encoding="utf-8").endswith("}\n")
+
+
+def test_one_type_name_for_two_shapes_fails_the_fill(project: pytest.Pytester) -> None:
+    """A name is all a vector says about its type, so a second shape under one is refused."""
+    project.makepyfile(**{"tests/fillers/test_collision": SHAPE_COLLISION_MODULE})
+
+    refused = fill(project, "--clean")
+
+    refused.assert_outcomes(passed=3, failed=1)
+    refused.stdout.fnmatch_lines(
+        [
+            "*ValueError: type name 'Shape' stands for two different shapes:*",
+            "*tests/fillers/test_collision.py::test_narrow: Container(a: Uint8())*",
+            "*tests/fillers/test_collision.py::test_wide: Container(a: Uint16())*",
+        ]
+    )
+
+
+def test_two_spellings_of_one_shape_share_a_name(project: pytest.Pytester) -> None:
+    """The claim is held against the declared shape, not against the class that declared it."""
+    project.makepyfile(**{"tests/fillers/test_agreement": SHAPE_AGREEMENT_MODULE})
+
+    fill(project, "--clean").assert_outcomes(passed=4)
