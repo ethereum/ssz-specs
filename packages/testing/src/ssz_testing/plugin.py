@@ -3,6 +3,7 @@
 import json
 import shutil
 from collections import defaultdict
+from inspect import cleandoc
 from pathlib import Path
 from typing import Any
 
@@ -188,10 +189,12 @@ def test_case_description(request: pytest.FixtureRequest) -> str:
     test_class_doc = ""
     test_function_doc = ""
 
-    if hasattr(request.node, "cls") and request.cls:
-        test_class_doc = f"Test class documentation:\n{request.cls.__doc__}"
+    # Docstring indentation is stripped by the compiler from Python 3.13 on, so a vector
+    # filled on an older interpreter would carry different text and a different hash.
+    if hasattr(request.node, "cls") and request.cls and request.cls.__doc__:
+        test_class_doc = f"Test class documentation:\n{cleandoc(request.cls.__doc__)}"
     if hasattr(request.node, "function") and request.function.__doc__:
-        test_function_doc = f"{request.function.__doc__}"
+        test_function_doc = cleandoc(request.function.__doc__)
 
     if not test_class_doc and not test_function_doc:
         return description_unavailable
