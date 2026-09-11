@@ -42,12 +42,7 @@ BASES: Final[Mapping[str, type[SSZType]]] = {
 
 
 def _declared_options(descriptor: Mapping[str, Any]) -> Any:
-    """
-    A union's options as its own kind declares them, from the selectors the descriptor lists.
-
-    A tagged union indexes its options by position, so they are placed in selector order,
-    and an option the descriptor gives no type for is the None the specification allows first.
-    """
+    """A union's options as its own kind declares them, a missing type being the None option."""
     options = descriptor["options"]
     if descriptor["kind"] != "Union":
         return {option["selector"]: build_declaration(option["type"]) for option in options}

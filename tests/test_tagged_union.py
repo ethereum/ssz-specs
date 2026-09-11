@@ -448,15 +448,10 @@ class TestNesting:
     """A union inside a container, inside a progressive list, and inside itself."""
 
     def test_a_container_reaches_a_union_through_an_offset(self) -> None:
-        """
-        The union is variable-size, so the container writes an offset for it.
-
-        Layout:
-
-            byte  0    : tag = ff        (fixed-size field, inline)
-            bytes 1..4 : off_body = 5    (the union body starts at byte 5)
-            byte  5    : body            (selector 00, the None option's whole encoding)
-        """
+        """The union is variable-size, so the container writes an offset for it."""
+        # byte  0    : tag = ff        (fixed-size field, inline)
+        # bytes 1..4 : off_body = 5    (the union body starts at byte 5)
+        # byte  5    : body            (selector 00, the None option's whole encoding)
         value = Holder(tag=Uint8(0xFF), body=Maybe(selector=Uint8(0), data=None))
         assert Holder.is_fixed_size() is False
         assert value.encode_bytes().hex() == "ff0500000000"
@@ -469,27 +464,17 @@ class TestNesting:
         assert Holder.decode_bytes(value.encode_bytes()) == value
 
     def test_a_union_holds_a_union(self) -> None:
-        """
-        Two selectors lead, one per level, before any payload byte.
-
-        The inner union is variable-size, and so is every union, so the outer one hands it
-        the rest of the budget and the inner one reads its own selector out of it.
-        """
+        """Two selectors lead, one per level, before any payload byte."""
         value = Nested(selector=Uint8(1), data=Maybe(selector=Uint8(2), data=Uint32(1)))
         assert value.encode_bytes().hex() == "010201000000"
         assert Nested.decode_bytes(value.encode_bytes()) == value
 
     def test_a_progressive_list_of_unions_needs_an_offset_table(self) -> None:
-        """
-        Unions are variable-size elements, so each body is reached through an offset.
-
-        Layout:
-
-            bytes 0..3 : off_0 = 8    (first body starts at byte 8)
-            bytes 4..7 : off_1 = 9    (second body starts at byte 9)
-            byte  8    : body_0       (selector 00, holding nothing)
-            bytes 9..13: body_1       (selector 01, then the eight-byte integer)
-        """
+        """Unions are variable-size elements, so each body is reached through an offset."""
+        # bytes 0..3 : off_0 = 8    (first body starts at byte 8)
+        # bytes 4..7 : off_1 = 9    (second body starts at byte 9)
+        # byte  8    : body_0       (selector 00, holding nothing)
+        # bytes 9..13: body_1       (selector 01, then the eight-byte integer)
         value = MaybeList(
             data=[
                 Maybe(selector=Uint8(0), data=None),

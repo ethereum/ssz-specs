@@ -41,12 +41,7 @@ class TaggedUint16List4(List[Uint16]):
 
 
 class TaggedMaybe(Union):
-    """
-    The specification's own example shape: None first, then two integer widths.
-
-    Selector zero holds nothing and encodes to the single byte 0x00, which is the one SSZ
-    encoding that does not follow from the general rules for the shapes around it.
-    """
+    """The specification's own example shape: None first, then two integer widths."""
 
     OPTIONS = (None, Uint64, Uint32)
 
