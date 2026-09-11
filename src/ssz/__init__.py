@@ -100,7 +100,7 @@ from ssz.roots import hash_tree_root
 from ssz.ssz_base import SSZCollection, SSZModel, SSZType
 from ssz.trees import merkleize, merkleize_progressive
 from ssz.uint import BaseUint, Byte, Uint8, Uint16, Uint32, Uint64, Uint128, Uint256
-from ssz.union import MAX_SELECTOR, MIN_SELECTOR, CompatibleUnion, is_compatible
+from ssz.union import MAX_SELECTOR, MIN_SELECTOR, CompatibleUnion, Union, is_compatible
 from ssz.verification import (
     calculate_merkle_root,
     calculate_multi_merkle_root,
@@ -157,6 +157,7 @@ __all__ = [
     "Uint32",
     "Uint64",
     "Uint8",
+    "Union",
     "ValueFault",
     "Vector",
     "ZERO_ROOT",

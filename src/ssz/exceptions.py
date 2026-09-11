@@ -35,6 +35,9 @@ class TypeFault(Enum):
 
     UNION_EMPTY = "a union declares at least one option"
     UNION_NOT_A_MAP = "a union declares a selector-to-type map, got {got}"
+    UNION_NOT_A_SEQUENCE = "a union declares its options in selector order, got {got}"
+    UNION_NONE_NOT_FIRST = "option {selector} is None, which is legal only as the first option"
+    UNION_NONE_ALONE = "a union whose first option is None declares at least two options"
     UNION_SELECTOR_TYPE = "selector {selector!r} is not a plain integer"
     UNION_SELECTOR_RANGE = "selector {selector} falls outside {low} through {high}"
     UNION_OPTION_TYPE = "option {selector} is not an SSZ type"

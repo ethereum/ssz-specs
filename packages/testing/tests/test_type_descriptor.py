@@ -21,6 +21,7 @@ from ssz import (
     Uint8,
     Uint16,
     Uint64,
+    Union,
     Vector,
     hash_tree_root,
 )
@@ -76,6 +77,10 @@ class SampleShape(CompatibleUnion):
     OPTIONS = {1: SampleSquare, 2: SampleCircle}
 
 
+class SamplePayload(Union):
+    OPTIONS = (None, Uint64, SampleSquare)
+
+
 class SampleNested(Container):
     count: Uint64
     digest: Bytes4
@@ -96,6 +101,8 @@ SAMPLE_VALUES: Final = (
     SampleSquareList4(data=[SampleSquare(side=Uint16(3), color=Uint8(4))]),
     SampleSquareProgressiveList(data=[SampleSquare(side=Uint16(5), color=Uint8(6))] * 3),
     SampleShape(selector=Uint8(2), data=SampleCircle(radius=Uint16(7), color=Uint8(8))),
+    SamplePayload(selector=Uint8(0), data=None),
+    SamplePayload(selector=Uint8(2), data=SampleSquare(side=Uint16(1), color=Uint8(2))),
     SampleNested(
         count=Uint64(9),
         digest=Bytes4(b"wxyz"),

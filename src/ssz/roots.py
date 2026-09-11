@@ -19,7 +19,7 @@ from ssz.mixins import mix_in
 from ssz.ssz_base import SSZModel, SSZType
 from ssz.trees import merkleize, merkleize_progressive
 from ssz.uint import BaseUint
-from ssz.union import CompatibleUnion
+from ssz.union import CompatibleUnion, Union
 
 PARANOID_ROOTS: bool = os.environ.get("SSZ_PARANOID_ROOTS") == "1"
 """
@@ -176,6 +176,13 @@ def _witness_fields(value: Container | ProgressiveContainer | CompatibleUnion) -
     # A list rather than a generator, so the tuple can size its result in one pass.
     fields = [getattr(value, name) for name in names]
     return (value._version, tuple([_witness_rule(type(field))(field) for field in fields]))
+
+
+@_root_witness.register
+def _witness_union(value: Union) -> object:
+    """A union carries the witness of the option it holds, a None option having none."""
+    held = value.data
+    return (value._version, None if held is None else _witness_rule(type(held))(held))
 
 
 def _root_from_layout(value: object) -> Root:

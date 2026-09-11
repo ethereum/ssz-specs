@@ -1,6 +1,6 @@
-"""SSZ compatible union, per EIP-8016."""
+"""The tagged union, and the compatible union of EIP-8016."""
 
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Mapping, Sequence
 from types import MappingProxyType
 from typing import IO, Any, ClassVar, Final, Self, override
 
@@ -17,10 +17,160 @@ from ssz.ssz_base import SSZModel, SSZType
 from ssz.uint import BaseUint, Uint8
 
 MIN_SELECTOR: Final = 1
-"""Lowest selector a union may declare, zero being reserved so an all-zero value names none."""
+"""Lowest selector a compatible union may declare, zero being reserved for the tagged union."""
 
 MAX_SELECTOR: Final = 127
-"""Highest selector a union may declare, the high bit being reserved."""
+"""Highest selector a compatible union may declare, the high bit being reserved."""
+
+
+class Union(SSZModel):
+    """Tagged union over an ordered list of options, the selector naming the one held."""
+
+    # Two doors: the mutation door refuses an assignment, and frozen refuses a deletion.
+    MUTABLE = False
+    model_config = ConfigDict(frozen=True)
+
+    KIND = "union"
+
+    OPTIONS: ClassVar[Sequence[type[SSZType] | None]]
+    """The options in selector order, of which only the first may be None."""
+
+    selector: Uint8
+    """Position in that list of the option this value holds."""
+
+    data: SSZType | None
+    """The value of the selected option, and None where the option itself is None."""
+
+    @field_serializer("data", when_used="json-unless-none")
+    def _serialize_data(self, value: SSZType) -> object:
+        """Write the option through its own declaration, the field's naming no shape."""
+        return json_writer(type(value)).dump_python(value, mode="json")
+
+    @classmethod
+    def __pydantic_init_subclass__(cls, **kwargs: Any) -> None:
+        """
+        Enforce the option rules on every declared union.
+
+        Raises:
+            SSZTypeError: When the options are missing, malformed, or place None anywhere
+                but first.
+        """
+        super().__pydantic_init_subclass__(**kwargs)
+
+        if not hasattr(cls, "OPTIONS"):
+            raise SSZTypeError(TypeFault.UNDECLARED, type=cls.__name__, requirement="OPTIONS")
+        # A selector indexes the list, so a mapping would be read by its keys' write order.
+        if isinstance(cls.OPTIONS, Mapping) or not isinstance(cls.OPTIONS, Sequence):
+            raise SSZTypeError(TypeFault.UNION_NOT_A_SEQUENCE, got=type(cls.OPTIONS).__name__)
+        if not cls.OPTIONS:
+            raise SSZTypeError(TypeFault.UNION_EMPTY)
+
+        for selector, option in enumerate(cls.OPTIONS):
+            if option is None:
+                if selector != 0:
+                    raise SSZTypeError(TypeFault.UNION_NONE_NOT_FIRST, selector=selector)
+            elif not (isinstance(option, type) and issubclass(option, SSZType)):
+                raise SSZTypeError(TypeFault.UNION_OPTION_TYPE, selector=selector)
+
+        # A union of None alone admits one value, whose encoding is a byte naming nothing.
+        if cls.OPTIONS[0] is None and len(cls.OPTIONS) < 2:
+            raise SSZTypeError(TypeFault.UNION_NONE_ALONE)
+
+        # A snapshot, since nothing above holds for a list the caller can still write to.
+        cls.OPTIONS = tuple(cls.OPTIONS)
+
+    @model_validator(mode="before")
+    @classmethod
+    def _build_the_default(cls, raw_input: Any) -> Any:
+        """
+        Answer the empty input that asks for a default with the first option's own.
+
+        Raises:
+            SSZTypeError: When the first option is a type that has no default itself.
+        """
+        if raw_input != {}:
+            return raw_input
+        first_option = cls.OPTIONS[0]
+        return {
+            "selector": Uint8(0),
+            "data": None if first_option is None else first_option.default(),
+        }
+
+    @model_validator(mode="after")
+    def _check_selected_option(self) -> Self:
+        """
+        Check that the value holds the option its selector names.
+
+        Raises:
+            SSZValueError: When the selector names no option.
+            SSZTypeError: When the value is a type other than the one named.
+        """
+        options = type(self).OPTIONS
+        selector = int(self.selector)
+        # A value is built field by field, so its selector may point past the list entirely.
+        if selector >= len(options):
+            raise SSZValueError(
+                ValueFault.UNKNOWN_SELECTOR, selector=selector, type=type(self).__name__
+            )
+
+        option = options[selector]
+        held = "None" if self.data is None else type(self.data).__name__
+        # A reader picks the tree shape from the selector, so the value must be that option.
+        if option is None:
+            if self.data is not None:
+                raise SSZTypeError(TypeFault.WRONG_TYPE, expected="None", got=held)
+        elif not isinstance(self.data, option):
+            raise SSZTypeError(TypeFault.WRONG_TYPE, expected=option.__name__, got=held)
+        return self
+
+    @classmethod
+    @override
+    def fixed_size(cls) -> None:
+        """A union is always variable-size, even where every option is the same fixed width."""
+        return None
+
+    @override
+    def serialize(self, stream: IO[bytes]) -> int:
+        """Write the selector byte, then the encoding of the option it names."""
+        # The None option is selector zero holding nothing, so the byte is the whole encoding.
+        written = self.selector.serialize(stream)
+        return written if self.data is None else written + self.data.serialize(stream)
+
+    @classmethod
+    @override
+    def deserialize(cls, stream: IO[bytes], scope: int) -> Self:
+        """
+        Read one union within the given byte budget, the selector leading.
+
+        Raises:
+            SSZValueError: When the budget holds no selector, or the selector names no option.
+            SSZValueError: When the None option is handed a budget beyond its single byte.
+        """
+        selector_width = Uint8.get_byte_length()
+        if scope < selector_width:
+            raise SSZValueError(ValueFault.NO_SELECTOR, scope=scope)
+
+        selector = Uint8.deserialize(stream, selector_width)
+        if int(selector) >= len(cls.OPTIONS):
+            raise SSZValueError(
+                ValueFault.UNKNOWN_SELECTOR, selector=int(selector), type=cls.__name__
+            )
+
+        option = cls.OPTIONS[int(selector)]
+        if option is None:
+            if scope != selector_width:
+                raise SSZValueError(
+                    ValueFault.SCOPE, type=cls.__name__, expected=selector_width, actual=scope
+                )
+            return cls(selector=selector, data=None)
+
+        # A refusal inside the option names the selector it was read under, as a path step.
+        try:
+            data = option.deserialize(stream, scope - selector_width)
+        except SSZError as error:
+            error.at(int(selector))
+            raise
+        return cls(selector=selector, data=data)
 
 
 class CompatibleUnion(SSZModel):
