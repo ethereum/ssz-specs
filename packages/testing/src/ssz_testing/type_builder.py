@@ -54,7 +54,6 @@ def build_declaration(descriptor: Mapping[str, Any], type_name: str | None = Non
     body: dict[str, Any] = {"__module__": "consumer"}
 
     # A kind naming no base of its own is an unsigned integer, spelled by its width alone.
-    # The opaque byte is not one of those: only its own base spells the hex string it renders as.
     base = BASES.get(descriptor["kind"])
     if base is None:
         return type(name, (BaseUint,), body | {"BITS": descriptor["bits"]})
