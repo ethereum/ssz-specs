@@ -2,7 +2,7 @@
 
 Generated from the Python reference implementation in this repository by `just fill`.
 
-329 cases: 225 an implementation must accept, 104 it must refuse.
+353 cases: 237 an implementation must accept, 116 it must refuse.
 Read [what a passing run proves](#what-a-passing-run-proves) before relying on them.
 
 ## Layout
@@ -14,9 +14,10 @@ fixtures/<format>/<kind>/<valid|invalid>/<case id>.json
 fixtures/ssz/vector/valid/uint16_vector3-mixed.json
 fixtures/ssz_type_rejection/vector/invalid/illegal-vector-zero_length.json
 fixtures/ssz_gindex/container/valid/gindex-light_client-altair-finalized_root.json
+fixtures/proof/container/valid/proof-container-flat_field.json
 ```
 
-`<format>` is the fixture format: `ssz` for the byte strings below, `ssz_type_rejection` for the [illegal declarations](#illegal-type-declarations), `ssz_gindex` for the [generalized-index vectors](#generalized-index-vectors), each with an envelope of its own.
+`<format>` is the fixture format: `ssz` for the byte strings below, `ssz_type_rejection` for the [illegal declarations](#illegal-type-declarations), `ssz_gindex` for the [generalized-index vectors](#generalized-index-vectors), and `proof` and `multiproof` for the [Merkle proofs](#proof-vectors) — each with an envelope of its own.
 `<kind>` is the SSZ kind, snake-cased.
 The file name is the case id with each `/` turned into `-`, so `uint16_vector3/mixed` becomes `uint16_vector3-mixed.json`.
 The id is authored and unique, so it survives a rename of the test that fills it.
@@ -196,6 +197,56 @@ An index resolves against the declaration alone. Whether a value reaches that fa
 105 is the index every light client hard-codes for the finalized checkpoint root.
 `chunkCount` and `treeWidth` are why: 24 fields pad to 32 leaves, which puts field 20 at 52 and its second subfield at 105.
 An implementation that pads to 24 instead answers 89, and the two extra fields say so at a glance.
+## Proof vectors
+
+Two more trees sit beside `ssz/`, filled from values of the same kind: `proof/` carries one Merkle branch per case, `multiproof/` several claims proved at once.
+
+Every proof case carries its subject the way an `ssz/` case does — `typeName`, `typeDescriptor`, `serialized`, `value` and `root` — so four things can be checked apart from one another:
+
+1. decode `serialized`, compare against `value`, and hash it: the root must be `root`.
+2. resolve `path` against the type: it must give `index`.
+3. read the node at `index` off your own tree: it must be `leaf`.
+4. hash `leaf` upward with `branch`: it must give `root`.
+
+A verifier that only does the fourth passes on a wrong index, a wrong path resolution and a wrong tree, since a branch built for the wrong node still rebuilds a root.
+
+| Field | Format | Meaning |
+| --- | --- | --- |
+| `path` | proof | Steps from the root down to the node being proved. |
+| `index` | proof | Decimal generalized index those steps resolve to. |
+| `leaf` | proof | The node the vector claims at that index. |
+| `branch` | proof | Sibling nodes from the leaf upward, in the order a verifier consumes them. |
+| `branchIndices` | proof | The index of each of those nodes. |
+| `paths` | multiproof | Steps down to each claimed node. |
+| `indices` | multiproof | Decimal generalized index each of those paths resolves to. |
+| `leaves` | multiproof | The node claimed at each index, one per index, in that order. |
+| `helperIndices` | multiproof | Every node the request needs, in descending order. |
+| `proof` | multiproof | The node for each of those helper indices, in that same order. |
+| `stricterThanSpec` | both | Present only where this suite refuses what `merkle-proofs.md` admits. |
+
+`branchIndices` is redundant with `index`, which already fixes which siblings a branch holds. That is what it is for: it pins the ordering separately from the hashing, so a verifier reading a branch top-down fails on the indices rather than only on a root that came out wrong.
+
+`helperIndices` descending is a contract rather than an artifact. `get_helper_indices` sorts in reverse so that a request for a single index is exactly that index's branch, node for node: `multiproof/container/one_index_is_a_branch` pins that equivalence, and `multiproof/container/spec_worked_example` pins the three nodes `merkle-proofs.md` draws for indices 8, 9 and 14.
+
+An index is decimal digits in a string, like every other integer here, since a generalized index inside a beacon state runs past what a double holds.
+A path step is an object with exactly one key: `field` for a container field, `position` for an element, and `mixin` for a reserved word — `__len__`, `__active_fields__` or `__selector__` — naming a word the root is hashed against.
+
+`valid` is the whole verdict: false says a verifier must not accept this proof.
+`rejectionReason` turns up beside it only where a named refusal has to fire; a case that merely fails to rebuild the root, such as a tampered leaf or a reversed branch, carries none.
+Where a multiproof's index set is refused outright, `helperIndices` and `proof` are empty, no node having been reached.
+
+### Where this suite is stricter than the specification
+
+`merkle-proofs.md` admits five inputs this implementation refuses. Each such case carries `stricterThanSpec`, saying what the specification does instead.
+Read that field before calling one of them a failure: it marks "this repository is stricter here", not "you are wrong". A spec-faithful verifier accepts four of the five and fails the last on a missing root.
+
+| Case | This suite | `merkle-proofs.md` |
+| --- | --- | --- |
+| Index 1 with an empty branch | `ROOT_HAS_NO_BRANCH` | Returns the leaf, which is the root |
+| A 31-byte proof node | `COUNT` | Hashes it, moving the boundary inside the pair |
+| A repeated index | `REPEATED_INDEX` | Keeps the last leaf given for it |
+| An index below another | `NESTED_INDEX` | Rebuilds the higher one, leaving the lower unchecked |
+| An empty index set | `EMPTY_REQUEST` | Reaches the end with no node at index 1 to return |
 
 ## `rejectionReason`
 
@@ -235,6 +286,21 @@ A generalized-index case may instead name a `TypeFault`, since a path is refused
 
 Every name in the two tables above appears in this suite. `OFFSET_OVERFLOW` completes the `ValueFault` vocabulary and needs a composite of at least 4 GiB to fire, so no vector names it.
 The rest of that catalogue covers constructing values and building proofs, which no vector exercises.
+A proof case names one of these instead, refused while the branch or the request was read rather than while bytes were.
+
+| Name | The proof |
+| --- | --- |
+| `BRANCH_LENGTH` | Holds a different number of nodes from the one the index needs. |
+| `COUNT` | Holds a node that is not 32 bytes wide. |
+| `EMPTY_REQUEST` | Is a multiproof asking for no index at all. |
+| `LEAF_COUNT` | Gives a different number of leaves from indices. |
+| `NESTED_INDEX` | Asks for an index lying below another in the same request. |
+| `PROOF_LENGTH` | Holds a different number of nodes from the one the request needs. |
+| `REPEATED_INDEX` | Asks for the same index twice. |
+| `ROOT_HAS_NO_BRANCH` | Is about index 1, which sits on no branch of its own. |
+
+Every name in the two tables above appears in this suite. `OFFSET_OVERFLOW` completes the decoding vocabulary and needs a composite of at least 4 GiB to fire, so no vector names it.
+The rest of the catalogue covers constructing values and walking paths, which no vector exercises.
 
 ## Illegal type declarations
 
@@ -293,6 +359,7 @@ Your implementation agrees with this one. Not that either agrees with the specif
 Every part of a vector comes from the same implementation: its encoder produced `serialized`, its decoder read the bytes back, and `hash_tree_root` produced `root`, which is recorded rather than checked against anything.
 The round-trip catches a decoder that disagrees with its own encoder, not an encoder and decoder that agree on something the specification does not say — a wrong root is recorded as confidently as a right one.
 Invalid cases are checked harder within the same limit: the decoder must raise the fault the author named. The author and the decoder are still the same project.
+A proof case is no different: this implementation resolved the path, read the leaf off its own tree, built the branch and then verified it.
 
 No second implementation has confirmed a byte string or a root here.
 [PR #132](https://github.com/ethereum/ssz-specs/pull/132) adds a Lean implementation cross-checked against this one, and would be the first independent check.
@@ -300,4 +367,5 @@ No second implementation has confirmed a byte string or a root here.
 ## Not covered
 
 - No proof vectors: a generalized index is pinned, the branch that authenticates it is not.
+- No generalized-index vectors of their own: an index is pinned by the proof case that resolves a path to it.
 - No vectors for the JSON mapping itself.

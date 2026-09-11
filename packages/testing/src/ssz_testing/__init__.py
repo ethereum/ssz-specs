@@ -3,6 +3,7 @@
 from typing import Protocol
 
 from ssz.exceptions import TypeFault, ValueFault
+from ssz.paths import PathStep
 from ssz.ssz_base import SSZType
 from ssz_testing.fixtures import (
     BaseTestSpec,
@@ -21,6 +22,14 @@ from ssz_testing.gindex_fixtures import (
     GindexTest,
     MixedInWord,
     MixinStep,
+)
+from ssz_testing.proof_fixtures import (
+    MultiproofFixture,
+    MultiproofMutation,
+    MultiproofTest,
+    ProofFixture,
+    ProofMutation,
+    ProofTest,
 )
 from ssz_testing.serialization import SSZFixture, SSZTest
 from ssz_testing.type_builder import build_declaration
@@ -77,8 +86,52 @@ class GindexTestFiller(Protocol):
         ...
 
 
-FIXTURE_FORMATS: tuple[type[BaseTestSpec], ...] = (SSZTest, TypeRejectionTest, GindexTest)
-"""Every fillable fixture format, named here because a format module cannot name itself."""
+class ProofTestFiller(Protocol):
+    """Type of the proof_test fixture: builds, generates, and collects one Merkle branch."""
+
+    def __call__(
+        self,
+        *,
+        case_id: str,
+        type_name: str,
+        value: SSZType,
+        path: tuple[PathStep, ...] = (),
+        expected_index: int | None = None,
+        mutation: ProofMutation | None = None,
+        stricter_than_spec: str | None = None,
+        expected_rejection: ExpectedRejection | None = None,
+    ) -> ProofFixture:
+        """Build the spec from these fields, generate the vector, and collect it."""
+        ...
+
+
+class MultiproofTestFiller(Protocol):
+    """Type of the multiproof_test fixture: builds, generates, and collects one multiproof."""
+
+    def __call__(
+        self,
+        *,
+        case_id: str,
+        type_name: str,
+        value: SSZType,
+        paths: tuple[tuple[PathStep, ...], ...],
+        expected_indices: tuple[int, ...] | None = None,
+        expected_helper_indices: tuple[int, ...] | None = None,
+        mutation: MultiproofMutation | None = None,
+        stricter_than_spec: str | None = None,
+        expected_rejection: ExpectedRejection | None = None,
+    ) -> MultiproofFixture:
+        """Build the spec from these fields, generate the vector, and collect it."""
+        ...
+
+
+FIXTURE_FORMATS: tuple[type[BaseTestSpec], ...] = (
+    SSZTest,
+    TypeRejectionTest,
+    GindexTest,
+    ProofTest,
+    MultiproofTest,
+)
 
 
 __all__ = [
@@ -95,6 +148,14 @@ __all__ = [
     "GindexTestFiller",
     "MixedInWord",
     "MixinStep",
+    "MultiproofFixture",
+    "MultiproofMutation",
+    "MultiproofTest",
+    "MultiproofTestFiller",
+    "ProofFixture",
+    "ProofMutation",
+    "ProofTest",
+    "ProofTestFiller",
     "SSZFixture",
     "SSZTest",
     "SSZTestFiller",
