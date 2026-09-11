@@ -237,6 +237,7 @@ class SSZType(ABC):
             vector                             the element default, once per position
             container                          one field default per field
             list, bitlist, progressive shapes  empty
+            union                              the first option's own default
             compatible union                   none, and asking for one is an error
 
         A composite builds from its parts, so a part with no default leaves it none.

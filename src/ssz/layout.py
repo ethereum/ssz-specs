@@ -19,7 +19,7 @@ from ssz.exceptions import SSZTypeError, TypeFault
 from ssz.mixins import active_fields_word, length_word, selector_word
 from ssz.ssz_base import SSZModel, SSZType
 from ssz.uint import BaseUint
-from ssz.union import CompatibleUnion
+from ssz.union import CompatibleUnion, Union
 
 
 def _pack_bytes(data: bytes) -> list[bytes]:
@@ -143,6 +143,7 @@ class MerkleLayout:
         List                  elements or packing  bounded by the limit        count
         ProgressiveList       elements or packing  progressive spine           count
         ProgressiveContainer  layout positions     progressive spine           layout
+        Union                 the option it holds  bounded by one              selector
         CompatibleUnion       the option it holds  bounded by one              selector
 
     Stating those steps rather than taking them lets a root and a proof share one rule.
@@ -309,6 +310,12 @@ def _layout_progressive_container(value: ProgressiveContainer) -> MerkleLayout:
         limit=None,
         mixin=word,
     )
+
+
+@merkle_layout.register
+def _layout_union(value: Union) -> MerkleLayout:
+    # A None option roots to the zero chunk, which is the leaf an absent value already gets.
+    return MerkleLayout.nesting((value.data,), limit=1, mixin=selector_word(int(value.selector)))
 
 
 @merkle_layout.register

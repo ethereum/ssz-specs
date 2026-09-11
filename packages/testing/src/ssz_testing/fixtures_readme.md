@@ -2,7 +2,7 @@
 
 Generated from the Python reference implementation in this repository by `just fill`.
 
-400 cases: 280 an implementation must accept, 120 it must refuse.
+421 cases: 292 an implementation must accept, 129 it must refuse.
 Read [what a passing run proves](#what-a-passing-run-proves) before relying on them.
 
 ## Layout
@@ -61,10 +61,12 @@ Read off the declared class. `kind` is always present; the rest depends on it.
 | `ProgressiveList` | `elementType` | `progressive_list` |
 | `Container` | `fields` | `container` |
 | `ProgressiveContainer` | `activeFields`, `fields` | `progressive_container` |
+| `Union` | `options` | `union` |
 | `CompatibleUnion` | `options` | `compatible_union` |
 
 `elementType`, and the `type` of every field and option, are descriptors of their own.
 `fields` (`{"name", "type"}`) and `options` (`{"selector", "type"}`) are arrays, not objects, because SSZ order is load-bearing; `activeFields` is one bit per position.
+A `Union` option carrying no `type` is the empty option, which the specification allows first and encodes as the single byte `0x00`.
 `packages/testing/tests/test_type_descriptor.py` rebuilds each kind from a descriptor alone.
 
 ## How `value` is written
@@ -79,7 +81,7 @@ Read off the declared class. `kind` is always present; the rest depends on it.
 | `Vector[Byte]`, `List[Byte]`, `ProgressiveList[Byte]` | `"0x0102"` |
 | `Vector`, `List`, `ProgressiveList` | `["1", "2"]` |
 | `Container`, `ProgressiveContainer` | `{"side": "1", "color": "2"}` |
-| `CompatibleUnion` | `{"selector": "1", "data": {...}}` |
+| `Union`, `CompatibleUnion` | `{"selector": "1", "data": {...}}` |
 
 An integer is decimal digits in a string, so a 64-bit value survives a parser holding JSON numbers as doubles.
 A bitfield's hex is exactly the bytes it serializes to, delimiter bit included.
@@ -333,6 +335,8 @@ No name appears in both catalogues, so a consumer holding one table of reasons n
 | `NOT_ENTITLED` | Declares a capacity its shape has none of. |
 | `UNION_EMPTY` | Is a union offering no option. |
 | `UNION_INCOMPATIBLE` | Is a union whose options merkleize differently. |
+| `UNION_NONE_ALONE` | Is a union offering the empty option and nothing else. |
+| `UNION_NONE_NOT_FIRST` | Places the empty option anywhere but first. |
 | `UNION_SELECTOR_RANGE` | Gives an option a selector outside 1 through 127. |
 | `VECTOR_EMPTY` | Pins a fixed count of zero. |
 

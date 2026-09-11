@@ -383,8 +383,8 @@ class DeclaredOption(CamelModel):
     selector: int
     """The selector byte an encoding of this option leads with."""
 
-    type: TypeDescriptor
-    """The option's declared type."""
+    type: TypeDescriptor | None = None
+    """The option's declared type, absent where the option is the None of a tagged union."""
 
 
 TypeDescriptor.model_rebuild()
@@ -393,15 +393,21 @@ _TYPE_PARAMETERS: Final = ("BITS", "LENGTH", "LIMIT", "ELEMENT_TYPE", "ACTIVE_FI
 """Everything a declaration fixes its wire format and its tree with, beyond its fields."""
 
 
-def _declared(parameter: Any) -> Any:
+def _declared_options(options: Any) -> list[DeclaredOption]:
+    """A union's options against their selectors, a sequence of them numbered by position."""
+    entries = options.items() if isinstance(options, Mapping) else enumerate(options)
+    return [
+        DeclaredOption(selector=selector, type=None if option is None else describe_type(option))
+        for selector, option in entries
+    ]
+
+
+def _declared(name: str, parameter: Any) -> Any:
     """One type parameter as a descriptor carries it, a nested type recursing into its own."""
+    if name == "OPTIONS":
+        return _declared_options(parameter)
     if isinstance(parameter, type) and issubclass(parameter, SSZType):
         return describe_type(parameter)
-    if isinstance(parameter, Mapping):
-        return [
-            DeclaredOption(selector=selector, type=describe_type(option))
-            for selector, option in parameter.items()
-        ]
     return parameter
 
 
@@ -414,7 +420,7 @@ def describe_type(ssz_type: type[SSZType]) -> TypeDescriptor:
         if base.__module__.split(".")[0] == "ssz" and "[" not in base.__name__
     )
     declared: dict[str, Any] = {
-        name.lower(): _declared(parameter)
+        name.lower(): _declared(name, parameter)
         for name in _TYPE_PARAMETERS
         if (parameter := getattr(ssz_type, name, None)) is not None
     }
