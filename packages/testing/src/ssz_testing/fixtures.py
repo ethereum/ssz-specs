@@ -1,4 +1,4 @@
-"""Fixture formats for SSZ conformance test vectors: input specs and emitted fixtures."""
+"""Bases every fixture format builds on: input specs, emitted fixtures, type declarations."""
 
 import hashlib
 import json
@@ -11,11 +11,8 @@ from typing import Any, ClassVar, Final, Self
 from pydantic import BaseModel, ConfigDict, Field, computed_field, field_serializer
 from pydantic.alias_generators import to_camel
 
-from ssz.base import json_writer
-from ssz.exceptions import SSZError, ValueFault
-from ssz.roots import hash_tree_root
+from ssz.exceptions import SSZError, TypeFault, ValueFault
 from ssz.ssz_base import SSZType
-from ssz_testing.hex_codec import from_hex, to_hex
 
 
 class CamelModel(BaseModel):
@@ -146,8 +143,8 @@ class BaseConsensusFixture(CamelModel):
     info: FixtureInfo | None = Field(default=None, exclude=True)
     """Metadata about the test (description, format, etc.)."""
 
-    rejection_reason: ValueFault | None = None
-    """The fault a negative vector's input is rejected with, and the field clients assert on."""
+    rejection_reason: ValueFault | TypeFault | None = None
+    """The fault a negative vector is rejected with, and the field clients assert on."""
 
     @computed_field
     @property
@@ -156,7 +153,7 @@ class BaseConsensusFixture(CamelModel):
         return self.rejection_reason is None
 
     @field_serializer("rejection_reason", when_used="json-unless-none")
-    def serialize_rejection_reason(self, fault: ValueFault) -> str:
+    def serialize_rejection_reason(self, fault: ValueFault | TypeFault) -> str:
         """Emit the fault's name, its stable tag, rather than the sentence it renders."""
         return fault.name
 
@@ -302,6 +299,10 @@ class BaseTestSpec(CamelModel):
         return expected
 
 
+_CAMEL_WORD_BREAK: Final = re.compile(r"(?<=[a-z0-9])(?=[A-Z])")
+"""Where a CamelCase kind parts into words, leaving the digits of Uint8 attached."""
+
+
 class TypeDescriptor(CamelModel):
     """An SSZ type declaration in the form a consumer rebuilds the type from."""
 
@@ -331,6 +332,11 @@ class TypeDescriptor(CamelModel):
     options: "tuple[DeclaredOption, ...] | None" = None
     """A union's options, each against the selector that names it."""
 
+    @property
+    def directory_name(self) -> str:
+        """The kind this declaration states, spelled as a directory can hold it."""
+        return _CAMEL_WORD_BREAK.sub("_", self.kind).lower()
+
 
 class DeclaredField(CamelModel):
     """One field of a container, against the declaration of what it holds."""
@@ -357,9 +363,6 @@ class DeclaredOption(CamelModel):
 
 
 TypeDescriptor.model_rebuild()
-
-_CAMEL_WORD_BREAK: Final = re.compile(r"(?<=[a-z0-9])(?=[A-Z])")
-"""Where a CamelCase kind parts into words, leaving the digits of Uint8 attached."""
 
 _TYPE_PARAMETERS: Final = ("BITS", "LENGTH", "LIMIT", "ELEMENT_TYPE", "ACTIVE_FIELDS", "OPTIONS")
 """Everything a declaration fixes its wire format and its tree with, beyond its fields."""
@@ -396,132 +399,3 @@ def describe_type(ssz_type: type[SSZType]) -> TypeDescriptor:
             for field_name, field_type in field_types
         ]
     return TypeDescriptor(kind=kind, **declared)
-
-
-class SSZFixture(BaseConsensusFixture):
-    """Emitted vector for SSZ conformance."""
-
-    format_name: ClassVar[str] = "ssz_test"
-
-    type_name: str
-    """SSZ type class name."""
-
-    ssz_type: type[SSZType] = Field(exclude=True)
-    """The declaration the vector is about, which the type name has to stand for."""
-
-    serialized: str
-    """Hex bytes handed to the decoder: the encoding of the value, or the input it must refuse."""
-
-    value: SSZType | None = None
-    """The SSZ value under test, absent on a vector whose bytes decode to no value."""
-
-    root: str | None = None
-    """Hex tree root, absent on a vector whose bytes decode to no value."""
-
-    @field_serializer("value", when_used="json-unless-none")
-    def serialize_value(self, ssz_value: SSZType) -> Any:
-        """Render the value as the SSZ JSON mapping of its own type spells it."""
-        return json_writer(type(ssz_value)).dump_python(ssz_value, mode="json")
-
-    @computed_field
-    @property
-    def type_descriptor(self) -> TypeDescriptor:
-        """The declaration of that type, read off the class so no vector can misstate it."""
-        return describe_type(self.ssz_type)
-
-    def declared_types(self) -> Mapping[str, TypeDescriptor]:
-        """The one name this vector emits, against the declaration it was filled from."""
-        return {self.type_name: self.type_descriptor}
-
-    def case_type_name(self) -> str:
-        """The declared type name this vector is about."""
-        return self.type_name
-
-    def case_kind(self) -> str:
-        """The kind the declaration already states, spelled as a directory can hold it."""
-        return _CAMEL_WORD_BREAK.sub("_", self.type_descriptor.kind).lower()
-
-
-class SSZTest(BaseTestSpec):
-    """Spec for SSZ conformance, running either a roundtrip or a decode-failure check."""
-
-    format_name: ClassVar[str] = "ssz_test"
-    description: ClassVar[str] = "Tests SSZ serialization roundtrip and hash_tree_root"
-
-    type_name: str
-    """SSZ type class name."""
-
-    value: SSZType
-    """
-    The SSZ value under test.
-
-    In decode-failure mode only its class matters, since the class supplies the decoder.
-    """
-
-    raw_bytes: str | None = None
-    """Hex malformed input, consulted only in decode-failure mode."""
-
-    def generate(self) -> SSZFixture:
-        """Verify SSZ roundtrip and re-encoding, or decode-failure, and produce the output."""
-        if self.expected_rejection is not None:
-            return self._generate_decode_failure()
-
-        ssz_bytes = self.value.encode_bytes()
-        decoded = self.value.decode_bytes(ssz_bytes)
-
-        assert decoded == self.value, (
-            f"SSZ roundtrip failed for {self.type_name}: "
-            f"original != decoded\n"
-            f"Original: {self.value}\n"
-            f"Decoded: {decoded}"
-        )
-
-        # Re-encoding an accepted value must reproduce its bytes, or one value has two encodings.
-        reencoded = decoded.encode_bytes()
-        assert reencoded == ssz_bytes, (
-            f"SSZ encoding is not canonical for {self.type_name}: "
-            f"re-encoding the decoded value gave other bytes\n"
-            f"Encoded: {to_hex(ssz_bytes)}\n"
-            f"Re-encoded: {to_hex(reencoded)}"
-        )
-
-        root = hash_tree_root(self.value)
-
-        return SSZFixture(
-            type_name=self.type_name,
-            ssz_type=type(self.value),
-            serialized=to_hex(ssz_bytes),
-            value=self.value,
-            root=to_hex(root),
-        )
-
-    def _generate_decode_failure(self) -> SSZFixture:
-        """
-        Assert decoding the malformed bytes raises, and emit the type, those bytes and the fault.
-
-        Nothing decoded, so the vector carries no value and no root to compare against.
-        """
-        if self.raw_bytes is None:
-            raise ValueError("raw_bytes is required when expected_rejection is set")
-
-        raw = from_hex(self.raw_bytes)
-        decoder = type(self.value)
-        exception_raised: SSZError[Any] | None = None
-        try:
-            decoder.decode_bytes(raw)
-        # Only an SSZ refusal is a vector; anything else is a bug, and crashes the fill.
-        except SSZError as exception:
-            exception_raised = exception
-
-        return SSZFixture(
-            type_name=self.type_name,
-            ssz_type=decoder,
-            serialized=to_hex(raw),
-            rejection_reason=self.assert_decode_rejection(
-                exception_raised, f"{decoder.__name__}.decode_bytes"
-            ),
-        )
-
-
-FIXTURE_FORMATS: tuple[type[BaseTestSpec], ...] = (SSZTest,)
-"""Canonical registry of every SSZ fixture format; add a class here to make it fillable."""
