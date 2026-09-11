@@ -1,21 +1,24 @@
 """Tests for the Vector and List types."""
 
 import io
+from itertools import accumulate
 from typing import Any, cast
 
 import pytest
 from hypothesis import given, strategies as st
 from pydantic import BaseModel, ValidationError
 
-from ssz import Uint8, Uint16, Uint32, Uint64
+from ssz import Byte, Uint8, Uint16, Uint32, Uint64
 from ssz.boolean import Boolean
-from ssz.byte_arrays import ByteVector
-from ssz.collections import List, ProgressiveList, Vector
+from ssz.byte_arrays import ByteList, ByteVector
+from ssz.chunks import BYTES_PER_CHUNK
+from ssz.collections import List, ProgressiveByteList, ProgressiveList, Vector
 from ssz.container import Container
 from ssz.exceptions import (
     SSZTypeError,
     SSZValueError,
 )
+from ssz.roots import hash_tree_root
 from ssz.ssz_base import SSZType
 from ssz.union import CompatibleUnion
 
@@ -24,6 +27,12 @@ class Bytes32(ByteVector):
     """A 32-byte array, as applications typically define for roots and hashes."""
 
     LENGTH = 32
+
+
+class ByteList8(ByteList):
+    """A byte list capped at eight bytes, the bounded shape a progressive one encodes like."""
+
+    LIMIT = 8
 
 
 ValueOrValidationError = (SSZValueError, ValidationError)
@@ -1562,6 +1571,103 @@ class TestProgressiveListSerialization:
         assert written == len(stream.getvalue())
         stream.seek(0)
         assert NestedProgressiveList.deserialize(stream, scope=written) == instance
+
+
+SPINE_BOUNDARY_BYTE_COUNTS = tuple(
+    count
+    for chunks in accumulate(4**level for level in range(3))
+    for count in (chunks * BYTES_PER_CHUNK, chunks * BYTES_PER_CHUNK + 1)
+)
+"""Byte counts either side of a spine level closing: 32, 33, 160, 161, 672 and 673."""
+
+
+class TestProgressiveByteList:
+    """The name EIP-7916 gives a progressive list of the opaque byte."""
+
+    def test_the_name_stands_for_the_parametrized_shape_itself(self) -> None:
+        """One shape under two spellings, so a value built under either is the same value."""
+        assert ProgressiveByteList is ProgressiveList[Byte]
+        assert ProgressiveByteList.ELEMENT_TYPE is Byte
+
+    def test_no_capacity_is_declared(self) -> None:
+        """A progressive shape bounds nothing, so every byte count validates."""
+        assert ProgressiveByteList.LENGTH is None
+        assert ProgressiveByteList.LIMIT is None
+        assert len(ProgressiveByteList(data=cast(Any, list(range(256)) * 4))) == 1024
+
+    def test_raw_byte_values_are_coerced(self) -> None:
+        """Plain integers are read as the bytes they stand for."""
+        instance = ProgressiveByteList(data=cast(Any, [0xDE, 0xAD]))
+
+        assert list(instance) == [Byte(0xDE), Byte(0xAD)]
+
+    def test_the_hex_string_the_mapping_writes_is_read_back(self) -> None:
+        """The mapping writes one hex string, so construction accepts one."""
+        assert ProgressiveByteList(data=cast(Any, "0xdead")) == ProgressiveByteList(
+            data=cast(Any, [0xDE, 0xAD])
+        )
+
+    def test_the_default_holds_no_bytes(self) -> None:
+        """The spec's default for every progressive shape is the empty one."""
+        assert len(ProgressiveByteList()) == 0
+
+    def test_the_mapping_writes_one_bare_hex_string(self) -> None:
+        """Opaque bytes render as their own encoding, not as a list of numbers."""
+        instance = ProgressiveByteList(data=cast(Any, [0xDE, 0xAD, 0xBE, 0xEF]))
+
+        assert instance.model_dump(mode="json") == "0xdeadbeef"
+
+    def test_the_encoding_is_the_bytes_themselves(self) -> None:
+        """Fixed-size elements pack back-to-back, and a byte is one byte wide."""
+        instance = ProgressiveByteList(data=cast(Any, [0xDE, 0xAD, 0xBE, 0xEF]))
+
+        assert instance.encode_bytes() == b"\xde\xad\xbe\xef"
+
+    def test_the_encoding_matches_a_bounded_byte_list(self) -> None:
+        """A byte payload encodes the same whether or not the shape bounds how many fit."""
+        payload = b"\xde\xad\xbe\xef"
+        progressive = ProgressiveByteList(data=cast(Any, list(payload)))
+
+        assert progressive.encode_bytes() == ByteList8(data=payload).encode_bytes()
+
+    def test_decoding_recovers_every_byte(self) -> None:
+        """The payload is the value, byte for byte, with no length prefix to strip."""
+        payload = b"\xde\xad\xbe\xef"
+
+        assert ProgressiveByteList.decode_bytes(payload) == ProgressiveByteList(
+            data=cast(Any, list(payload))
+        )
+
+    @given(st.binary(min_size=0, max_size=300))
+    def test_round_trip_random_bytes(self, payload: bytes) -> None:
+        """Any byte string decodes to a value that encodes back to the very same bytes."""
+        assert ProgressiveByteList.decode_bytes(payload).encode_bytes() == payload
+
+    def test_a_raw_byte_string_is_refused(self) -> None:
+        """Iterating a byte string yields integers, which is not the element input asked for."""
+        with pytest.raises(TypeOrValidationError) as exception_info:
+            ProgressiveByteList(data=cast(Any, b"\xde\xad"))
+        assert str(exception_info.value) == "expected iterable of Byte, got bytes"
+
+    def test_a_value_past_a_byte_is_refused(self) -> None:
+        """Eight bits is the whole range, so 256 belongs to no byte."""
+        with pytest.raises(ValueOrValidationError):
+            ProgressiveByteList(data=cast(Any, [256]))
+
+    def test_an_unrelated_element_class_is_refused(self) -> None:
+        """Nothing but a byte, or an integer standing for one, may take an element position."""
+        with pytest.raises(TypeOrValidationError) as exception_info:
+            ProgressiveByteList(data=cast(Any, [1, "bad"]))
+        assert str(exception_info.value) == "expected Byte, got str"
+
+    @pytest.mark.parametrize("byte_count", SPINE_BOUNDARY_BYTE_COUNTS)
+    def test_the_spine_is_the_one_the_uint8_spelling_builds(self, byte_count: int) -> None:
+        """A byte and an eight-bit number pack alike, so renaming the element moves no chunk."""
+        values = [index % 256 for index in range(byte_count)]
+
+        assert hash_tree_root(ProgressiveByteList(data=cast(Any, values))) == hash_tree_root(
+            Uint8ProgressiveList(data=cast(Any, values))
+        )
 
 
 class TestSequenceDefaults:

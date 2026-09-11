@@ -8,6 +8,7 @@ from ssz import (
     BitList,
     BitVector,
     Boolean,
+    Byte,
     ByteList,
     ByteVector,
     CompatibleUnion,
@@ -22,6 +23,7 @@ from ssz import (
 
 BASES: Final[Mapping[str, type[SSZType]]] = {
     "Boolean": Boolean,
+    "Byte": Byte,
     "BitVector": BitVector,
     "BitList": BitList,
     "ProgressiveBitList": ProgressiveBitList,
@@ -34,7 +36,7 @@ BASES: Final[Mapping[str, type[SSZType]]] = {
     "ProgressiveContainer": ProgressiveContainer,
     "CompatibleUnion": CompatibleUnion,
 }
-"""The base each descriptor kind names, an unsigned integer being spelled by its width instead."""
+"""Every kind that names a base of its own, the rest being unsigned integers of a width."""
 
 
 def build_declaration(descriptor: Mapping[str, Any], type_name: str | None = None) -> type[SSZType]:
@@ -51,8 +53,10 @@ def build_declaration(descriptor: Mapping[str, Any], type_name: str | None = Non
     name = type_name or descriptor["kind"]
     body: dict[str, Any] = {"__module__": "consumer"}
 
-    # An unsigned integer is the one kind named by its width rather than by a base of its own.
-    if "bits" in descriptor:
+    # A kind naming no base of its own is an unsigned integer, spelled by its width alone.
+    # The opaque byte is not one of those: only its own base spells the hex string it renders as.
+    base = BASES.get(descriptor["kind"])
+    if base is None:
         return type(name, (BaseUint,), body | {"BITS": descriptor["bits"]})
 
     if "length" in descriptor:
@@ -73,4 +77,4 @@ def build_declaration(descriptor: Mapping[str, Any], type_name: str | None = Non
         body["__annotations__"] = {
             field["name"]: build_declaration(field["type"]) for field in descriptor["fields"]
         }
-    return type(name, (BASES[descriptor["kind"]],), body)
+    return type(name, (base,), body)

@@ -14,6 +14,7 @@ from ssz import (
     Container,
     List,
     ProgressiveBitList,
+    ProgressiveByteList,
     ProgressiveContainer,
     ProgressiveList,
     SSZType,
@@ -23,6 +24,7 @@ from ssz import (
     Vector,
     hash_tree_root,
 )
+from ssz.base import json_writer
 from ssz_testing.hex_codec import from_hex, to_hex
 from ssz_testing.serialization import SSZTest
 from ssz_testing.type_builder import build_declaration
@@ -89,6 +91,7 @@ SAMPLE_VALUES: Final = (
     SampleBitVector9(data=[Boolean(bit) for bit in (1, 0, 1, 0, 1, 0, 1, 0, 1)]),
     SampleBitList16(data=[Boolean(bit) for bit in (1, 1, 0, 1, 1)]),
     ProgressiveBitList(data=[Boolean(bit) for bit in (1, 0, 1)]),
+    ProgressiveByteList(data=[0xDE, 0xAD, 0xBE, 0xEF]),
     SampleBytes4Vector2(data=[Bytes4(b"abcd"), Bytes4(b"efgh")]),
     SampleSquareList4(data=[SampleSquare(side=Uint16(3), color=Uint8(4))]),
     SampleSquareProgressiveList(data=[SampleSquare(side=Uint16(5), color=Uint8(6))] * 3),
@@ -104,7 +107,7 @@ SAMPLE_VALUES: Final = (
 
 @pytest.mark.parametrize("value", SAMPLE_VALUES, ids=lambda value: type(value).__name__)
 def test_a_consumer_rebuilds_the_type_from_the_descriptor_alone(value: SSZType) -> None:
-    """The rebuilt type decodes the vector's bytes back to the same encoding and the same root."""
+    """The rebuilt type reproduces the vector's encoding, its root, and its JSON mapping."""
     emitted = SSZTest(type_name=type(value).__name__, value=value).generate().json_dict
 
     rebuilt = build_declaration(emitted["typeDescriptor"], emitted["typeName"])
@@ -112,3 +115,4 @@ def test_a_consumer_rebuilds_the_type_from_the_descriptor_alone(value: SSZType) 
 
     assert to_hex(decoded.encode_bytes()) == emitted["serialized"]
     assert to_hex(hash_tree_root(decoded)) == emitted["root"]
+    assert json_writer(rebuilt).dump_python(decoded, mode="json") == emitted["value"]

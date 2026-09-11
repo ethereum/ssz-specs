@@ -659,3 +659,7 @@ class ProgressiveList[T: SSZType](_SSZList[T]):
             raise SSZTypeError(TypeFault.NOT_ENTITLED, type=cls.__name__, capacity="LENGTH")
         if cls.LIMIT is not None:
             raise SSZTypeError(TypeFault.NOT_ENTITLED, type=cls.__name__, capacity="LIMIT")
+
+
+ProgressiveByteList = ProgressiveList[Byte]
+"""Progressive sequence of opaque bytes, the name EIP-7916 gives a progressive list of byte."""
