@@ -1,5 +1,6 @@
-"""What the fill command finds, and what it hands the pytest it starts."""
+"""What the fill command finds, what it hands the pytest it starts, and where the export lands."""
 
+import json
 import subprocess
 import sys
 from pathlib import Path
@@ -8,6 +9,8 @@ import pytest
 from click.testing import CliRunner
 
 from ssz_testing import cli
+from ssz_testing.plugin import FIXTURE_FORMAT_VERSION
+from ssz_testing.ssz_generic import SUITE_ROOT
 
 FILL_INI = Path(cli.__file__).parent / "pytest_ini_files" / "pytest-fill.ini"
 
@@ -95,3 +98,75 @@ def test_the_command_exits_with_the_code_pytest_returned(
     )
 
     assert CliRunner().invoke(cli.fill, []).exit_code == 1
+
+
+def write_filled_tree(root: Path) -> Path:
+    """A filled tree of one case, in the shape the export command reads."""
+    source = root / "fixtures"
+    case = source / "ssz" / "uint8" / "valid" / "uint8-max.json"
+    case.parent.mkdir(parents=True)
+    case.write_text(
+        json.dumps(
+            {
+                "typeName": "Uint8",
+                "serialized": "0xff",
+                "value": "255",
+                "root": "0xff" + "00" * 31,
+                "valid": True,
+                "typeDescriptor": {"kind": "Uint8", "bits": 8},
+            }
+        ),
+        encoding="utf-8",
+    )
+    (source / "index.json").write_text(
+        json.dumps({"cases": [{"id": "uint8/max", "path": "ssz/uint8/valid/uint8-max.json"}]}),
+        encoding="utf-8",
+    )
+    (source / "manifest.json").write_text(
+        json.dumps({"formatVersion": FIXTURE_FORMAT_VERSION, "specVersion": "0.0.0"}),
+        encoding="utf-8",
+    )
+    return source
+
+
+def test_the_export_lands_beside_the_vectors_it_was_read_from(workspace: Path) -> None:
+    """Both paths resolve against the workspace root, so the command means the same anywhere."""
+    write_filled_tree(workspace)
+
+    result = CliRunner().invoke(cli.export_ssz_generic, [])
+
+    assert result.exit_code == 0
+    assert "1 cases exported" in result.output
+    exported = workspace / "fixtures-ssz-generic" / SUITE_ROOT / "uints" / "valid"
+    assert (exported / "uint_8_uint8_max" / "value.yaml").read_text(encoding="utf-8") == "255\n"
+
+
+def test_an_output_directory_the_workspace_does_not_contain_is_refused(workspace: Path) -> None:
+    """--clean removes the whole tree, so a path reaching outside the root is refused."""
+    write_filled_tree(workspace)
+    elsewhere = workspace.parent / "not-the-workspace"
+    elsewhere.mkdir()
+    (elsewhere / "irreplaceable.txt").write_text("keep me", encoding="utf-8")
+
+    refused = CliRunner().invoke(cli.export_ssz_generic, ["--clean", "-o", str(elsewhere)])
+
+    assert refused.exit_code == 2
+    assert (elsewhere / "irreplaceable.txt").exists()
+
+    # The root itself holds the workspace, so it is refused for the same reason.
+    assert CliRunner().invoke(cli.export_ssz_generic, ["--clean", "-o", "."]).exit_code == 2
+
+
+def test_an_existing_export_is_never_written_over(workspace: Path) -> None:
+    """An export is replaced only when --clean asks for it, and then nothing of it survives."""
+    write_filled_tree(workspace)
+    leftover = workspace / "fixtures-ssz-generic" / "leftover.txt"
+    leftover.parent.mkdir()
+    leftover.write_text("from an older export", encoding="utf-8")
+
+    refused = CliRunner().invoke(cli.export_ssz_generic, [])
+    assert refused.exit_code == 2
+    assert leftover.exists()
+
+    assert CliRunner().invoke(cli.export_ssz_generic, ["--clean"]).exit_code == 0
+    assert not leftover.exists()

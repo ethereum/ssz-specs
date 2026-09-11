@@ -59,6 +59,11 @@ lock-check:
 fill *args:
     SSZ_PARANOID_ROOTS=1 uv run --locked --group test fill --clean "$@"
 
+# Export the filled vectors as the ssz_generic tree a consensus-spec-tests harness reads
+[group('fill')]
+export-ssz-generic *args:
+    uv run --locked --group test export-ssz-generic --clean "$@"
+
 # Run unit tests in parallel, over every path testpaths names
 [group('tests')]
 test *args:
@@ -85,10 +90,10 @@ test-cov-gate *args:
 build:
     uv build
 
-# Fill vectors and package them as a versioned, deterministic release tarball
+# Fill vectors and package them as versioned, deterministic release tarballs
 # (requires GNU tar and sha256sum; on macOS: brew install gnu-tar coreutils)
 [group('release')]
-pack-fixtures tag: fill
+pack-fixtures tag: fill export-ssz-generic
     #!/usr/bin/env bash
     set -euo pipefail
     TAR=tar
@@ -98,11 +103,15 @@ pack-fixtures tag: fill
         TAR=gtar
         command -v sha256sum >/dev/null || SHA256="shasum -a 256"
     fi
-    "$TAR" --sort=name --owner=0 --group=0 --numeric-owner \
-        --mtime='@0' --mode='go-w,a+rX' --format=gnu \
-        --use-compress-program='gzip --no-name' \
-        --create --file="ssz-test-vectors-{{tag}}.tar.gz" fixtures
-    $SHA256 "ssz-test-vectors-{{tag}}.tar.gz" > "ssz-test-vectors-{{tag}}.tar.gz.sha256"
+    pack() {
+        "$TAR" --sort=name --owner=0 --group=0 --numeric-owner \
+            --mtime='@0' --mode='go-w,a+rX' --format=gnu \
+            --use-compress-program='gzip --no-name' \
+            --create --file="$1.tar.gz" "$2"
+        $SHA256 "$1.tar.gz" > "$1.tar.gz.sha256"
+    }
+    pack "ssz-test-vectors-{{tag}}" fixtures
+    pack "ssz-generic-{{tag}}" fixtures-ssz-generic
 
 # Remove worktrees and branches whose pull request is already merged
 #

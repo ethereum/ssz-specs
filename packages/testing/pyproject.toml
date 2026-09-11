@@ -36,12 +36,18 @@ Issues = "https://github.com/ethereum/ssz-specs/issues"
 # No pytest11 entry point on purpose: autoloading would make every pytest run rmtree fixtures/.
 [project.scripts]
 fill = "ssz_testing.cli:fill"
+export-ssz-generic = "ssz_testing.cli:export_ssz_generic"
 
 [tool.setuptools.packages.find]
 where = ["src"]
 
 [tool.setuptools.package-data]
-ssz_testing = ["py.typed", "pytest_ini_files/*.ini", "fixtures_readme.md"]
+ssz_testing = [
+    "py.typed",
+    "pytest_ini_files/*.ini",
+    "fixtures_readme.md",
+    "ssz_generic_readme.md",
+]
 
 [tool.uv.sources]
 eth-ssz-specs = { workspace = true }

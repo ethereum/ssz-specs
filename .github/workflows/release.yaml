@@ -135,6 +135,8 @@ jobs:
           path: |
             ssz-test-vectors-${{ needs.setup.outputs.tag }}.tar.gz
             ssz-test-vectors-${{ needs.setup.outputs.tag }}.tar.gz.sha256
+            ssz-generic-${{ needs.setup.outputs.tag }}.tar.gz
+            ssz-generic-${{ needs.setup.outputs.tag }}.tar.gz.sha256
           if-no-files-found: error
 
   build:

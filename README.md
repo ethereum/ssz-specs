@@ -10,10 +10,11 @@ This project uses [`uv`](https://docs.astral.sh/uv/) and
 [`just`](https://just.systems/).
 
 ```bash
-just check  # Run code quality checks
-just fix    # Run code quality fixers
-just test   # Run unit tests
-just fill   # Generate reference tests
+just check                # Run code quality checks
+just fix                  # Run code quality fixers
+just test                 # Run unit tests
+just fill                 # Generate reference tests
+just export-ssz-generic   # Rewrite them as an ssz_generic tree
 ```
 
 ## Tests
@@ -47,6 +48,18 @@ curl -sSLO "https://github.com/ethereum/ssz-specs/releases/download/$TAG/ssz-tes
 curl -sSLO "https://github.com/ethereum/ssz-specs/releases/download/$TAG/ssz-test-vectors-$TAG.tar.gz.sha256"
 sha256sum --check "ssz-test-vectors-$TAG.tar.gz.sha256"
 tar -xzf "ssz-test-vectors-$TAG.tar.gz"   # extracts fixtures/
+```
+
+A second asset carries part of the same suite in the layout of the `ssz_generic`
+tests consensus-specs deleted, so a harness written for those runs this suite with no
+new consumer code. It covers the handlers that suite ever published data for, which is
+131 of the 353 cases; `fixtures-ssz-generic/README.md` says which and why.
+
+```bash
+curl -sSLO "https://github.com/ethereum/ssz-specs/releases/download/$TAG/ssz-generic-$TAG.tar.gz"
+curl -sSLO "https://github.com/ethereum/ssz-specs/releases/download/$TAG/ssz-generic-$TAG.tar.gz.sha256"
+sha256sum --check "ssz-generic-$TAG.tar.gz.sha256"
+tar -xzf "ssz-generic-$TAG.tar.gz"        # extracts fixtures-ssz-generic/
 ```
 
 ## Types

@@ -17,6 +17,7 @@ just fill                                   # generate every vector into fixture
 uv run --group test fill --clean            # same thing, without just
 uv run --group test fill tests/fillers/ssz  # fill a single directory
 uv run --group test fill --collect-only     # preview, writing and removing nothing
+just export-ssz-generic                     # rewrite them as an ssz_generic tree
 ```
 
 The package's own tests run with the rest of the suite, from the workspace root:
@@ -53,7 +54,9 @@ src/ssz_testing/
   fixtures.py          # fixture formats: input specs and emitted vectors
   hex_codec.py         # 0x-prefixed hex helpers
   plugin.py            # pytest plugin: collection, generation, writing
-  cli.py               # the `fill` command
+  ssz_generic.py       # the ssz_generic view of a filled tree
+  snappy.py            # the block encoding that view publishes bytes under
+  cli.py               # the `fill` and `export-ssz-generic` commands
   pytest_ini_files/    # pytest config used by the fill command
 tests/                 # the package's own tests
 ```

@@ -1,11 +1,14 @@
-"""CLI command for generating SSZ conformance test fixtures."""
+"""CLI commands for generating SSZ conformance test fixtures and exporting them."""
 
+import shutil
 import subprocess
 import sys
 from collections.abc import Sequence
 from pathlib import Path
 
 import click
+
+from ssz_testing.ssz_generic import export
 
 
 def find_workspace_root() -> Path:
@@ -73,3 +76,52 @@ def fill(
 
     exit_code = subprocess.run([sys.executable, "-m", "pytest", *args]).returncode
     sys.exit(exit_code)
+
+
+@click.command()
+@click.option(
+    "--source",
+    "-s",
+    default="fixtures",
+    help="Directory holding the filled JSON vectors",
+)
+@click.option(
+    "--output",
+    "-o",
+    default="fixtures-ssz-generic",
+    help="Output directory for the exported tree",
+)
+@click.option(
+    "--clean",
+    is_flag=True,
+    help="Clean output directory before exporting",
+)
+def export_ssz_generic(source: str, output: str, clean: bool) -> None:
+    """
+    Export the filled vectors as the ssz_generic tree consensus-specs used to publish.
+
+    Raises:
+        UsageError: When the output directory is not one inside the workspace.
+        UsageError: When the output directory exists and cleaning was not asked for.
+    """
+    workspace_root = find_workspace_root().resolve()
+    destination = (workspace_root / output).resolve()
+
+    # --clean removes the whole tree, so a path the workspace does not contain is refused.
+    if not destination.is_relative_to(workspace_root) or destination == workspace_root:
+        raise click.UsageError(
+            f"Output directory '{destination}' must be a directory under '{workspace_root}'."
+        )
+    if destination.exists():
+        if not clean:
+            raise click.UsageError(
+                f"Output directory '{destination}' is not empty. Use --clean to remove it "
+                "or specify a different output directory."
+            )
+        shutil.rmtree(destination)
+
+    manifest = export((workspace_root / source).resolve(), destination)
+    click.echo(
+        f"{len(manifest['exported'])} cases exported to {destination}, "
+        f"{len(manifest['skipped'])} read by no ssz_generic handler"
+    )
