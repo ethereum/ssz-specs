@@ -12,6 +12,16 @@ from ssz_testing.fixtures import (
     TypeDescriptor,
     describe_type,
 )
+from ssz_testing.gindex_fixtures import (
+    ELEMENT_COUNT_STEP,
+    FIELD_LAYOUT_STEP,
+    TYPE_SELECTOR_STEP,
+    GindexFixture,
+    GindexPathStep,
+    GindexTest,
+    MixedInWord,
+    MixinStep,
+)
 from ssz_testing.serialization import SSZFixture, SSZTest
 from ssz_testing.type_builder import build_declaration
 from ssz_testing.type_rejections import TypeRejectionFixture, TypeRejectionTest
@@ -50,15 +60,41 @@ class TypeRejectionFiller(Protocol):
         ...
 
 
-FIXTURE_FORMATS: tuple[type[BaseTestSpec], ...] = (SSZTest, TypeRejectionTest)
+class GindexTestFiller(Protocol):
+    """Type of the ssz_gindex_test fixture: builds, generates, and collects a gindex vector."""
+
+    def __call__(
+        self,
+        *,
+        case_id: str,
+        type_name: str,
+        ssz_type: type[SSZType],
+        path: tuple[GindexPathStep, ...] = (),
+        gindex: int | None = None,
+        refusal: TypeFault | ValueFault | None = None,
+    ) -> GindexFixture:
+        """Build the spec from these fields, generate the vector, and collect it."""
+        ...
+
+
+FIXTURE_FORMATS: tuple[type[BaseTestSpec], ...] = (SSZTest, TypeRejectionTest, GindexTest)
 """Every fillable fixture format, named here because a format module cannot name itself."""
 
 
 __all__ = [
+    "ELEMENT_COUNT_STEP",
+    "FIELD_LAYOUT_STEP",
     "FIXTURE_FORMATS",
+    "TYPE_SELECTOR_STEP",
     "DeclaredField",
     "DeclaredOption",
     "ExpectedRejection",
+    "GindexFixture",
+    "GindexPathStep",
+    "GindexTest",
+    "GindexTestFiller",
+    "MixedInWord",
+    "MixinStep",
     "SSZFixture",
     "SSZTest",
     "SSZTestFiller",

@@ -2,20 +2,21 @@
 
 Generated from the Python reference implementation in this repository by `just fill`.
 
-293 cases: 199 an implementation must accept, 94 it must refuse.
+329 cases: 225 an implementation must accept, 104 it must refuse.
 Read [what a passing run proves](#what-a-passing-run-proves) before relying on them.
 
 ## Layout
 
-One case is one file.
+One case is one file, filed under the format that produced it.
 
 ```
 fixtures/<format>/<kind>/<valid|invalid>/<case id>.json
 fixtures/ssz/vector/valid/uint16_vector3-mixed.json
 fixtures/ssz_type_rejection/vector/invalid/illegal-vector-zero_length.json
+fixtures/ssz_gindex/container/valid/gindex-light_client-altair-finalized_root.json
 ```
 
-`<format>` is the fixture format: `ssz` for the byte strings below, `ssz_type_rejection` for the declarations at the end.
+`<format>` is the fixture format: `ssz` for the byte strings below, `ssz_type_rejection` for the [illegal declarations](#illegal-type-declarations), `ssz_gindex` for the [generalized-index vectors](#generalized-index-vectors), each with an envelope of its own.
 `<kind>` is the SSZ kind, snake-cased.
 The file name is the case id with each `/` turned into `-`, so `uint16_vector3/mixed` becomes `uint16_vector3-mixed.json`.
 The id is authored and unique, so it survives a rename of the test that fills it.
@@ -125,6 +126,77 @@ An invalid case carries nothing beyond the refusal:
 }
 ```
 
+## Generalized-index vectors
+
+A case under `ssz_gindex/` asks a different question: not what a type's bytes are, but where in its Merkle tree one value sits.
+There are no bytes and no value, only a type, a path, and the generalized index that path names.
+
+| Field | Present | Meaning |
+| --- | --- | --- |
+| `valid` | always | Whether the type resolves this path at all. |
+| `typeName` | always | Class name the type was declared under. |
+| `typeDescriptor` | always | That type's declaration, in full, exactly as an `ssz` case carries it. |
+| `path` | always | The steps from the type's own root down to the node. |
+| `gindex` | valid | The generalized index, in decimal, as a string. |
+| `depth` | valid | Levels that index sits below the root, which is the node count of its proof branch. |
+| `chunkCount` | bounded shapes | Leaves the type merkleizes into at its own level. |
+| `treeWidth` | bounded shapes | Power of two those leaves pad out to. |
+| `rejectionReason` | invalid | The name the type must refuse the path with. |
+
+`gindex` is a decimal string for the same reason every integer in a `value` is: a deep path outgrows the 53 bits a JSON number is safely read into.
+`depth` is `gindex.bit_length() - 1` and `treeWidth` is `chunkCount` rounded up to a power of two, so both are redundant on purpose — an implementation whose index is wrong reads off *which* number it got wrong rather than only that the answer mismatched.
+
+`chunkCount` and `treeWidth` describe the declared type, not the path, and are absent for a progressive shape, which grows with its data and pads to nothing.
+A `CompatibleUnion` reports one chunk: an option is reached whole through the root's left child, and the union contributes no leaf of its own.
+
+### How a path is written
+
+A path is a JSON array, and the type of each element says what kind of step it is.
+
+| Step | Selects |
+| --- | --- |
+| a string | The field of that name, on a `Container` or a `ProgressiveContainer`. |
+| an integer | The element at that position — or, on a `CompatibleUnion`, the option with that selector. |
+| `{"mixin": ...}` | One of the three words a root is hashed against. It ends the path. |
+
+The three words are `elementCount` (what a `List`, `ByteList`, `BitList`, `ProgressiveList` or `ProgressiveBitList` mixes in), `fieldLayout` (a `ProgressiveContainer`'s active fields) and `typeSelector` (a `CompatibleUnion`'s selector).
+Each is wrapped in an object rather than spelled as a bare string, so that no field name can ever be mistaken for one.
+
+```json
+["f20", "root"]
+[3]
+[{"mixin": "elementCount"}]
+[1, "color"]
+```
+
+### Running a case
+
+1. Build the type from `typeDescriptor`.
+2. Resolve `path` against it.
+3. For a valid case, compare the index against `gindex`; for an invalid one, require a failure naming `rejectionReason`.
+
+An index resolves against the declaration alone. Whether a value reaches that far — whether a progressive list is that long, or a gap holds a node — is a question only a value answers, and no case here asks it.
+
+### A worked example
+
+`fixtures/ssz_gindex/container/valid/gindex-light_client-altair-finalized_root.json`, with `typeDescriptor` and `_info` trimmed:
+
+```json
+{
+    "typeName": "GindexAltairState",
+    "path": ["f20", "root"],
+    "gindex": "105",
+    "depth": 6,
+    "valid": true,
+    "chunkCount": 24,
+    "treeWidth": 32
+}
+```
+
+105 is the index every light client hard-codes for the finalized checkpoint root.
+`chunkCount` and `treeWidth` are why: 24 fields pad to 32 leaves, which puts field 20 at 52 and its second subfield at 105.
+An implementation that pads to 24 instead answers 89, and the two extra fields say so at a glance.
+
 ## `rejectionReason`
 
 The name of a `ValueFault` member in `src/ssz/exceptions.py`. The catalogue is closed, so fail loudly on a name you do not know rather than skipping the case.
@@ -150,8 +222,19 @@ The name is stable; the sentence rendered from it is not, and is never emitted.
 | `TRUNCATED` | Ran out while a value was being read. |
 | `UNKNOWN_SELECTOR` | Names a selector the union declares no option for. |
 
-Every name above appears in this suite. `OFFSET_OVERFLOW` completes the vocabulary and needs a composite of at least 4 GiB to fire, so no vector names it.
-The rest of the catalogue covers constructing values, walking paths and proofs, which no vector exercises.
+A generalized-index case may instead name a `TypeFault`, since a path is refused by the type as often as by one of its steps. Both catalogues are closed, and a name from either is a hard failure if you do not know it.
+
+| Name | The path |
+| --- | --- |
+| `NO_MIXIN` | Names a word this shape does not mix in. |
+| `NO_PARTS` | Carries on past a basic value, which is a run of bytes inside a chunk and no node of its own. |
+| `NO_PARTS_MIXIN` | Carries on past a mixed-in word, which is one leaf. |
+| `NO_SUCH_FIELD` | Names a field the struct does not declare — a vacant layout position among them. |
+| `NO_SUCH_OPTION` | Names a selector the union declares no option for. |
+| `NO_SUCH_POSITION` | Names a position outside what the shape declares, `-1` included. |
+
+Every name in the two tables above appears in this suite. `OFFSET_OVERFLOW` completes the `ValueFault` vocabulary and needs a composite of at least 4 GiB to fire, so no vector names it.
+The rest of that catalogue covers constructing values and building proofs, which no vector exercises.
 
 ## Illegal type declarations
 
@@ -186,7 +269,7 @@ No name appears in both catalogues, so a consumer holding one table of reasons n
 | `UNION_SELECTOR_RANGE` | Gives an option a selector outside 1 through 127. |
 | `VECTOR_EMPTY` | Pins a fixed count of zero. |
 
-The rest of the `TypeFault` catalogue is about this implementation's own Python machinery — a string handed in where an integer was declared, a width asked of a type that has none — which another language cannot fail and no vector names.
+Beyond these and the path refusals above, the `TypeFault` catalogue is about this implementation's own Python machinery — a string handed in where an integer was declared, a width asked of a type that has none — which another language cannot fail and no vector names.
 
 ## `_info`
 
@@ -216,5 +299,5 @@ No second implementation has confirmed a byte string or a root here.
 
 ## Not covered
 
-- No proof or generalized-index vectors, though the implementation carries both.
+- No proof vectors: a generalized index is pinned, the branch that authenticates it is not.
 - No vectors for the JSON mapping itself.

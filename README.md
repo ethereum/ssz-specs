@@ -27,6 +27,10 @@ that holds JSON numbers as doubles, and bitfields are hex byte strings holding
 exactly the bytes they serialize to. A collection is written bare: the array or
 the hex string itself, never wrapped in an object.
 
+Alongside them the suite ships generalized-index vectors: a type, a path through
+it, and the index that path names in the Merkle tree. `fixtures/README.md`, written
+by each fill, documents every format.
+
 ## Releases
 
 Each release ships the `eth-ssz-specs` package on PyPI and the reference tests on the
