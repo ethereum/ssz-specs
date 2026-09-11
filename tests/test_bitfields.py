@@ -107,7 +107,7 @@ class TestBitVector:
         # A refusal inside a field validator is a ValueError, which pydantic collects.
         with pytest.raises(ValidationError) as exception_info:
             BitVector4(data=bits)
-        assert f"BitVector4 holds exactly 4 elements, got {expected_element_count}" in str(
+        assert f"BitVector4 holds exactly 4 bits, got {expected_element_count}" in str(
             exception_info.value
         )
 
@@ -229,7 +229,7 @@ class TestBitList:
 
         with pytest.raises(ValidationError) as exception_info:
             BitList4(data=[Boolean(bit) for bit in [True, False, True, False, True]])
-        assert "BitList4 holds at most 4 elements, got 5" in str(exception_info.value)
+        assert "BitList4 holds at most 4 bits, got 5" in str(exception_info.value)
 
     def test_pydantic_validation_accepts_valid_list(self) -> None:
         """Pydantic validation accepts a valid list of booleans."""
@@ -322,7 +322,7 @@ class TestBitList:
         bitlist = BitList4(data=[Boolean(True), Boolean(False), Boolean(True)])
         with pytest.raises(ValidationError) as exception_info:
             _ = bitlist + [Boolean(False), Boolean(True)]
-        assert "BitList4 holds at most 4 elements, got 5" in str(exception_info.value)
+        assert "BitList4 holds at most 4 bits, got 5" in str(exception_info.value)
 
 
 class TestProgressiveBitList:
@@ -793,7 +793,7 @@ class TestBitfieldSSZ:
         # Bytes [0xFF, 0xFF, 0x01] mean 16 data bits + delimiter at bit 16 — > LIMIT=8.
         with pytest.raises(SSZValueError) as exception_info:
             BitList8.decode_bytes(b"\xff\xff\x01")
-        assert str(exception_info.value) == "BitList8 holds at most 8 elements, got 16"
+        assert str(exception_info.value) == "BitList8 holds at most 8 bits, got 16"
 
     def test_bitlist_deserialize_premature_end(self) -> None:
         """BitList.deserialize rejects a stream that ends before the declared scope."""
@@ -819,7 +819,7 @@ class TestBitfieldDefaults:
         """Zero bits is a count mismatch against LENGTH, never a request for the default."""
         with pytest.raises(ValidationError) as exception_info:
             BitVector4(data=[])
-        assert "BitVector4 holds exactly 4 elements, got 0" in str(exception_info.value)
+        assert "BitVector4 holds exactly 4 bits, got 0" in str(exception_info.value)
 
     def test_bitvector_data_is_no_longer_a_required_field(self) -> None:
         """The bits carry a default, so Pydantic itself reports them as optional."""
@@ -903,6 +903,35 @@ class TestBitfieldDefaults:
         """Each default encodes to a known byte and decodes back unchanged."""
         assert default_value.encode_bytes() == expected_encoding
         assert type(default_value).decode_bytes(expected_encoding) == default_value
+
+
+class TestTheUnitABitfieldReports:
+    """A bitfield counts bits, so a refused count says so rather than naming elements."""
+
+    def test_a_bitvector_pins_a_count_of_bits(self) -> None:
+        """A slice write that resizes carries the count rule out unwrapped by the model."""
+        bits = BitVector4(data=bits_of(1, 0, 1, 0))
+        with pytest.raises(SSZValueError) as exception_info:
+            bits[1:] = [Boolean(False)]
+        assert exception_info.value.fault is ValueFault.COUNT
+        assert str(exception_info.value) == (
+            f"BitVector4 holds exactly {BitVector4.LENGTH} bits, got 2"
+        )
+
+    def test_a_bitlist_bounds_a_count_of_bits(self) -> None:
+        """One bit past the limit, in the bytes the uncapped shape writes for that many."""
+        over_limit = BitList8.LIMIT + 1
+        encoded = ProgressiveBitList(data=[Boolean(True)] * over_limit).encode_bytes()
+        with pytest.raises(SSZValueError) as exception_info:
+            BitList8.decode_bytes(encoded)
+        assert exception_info.value.fault is ValueFault.LIMIT
+        assert str(exception_info.value) == (
+            f"BitList8 holds at most {BitList8.LIMIT} bits, got {over_limit}"
+        )
+
+    def test_a_progressive_bitlist_counts_the_same_thing(self) -> None:
+        """It declares no bound of its own to report, and still counts what the other two do."""
+        assert ProgressiveBitList.UNIT == BitList.UNIT == BitVector.UNIT == "bits"
 
 
 @given(bits=st.lists(st.booleans(), max_size=8))
