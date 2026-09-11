@@ -20,14 +20,7 @@ def _varint(value: int) -> bytes:
 
 
 def compress(data: bytes) -> bytes:
-    """
-    Encode bytes as one Snappy block: the decompressed length, then the bytes as a single literal.
-
-    A back-reference costs a search and buys a few hundred bytes across a corpus whose largest
-    member is a few kilobytes, so this emits none. The output is a Snappy stream any decompressor
-    accepts, it is a pure function of the input, and it is a handful of bytes longer than the
-    input rather than shorter.
-    """
+    """Encode bytes as one Snappy block: the decompressed length, then one literal element."""
     preamble = _varint(len(data))
     if not data:
         return preamble

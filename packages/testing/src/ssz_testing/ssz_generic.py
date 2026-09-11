@@ -154,8 +154,7 @@ def case_files(case: dict[str, Any]) -> dict[str, bytes]:
             yaml_document(upstream_value(case["typeDescriptor"], case["value"])) + "\n"
         ).encode()
     else:
-        # Upstream invalid cases carry only the bytes; the fault this suite names is kept beside
-        # them under a name no handler reads, so a harness sees the tree it expects.
+        # Upstream invalid cases carry only bytes, so the fault goes under a name no handler reads.
         files["rejection.yaml"] = f"reason: {case['rejectionReason']}\n".encode()
     return files
 

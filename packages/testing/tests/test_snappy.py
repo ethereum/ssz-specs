@@ -4,14 +4,8 @@ import pytest
 
 from ssz_testing.snappy import compress
 
-# Every expectation below is read off the Snappy format description rather than off the encoder.
-#
-# A block opens with the decompressed length as a base-128 varint, seven bits per byte, low
-# group first with the high bit marking a group that is not the last. Then comes one element,
-# here always a literal: a tag byte whose two low bits are zero, and whose upper six bits hold
-# the literal length minus one when that fits in them. Sixty, sixty-one, sixty-two and
-# sixty-three in those bits instead mean the length minus one follows in one, two, three or
-# four little-endian bytes.
+# Read off the Snappy format description rather than off the encoder: a length varint, then a
+# tag byte holding the literal length minus one, or 60-63 meaning it follows in that many bytes.
 LITERAL_BLOCKS = [
     (b"", b"\x00"),
     (b"A", b"\x01\x00A"),
