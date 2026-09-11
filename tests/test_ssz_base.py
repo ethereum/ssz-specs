@@ -1038,13 +1038,15 @@ class TestSSZMutabilityFlag:
         container.x = 3  # ty: ignore[invalid-assignment]
         assert container == TwoFieldContainer(x=Uint8(3), y=Uint16(2))
 
-    def test_container_collection_field_raw_payload_rejected(self) -> None:
-        """A raw payload assigned to a collection field fails, exactly as at construction."""
+    def test_container_collection_field_reads_a_bare_array(self) -> None:
+        """A bare array assigned to a collection field is the very form the mapping writes."""
         container = ThreeFieldContainer(a=Uint8(0), b=Uint64(0), c=Uint16List4(data=[]))
-        with pytest.raises(ValidationError):
-            container.c = [1, 2]  # ty: ignore[invalid-assignment]
-        container.c = Uint16List4(data=[Uint16(1), Uint16(2)])
+        container.c = [1, 2]  # ty: ignore[invalid-assignment]
         assert container.c == Uint16List4(data=[Uint16(1), Uint16(2)])
+
+        # A number is no spelling of a sequence, so nothing reads one as one.
+        with pytest.raises(ValidationError):
+            container.c = 2  # ty: ignore[invalid-assignment]
 
     def test_container_assignment_of_typed_value_passes_through(self) -> None:
         """An already-typed value is assigned without re-coercion."""

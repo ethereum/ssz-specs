@@ -1367,7 +1367,7 @@ class TestTheJsonMapping:
         """A number inside a list is a string too, element rendering being the same rule."""
         values = Uint256List4.of(0, 2**255, 2**256 - 1)
 
-        assert values.model_dump(mode="json") == {"data": ["0", str(2**255), str(2**256 - 1)]}
+        assert values.model_dump(mode="json") == ["0", str(2**255), str(2**256 - 1)]
         assert Uint256List4.model_validate_json(values.model_dump_json()) == values
 
     @pytest.mark.parametrize(
@@ -1575,20 +1575,15 @@ class TestOpaqueByteSpelling:
         assert holder.model_dump_json() == '{"payload":"0x01","count":"1"}'
         assert OpaqueByteHolder.model_validate_json(holder.model_dump_json()) == holder
 
-    def test_a_collection_of_opaque_bytes_wraps_its_hex_elements(self) -> None:
-        """
-        Pin what a collection of opaque bytes writes, which is not yet what the spec asks.
+    def test_a_collection_of_opaque_bytes_is_one_hex_string(self) -> None:
+        """The mapping gives a byte sequence one hex string, not one per element."""
+        vector = OpaqueByteVector4.of(0x11, 0x22, 0x33, 0x44)
+        assert vector.model_dump_json() == '"0x11223344"'
+        assert OpaqueByteList4.of(0x11, 0x22).model_dump_json() == '"0x1122"'
+        assert OpaqueByteProgressiveList.of(0x11, 0x22).model_dump_json() == '"0x1122"'
 
-        The mapping asks for the bare string "0x11223344", not an object of one per element.
-        """
-        assert (
-            OpaqueByteVector4.of(0x11, 0x22, 0x33, 0x44).model_dump_json()
-            == '{"data":["0x11","0x22","0x33","0x44"]}'
-        )
-        assert OpaqueByteList4.of(0x11, 0x22).model_dump_json() == '{"data":["0x11","0x22"]}'
-        assert (
-            OpaqueByteProgressiveList.of(0x11, 0x22).model_dump_json() == '{"data":["0x11","0x22"]}'
-        )
+        # The one string reads back as the four bytes it spells, so the mapping closes.
+        assert OpaqueByteVector4.model_validate_json(vector.model_dump_json()) == vector
 
     def test_the_package_exports_the_spelling(self) -> None:
         """The export list is what a star import and the documentation tooling read."""

@@ -15,7 +15,7 @@ from collections.abc import Iterable, Sequence
 from enum import Enum
 from typing import IO, Any, ClassVar, NoReturn, Self, cast, overload, override
 
-from pydantic import Field, field_serializer, field_validator
+from pydantic import Field, field_validator, model_serializer
 from pydantic.annotated_handlers import GetCoreSchemaHandler
 from pydantic_core import core_schema
 
@@ -338,10 +338,10 @@ class ByteList(SSZCollection[int]):
             )
         return data
 
-    @field_serializer("data", when_used="json")
-    def _serialize_data(self, value: bytes) -> str:
-        """Serialize the raw bytes to a 0x-prefixed hex string for JSON output."""
-        return "0x" + value.hex()
+    @model_serializer(mode="plain", when_used="json")
+    def _serialize(self) -> str:
+        """Render the raw bytes bare, as the 0x-prefixed hex string the mapping writes."""
+        return "0x" + self.data.hex()
 
     def _store(self, working: bytearray) -> None:
         """

@@ -6,7 +6,7 @@ from collections.abc import Iterator, Mapping, Sequence
 from copy import copy as shallow_copy
 from typing import IO, TYPE_CHECKING, Any, ClassVar, Final, Self, cast, final, overload, override
 
-from pydantic import ConfigDict, Field
+from pydantic import ConfigDict, Field, model_validator
 from pydantic.annotated_handlers import GetCoreSchemaHandler
 from pydantic_core import core_schema
 
@@ -461,6 +461,12 @@ class SSZCollection[T](SSZModel, Sequence[T], ABC):
     # A subclass narrows this field only where the declaration here carries a value.
     data: Sequence[T] = Field()
     """The contents, declared with its concrete type and default by each subclass."""
+
+    @model_validator(mode="before")
+    @classmethod
+    def _accept_bare_contents(cls, raw_input: Any) -> Any:
+        """Read the array or hex string the mapping writes, the field name appearing in neither."""
+        return {"data": raw_input} if isinstance(raw_input, (list, tuple, str)) else raw_input
 
     @classmethod
     def of(cls, *elements: Any) -> Self:

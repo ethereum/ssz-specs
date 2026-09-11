@@ -1695,19 +1695,19 @@ class TestSequenceDefaults:
 
 
 class TestJsonSerialization:
-    """Tests for the JSON field serializer on SSZ sequences."""
+    """Tests for the JSON mapping of an SSZ sequence, which is the bare array of its elements."""
 
     def test_byte_array_elements_render_as_hex_strings(self) -> None:
         """Byte-array leaves render as 0x-prefixed hex strings in JSON output."""
         instance = Bytes32List32(data=[Bytes32.zero()])
 
-        assert instance.model_dump(mode="json") == {"data": ["0x" + ("00" * 32)]}
+        assert instance.model_dump(mode="json") == ["0x" + ("00" * 32)]
 
     def test_boolean_elements_render_as_true_false(self) -> None:
         """Booleans are excluded from the int branch and stay as true/false."""
         instance = BooleanList4(data=[Boolean(True), Boolean(False), Boolean(True)])
 
-        assert instance.model_dump(mode="json") == {"data": [True, False, True]}
+        assert instance.model_dump(mode="json") == [True, False, True]
 
     def test_container_elements_render_as_objects(self) -> None:
         """A container element renders as an object, its own fields spelled by their types."""
@@ -1718,9 +1718,7 @@ class TestJsonSerialization:
             ]
         )
 
-        assert instance.model_dump(mode="json") == {
-            "data": [{"a": "1", "b": "2"}, {"a": "3", "b": "4"}]
-        }
+        assert instance.model_dump(mode="json") == [{"a": "1", "b": "2"}, {"a": "3", "b": "4"}]
 
 
 @given(values=st.lists(st.integers(min_value=0, max_value=2**16 - 1), max_size=4))
@@ -1970,7 +1968,7 @@ class TestJsonRoundTrip:
 
     def test_a_sequence_of_containers_round_trips(self) -> None:
         """A container element renders as a mapping, and validates back from one."""
-        # Rendering:  {"data": [{"a": 1, "b": [2, 3]}]}
+        # Rendering:  [{"a": "1", "b": ["2", "3"]}]
         instance = VariableContainerList2(
             data=[VariableContainer(a=Uint8(1), b=Uint16List4(data=[Uint16(2), Uint16(3)]))]
         )
@@ -1979,7 +1977,7 @@ class TestJsonRoundTrip:
 
     def test_a_sequence_of_byte_arrays_round_trips(self) -> None:
         """A fixed byte array renders as a 0x-prefixed hex string, and validates back."""
-        # Rendering:  {"data": ["0xaaaa...", "0xbbbb..."]}
+        # Rendering:  ["0xaaaa...", "0xbbbb..."]
         instance = Bytes32List32(data=[Bytes32(b"\xaa" * 32), Bytes32(b"\xbb" * 32)])
 
         assert Bytes32List32.model_validate_json(instance.model_dump_json()) == instance
@@ -2000,8 +1998,8 @@ class TestJsonRoundTrip:
         assert Uint16List4.model_validate_json(instance.model_dump_json()) == instance
 
     def test_a_nested_sequence_round_trips(self) -> None:
-        """A sequence element is Pydantic-backed, so it renders and validates as a mapping."""
-        # Rendering:  {"data": [{"data": [1, 2]}, {"data": []}]}
+        """A sequence element renders as the bare array of its own elements, and reads back."""
+        # Rendering:  [["1", "2"], []]
         instance = NestedProgressiveList(
             data=[
                 Uint16ProgressiveList(data=[Uint16(1), Uint16(2)]),
