@@ -32,31 +32,14 @@ DROPPED_POSITION = 31
 
 
 def distinct_roots(*values: SSZType) -> None:
-    """
-    Check that these values merkleize to roots of their own.
-
-    A stable index is a claim about several trees, so two of them rooting alike would make
-    the claim about one tree stated twice.
-
-    Raises:
-        AssertionError: When two of the values root alike.
-    """
+    """Check that these values merkleize to roots of their own."""
     roots = [hash_tree_root(value).hex() for value in values]
     if len(set(roots)) != len(roots):
         raise AssertionError(f"two of these values merkleize alike: {roots}")
 
 
 def shared_index(field: str, *layouts: type[ProgressiveContainer]) -> int:
-    """
-    The generalized index every one of these layouts puts that field at.
-
-    The layout word is mixed into the root.
-    Two variants that hold a field in one place therefore still root differently, which is
-    checked here beside the index itself.
-
-    Raises:
-        AssertionError: When one layout puts the field elsewhere, or two of them root alike.
-    """
+    """The generalized index every one of these layouts puts that field at."""
     indices = {layout.__name__: get_generalized_index(layout, field) for layout in layouts}
     if len(set(indices.values())) != 1:
         raise AssertionError(f"the field moves between these layouts: {indices}")
@@ -65,12 +48,7 @@ def shared_index(field: str, *layouts: type[ProgressiveContainer]) -> int:
 
 
 def shared_option_index(union: type[CompatibleUnion], field: str) -> int:
-    """
-    The generalized index every option of this union puts that field at.
-
-    Raises:
-        AssertionError: When two options put the field at different indices.
-    """
+    """The generalized index every option of this union puts that field at."""
     indices = {
         selector: get_generalized_index(union, selector, field) for selector in union.OPTIONS
     }
