@@ -49,7 +49,7 @@ from ssz.chunks import (
     next_pow2,
     zero_tree_root,
 )
-from ssz.collections import List, ProgressiveList, Vector
+from ssz.collections import List, ProgressiveByteList, ProgressiveList, Vector
 from ssz.container import MAX_ACTIVE_FIELDS, Container, ProgressiveContainer, active_fields
 from ssz.exceptions import (
     SSZError,
@@ -139,6 +139,7 @@ __all__ = [
     "PackedLeaves",
     "PathStep",
     "ProgressiveBitList",
+    "ProgressiveByteList",
     "ProgressiveContainer",
     "ProgressiveList",
     "Root",

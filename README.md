@@ -212,6 +212,14 @@ class Temperatures(ProgressiveList[Uint16]):
 Temperatures(data=[20, 21, 19])
 ```
 
+### `ProgressiveByteList`
+
+A variable number of bytes with no limit.
+
+```python
+ProgressiveByteList(data="0xdeadbeef")
+```
+
 ### `ProgressiveBitList`
 
 A variable number of bits with no limit.

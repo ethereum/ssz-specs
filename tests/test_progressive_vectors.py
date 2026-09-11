@@ -17,6 +17,7 @@ from ssz import (
     CompatibleUnion,
     Container,
     ProgressiveBitList,
+    ProgressiveByteList,
     ProgressiveContainer,
     ProgressiveList,
     Uint8,
@@ -171,6 +172,8 @@ def test_one_byte_element_roots(element_count: int, expected_root: str) -> None:
     # 33 elements: 32 bytes fill the first level, and byte 33 opens the second.
     values = [Uint8(i) for i in range(1, element_count + 1)]
     assert root_hex(ProgressiveList[Uint8](data=values)) == expected_root
+    # EIP-7916's byte spelling of the same shape stands on the very same tree.
+    assert root_hex(ProgressiveByteList(data=values)) == expected_root
 
 
 @pytest.mark.parametrize(
