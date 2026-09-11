@@ -33,10 +33,17 @@ def active_fields_word(active_fields: Sequence[int]) -> Chunk:
     """
     The field layout a progressive container mixes in, as one 32-byte word.
 
-    One bit per position, lowest bit first, so at most 256 fit, a bound the type enforces:
+    One bit per position, lowest bit first, so a layout spans at most one word of positions:
 
         [1, 0, 1]  ->  05 00 00 ... 00
+
+    A progressive container meets the same bound where it declares its layout.
+
+    Raises:
+        SSZValueError: A layout wider than the word.
     """
+    if len(active_fields) > BITS_PER_CHUNK:
+        raise SSZValueError(ValueFault.ACTIVE_FIELDS_WORD, width=len(active_fields))
     packed_bits = sum(1 << i for i, bit in enumerate(active_fields) if bit)
     return Chunk._trusted(packed_bits.to_bytes(BYTES_PER_CHUNK, "little"))
 
@@ -76,7 +83,12 @@ def mix_in_length(root: Root, length: int) -> Root:
 
 
 def mix_in_active_fields(root: Root, active_fields: Sequence[int]) -> Root:
-    """Mix a layout in, per EIP-7495, so a dropped field and a zeroed one differ."""
+    """
+    Mix a layout in, per EIP-7495, so a dropped field and a zeroed one differ.
+
+    Raises:
+        SSZValueError: A layout wider than the word.
+    """
     return mix_in(root, active_fields_word(active_fields))
 
 

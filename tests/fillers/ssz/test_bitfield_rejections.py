@@ -350,7 +350,7 @@ def test_bitlist16_over_limit(ssz_test: SSZTestFiller) -> None:
         raw_bytes="0xffff02",
         expected_rejection=ExpectedRejection(
             reason=ValueFault.LIMIT,
-            message_substring="SampleBitList16 holds at most 16 elements, got 17",
+            message_substring="SampleBitList16 holds at most 16 bits, got 17",
         ),
     )
 

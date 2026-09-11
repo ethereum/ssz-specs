@@ -53,6 +53,8 @@ class BitVector(SSZCollection[Boolean]):
     LENGTH: ClassVar[int | None]
     """Number of bits in the vector."""
 
+    UNIT = "bits"
+
     data: Sequence[Boolean] = Field(default_factory=list[Boolean])
     """
     The bits, in position order.
@@ -254,6 +256,8 @@ class _SSZBitList(SSZCollection[Boolean]):
     - The bit-count rule, applied on construction and again on decode.
     - The Merkle tree shape, which lives in the merkleization module.
     """
+
+    UNIT = "bits"
 
     KIND = "bitlist"
 

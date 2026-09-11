@@ -102,6 +102,7 @@ class ValueFault(Enum):
     ZERO_TREE_WIDTH = "a zero subtree spans a positive power of two leaves, got {width}"
     STALE_ROOT = "stale remembered root for {type}"
     LENGTH_WORD = "a mixed-in length {length} does not fit one 32-byte word"
+    ACTIVE_FIELDS_WORD = "a mixed-in layout of {width} positions does not fit one 32-byte word"
     SELECTOR_BYTE = "selector {selector} does not fit one byte"
 
 

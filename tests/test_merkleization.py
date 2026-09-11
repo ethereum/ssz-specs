@@ -440,6 +440,25 @@ def test_mix_in_active_fields_fills_the_word_at_256_positions() -> None:
     assert mix_in_active_fields(root, [1] * 256) == h(root, Chunk(b"\xff" * 32))
 
 
+@pytest.mark.parametrize(
+    "active_fields",
+    [
+        pytest.param([1] * (BITS_PER_CHUNK + 1), id="one_past_the_word"),
+        # Every position empty packs to zero, which fits: the width is what does not.
+        pytest.param([0] * (BITS_PER_CHUNK + 1), id="empty_past_the_word"),
+        pytest.param([1] * (BITS_PER_CHUNK * 2), id="far_past_the_word"),
+    ],
+)
+def test_mix_in_active_fields_error_wider_than_the_word(active_fields: Sequence[int]) -> None:
+    """Rejects a layout holding more positions than the word holds bits."""
+    with pytest.raises(SSZValueError) as exception_info:
+        mix_in_active_fields(Root(sample_chunks[1]), active_fields)
+    assert exception_info.value.fault is ValueFault.ACTIVE_FIELDS_WORD
+    assert str(exception_info.value) == (
+        f"a mixed-in layout of {len(active_fields)} positions does not fit one 32-byte word"
+    )
+
+
 def test_mix_in_active_fields_zero_pads_a_layout_below_256_positions() -> None:
     """A layout narrower than the word is zero-padded up to it, not scaled to fit."""
     root = Root(sample_chunks[1])

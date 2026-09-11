@@ -800,7 +800,7 @@ class TestSSZCollectionNegativeIndex:
             pytest.param(
                 SmallBitVector(data=[Boolean(True)] * 3),
                 [Boolean(False)],
-                "SmallBitVector holds exactly 3 elements, got 2",
+                "SmallBitVector holds exactly 3 bits, got 2",
                 id="bitvector",
             ),
         ],
@@ -1200,7 +1200,7 @@ class TestSSZCollectionOf:
         type_name = collection_type.__name__
         with pytest.raises(ValidationError) as exception_info:
             collection_type.of()
-        assert f"{type_name} holds exactly {expected_length} elements, got 0" in str(
+        assert f"{type_name} holds exactly {expected_length} {collection_type.UNIT}, got 0" in str(
             exception_info.value
         )
         # The same shape asked for its default is full, not empty.
@@ -1615,7 +1615,7 @@ class TestDeclaredCapacity:
             ),
             pytest.param(
                 lambda: TypedLimitBitList.of(*[True] * 5),
-                "TypedLimitBitList holds at most 4 elements, got 5",
+                "TypedLimitBitList holds at most 4 bits, got 5",
                 id="bitlist_over_capacity",
             ),
             pytest.param(
@@ -1630,7 +1630,7 @@ class TestDeclaredCapacity:
             ),
             pytest.param(
                 lambda: TypedLengthBitVector.of(*[True] * 3),
-                "TypedLengthBitVector holds exactly 4 elements, got 3",
+                "TypedLengthBitVector holds exactly 4 bits, got 3",
                 id="bitvector_wrong_count",
             ),
             pytest.param(
@@ -1682,7 +1682,7 @@ class TestDeclaredCapacity:
         #     4 bits  ->  [1:] = [0, 0]  ->  3 bits, one short of the required 4
         bits = TypedLengthBitVector.of(*[True] * 4)
         with pytest.raises(
-            SSZValueError, match=r"^TypedLengthBitVector holds exactly 4 elements, got 3$"
+            SSZValueError, match=r"^TypedLengthBitVector holds exactly 4 bits, got 3$"
         ):
             bits[1:] = [Boolean(False)] * 2
         assert bits == TypedLengthBitVector.of(*[True] * 4)
