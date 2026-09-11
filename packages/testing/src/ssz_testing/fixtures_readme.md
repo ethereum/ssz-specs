@@ -71,17 +71,16 @@ Read off the declared class. `kind` is always present; the rest depends on it.
 | `Boolean`, `Bit` | `true` |
 | `Byte` | `"0xff"` |
 | `Uint8` … `Uint256` | `"255"` |
-| `BitVector`, `BitList`, `ProgressiveBitList` | `{"data": "0x0d"}` |
-| `ByteVector` | `"0xdeadbeef"` |
-| `ByteList` | `{"data": "0x0102"}` |
-| `Vector`, `List`, `ProgressiveList` | `{"data": ["1", "2"]}` |
+| `BitVector`, `BitList`, `ProgressiveBitList` | `"0x0d"` |
+| `ByteVector`, `ByteList` | `"0xdeadbeef"` |
+| `Vector[Byte]`, `List[Byte]`, `ProgressiveList[Byte]` | `"0x0102"` |
+| `Vector`, `List`, `ProgressiveList` | `["1", "2"]` |
 | `Container`, `ProgressiveContainer` | `{"side": "1", "color": "2"}` |
 | `CompatibleUnion` | `{"selector": "1", "data": {...}}` |
 
 An integer is decimal digits in a string, so a 64-bit value survives a parser holding JSON numbers as doubles.
 A bitfield's hex is exactly the bytes it serializes to, delimiter bit included.
-
-Two shapes differ from the consensus-specs mapping: every collection is wrapped in a one-key object under `data`, where that mapping writes the array or hex bare — and `ByteVector` is the lone exception, written bare.
+A collection is written bare, so a byte sequence is one hex string however it was spelled, and nothing carries a wrapping object.
 
 ## Running a case
 
@@ -101,7 +100,7 @@ For an invalid case, decode `serialized` and require a failure naming `rejection
 {
     "typeName": "SampleUint16Vector3",
     "serialized": "0x6400c800ffff",
-    "value": {"data": ["100", "200", "65535"]},
+    "value": ["100", "200", "65535"],
     "root": "0x6400c800ffff0000000000000000000000000000000000000000000000000000",
     "valid": true,
     "typeDescriptor": {

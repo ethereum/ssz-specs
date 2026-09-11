@@ -855,11 +855,11 @@ class TestBaseByteListPydantic:
         assert "ByteList16 holds at most 16 bytes, got 17" in str(exception_info.value)
 
     def test_json_serialization_to_hex(self) -> None:
-        """JSON-mode serialization renders the data field as a 0x-prefixed hex string."""
+        """JSON-mode serialization renders a byte list as the bare 0x-prefixed hex string."""
         raw_bytes = bytes.fromhex("0001020304")
         model = ModelLists(payload=ByteList16(data=raw_bytes))
         dumped = model.model_dump(mode="json")
-        assert dumped["payload"]["data"] == "0x0001020304"
+        assert dumped["payload"] == "0x0001020304"
 
 
 class TestBaseBytesDefault:

@@ -24,7 +24,8 @@ implementations can run to ensure compliance with the specifications.
 Each vector carries the value under test in the specification's JSON mapping.
 Integers are strings of decimal digits, so that a 64-bit value survives a parser
 that holds JSON numbers as doubles, and bitfields are hex byte strings holding
-exactly the bytes they serialize to.
+exactly the bytes they serialize to. A collection is written bare: the array or
+the hex string itself, never wrapped in an object.
 
 ## Releases
 

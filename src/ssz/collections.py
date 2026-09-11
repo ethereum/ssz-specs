@@ -29,10 +29,10 @@ from abc import ABC
 from collections.abc import Iterable, Mapping, Sequence
 from typing import IO, Any, ClassVar, Self, cast, overload, override
 
-from pydantic import Field, field_serializer, field_validator
+from pydantic import Field, field_validator, model_serializer
 
 from ssz.base import json_writer
-from ssz.byte_arrays import ByteVector
+from ssz.byte_arrays import ByteVector, coerced_bytes
 from ssz.exceptions import SSZError, SSZTypeError, SSZValueError, TypeFault, ValueFault
 from ssz.offsets import BYTES_PER_LENGTH_OFFSET, check_composite_size, offset_table_spans
 from ssz.ssz_base import (
@@ -41,7 +41,7 @@ from ssz.ssz_base import (
     SSZType,
     hold_to_bases,
 )
-from ssz.uint import BaseUint, Uint32
+from ssz.uint import BaseUint, Byte, Uint32
 
 
 class _SSZSequence[T: SSZType](SSZCollection[T], ABC):
@@ -127,6 +127,10 @@ class _SSZSequence[T: SSZType](SSZCollection[T], ABC):
         """Shape the input, check the element count, then coerce every element."""
         cls._check_declaration()
 
+        # The mapping spells a sequence of opaque bytes as the hex of its own encoding.
+        if isinstance(raw_input, str) and issubclass(cls.ELEMENT_TYPE, Byte):
+            raw_input = list(coerced_bytes(cls.__name__, raw_input))
+
         # Strings and non-iterables are refused, and a generator is materialized.
         elements = cls._shape_input(raw_input)
 
@@ -164,8 +168,8 @@ class _SSZSequence[T: SSZType](SSZCollection[T], ABC):
             if issubclass(element_type, element_class):
                 return element_type(value)
 
-            # A mapping is how a Pydantic-backed element renders, and how it reads back.
-            if isinstance(value, Mapping) and issubclass(element_type, SSZModel):
+            # An object, an array or a hex string: whichever the element's own mapping spells.
+            if isinstance(value, (Mapping, list, str)) and issubclass(element_type, SSZModel):
                 return element_type.model_validate(value)
 
             # A number renders as a string, and its own declaration is what reads one back.
@@ -297,12 +301,17 @@ class _SSZSequence[T: SSZType](SSZCollection[T], ABC):
             _fields_set=set(self.__pydantic_fields_set__), data=list(self.data)
         )
 
-    @field_serializer("data", when_used="json")
-    def _serialize_data(self, value: Sequence[T]) -> list[Any]:
-        """Render each element as the JSON mapping of the declared element type spells it."""
+    @model_serializer(mode="plain", when_used="json")
+    def _serialize(self) -> str | list[Any]:
+        """Render the elements bare, as the mapping of the declared element type spells them."""
         # The field is annotated with a type variable, so pydantic has no element type to use.
-        write = json_writer(type(self).ELEMENT_TYPE)
-        return [write.dump_python(element, mode="json") for element in value]
+        element_type = type(self).ELEMENT_TYPE
+
+        # A sequence of opaque bytes is one hex string, byte for byte its own encoding.
+        if issubclass(element_type, Byte):
+            return "0x" + bytes(cast("Sequence[int]", self.data)).hex()
+        write = json_writer(element_type)
+        return [write.dump_python(element, mode="json") for element in self.data]
 
 
 class Vector[T: SSZType](_SSZSequence[T]):

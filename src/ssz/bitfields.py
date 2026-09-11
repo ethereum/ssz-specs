@@ -23,7 +23,7 @@ from typing import (
     override,
 )
 
-from pydantic import Field, field_serializer, field_validator
+from pydantic import Field, field_validator, model_serializer
 
 from ssz.boolean import Boolean
 from ssz.byte_arrays import coerced_bytes
@@ -120,9 +120,9 @@ class BitVector(SSZCollection[Boolean]):
         # A named spelling is still converted, the test being on the exact class.
         return [bit if type(bit) is Boolean else Boolean(bit) for bit in bits]
 
-    @field_serializer("data", when_used="json")
-    def _serialize_data(self, _bits: Sequence[Boolean]) -> str:
-        """Render the bits as the hex byte string of their own SSZ encoding."""
+    @model_serializer(mode="plain", when_used="json")
+    def _serialize(self) -> str:
+        """Render the bits bare, as the hex byte string of their own SSZ encoding."""
         return "0x" + self.encode_bytes().hex()
 
     @classmethod
@@ -306,9 +306,9 @@ class _SSZBitList(SSZCollection[Boolean]):
         # Wrapping it again would only hand back the object it already is.
         return [bit if type(bit) is Boolean else Boolean(bit) for bit in bits]
 
-    @field_serializer("data", when_used="json")
-    def _serialize_data(self, _bits: Sequence[Boolean]) -> str:
-        """Render the bits as the hex byte string of their own SSZ encoding, delimiter included."""
+    @model_serializer(mode="plain", when_used="json")
+    def _serialize(self) -> str:
+        """Render the bits bare, as the hex of their own SSZ encoding, delimiter included."""
         return "0x" + self.encode_bytes().hex()
 
     @classmethod

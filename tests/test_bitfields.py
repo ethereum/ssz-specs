@@ -987,7 +987,7 @@ class TestTheJsonMapping:
     @pytest.mark.parametrize("value", BITFIELD_VALUES)
     def test_the_hex_is_the_serialization(self, value: BitVector | BitList) -> None:
         """Derived from the encoding rather than retyped, so the two cannot drift apart."""
-        assert value.model_dump(mode="json") == {"data": "0x" + value.encode_bytes().hex()}
+        assert value.model_dump(mode="json") == "0x" + value.encode_bytes().hex()
 
     @pytest.mark.parametrize("value", BITFIELD_VALUES)
     def test_decoding_reads_back_what_encoding_wrote(self, value: BitVector | BitList) -> None:
@@ -997,15 +997,16 @@ class TestTheJsonMapping:
     def test_the_bitlist_hex_carries_the_delimiter(self) -> None:
         """Three data bits and the delimiter one place past them make the byte 0x0d."""
         # 0x05, the three bits packed alone, would equally spell every zero-padded extension.
-        assert BitList20(data=bits_of(1, 0, 1)).model_dump(mode="json") == {"data": "0x0d"}
-        assert BitList20(data=bits_of(1, 0, 1, 0, 0)).model_dump(mode="json") == {"data": "0x25"}
+        assert BitList20(data=bits_of(1, 0, 1)).model_dump(mode="json") == "0x0d"
+        assert BitList20(data=bits_of(1, 0, 1, 0, 0)).model_dump(mode="json") == "0x25"
 
     def test_the_hex_a_bitvector_would_never_write_is_refused(self) -> None:
         """Reading through the decoder is what holds a padding bit above the last one to zero."""
         # The eleven declared bits leave five padding bits in the second byte.
-        assert BitVector11(data=bits_of(1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1)).model_dump(
-            mode="json"
-        ) == {"data": "0xff07"}
+        assert (
+            BitVector11(data=bits_of(1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1)).model_dump(mode="json")
+            == "0xff07"
+        )
 
         with pytest.raises(ValueOrValidationError):
             BitVector11(data="0xffff")
