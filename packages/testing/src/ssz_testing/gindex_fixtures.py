@@ -1,6 +1,5 @@
 """Fixture format for a path through an SSZ type, resolved to the generalized index it names."""
 
-from collections.abc import Mapping
 from enum import StrEnum
 from typing import Any, ClassVar, Final
 
@@ -19,9 +18,9 @@ from ssz.paths import (
 )
 from ssz.ssz_base import SSZType
 from ssz_testing.fixtures import (
-    BaseConsensusFixture,
     BaseTestSpec,
     CamelModel,
+    DescribedFixture,
     TypeDescriptor,
     describe_type,
 )
@@ -71,13 +70,10 @@ def resolver_path(path: tuple[GindexPathStep, ...]) -> tuple[PathStep, ...]:
     )
 
 
-class GindexFixture(BaseConsensusFixture):
+class GindexFixture(DescribedFixture):
     """Emitted vector for one path through an SSZ type."""
 
     format_name: ClassVar[str] = "ssz_gindex_test"
-
-    type_name: str
-    """SSZ type class name."""
 
     ssz_type: type[SSZType] = Field(exclude=True)
     """The declaration the path is walked through, which the type name has to stand for."""
@@ -113,18 +109,6 @@ class GindexFixture(BaseConsensusFixture):
         """Power of two those leaves pad out to, which is what one step down the tree costs."""
         leaves = self.chunk_count
         return None if leaves is None else next_pow2(leaves)
-
-    def declared_types(self) -> Mapping[str, TypeDescriptor]:
-        """The one name this vector emits, against the declaration it was filled from."""
-        return {self.type_name: self.type_descriptor}
-
-    def case_type_name(self) -> str:
-        """The declared type name this vector is about."""
-        return self.type_name
-
-    def case_kind(self) -> str:
-        """The kind the declaration already states, spelled as a directory can hold it."""
-        return self.type_descriptor.directory_name
 
 
 class GindexTest(BaseTestSpec):

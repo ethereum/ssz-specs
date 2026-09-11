@@ -1,6 +1,5 @@
 """Fixture format for SSZ serialization: a value round-tripped, or bytes a decoder must refuse."""
 
-from collections.abc import Mapping
 from typing import Any, ClassVar
 
 from pydantic import Field, computed_field, field_serializer
@@ -10,21 +9,18 @@ from ssz.exceptions import SSZError
 from ssz.roots import hash_tree_root
 from ssz.ssz_base import SSZType
 from ssz_testing.fixtures import (
-    BaseConsensusFixture,
     BaseTestSpec,
+    DescribedFixture,
     TypeDescriptor,
     describe_type,
 )
 from ssz_testing.hex_codec import from_hex, to_hex
 
 
-class SSZFixture(BaseConsensusFixture):
+class SSZFixture(DescribedFixture):
     """Emitted vector for SSZ conformance."""
 
     format_name: ClassVar[str] = "ssz_test"
-
-    type_name: str
-    """SSZ type class name."""
 
     ssz_type: type[SSZType] = Field(exclude=True)
     """The declaration the vector is about, which the type name has to stand for."""
@@ -48,18 +44,6 @@ class SSZFixture(BaseConsensusFixture):
     def type_descriptor(self) -> TypeDescriptor:
         """The declaration of that type, read off the class so no vector can misstate it."""
         return describe_type(self.ssz_type)
-
-    def declared_types(self) -> Mapping[str, TypeDescriptor]:
-        """The one name this vector emits, against the declaration it was filled from."""
-        return {self.type_name: self.type_descriptor}
-
-    def case_type_name(self) -> str:
-        """The declared type name this vector is about."""
-        return self.type_name
-
-    def case_kind(self) -> str:
-        """The kind the declaration already states, spelled as a directory can hold it."""
-        return self.type_descriptor.directory_name
 
 
 class SSZTest(BaseTestSpec):

@@ -17,6 +17,7 @@ from ssz import (
 from ssz_testing.fixtures import (
     BaseConsensusFixture,
     CamelModel,
+    DescribedFixture,
     ExpectedRejection,
     FixtureInfo,
     describe_type,
@@ -355,3 +356,13 @@ def test_a_fixture_format_that_names_no_type_claims_nothing() -> None:
             return "bare"
 
     assert Bare().declared_types() == {}
+
+
+def test_a_described_fixture_that_reads_off_no_declaration_cannot_be_built() -> None:
+    """A vector filed by the declaration it names has to state one to be built at all."""
+
+    class Undeclared(DescribedFixture):
+        pass
+
+    with pytest.raises(TypeError, match="type_descriptor"):
+        Undeclared(type_name="Undeclared")
