@@ -4,12 +4,8 @@ from typing import Protocol
 
 from ssz.exceptions import ValueFault
 from ssz.ssz_base import SSZType
-from ssz_testing.fixtures import (
-    FIXTURE_FORMATS,
-    ExpectedRejection,
-    SSZFixture,
-    SSZTest,
-)
+from ssz_testing.fixtures import BaseTestSpec, ExpectedRejection
+from ssz_testing.serialization import SSZFixture, SSZTest
 
 
 class SSZTestFiller(Protocol):
@@ -27,6 +23,10 @@ class SSZTestFiller(Protocol):
     ) -> SSZFixture:
         """Build the spec from these fields, generate the vector, and collect it."""
         ...
+
+
+FIXTURE_FORMATS: tuple[type[BaseTestSpec], ...] = (SSZTest,)
+"""Every fillable fixture format, named here because a format module cannot name itself."""
 
 
 __all__ = [

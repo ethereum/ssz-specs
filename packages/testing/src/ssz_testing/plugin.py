@@ -12,12 +12,8 @@ from typing import Any, Final
 
 import pytest
 
-from ssz_testing.fixtures import (
-    FIXTURE_FORMATS,
-    BaseConsensusFixture,
-    FixtureInfo,
-    TypeDescriptor,
-)
+from ssz_testing import FIXTURE_FORMATS
+from ssz_testing.fixtures import BaseConsensusFixture, FixtureInfo, TypeDescriptor
 
 CASE_ID_PATTERN: Final = re.compile(r"[a-z0-9]+(?:_[a-z0-9]+)*(?:/[a-z0-9]+(?:_[a-z0-9]+)*)*")
 """A case id: slash-separated segments of lowercase words, such as `uint64/max`."""

@@ -19,11 +19,10 @@ from ssz_testing.fixtures import (
     CamelModel,
     ExpectedRejection,
     FixtureInfo,
-    SSZFixture,
-    SSZTest,
     describe_type,
 )
 from ssz_testing.hex_codec import from_hex, to_hex
+from ssz_testing.serialization import SSZFixture, SSZTest
 
 
 class Bytes2(ByteVector):

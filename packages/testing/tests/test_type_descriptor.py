@@ -24,8 +24,8 @@ from ssz import (
     Vector,
     hash_tree_root,
 )
-from ssz_testing.fixtures import SSZTest
 from ssz_testing.hex_codec import from_hex, to_hex
+from ssz_testing.serialization import SSZTest
 
 BASES: Final[dict[str, type[SSZType]]] = {
     "Boolean": Boolean,
