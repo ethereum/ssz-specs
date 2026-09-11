@@ -202,6 +202,31 @@ class BaseConsensusFixture(CamelModel):
         return dict_with_info
 
 
+class DescribedFixture(BaseConsensusFixture):
+    """Base for a vector about one SSZ type, its declaration read off the class it names."""
+
+    type_name: str
+    """SSZ type class name."""
+
+    @computed_field
+    @property
+    @abstractmethod
+    def type_descriptor(self) -> "TypeDescriptor":
+        """The declaration of that type, read off the class so no vector can misstate it."""
+
+    def declared_types(self) -> "Mapping[str, TypeDescriptor]":
+        """The one name this vector emits, against the declaration it was filled from."""
+        return {self.type_name: self.type_descriptor}
+
+    def case_type_name(self) -> str:
+        """The declared type name this vector is about."""
+        return self.type_name
+
+    def case_kind(self) -> str:
+        """The kind the declaration already states, spelled as a directory can hold it."""
+        return self.type_descriptor.directory_name
+
+
 class BaseTestSpec(CamelModel):
     """
     Base for author-facing test input specs.

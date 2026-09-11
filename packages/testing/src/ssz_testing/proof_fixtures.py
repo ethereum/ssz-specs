@@ -1,6 +1,6 @@
 """Fixture formats for Merkle proof conformance: one branch, and one multiproof."""
 
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Callable, Sequence
 from enum import Enum
 from typing import Any, ClassVar, Final, Self
 
@@ -21,9 +21,9 @@ from ssz.roots import hash_tree_root
 from ssz.ssz_base import SSZType
 from ssz.verification import verify_merkle_multiproof, verify_merkle_proof
 from ssz_testing.fixtures import (
-    BaseConsensusFixture,
     BaseTestSpec,
     CamelModel,
+    DescribedFixture,
     TypeDescriptor,
     describe_type,
 )
@@ -137,11 +137,8 @@ def _written_path(path: Sequence[PathStep]) -> tuple[ProofPathStep, ...]:
     return tuple(ProofPathStep.read(step) for step in path)
 
 
-class ProofSubject(BaseConsensusFixture):
+class ProofSubject(DescribedFixture):
     """The value a proof is read against: its encoding, its declaration and its root."""
-
-    type_name: str
-    """SSZ type class name."""
 
     value: SSZType
     """The value whose Merkle tree the proof is read against."""
@@ -174,18 +171,6 @@ class ProofSubject(BaseConsensusFixture):
     def type_descriptor(self) -> TypeDescriptor:
         """The declaration of that type, read off the class so no vector can misstate it."""
         return describe_type(type(self.value))
-
-    def declared_types(self) -> Mapping[str, TypeDescriptor]:
-        """The one name this vector emits, against the declaration it was filled from."""
-        return {self.type_name: self.type_descriptor}
-
-    def case_type_name(self) -> str:
-        """The declared type name this vector is about."""
-        return self.type_name
-
-    def case_kind(self) -> str:
-        """The kind the declaration already states, spelled as a directory can hold it."""
-        return self.type_descriptor.directory_name
 
 
 class ProofFixture(ProofSubject):
