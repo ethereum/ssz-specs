@@ -1,6 +1,6 @@
 """Test tools for generating SSZ conformance test vectors."""
 
-from typing import Protocol
+from typing import Any, Protocol
 
 from ssz.exceptions import TypeFault, ValueFault
 from ssz.paths import PathStep
@@ -23,6 +23,7 @@ from ssz_testing.gindex_fixtures import (
     MixedInWord,
     MixinStep,
 )
+from ssz_testing.json_mapping import JsonFault, JsonMappingFixture, JsonMappingTest
 from ssz_testing.proof_fixtures import (
     MultiproofFixture,
     MultiproofMutation,
@@ -86,6 +87,25 @@ class GindexTestFiller(Protocol):
         ...
 
 
+class JsonMappingFiller(Protocol):
+    """Type of the ssz_json_test fixture: builds, generates, and collects a JSON vector."""
+
+    def __call__(
+        self,
+        *,
+        case_id: str,
+        type_name: str,
+        ssz_type: type[SSZType],
+        document: Any,
+        value: SSZType | None = None,
+        rejection_reason: JsonFault | None = None,
+        message_substring: str | None = None,
+        not_read_back: str | None = None,
+    ) -> JsonMappingFixture:
+        """Build the spec from these fields, generate the vector, and collect it."""
+        ...
+
+
 class ProofTestFiller(Protocol):
     """Type of the proof_test fixture: builds, generates, and collects one Merkle branch."""
 
@@ -131,6 +151,7 @@ FIXTURE_FORMATS: tuple[type[BaseTestSpec], ...] = (
     GindexTest,
     ProofTest,
     MultiproofTest,
+    JsonMappingTest,
 )
 
 
@@ -146,6 +167,10 @@ __all__ = [
     "GindexPathStep",
     "GindexTest",
     "GindexTestFiller",
+    "JsonFault",
+    "JsonMappingFiller",
+    "JsonMappingFixture",
+    "JsonMappingTest",
     "MixedInWord",
     "MixinStep",
     "MultiproofFixture",

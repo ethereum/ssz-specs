@@ -2,7 +2,7 @@
 
 Generated from the Python reference implementation in this repository by `just fill`.
 
-353 cases: 237 an implementation must accept, 116 it must refuse.
+400 cases: 280 an implementation must accept, 120 it must refuse.
 Read [what a passing run proves](#what-a-passing-run-proves) before relying on them.
 
 ## Layout
@@ -15,9 +15,10 @@ fixtures/ssz/vector/valid/uint16_vector3-mixed.json
 fixtures/ssz_type_rejection/vector/invalid/illegal-vector-zero_length.json
 fixtures/ssz_gindex/container/valid/gindex-light_client-altair-finalized_root.json
 fixtures/proof/container/valid/proof-container-flat_field.json
+fixtures/ssz_json/vector/valid/json-vector_of_bytes.json
 ```
 
-`<format>` is the fixture format: `ssz` for the byte strings below, `ssz_type_rejection` for the [illegal declarations](#illegal-type-declarations), `ssz_gindex` for the [generalized-index vectors](#generalized-index-vectors), and `proof` and `multiproof` for the [Merkle proofs](#proof-vectors) — each with an envelope of its own.
+`<format>` is the fixture format: `ssz` for the byte strings below, `ssz_type_rejection` for the [illegal declarations](#illegal-type-declarations), `ssz_gindex` for the [generalized-index vectors](#generalized-index-vectors), `proof` and `multiproof` for the [Merkle proofs](#proof-vectors), and `ssz_json` for the [JSON documents](#json-mapping-vectors) — each with an envelope of its own.
 `<kind>` is the SSZ kind, snake-cased.
 The file name is the case id with each `/` turned into `-`, so `uint16_vector3/mixed` becomes `uint16_vector3-mixed.json`.
 The id is authored and unique, so it survives a rename of the test that fills it.
@@ -337,6 +338,62 @@ No name appears in both catalogues, so a consumer holding one table of reasons n
 
 Beyond these and the path refusals above, the `TypeFault` catalogue is about this implementation's own Python machinery — a string handed in where an integer was declared, a width asked of a type that has none — which another language cannot fail and no vector names.
 
+## JSON mapping vectors
+
+`fixtures/ssz_json/` asks what a value looks like written as JSON rather than as bytes.
+The mapping is normative — an SSZ schema defines the JSON encoding too — and [How `value` is written](#how-value-is-written) above is the same table read from the other side.
+
+| Field | Present | Meaning |
+| --- | --- | --- |
+| `valid` | always | Whether a parser must accept `document`. |
+| `typeName` | always | Class name the type was declared under. |
+| `typeDescriptor` | always | That type's declaration, in full, exactly as an `ssz` case carries it. |
+| `document` | always | The JSON to hand the parser: the rendering of a value, or the input it must refuse. |
+| `serialized` | valid | The SSZ encoding of that same value. |
+| `notReadBack` | rarely | Why this implementation only wrote the document, and never read one back. |
+| `rejectionReason` | invalid | The name the parser must refuse with. |
+
+`serialized` is what keeps a valid case from being a tautology. Parsing `document` and writing it out again only proves your reader and your writer agree with each other; the bytes pin the value against a representation the mapping never touches.
+It duplicates what an `ssz` case carries, and that is the point — no `ssz` case is guaranteed to exist for the type and value a JSON case chose.
+
+### Running a case
+
+1. Build the type from `typeDescriptor`.
+2. Parse `document`.
+3. Write the parsed value back out: it must be `document` again.
+4. Encode it, and compare the bytes against `serialized`.
+
+For an invalid case, parse `document` and require a failure naming `rejectionReason`.
+
+`notReadBack` marks a document this repository can write but not parse, so step 2 never ran here. It says nothing about your implementation: run every step anyway.
+One case carries it. A `CompatibleUnion` declares its option field as holding any SSZ value, which compiles to a check no JSON document passes.
+
+### `rejectionReason`
+
+A third closed catalogue, `JsonFault` in `packages/testing/src/ssz_testing/json_mapping.py`, read the way the other two are: the name is stable, the sentence rendered from it is not, and no name is shared with either of them.
+A JSON refusal is named at the level of the mapping rather than of whichever machinery caught it, since a parser reaching the same verdict by another route is still right.
+
+| Name | The document |
+| --- | --- |
+| `BITFIELD_PADDING` | Is a bitfield setting a bit past the length its type declares. |
+| `HEX_PREFIX` | Writes a hex byte string without its `0x`. |
+| `OVER_LIMIT` | Holds more elements than its type admits. |
+| `UNDECLARED_FIELD` | Names a field its struct does not declare. |
+
+### Where this implementation and the mapping part
+
+The specification says every field in the schema must be present with a value, and that a parser *may* ignore additional fields. Four documents sit outside what the mapping spells, and this implementation does not treat them alike:
+
+| The document | The specification | Here |
+| --- | --- | --- |
+| An object missing a declared field | Must be present with a value | Accepted, the field taking its zero value |
+| An object naming an undeclared field | May be ignored | Refused, which the `may` leaves open |
+| An integer as a JSON number | A string, so that a uint64 survives | Accepted beside the string |
+| A hex byte string with no `0x` | Carries the prefix | Accepted on a byte array, refused on `Byte` and on a bitfield |
+
+Rows two and four carry a vector, each on the half where refusing is what the mapping asks for.
+Rows one and three carry none: a vector either way would make one reading of an open question the contract, and the reading it would pin is this implementation's own leniency.
+
 ## `_info`
 
 `hash`, `comment`, `testId` (the case id), `generatedBy` (the test that filled it) and `description` (that test's docstring).
@@ -363,9 +420,3 @@ A proof case is no different: this implementation resolved the path, read the le
 
 No second implementation has confirmed a byte string or a root here.
 [PR #132](https://github.com/ethereum/ssz-specs/pull/132) adds a Lean implementation cross-checked against this one, and would be the first independent check.
-
-## Not covered
-
-- No proof vectors: a generalized index is pinned, the branch that authenticates it is not.
-- No generalized-index vectors of their own: an index is pinned by the proof case that resolves a path to it.
-- No vectors for the JSON mapping itself.
