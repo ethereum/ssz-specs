@@ -174,3 +174,25 @@ shell-completions:
     esac
     echo ""
     echo "For more details, see https://just.systems/man/en/shell-completion-scripts.html"
+
+# Build the Lean package, which checks every proof in it
+[group('lean')]
+lean *args:
+    python3 lean/scripts/check-imports.py
+    cd lean && lake build "$@"
+
+# Rebuild the Lean package from scratch, ignoring what was already checked
+[group('lean')]
+lean-clean:
+    cd lean && lake clean && lake build
+
+# Check the Lean implementation against the reference tests
+[group('lean')]
+lean-test: lean
+    cd lean && ./.lake/build/bin/conformance ../fixtures
+    cd lean && lake exe regressions
+
+# Check the Lean implementation against this one, on types neither was written for
+[group('lean')]
+lean-parity *args: lean
+    uv run --locked --group test pytest tests/parity --no-cov "$@"
