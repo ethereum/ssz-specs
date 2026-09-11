@@ -1,11 +1,10 @@
 """A consumer holding only the emitted JSON rebuilds the type and reads the vector back."""
 
-from typing import Any, Final
+from typing import Final
 
 import pytest
 
 from ssz import (
-    BaseUint,
     BitList,
     BitVector,
     Boolean,
@@ -26,45 +25,7 @@ from ssz import (
 )
 from ssz_testing.hex_codec import from_hex, to_hex
 from ssz_testing.serialization import SSZTest
-
-BASES: Final[dict[str, type[SSZType]]] = {
-    "Boolean": Boolean,
-    "BitVector": BitVector,
-    "BitList": BitList,
-    "ProgressiveBitList": ProgressiveBitList,
-    "ByteVector": ByteVector,
-    "ByteList": ByteList,
-    "Vector": Vector,
-    "List": List,
-    "ProgressiveList": ProgressiveList,
-    "Container": Container,
-    "ProgressiveContainer": ProgressiveContainer,
-    "CompatibleUnion": CompatibleUnion,
-}
-
-
-def build_type(descriptor: dict[str, Any]) -> type[SSZType]:
-    """Rebuild an SSZ type from one emitted descriptor, reading no declaration of this repo."""
-    body: dict[str, Any] = {"__module__": "consumer"}
-    if "bits" in descriptor:
-        return type(descriptor["kind"], (BaseUint,), body | {"BITS": descriptor["bits"]})
-    if "length" in descriptor:
-        body["LENGTH"] = descriptor["length"]
-    if "limit" in descriptor:
-        body["LIMIT"] = descriptor["limit"]
-    if "elementType" in descriptor:
-        body["ELEMENT_TYPE"] = build_type(descriptor["elementType"])
-    if "activeFields" in descriptor:
-        body["ACTIVE_FIELDS"] = tuple(descriptor["activeFields"])
-    if "options" in descriptor:
-        body["OPTIONS"] = {
-            option["selector"]: build_type(option["type"]) for option in descriptor["options"]
-        }
-    if "fields" in descriptor:
-        body["__annotations__"] = {
-            field["name"]: build_type(field["type"]) for field in descriptor["fields"]
-        }
-    return type(descriptor["kind"], (BASES[descriptor["kind"]],), body)
+from ssz_testing.type_builder import build_declaration
 
 
 class Bytes4(ByteVector):
@@ -146,7 +107,7 @@ def test_a_consumer_rebuilds_the_type_from_the_descriptor_alone(value: SSZType) 
     """The rebuilt type decodes the vector's bytes back to the same encoding and the same root."""
     emitted = SSZTest(type_name=type(value).__name__, value=value).generate().json_dict
 
-    rebuilt = build_type(emitted["typeDescriptor"])
+    rebuilt = build_declaration(emitted["typeDescriptor"], emitted["typeName"])
     decoded = rebuilt.decode_bytes(from_hex(emitted["serialized"]))
 
     assert to_hex(decoded.encode_bytes()) == emitted["serialized"]

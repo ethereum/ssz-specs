@@ -11,7 +11,7 @@ from typing import Any, ClassVar, Final, Self
 from pydantic import BaseModel, ConfigDict, Field, computed_field, field_serializer
 from pydantic.alias_generators import to_camel
 
-from ssz.exceptions import SSZError, ValueFault
+from ssz.exceptions import SSZError, TypeFault, ValueFault
 from ssz.ssz_base import SSZType
 
 
@@ -143,8 +143,8 @@ class BaseConsensusFixture(CamelModel):
     info: FixtureInfo | None = Field(default=None, exclude=True)
     """Metadata about the test (description, format, etc.)."""
 
-    rejection_reason: ValueFault | None = None
-    """The fault a negative vector's input is rejected with, and the field clients assert on."""
+    rejection_reason: ValueFault | TypeFault | None = None
+    """The fault a negative vector is rejected with, and the field clients assert on."""
 
     @computed_field
     @property
@@ -153,7 +153,7 @@ class BaseConsensusFixture(CamelModel):
         return self.rejection_reason is None
 
     @field_serializer("rejection_reason", when_used="json-unless-none")
-    def serialize_rejection_reason(self, fault: ValueFault) -> str:
+    def serialize_rejection_reason(self, fault: ValueFault | TypeFault) -> str:
         """Emit the fault's name, its stable tag, rather than the sentence it renders."""
         return fault.name
 

@@ -2,10 +2,19 @@
 
 from typing import Protocol
 
-from ssz.exceptions import ValueFault
+from ssz.exceptions import TypeFault, ValueFault
 from ssz.ssz_base import SSZType
-from ssz_testing.fixtures import BaseTestSpec, ExpectedRejection
+from ssz_testing.fixtures import (
+    BaseTestSpec,
+    DeclaredField,
+    DeclaredOption,
+    ExpectedRejection,
+    TypeDescriptor,
+    describe_type,
+)
 from ssz_testing.serialization import SSZFixture, SSZTest
+from ssz_testing.type_builder import build_declaration
+from ssz_testing.type_rejections import TypeRejectionFixture, TypeRejectionTest
 
 
 class SSZTestFiller(Protocol):
@@ -25,15 +34,40 @@ class SSZTestFiller(Protocol):
         ...
 
 
-FIXTURE_FORMATS: tuple[type[BaseTestSpec], ...] = (SSZTest,)
+class TypeRejectionFiller(Protocol):
+    """Type of the ssz_type_rejection fixture: attempts an illegal declaration and collects it."""
+
+    def __call__(
+        self,
+        *,
+        case_id: str,
+        type_name: str,
+        type_descriptor: TypeDescriptor,
+        rejection_reason: TypeFault,
+        exact_message: str,
+    ) -> TypeRejectionFixture:
+        """Build the spec from these fields, generate the vector, and collect it."""
+        ...
+
+
+FIXTURE_FORMATS: tuple[type[BaseTestSpec], ...] = (SSZTest, TypeRejectionTest)
 """Every fillable fixture format, named here because a format module cannot name itself."""
 
 
 __all__ = [
     "FIXTURE_FORMATS",
+    "DeclaredField",
+    "DeclaredOption",
     "ExpectedRejection",
     "SSZFixture",
     "SSZTest",
     "SSZTestFiller",
+    "TypeDescriptor",
+    "TypeFault",
+    "TypeRejectionFiller",
+    "TypeRejectionFixture",
+    "TypeRejectionTest",
     "ValueFault",
+    "build_declaration",
+    "describe_type",
 ]

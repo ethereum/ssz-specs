@@ -2,7 +2,7 @@
 
 Generated from the Python reference implementation in this repository by `just fill`.
 
-117 cases: 109 a decoder must accept, 8 it must refuse.
+293 cases: 199 an implementation must accept, 94 it must refuse.
 Read [what a passing run proves](#what-a-passing-run-proves) before relying on them.
 
 ## Layout
@@ -10,10 +10,12 @@ Read [what a passing run proves](#what-a-passing-run-proves) before relying on t
 One case is one file.
 
 ```
-fixtures/ssz/<kind>/<valid|invalid>/<case id>.json
+fixtures/<format>/<kind>/<valid|invalid>/<case id>.json
 fixtures/ssz/vector/valid/uint16_vector3-mixed.json
+fixtures/ssz_type_rejection/vector/invalid/illegal-vector-zero_length.json
 ```
 
+`<format>` is the fixture format: `ssz` for the byte strings below, `ssz_type_rejection` for the declarations at the end.
 `<kind>` is the SSZ kind, snake-cased.
 The file name is the case id with each `/` turned into `-`, so `uint16_vector3/mixed` becomes `uint16_vector3-mixed.json`.
 The id is authored and unique, so it survives a rename of the test that fills it.
@@ -149,9 +151,43 @@ The name is stable; the sentence rendered from it is not, and is never emitted.
 | `TRUNCATED` | Ran out while a value was being read. |
 | `UNKNOWN_SELECTOR` | Names a selector the union declares no option for. |
 
-`OFFSET_OVERFLOW` completes the vocabulary and needs a composite of at least 4 GiB to fire.
-Six appear in this suite: `FIRST_OFFSET`, `LIMIT`, `NO_SELECTOR`, `SCOPE`, `TRUNCATED`, `UNKNOWN_SELECTOR`.
+Every name above appears in this suite. `OFFSET_OVERFLOW` completes the vocabulary and needs a composite of at least 4 GiB to fire, so no vector names it.
 The rest of the catalogue covers constructing values, walking paths and proofs, which no vector exercises.
+
+## Illegal type declarations
+
+`fixtures/ssz_type_rejection/` holds the declarations the specification calls illegal — a vector of zero elements, a container naming no field, a union selector outside 1 through 127.
+Nothing is decoded: the input under test is the declaration itself, and there are no bytes.
+
+| Field | Present | Meaning |
+| --- | --- | --- |
+| `valid` | always | `false`, always. |
+| `typeName` | always | Name to declare the type under, which some refusals quote back. |
+| `typeDescriptor` | always | The illegal declaration, read exactly as any other descriptor is. |
+| `rejectionReason` | always | The name of the rule that must refuse it. |
+| `_info` | always | Metadata, never part of what you assert. |
+
+Build the type from `typeDescriptor` and require the build to fail.
+An implementation that checks a declaration lazily may fail later — at the first value, encoding or root — and that counts, so long as no value of the type is ever produced.
+
+`rejectionReason` here names a `TypeFault` member rather than a `ValueFault` one, from the same file and read the same way: the name is stable, the sentence rendered from it is not, and the catalogue is closed.
+No name appears in both catalogues, so a consumer holding one table of reasons never has to ask which it came from.
+
+| Name | The declaration |
+| --- | --- |
+| `CAPACITY_NEGATIVE` | Counts what it holds with a negative number. |
+| `CONTAINER_EMPTY` | Is a container naming no field. |
+| `LAYOUT_FIELD_COUNT` | Sets a number of layout positions other than its field count. |
+| `LAYOUT_TOO_WIDE` | Lays out more than 256 positions, which one 32-byte word cannot hold. |
+| `LAYOUT_TRAILING_GAP` | Ends its layout on a gap rather than on a field. |
+| `LAYOUT_WIDTH` | Lays out no position at all. |
+| `NOT_ENTITLED` | Declares a capacity its shape has none of. |
+| `UNION_EMPTY` | Is a union offering no option. |
+| `UNION_INCOMPATIBLE` | Is a union whose options merkleize differently. |
+| `UNION_SELECTOR_RANGE` | Gives an option a selector outside 1 through 127. |
+| `VECTOR_EMPTY` | Pins a fixed count of zero. |
+
+The rest of the `TypeFault` catalogue is about this implementation's own Python machinery — a string handed in where an integer was declared, a width asked of a type that has none — which another language cannot fail and no vector names.
 
 ## `_info`
 
@@ -182,6 +218,4 @@ No second implementation has confirmed a byte string or a root here.
 ## Not covered
 
 - No proof or generalized-index vectors, though the implementation carries both.
-- No vectors for declarations the specification calls illegal, such as a zero-length vector; those come from a catalogue `rejectionReason` cannot name.
 - No vectors for the JSON mapping itself.
-- Thin negatives: 8 cases over three kinds. Nothing rejects a malformed uint, boolean, byte array, vector, list or container.
