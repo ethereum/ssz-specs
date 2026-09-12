@@ -50,6 +50,7 @@ Read off the declared class. `kind` is always present; the rest depends on it.
 | `kind` | Also carries | Directory |
 | --- | --- | --- |
 | `Uint8` … `Uint256` | `bits` | `uint8` … `uint256` |
+| `Byte` | `bits` | `byte` |
 | `Boolean` | — | `boolean` |
 | `BitVector` | `length` | `bit_vector` |
 | `BitList` | `limit` | `bit_list` |
