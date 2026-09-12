@@ -5,7 +5,7 @@ from typing import Any
 
 import pytest
 
-from ssz import Container, List, Uint64, ValueFault
+from ssz import Container, List, ProgressiveList, Uint64, ValueFault
 from ssz.paths import LENGTH_KEY
 from ssz_testing.fixtures import ExpectedRejection
 from ssz_testing.hex_codec import to_hex
@@ -41,9 +41,16 @@ class Numbers(List[Uint64]):
     ELEMENT_TYPE = Uint64
 
 
+class Spine(ProgressiveList[Uint64]):
+    """Eight-byte elements four to a chunk, on a spine only as long as its data."""
+
+    ELEMENT_TYPE = Uint64
+
+
 QUAD = Quad(a=Uint64(1), b=Uint64(2), c=Uint64(3), d=Uint64(4))
 PAIR = Pair(first=Uint64(5), second=Uint64(6))
 NUMBERS = Numbers(data=[Uint64(7), Uint64(8)])
+SPINE = Spine(data=[Uint64(9)])
 
 
 def leaf(value: int) -> bytes:
@@ -134,6 +141,27 @@ def test_the_root_carries_no_branch_of_its_own() -> None:
     assert vector.json_dict["branchIndices"] == []
     assert vector.json_dict["rejectionReason"] == "ROOT_HAS_NO_BRANCH"
     assert vector.json_dict["stricterThanSpec"] == "merkle-proofs.md returns the leaf unchanged"
+    assert vector.valid is False
+
+
+def test_a_node_the_tree_does_not_reach_carries_no_leaf() -> None:
+    """A position past the end of a progressive spine has nothing to claim and nothing to hash."""
+    vector = ProofTest(
+        type_name="Spine",
+        value=SPINE,
+        path=(4,),
+        expected_index=40,
+        expected_rejection=ExpectedRejection(
+            reason=ValueFault.PATH_PAST_SPINE,
+            exact_message="the path lies past the end of the progressive spine of Spine",
+        ),
+    ).generate()
+
+    assert vector.json_dict["index"] == "40"
+    assert "leaf" not in vector.json_dict
+    assert "branch" not in vector.json_dict
+    assert vector.json_dict["branchIndices"] == []
+    assert vector.json_dict["rejectionReason"] == "PATH_PAST_SPINE"
     assert vector.valid is False
 
 

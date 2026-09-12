@@ -50,6 +50,14 @@ def _outcome(verify: Callable[[], bool]) -> tuple[SSZError[Any] | None, bool]:
         return raised, False
 
 
+def _read_node(value: object, index: int) -> tuple[SSZError[Any] | None, bytes | None]:
+    """Read the node at one index, telling a refusal apart from the node that is there."""
+    try:
+        return None, bytes(node_root(value, index))
+    except SSZError as raised:
+        return raised, None
+
+
 class ProofMutation(Enum):
     """How a negative single-proof vector departs from the honest branch it was built from."""
 
@@ -184,11 +192,11 @@ class ProofFixture(ProofSubject):
     index: str
     """Decimal generalized index those steps resolve to."""
 
-    leaf: str
-    """Hex node the vector claims sits at that index."""
+    leaf: str | None = None
+    """Hex node the vector claims sits at that index, absent where the tree reaches none."""
 
-    branch: tuple[str, ...]
-    """Hex sibling nodes from the leaf upward, in the order a verifier consumes them."""
+    branch: tuple[str, ...] | None = None
+    """Hex sibling nodes from the leaf upward, absent where there is no leaf to carry."""
 
     branch_indices: tuple[str, ...]
     """Decimal index of each of those nodes, which the index alone already fixes."""
@@ -277,20 +285,26 @@ class ProofTest(BaseProofTest):
                 f"  Actual index: {index}"
             )
 
-        leaf = bytes(node_root(self.value, index))
+        raised, node = _read_node(self.value, index)
         branch_indices: tuple[int, ...] = ()
-        branch: tuple[bytes, ...] = ()
-        # The root sits on no branch of its own, so a vector about index one carries none.
-        if index > 1:
-            branch_indices = tuple(get_branch_indices(index))
-            branch = tuple(bytes(node) for node in build_proof(self.value, index))
+        emitted_leaf: str | None = None
+        emitted_branch: tuple[str, ...] | None = None
+        verified = False
+        if node is not None:
+            branch: tuple[bytes, ...] = ()
+            # The root sits on no branch of its own, so a vector about index one carries none.
+            if index > 1:
+                branch_indices = tuple(get_branch_indices(index))
+                branch = tuple(bytes(sibling) for sibling in build_proof(self.value, index))
 
-        leaf, branch = _mutated_proof(self.mutation, leaf, branch)
-        # Plain bytes, the way a consumer reads them off the vector: a node the width check
-        # refuses is one of the cases, and it is no Chunk to begin with.
-        raised, verified = _outcome(
-            lambda: verify_merkle_proof(leaf, branch, index, root)  # ty: ignore[invalid-argument-type]
-        )
+            leaf, branch = _mutated_proof(self.mutation, node, branch)
+            # Plain bytes, the way a consumer reads them off the vector: a node the width check
+            # refuses is one of the cases, and it is no Chunk to begin with.
+            raised, verified = _outcome(
+                lambda: verify_merkle_proof(leaf, branch, index, root)  # ty: ignore[invalid-argument-type]
+            )
+            emitted_leaf = to_hex(leaf)
+            emitted_branch = tuple(to_hex(sibling) for sibling in branch)
 
         return ProofFixture(
             type_name=self.type_name,
@@ -299,8 +313,8 @@ class ProofTest(BaseProofTest):
             root=to_hex(root),
             path=_written_path(self.path),
             index=str(index),
-            leaf=to_hex(leaf),
-            branch=tuple(to_hex(node) for node in branch),
+            leaf=emitted_leaf,
+            branch=emitted_branch,
             branch_indices=tuple(str(sibling) for sibling in branch_indices),
             verified=verified,
             stricter_than_spec=self.stricter_than_spec,

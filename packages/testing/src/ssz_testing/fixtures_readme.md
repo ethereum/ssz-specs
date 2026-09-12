@@ -235,6 +235,7 @@ A path step is an object with exactly one key: `field` for a container field, `p
 `valid` is the whole verdict: false says a verifier must not accept this proof.
 `rejectionReason` turns up beside it only where a named refusal has to fire; a case that merely fails to rebuild the root, such as a tampered leaf or a reversed branch, carries none.
 Where a multiproof's index set is refused outright, `helperIndices` and `proof` are empty, no node having been reached.
+Where a value's own tree holds no node at `index` — a position past the end of a progressive spine — `leaf` and `branch` are absent and `branchIndices` is empty, so steps 3 and 4 above have nothing to run and the refusal is the whole claim.
 
 ### Where this suite is stricter than the specification
 
@@ -296,6 +297,7 @@ A proof case names one of these instead, refused while the branch or the request
 | `EMPTY_REQUEST` | Is a multiproof asking for no index at all. |
 | `LEAF_COUNT` | Gives a different number of leaves from indices. |
 | `NESTED_INDEX` | Asks for an index lying below another in the same request. |
+| `PATH_PAST_SPINE` | Is about a position past the end of the value's progressive spine, which holds no node there to read. |
 | `PROOF_LENGTH` | Holds a different number of nodes from the one the request needs. |
 | `REPEATED_INDEX` | Asks for the same index twice. |
 | `ROOT_HAS_NO_BRANCH` | Is about index 1, which sits on no branch of its own. |
