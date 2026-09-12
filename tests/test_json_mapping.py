@@ -6,6 +6,7 @@ import json
 from typing import Any
 
 import pytest
+from pydantic import ValidationError
 
 from ssz import (
     BitList,
@@ -18,6 +19,7 @@ from ssz import (
     ProgressiveBitList,
     ProgressiveContainer,
     ProgressiveList,
+    Uint8,
     Uint16,
     Vector,
 )
@@ -218,3 +220,51 @@ def test_a_nested_collection_is_written_and_read_bare(value: SSZType, expected: 
     """An element carries no wrapper either, so the mapping is the same at every depth."""
     assert json.loads(json_writer(type(value)).dump_json(value)) == expected
     assert json_writer(type(value)).validate_python(expected) == value
+
+
+@pytest.mark.parametrize(
+    "declaration,document,absent",
+    [
+        (Point, '{"x": "1"}', "y"),
+        (Point, "{}", "x, y"),
+        (Corner, '{"x": "1"}', "y"),
+    ],
+    ids=["container", "container_empty", "progressive_container"],
+)
+def test_an_object_leaving_out_a_declared_field_is_refused(
+    declaration: type[SSZType], document: str, absent: str
+) -> None:
+    """Every field of the schema is present with a value in a document that renders a struct."""
+    with pytest.raises(ValidationError, match=f"leaves {absent} of {declaration.__name__}"):
+        json_writer(declaration).validate_json(document)
+
+
+def test_a_field_left_out_of_a_python_value_still_takes_its_default() -> None:
+    """The rule binds the document, the zero value of a struct being no document at all."""
+    assert Point(x=Uint16(1)) == Point(x=Uint16(1), y=Uint16(0))  # ty: ignore[missing-argument]
+    assert json_writer(Point).validate_python({"x": "1"}) == Point(x=Uint16(1), y=Uint16(0))
+
+
+@pytest.mark.parametrize(
+    "document,expected",
+    [
+        ('"0x0102"', "expected iterable of Uint16, got str"),
+        ("[true]", "expected Uint16, got bool"),
+    ],
+    ids=["hex_string", "wrong_element_kind"],
+)
+def test_a_document_of_the_wrong_kind_for_a_sequence_is_refused(
+    document: str, expected: str
+) -> None:
+    """A document read answers with a refusal, never with the type error a constructor raises."""
+    with pytest.raises(ValidationError, match=expected):
+        json_writer(Uint16List4).validate_json(document)
+
+
+def test_a_number_above_the_uint_width_says_which_bound_it_broke() -> None:
+    """The range is what the refusal names, so it reads apart from a misspelled number."""
+    with pytest.raises(ValidationError, match="Input should be less than 256"):
+        json_writer(Uint8).validate_json('"256"')
+
+    with pytest.raises(ValidationError, match="String should match pattern"):
+        json_writer(Uint8).validate_json('"0x05"')

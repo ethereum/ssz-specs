@@ -10,10 +10,11 @@ Both encode identically: fixed-size fields inline, variable-size fields behind o
 """
 
 import io
+from collections.abc import Mapping
 from itertools import pairwise
 from typing import IO, Any, ClassVar, Final, Self, override
 
-from pydantic import ConfigDict
+from pydantic import ConfigDict, ValidationInfo, model_validator
 from pydantic_core import PydanticUndefined
 
 from ssz.exceptions import SSZError, SSZTypeError, SSZValueError, TypeFault, ValueFault
@@ -90,6 +91,26 @@ class _SSZContainer(SSZModel):
 
     _FIXED_SIZE: ClassVar[int | None] = 0
     """Width of the whole struct, or None where a field leaves it without one."""
+
+    @model_validator(mode="before")
+    @classmethod
+    def _require_every_field(cls, value: Any, info: ValidationInfo) -> Any:
+        """
+        Refuse a JSON object that leaves a declared field out, per the canonical JSON mapping.
+
+        Every field of the schema is present with a value in a document that renders a struct.
+        A value built in Python is not a document, and still takes each field's own default.
+
+        Raises:
+            SSZValueError: When a JSON object names no value for some declared field.
+        """
+        if info.mode == "json" and isinstance(value, Mapping):
+            absent = [name for name in cls.model_fields if name not in value]
+            if absent:
+                raise SSZValueError(
+                    ValueFault.FIELD_ABSENT, type=cls.__name__, fields=", ".join(absent)
+                )
+        return value
 
     @classmethod
     def __pydantic_init_subclass__(cls, **kwargs: Any) -> None:

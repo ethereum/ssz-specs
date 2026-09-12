@@ -80,6 +80,8 @@ class ValueFault(Enum):
     NO_SELECTOR = "a budget of {scope} holds no selector"
     UNKNOWN_SELECTOR = "selector {selector} names no option of {type}"
 
+    FIELD_ABSENT = "the document leaves {fields} of {type} without a value"
+
     NO_SUCH_FIELD = "{type} has no field named {step}"
     NO_SUCH_OPTION = "{type} has no option with selector {step}"
     NO_SUCH_POSITION = "{type} has no position {step}"
