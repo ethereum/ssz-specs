@@ -13,8 +13,7 @@ import io
 from itertools import pairwise
 from typing import IO, Any, ClassVar, Final, Self, override
 
-from pydantic import ConfigDict, model_validator
-from pydantic.functional_validators import ModelWrapValidatorHandler
+from pydantic import ConfigDict
 from pydantic_core import PydanticUndefined
 
 from ssz.exceptions import SSZError, SSZTypeError, SSZValueError, TypeFault, ValueFault
@@ -91,19 +90,6 @@ class _SSZContainer(SSZModel):
 
     _FIXED_SIZE: ClassVar[int | None] = 0
     """Width of the whole struct, or None where a field leaves it without one."""
-
-    @model_validator(mode="wrap")
-    @classmethod
-    def _accept_hex_string(cls, value: Any, handler: ModelWrapValidatorHandler[Self]) -> Self:
-        """
-        Reconstruct the container from a hex-encoded SSZ payload.
-
-        - Other input shapes pass through to field-by-field validation.
-        - Hex strings accept an optional 0x prefix.
-        """
-        if isinstance(value, str):
-            return cls.from_hex(value)
-        return handler(value)
 
     @classmethod
     def __pydantic_init_subclass__(cls, **kwargs: Any) -> None:
@@ -249,6 +235,8 @@ class _SSZContainer(SSZModel):
     def from_hex(cls, value: str) -> Self:
         """
         Decode from a hex string with an optional 0x prefix.
+
+        The JSON mapping writes a struct as an object, so no parser reads one from a string.
 
         Raises:
             SSZValueError: When the string holds something other than hex digits.
