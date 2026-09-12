@@ -1670,6 +1670,58 @@ class TestProgressiveByteList:
         )
 
 
+class Bytes4(ByteVector):
+    """A four-byte array, the shorthand half of the fixed byte-array alias."""
+
+    LENGTH = 4
+
+
+class Bytes4Elementwise(Vector[Byte]):
+    """Four byte elements, the spelled-out half of that alias."""
+
+    LENGTH = 4
+
+
+class ByteList8Elementwise(List[Byte]):
+    """Up to eight byte elements, the spelled-out half of the bounded byte-array alias."""
+
+    LIMIT = 8
+
+
+class ProgressiveByteListElementwise(ProgressiveList[Byte]):
+    """Byte elements on a progressive spine, the spelled-out half of the unbounded alias."""
+
+
+BYTE_ARRAY_ALIASES = [
+    pytest.param(Bytes4, Bytes4Elementwise, id="byte_vector_against_a_vector_of_bytes"),
+    pytest.param(Bytes4, Uint8Vector4, id="byte_vector_against_a_vector_of_numbers"),
+    pytest.param(ByteList8, ByteList8Elementwise, id="byte_list_against_a_list_of_bytes"),
+    pytest.param(
+        ProgressiveByteList,
+        ProgressiveByteListElementwise,
+        id="progressive_byte_list_against_a_progressive_list_of_bytes",
+    ),
+]
+"""Every byte-array shorthand the specification names, against the spelling it stands for."""
+
+
+class TestByteArrayAliases:
+    """The byte-array shorthands, against the element-type spellings they are aliases of."""
+
+    @pytest.mark.parametrize(("shorthand", "spelled_out"), BYTE_ARRAY_ALIASES)
+    def test_both_spellings_read_one_wire_format_and_build_one_tree(
+        self, shorthand: type[SSZType], spelled_out: type[SSZType]
+    ) -> None:
+        """An alias is one shape under two names, so neither name may hold bytes or a root apart."""
+        payload = b"\xde\xad\xbe\xef"
+
+        assert shorthand.decode_bytes(payload).encode_bytes() == payload
+        assert spelled_out.decode_bytes(payload).encode_bytes() == payload
+        assert hash_tree_root(shorthand.decode_bytes(payload)) == hash_tree_root(
+            spelled_out.decode_bytes(payload)
+        )
+
+
 class TestSequenceDefaults:
     """The default value of the three sequence shapes, and the zeroed check over it."""
 
