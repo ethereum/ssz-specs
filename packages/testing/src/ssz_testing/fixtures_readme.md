@@ -378,6 +378,7 @@ A JSON refusal is named at the level of the mapping rather than of whichever mac
 | `BITFIELD_PADDING` | Is a bitfield setting a bit past the length its type declares. |
 | `HEX_PREFIX` | Writes a hex byte string without its `0x`. |
 | `OVER_LIMIT` | Holds more elements than its type admits. |
+| `STRUCT_NOT_AN_OBJECT` | Is a struct written as something other than an object, such as the hex of its own encoding. |
 | `UNDECLARED_FIELD` | Names a field its struct does not declare. |
 
 ### Where this implementation and the mapping part

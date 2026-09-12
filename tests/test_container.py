@@ -958,8 +958,8 @@ class TestFromHex:
         )
 
 
-class TestHexStringValidator:
-    """Pydantic validation accepts hex strings via the wrap validator."""
+class TestStructShape:
+    """The JSON mapping writes a struct as an object, and validation reads nothing else."""
 
     @pytest.mark.parametrize(
         "hex_input",
@@ -969,12 +969,13 @@ class TestHexStringValidator:
             pytest.param("0xAB", id="uppercase_with_prefix"),
         ],
     )
-    def test_validates_hex_string(self, hex_input: str) -> None:
-        """Pydantic validation tolerates the 0x prefix and mixed case alike."""
-        assert OneByte.model_validate(hex_input) == OneByte(a=Uint8(0xAB))
+    def test_a_hex_string_is_refused(self, hex_input: str) -> None:
+        """A struct's own SSZ encoding, written as hex, is no rendering of that struct."""
+        with pytest.raises(ValidationError, match=r"Input should be a valid dictionary"):
+            OneByte.model_validate(hex_input)
 
     def test_dict_input_routes_to_field_validation(self) -> None:
-        """A dict input goes through field-by-field validation, not hex decoding."""
+        """A dict input goes through field-by-field validation, which is the mapping's shape."""
         assert OneByte.model_validate({"a": Uint8(0xAB)}) == OneByte(a=Uint8(0xAB))
 
     def test_instance_input_passes_through(self) -> None:
@@ -982,33 +983,17 @@ class TestHexStringValidator:
         instance = OneByte(a=Uint8(0xAB))
         assert OneByte.model_validate(instance) == instance
 
-    def test_wrong_length_hex_raises_with_class_name(self) -> None:
-        """Hex with too many bytes raises a validation error tagged by the class name."""
-        # Two hex bytes cannot fit a 1-byte container, which spans its own width exactly.
-        # The docs URL embeds the installed pydantic version, so the regex generalizes it.
-        with pytest.raises(
-            ValidationError,
-            match=(
-                r"(?s)^1 validation error for OneByte\n"
-                + r"  Value error, OneByte spans 1 bytes, and the budget is 2 "
-                + r"\[type=value_error, input_value='abcd', input_type=str\]\n"
-                + r"    For further information visit "
-                + r"https://errors\.pydantic\.dev/[^/]+/v/value_error\Z"
-            ),
-        ):
-            OneByte.model_validate("abcd")
+    def test_a_nested_struct_field_is_refused_a_hex_string(self) -> None:
+        """A struct field is written as an object of its own, hex being no spelling of one."""
+        with pytest.raises(ValidationError, match=r"Input should be a valid dictionary"):
+            OuterFixedNested.model_validate(
+                {"z": Uint64(7), "inner": "01000000000000000200000000000000"}
+            )
 
-    def test_nested_container_field_accepts_hex_string(self) -> None:
-        """A nested container field accepts a hex string for its own SSZ encoding."""
-        # Fixture state:
-        #   inner.x (Uint64) = 1, inner.y (Uint64) = 2 -> 16 little-endian bytes
-        outer = OuterFixedNested.model_validate(
-            {
-                "z": Uint64(7),
-                "inner": "01000000000000000200000000000000",
-            }
-        )
-        assert outer == OuterFixedNested(z=Uint64(7), inner=InnerFixed(x=Uint64(1), y=Uint64(2)))
+    def test_the_hex_entry_point_stays_open(self) -> None:
+        """Decoding a struct from hex is asked for by name, and is no longer a rendering."""
+        encoded = OuterFixedNested(z=Uint64(7), inner=InnerFixed(x=Uint64(1), y=Uint64(2)))
+        assert OuterFixedNested.from_hex(encoded.encode_bytes().hex()) == encoded
 
 
 class TestZeroFieldStruct:
@@ -1732,16 +1717,12 @@ class TestProgressiveContainerSerialization:
         stream = io.BytesIO(encoded)
         assert ProgressiveFieldsProgressive.deserialize(stream, len(encoded)) == value
 
-    def test_from_hex_and_validation_accept_a_hex_payload(self) -> None:
-        """The hex entry points work on a progressive container as on any container."""
+    def test_from_hex_decodes_and_validation_refuses_the_same_string(self) -> None:
+        """A progressive struct reads hex by name only, its JSON rendering being an object."""
         expected = Square(side=Uint16(0x1234), color=Uint8(0x56))
         assert Square.from_hex("0x341256") == expected
-        assert Square.model_validate("341256") == expected
-
-    def test_bad_hex_reports_the_shape_name(self) -> None:
-        """A malformed hex payload surfaces a validation error tagged by the class name."""
-        with pytest.raises(ValidationError, match=r"1 validation error for Square"):
-            Square.model_validate("34125600")
+        with pytest.raises(ValidationError, match=r"Input should be a valid dictionary"):
+            Square.model_validate("341256")
 
 
 class TestProgressiveContainerNesting:

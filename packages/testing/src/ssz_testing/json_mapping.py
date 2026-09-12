@@ -25,6 +25,7 @@ class JsonFault(Enum):
     BITFIELD_PADDING = "a bitfield sets a bit past the length its type declares"
     OVER_LIMIT = "a collection holds more elements than its type admits"
     UNDECLARED_FIELD = "an object names a field its struct does not declare"
+    STRUCT_NOT_AN_OBJECT = "a struct is written as an object, and this document is not one"
 
 
 class JsonMappingFixture(BaseConsensusFixture):
