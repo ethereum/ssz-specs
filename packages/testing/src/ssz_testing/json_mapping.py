@@ -22,10 +22,17 @@ class JsonFault(Enum):
     """Every way a JSON document fails to be a rendering of the type it is read against."""
 
     HEX_PREFIX = "a hex byte string opens with 0x"
+    HEX_DIGITS = "a hex byte string holds something other than hex digits"
+    HEX_LENGTH = "a hex byte string spans a length its type does not have"
     BITFIELD_PADDING = "a bitfield sets a bit past the length its type declares"
+    BITFIELD_DELIMITER = "a bit list encoding closes with no delimiter bit"
+    BITFIELD_TRAILING_ZEROS = "a bit list encoding carries zero bytes past its delimiter"
+    UINT_RANGE = "a number stands above what its uint type admits"
     OVER_LIMIT = "a collection holds more elements than its type admits"
     UNDECLARED_FIELD = "an object names a field its struct does not declare"
+    MISSING_FIELD = "an object leaves out a field its struct declares"
     STRUCT_NOT_AN_OBJECT = "a struct is written as an object, and this document is not one"
+    UNDECLARED_SELECTOR = "an object names a selector its union does not declare"
 
 
 class JsonMappingFixture(BaseConsensusFixture):

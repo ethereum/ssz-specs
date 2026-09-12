@@ -29,7 +29,7 @@ from abc import ABC
 from collections.abc import Iterable, Mapping, Sequence
 from typing import IO, Any, ClassVar, Self, cast, overload, override
 
-from pydantic import Field, field_validator, model_serializer
+from pydantic import Field, ValidationInfo, field_validator, model_serializer
 
 from ssz.base import json_writer
 from ssz.byte_arrays import ByteVector, coerced_bytes
@@ -123,27 +123,41 @@ class _SSZSequence[T: SSZType](SSZCollection[T], ABC):
 
     @field_validator("data", mode="before")
     @classmethod
-    def _coerce_and_validate(cls, raw_input: Any) -> list[SSZType]:
-        """Shape the input, check the element count, then coerce every element."""
+    def _coerce_and_validate(cls, raw_input: Any, info: ValidationInfo) -> list[SSZType]:
+        """
+        Shape the input, check the element count, then coerce every element.
+
+        Raises:
+            SSZTypeError: When a value built in Python is not one this shape holds.
+            ValueError: When a JSON document holds neither the array nor the hex the type spells.
+        """
         cls._check_declaration()
 
         # The mapping spells a sequence of opaque bytes as the hex of its own encoding.
         if isinstance(raw_input, str) and issubclass(cls.ELEMENT_TYPE, Byte):
             raw_input = list(coerced_bytes(cls.__name__, raw_input))
 
-        # Strings and non-iterables are refused, and a generator is materialized.
-        elements = cls._shape_input(raw_input)
+        try:
+            # Strings and non-iterables are refused, and a generator is materialized.
+            elements = cls._shape_input(raw_input)
 
-        # Checked before coercion, so an oversized input reports the capacity it broke.
-        cls._validate_length(len(elements))
+            # Checked before coercion, so an oversized input reports the capacity it broke.
+            cls._validate_length(len(elements))
 
-        # An element already of the declared class is settled without a call.
-        # Whole sequences of them arrive here whenever a value is revalidated.
-        element_type = cls.ELEMENT_TYPE
-        coerce = cls._validate_element
-        return [
-            element if type(element) is element_type else coerce(element) for element in elements
-        ]
+            # An element already of the declared class is settled without a call.
+            # Whole sequences of them arrive here whenever a value is revalidated.
+            element_type = cls.ELEMENT_TYPE
+            coerce = cls._validate_element
+            return [
+                element if type(element) is element_type else coerce(element)
+                for element in elements
+            ]
+        except SSZTypeError as fault:
+            # Reading a document answers with a validation error, which a type error is not.
+            # One escapes the reader whose whole contract is to refuse rather than raise.
+            if info.mode == "json":
+                raise ValueError(str(fault)) from fault
+            raise
 
     @classmethod
     @override

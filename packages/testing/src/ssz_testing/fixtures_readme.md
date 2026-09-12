@@ -2,7 +2,7 @@
 
 Generated from the Python reference implementation in this repository by `just fill`.
 
-400 cases: 280 an implementation must accept, 120 it must refuse.
+505 cases: 314 an implementation must accept, 191 it must refuse.
 Read [what a passing run proves](#what-a-passing-run-proves) before relying on them.
 
 ## Layout
@@ -387,25 +387,31 @@ A JSON refusal is named at the level of the mapping rather than of whichever mac
 
 | Name | The document |
 | --- | --- |
+| `BITFIELD_DELIMITER` | Is a bit list whose encoding closes with no delimiter bit. |
 | `BITFIELD_PADDING` | Is a bitfield setting a bit past the length its type declares. |
+| `BITFIELD_TRAILING_ZEROS` | Is a bit list whose encoding carries zero bytes past its delimiter. |
+| `HEX_DIGITS` | Writes a hex byte string holding something other than hex digits. |
+| `HEX_LENGTH` | Writes a hex byte string spanning a length its type does not have. |
 | `HEX_PREFIX` | Writes a hex byte string without its `0x`. |
+| `MISSING_FIELD` | Leaves out a field its struct declares. |
 | `OVER_LIMIT` | Holds more elements than its type admits. |
 | `STRUCT_NOT_AN_OBJECT` | Is a struct written as something other than an object, such as the hex of its own encoding. |
+| `UINT_RANGE` | Holds a number above what its uint type admits. |
 | `UNDECLARED_FIELD` | Names a field its struct does not declare. |
+| `UNDECLARED_SELECTOR` | Names a selector its union does not declare. |
 
 ### Where this implementation and the mapping part
 
-The specification says every field in the schema must be present with a value, and that a parser *may* ignore additional fields. Four documents sit outside what the mapping spells, and this implementation does not treat them alike:
+The specification says every field in the schema must be present with a value, and that a parser *may* ignore additional fields. An object leaving a declared field out is refused here, that first half being a `must`. Three documents still sit outside what the mapping spells, and this implementation does not treat them alike:
 
 | The document | The specification | Here |
 | --- | --- | --- |
-| An object missing a declared field | Must be present with a value | Accepted, the field taking its zero value |
 | An object naming an undeclared field | May be ignored | Refused, which the `may` leaves open |
 | An integer as a JSON number | A string, so that a uint64 survives | Accepted beside the string |
 | A hex byte string with no `0x` | Carries the prefix | Accepted on a byte array, refused on `Byte` and on a bitfield |
 
-Rows two and four carry a vector. Row four's refusal is the spelling the mapping gives, and row two's is only permitted, so that case carries `stricterThanSpec`: a parser ignoring the undeclared field is as conformant as one refusing the document.
-Rows one and three carry none: a vector either way would make one reading of an open question the contract, and the reading it would pin is this implementation's own leniency.
+Rows one and three carry a vector. Row three's refusal is the spelling the mapping gives, and row one's is only permitted, so that case carries `stricterThanSpec`: a parser ignoring the undeclared field is as conformant as one refusing the document.
+Row two carries none: a vector either way would make one reading of an open question the contract, and the reading it would pin is this implementation's own leniency.
 
 ## `_info`
 

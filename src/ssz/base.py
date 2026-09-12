@@ -33,21 +33,22 @@ def wrapping_schema(
     """
     Build the pydantic schema for an SSZ type that wraps one validated primitive.
 
-    - An instance takes a branch of its own, reaching the field untouched.
+    - An instance is settled first, and reaches the field without meeting the constructor.
     - Every other accepted form is checked, then handed to the constructor.
     """
     # The constructor accepts more than a field should.
     # It refuses with an SSZ error, which pydantic does not recognize.
     # Gating on the accepted forms first keeps every refusal a validation error.
     wrap = core_schema.no_info_plain_validator_function(cls)
-    return core_schema.union_schema(
-        # An instance is listed first, and reaches the field without meeting the constructor.
+    return core_schema.no_info_wrap_validator_function(
         # A field may hold a subclass of what it declares.
         # The constructor would narrow one back, refusing a value that was already right.
-        [
-            core_schema.is_instance_schema(cls),
-            *(core_schema.chain_schema([raw, wrap]) for raw in accepted),
-        ],
+        #
+        # Asked here rather than as a union branch, since such a branch cannot run on a document.
+        # It reports that in place of the refusal the document earned, which leaves a number out
+        # of range reading no differently from a misspelled one.
+        lambda value, handler: value if isinstance(value, cls) else handler(value),
+        core_schema.union_schema([core_schema.chain_schema([raw, wrap]) for raw in accepted]),
         serialization=core_schema.plain_serializer_function_ser_schema(to_json),
     )
 
