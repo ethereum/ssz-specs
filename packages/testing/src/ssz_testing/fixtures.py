@@ -146,6 +146,9 @@ class BaseConsensusFixture(CamelModel):
     rejection_reason: ValueFault | TypeFault | None = None
     """The fault a negative vector is rejected with, and the field clients assert on."""
 
+    stricter_than_spec: str | None = None
+    """What the specification admits here, present only where this suite refuses it anyway."""
+
     @computed_field
     @property
     def valid(self) -> bool:
@@ -250,6 +253,9 @@ class BaseTestSpec(CamelModel):
     If set, the input must be rejected during processing.
     Never serialized: the emitted contract is the fixture's reason field.
     """
+
+    stricter_than_spec: str | None = None
+    """What the specification admits here, authored where this suite refuses it anyway."""
 
     @abstractmethod
     def generate(self) -> BaseConsensusFixture:

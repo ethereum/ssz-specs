@@ -25,6 +25,19 @@ UINT16: Final = describe_type(Uint16)
 ONE_FIELD: Final = (DeclaredField(name="amount", type=UINT8),)
 """A single named field, enough to give a struct the one thing a layout is counted against."""
 
+SURPLUS_CAPACITY_IS_UNLISTED: Final = (
+    "simple-serialize.md names no such illegal type: the surplus key makes a malformed "
+    "descriptor rather than an illegal SSZ type, and an implementation that ignores it builds "
+    "the type the rest of the declaration spells"
+)
+"""What the specification says about a declaration carrying a capacity its shape has none of."""
+
+NEGATIVE_CAPACITY_IS_UNLISTED: Final = (
+    "simple-serialize.md names no such illegal type: a capacity is written N, and a descriptor "
+    "counting with a negative number is malformed before any rule about SSZ types reads it"
+)
+"""What the specification says about a capacity below zero."""
+
 
 def test_a_vector_of_zero_elements_is_refused(ssz_type_rejection: TypeRejectionFiller) -> None:
     """
@@ -158,6 +171,7 @@ def test_a_list_declaring_a_length_is_refused(ssz_type_rejection: TypeRejectionF
     - it is refused, an exact count being a vector's rule.
     - a list merkleizes from its bound and mixes in its own count, so a second count
       rule would name a tree the shape does not have.
+    - this suite is stricter than the specification here, and the vector says so.
     """
     ssz_type_rejection(
         case_id="illegal/list/declares_a_length",
@@ -165,6 +179,7 @@ def test_a_list_declaring_a_length_is_refused(ssz_type_rejection: TypeRejectionF
         type_descriptor=TypeDescriptor(kind="List", limit=4, length=2, element_type=UINT8),
         rejection_reason=TypeFault.NOT_ENTITLED,
         exact_message="IllegalLengthBearingList declares a LENGTH its shape has none of",
+        stricter_than_spec=SURPLUS_CAPACITY_IS_UNLISTED,
     )
 
 
@@ -185,6 +200,7 @@ def test_a_vector_declaring_a_limit_is_refused(ssz_type_rejection: TypeRejection
     - it is refused, the bound being a list's rule.
     - the two agree here, and the declaration is refused anyway: a shape carries the
       one capacity it has, not every capacity it could be reconciled with.
+    - this suite is stricter than the specification here, and the vector says so.
     """
     ssz_type_rejection(
         case_id="illegal/vector/declares_a_limit",
@@ -192,6 +208,7 @@ def test_a_vector_declaring_a_limit_is_refused(ssz_type_rejection: TypeRejection
         type_descriptor=TypeDescriptor(kind="Vector", length=4, limit=4, element_type=UINT8),
         rejection_reason=TypeFault.NOT_ENTITLED,
         exact_message="IllegalLimitBearingVector declares a LIMIT its shape has none of",
+        stricter_than_spec=SURPLUS_CAPACITY_IS_UNLISTED,
     )
 
 
@@ -213,6 +230,7 @@ def test_a_progressive_list_declaring_a_length_is_refused(
     ----
     - it is refused, EIP-7916 giving this shape no capacity at all.
     - its tree grows with what it holds, so a declared count names no level of the spine.
+    - this suite is stricter than the specification here, and the vector says so.
     """
     ssz_type_rejection(
         case_id="illegal/progressive_list/declares_a_length",
@@ -220,6 +238,7 @@ def test_a_progressive_list_declaring_a_length_is_refused(
         type_descriptor=TypeDescriptor(kind="ProgressiveList", length=2, element_type=UINT8),
         rejection_reason=TypeFault.NOT_ENTITLED,
         exact_message="IllegalLengthBearingProgressiveList declares a LENGTH its shape has none of",
+        stricter_than_spec=SURPLUS_CAPACITY_IS_UNLISTED,
     )
 
 
@@ -242,6 +261,7 @@ def test_a_progressive_list_declaring_a_limit_is_refused(
     - it is refused, for the reason a declared length is.
     - both capacities are named separately, so an implementation refusing one and
       admitting the other is caught by exactly one of the two vectors.
+    - this suite is stricter than the specification here, and the vector says so.
     """
     ssz_type_rejection(
         case_id="illegal/progressive_list/declares_a_limit",
@@ -249,6 +269,7 @@ def test_a_progressive_list_declaring_a_limit_is_refused(
         type_descriptor=TypeDescriptor(kind="ProgressiveList", limit=4, element_type=UINT8),
         rejection_reason=TypeFault.NOT_ENTITLED,
         exact_message="IllegalLimitBearingProgressiveList declares a LIMIT its shape has none of",
+        stricter_than_spec=SURPLUS_CAPACITY_IS_UNLISTED,
     )
 
 
@@ -269,6 +290,7 @@ def test_a_negative_capacity_is_refused(ssz_type_rejection: TypeRejectionFiller)
     - it is refused, a capacity counting what a shape holds.
     - an implementation reading the bound into an unsigned word would see a bound of
       2**64 - 1 rather than a refusal.
+    - this suite is stricter than the specification here, and the vector says so.
     """
     ssz_type_rejection(
         case_id="illegal/list/negative_limit",
@@ -278,6 +300,7 @@ def test_a_negative_capacity_is_refused(ssz_type_rejection: TypeRejectionFiller)
         exact_message=(
             "IllegalNegativeLimitList.LIMIT counts what a shape holds, and -1 is not a count"
         ),
+        stricter_than_spec=NEGATIVE_CAPACITY_IS_UNLISTED,
     )
 
 

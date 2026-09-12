@@ -128,6 +128,7 @@ class JsonMappingTest(BaseTestSpec):
             document=self.document,
             serialized=to_hex(self.value.encode_bytes()),
             not_read_back=self.not_read_back,
+            stricter_than_spec=self.stricter_than_spec,
         )
 
     def _require_the_read_stays_unavailable(self, mapping: Any) -> None:
@@ -176,4 +177,5 @@ class JsonMappingTest(BaseTestSpec):
             ssz_type=self.ssz_type,
             document=self.document,
             rejection_reason=fault,
+            stricter_than_spec=self.stricter_than_spec,
         )

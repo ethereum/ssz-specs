@@ -82,4 +82,5 @@ class TypeRejectionTest(BaseTestSpec):
             type_name=self.type_name,
             type_descriptor=self.type_descriptor,
             rejection_reason=self.rejection_reason,
+            stricter_than_spec=self.stricter_than_spec,
         )

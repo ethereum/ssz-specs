@@ -37,9 +37,11 @@ The id is authored and unique, so it survives a rename of the test that fills it
 | `value` | valid | What those bytes encode. |
 | `root` | valid | `hash_tree_root` of that value. |
 | `rejectionReason` | invalid | The name the decoder must refuse with. |
+| `stricterThanSpec` | rarely | What the specification admits where this suite refuses it anyway. |
 | `_info` | always | Metadata, never part of what you assert. |
 
 Branch on `valid`, not on which fields turned up. An absent field is omitted, never `null`.
+`stricterThanSpec` is carried by any format, and marks a case asserting more than the specification requires: read it before calling that case a failure, since it says what the specification does instead rather than what you got wrong.
 Hex is `0x`-prefixed and lowercase, so an empty byte string is `"0x"`.
 `typeName` is a label, not a contract — build the type from `typeDescriptor`.
 
@@ -257,6 +259,7 @@ Read that field before calling one of them a failure: it marks "this repository 
 
 The name of a `ValueFault` member in `src/ssz/exceptions.py`. The catalogue is closed, so fail loudly on a name you do not know rather than skipping the case.
 The name is stable; the sentence rendered from it is not, and is never emitted.
+Requiring the name, and not merely a failure, is load-bearing: a decoder skipping an offset or budget rule mostly still fails, on the bytes that rule left unread, under `TRAILING_BYTES` or `TRUNCATED` rather than under the name the case gives.
 
 | Name | The input |
 | --- | --- |
@@ -324,6 +327,9 @@ Nothing is decoded: the input under test is the declaration itself, and there ar
 Build the type from `typeDescriptor` and require the build to fail.
 An implementation that checks a declaration lazily may fail later — at the first value, encoding or root — and that counts, so long as no value of the type is ever produced.
 
+Five cases carry `stricterThanSpec`, and none of them is on the specification's list of illegal types: the four declaring a capacity their shape has none of, and the one counting with a negative number.
+Those are hygiene rules of the descriptor above rather than rules about SSZ types, and an implementation that ignores the surplus key builds the type the rest of the declaration spells.
+
 `rejectionReason` here names a `TypeFault` member rather than a `ValueFault` one, from the same file and read the same way: the name is stable, the sentence rendered from it is not, and the catalogue is closed.
 No name appears in both catalogues, so a consumer holding one table of reasons never has to ask which it came from.
 
@@ -357,6 +363,7 @@ The mapping is normative — an SSZ schema defines the JSON encoding too — and
 | `serialized` | valid | The SSZ encoding of that same value. |
 | `notReadBack` | rarely | Why this implementation only wrote the document, and never read one back. |
 | `rejectionReason` | invalid | The name the parser must refuse with. |
+| `stricterThanSpec` | rarely | What the specification admits where this suite refuses it anyway. |
 
 `serialized` is what keeps a valid case from being a tautology. Parsing `document` and writing it out again only proves your reader and your writer agree with each other; the bytes pin the value against a representation the mapping never touches.
 It duplicates what an `ssz` case carries, and that is the point — no `ssz` case is guaranteed to exist for the type and value a JSON case chose.
@@ -397,7 +404,7 @@ The specification says every field in the schema must be present with a value, a
 | An integer as a JSON number | A string, so that a uint64 survives | Accepted beside the string |
 | A hex byte string with no `0x` | Carries the prefix | Accepted on a byte array, refused on `Byte` and on a bitfield |
 
-Rows two and four carry a vector, each on the half where refusing is what the mapping asks for.
+Rows two and four carry a vector. Row four's refusal is the spelling the mapping gives, and row two's is only permitted, so that case carries `stricterThanSpec`: a parser ignoring the undeclared field is as conformant as one refusing the document.
 Rows one and three carry none: a vector either way would make one reading of an open question the contract, and the reading it would pin is this implementation's own leniency.
 
 ## `_info`

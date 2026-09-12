@@ -45,6 +45,21 @@ def test_a_refused_declaration_is_emitted_with_the_fault_that_fired() -> None:
     }
 
 
+def test_a_declaration_the_specification_never_calls_illegal_is_marked_as_stricter() -> None:
+    """A capacity a shape has none of is a hygiene rule of this encoding, and the vector says it."""
+    unlisted = "simple-serialize.md names no such illegal type"
+    emitted = TypeRejectionTest(
+        type_name="IllegalLimitBearingVector",
+        type_descriptor=TypeDescriptor(kind="Vector", length=4, limit=4, element_type=UINT8),
+        rejection_reason=TypeFault.NOT_ENTITLED,
+        exact_message="IllegalLimitBearingVector declares a LIMIT its shape has none of",
+        stricter_than_spec=unlisted,
+    ).generate()
+
+    assert emitted.json_dict["rejectionReason"] == "NOT_ENTITLED"
+    assert emitted.json_dict["stricterThanSpec"] == unlisted
+
+
 def test_a_multi_word_kind_names_a_snake_cased_directory() -> None:
     """A kind is CamelCase and a directory is not, so the vector files under the spelled-out one."""
     union = TypeRejectionTest(
