@@ -93,6 +93,8 @@ A collection is written bare, so a byte sequence is one hex string however it wa
 4. Re-encode, and compare the bytes against `serialized` — this is what catches a decoder that accepts a non-canonical encoding.
 5. Compute `hash_tree_root`, and compare against `root`.
 
+Two valid cases may carry identical `serialized` and differ only in `root`, since a progressive container writes its field layout nowhere on the wire and mixes it into the root instead.
+
 For an invalid case, decode `serialized` and require a failure naming `rejectionReason`.
 
 ## A worked example
