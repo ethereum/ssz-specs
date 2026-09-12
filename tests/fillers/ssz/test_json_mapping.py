@@ -32,6 +32,12 @@ UNION_IS_WRITE_ONLY = (
 )
 """Why the union document below is only written here, and never read back."""
 
+EXTRA_FIELDS_MAY_BE_IGNORED = (
+    "simple-serialize.md admits an object naming a field the schema does not declare: a parser "
+    "may ignore the additional field, and one that does is as conformant as one that refuses it"
+)
+"""What the specification does with a field its schema never named."""
+
 
 class JsonUint16Vector3(Vector[Uint16]):
     """Three numbers, the shape the mapping writes as an array of decimal strings."""
@@ -765,6 +771,7 @@ def test_a_container_carrying_an_undeclared_field(ssz_json_test: JsonMappingFill
     Then
     ----
     - the document is refused, which the specification permits rather than requires.
+    - this suite is stricter than the specification here, and the vector says so.
     """
     ssz_json_test(
         case_id="json/container/invalid/undeclared_field",
@@ -773,4 +780,5 @@ def test_a_container_carrying_an_undeclared_field(ssz_json_test: JsonMappingFill
         document={"x": "1", "y": "2", "z": "3"},
         rejection_reason=JsonFault.UNDECLARED_FIELD,
         message_substring="Extra inputs are not permitted",
+        stricter_than_spec=EXTRA_FIELDS_MAY_BE_IGNORED,
     )

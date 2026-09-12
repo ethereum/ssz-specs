@@ -65,6 +65,7 @@ class TypeRejectionFiller(Protocol):
         type_descriptor: TypeDescriptor,
         rejection_reason: TypeFault,
         exact_message: str,
+        stricter_than_spec: str | None = None,
     ) -> TypeRejectionFixture:
         """Build the spec from these fields, generate the vector, and collect it."""
         ...
@@ -101,6 +102,7 @@ class JsonMappingFiller(Protocol):
         rejection_reason: JsonFault | None = None,
         message_substring: str | None = None,
         not_read_back: str | None = None,
+        stricter_than_spec: str | None = None,
     ) -> JsonMappingFixture:
         """Build the spec from these fields, generate the vector, and collect it."""
         ...

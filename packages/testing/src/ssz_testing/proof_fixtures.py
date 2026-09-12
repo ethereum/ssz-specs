@@ -149,9 +149,6 @@ class ProofSubject(DescribedFixture):
     root: str
     """Hex tree root of that value, which every proof here has to rebuild."""
 
-    stricter_than_spec: str | None = None
-    """What merkle-proofs.md does here, present only where this suite refuses more than it does."""
-
     verified: bool = Field(exclude=True)
     """Whether the emitted proof rebuilt that root when the vector was filled."""
 
@@ -217,9 +214,6 @@ class MultiproofFixture(ProofSubject):
 
 class BaseProofTest(BaseTestSpec):
     """Shared checking for the proof formats: one verification, against what was authored."""
-
-    stricter_than_spec: str | None = None
-    """What merkle-proofs.md does here, authored where this suite refuses more than it does."""
 
     def confirmed_fault(
         self, raised: SSZError[Any] | None, verified: bool, honest: bool

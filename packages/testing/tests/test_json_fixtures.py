@@ -147,6 +147,21 @@ def test_a_refused_document_carries_the_fault_and_no_bytes() -> None:
     }
 
 
+def test_a_refusal_the_specification_only_permits_is_marked_as_stricter() -> None:
+    """A parser may ignore an undeclared field, so a case refusing one says the choice is ours."""
+    permitted = "simple-serialize.md admits an object naming a field the schema never declared"
+    fixture = JsonMappingTest(
+        type_name="Pair",
+        ssz_type=Pair,
+        document={"x": "1", "y": "2", "z": "3"},
+        rejection_reason=JsonFault.UNDECLARED_FIELD,
+        stricter_than_spec=permitted,
+    ).generate()
+
+    assert fixture.json_dict["rejectionReason"] == "UNDECLARED_FIELD"
+    assert fixture.json_dict["stricterThanSpec"] == permitted
+
+
 def test_a_document_the_type_accepts_is_not_a_refusal() -> None:
     """A negative vector has to be refused, or it pins the opposite of what it claims."""
     spec = JsonMappingTest(
