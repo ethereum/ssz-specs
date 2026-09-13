@@ -1592,12 +1592,6 @@ class TestOpaqueByteSpelling:
         assert "Byte" in ssz.__all__
 
 
-class NarrowerThanTheTable(BaseUint):
-    """A width narrower than the shared table, to exercise the clamp."""
-
-    BITS = 2
-
-
 class LiesInComparisons(int):
     """An integer subclass that answers every ordering question the way it prefers."""
 
@@ -1652,13 +1646,13 @@ class TestSmallValuesAreShared:
         assert Slot(7) is not Uint64(7)
         assert Slot(7) is not Epoch(7)
 
-    def test_a_narrow_width_refuses_what_its_table_would_not_reach(self) -> None:
+    def test_the_narrowest_width_refuses_what_its_table_would_not_reach(self) -> None:
         """The table is clamped to the width, so it cannot serve a value out of range."""
-        # Two bits hold 0 through 3, and the clamp keeps the top of that range shared.
-        assert NarrowerThanTheTable(3) == 3
-        # An unclamped table would answer with a shared 10 here instead of refusing it.
+        # Eight bits hold 0 through 255, which is the table's last entry exactly.
+        assert Uint8(255) is Uint8(255)
+        # An unclamped table would answer with a shared 256 here instead of refusing it.
         with pytest.raises(SSZValueError):
-            NarrowerThanTheTable(10)
+            Uint8(256)
 
     def test_an_operand_that_lies_about_its_size_is_still_refused(self) -> None:
         """The bound is checked against a plain integer, never against the input's own answers."""
@@ -1680,7 +1674,7 @@ class TestAValueCarriesNoState:
 
 
 class TestAWidthIsDeclaredBeforeItIsUsed:
-    """Every per-width constant is computed from ``BITS``, so a subtype declares one."""
+    """A subtype declares a width for the per-width constants, and only the six the spec names."""
 
     def test_a_subtype_without_a_width_is_refused_at_declaration(self) -> None:
         """The missing declaration is named the way every other missing one is."""
@@ -1690,3 +1684,21 @@ class TestAWidthIsDeclaredBeforeItIsUsed:
                 pass
 
         assert str(exception_info.value) == "NoBits must declare BITS"
+
+    @pytest.mark.parametrize("width", (0, 7, 24, 512, -8))
+    def test_a_width_the_specification_omits_is_refused(self, width: int) -> None:
+        """A width off the list declares a range its own encoding cannot carry."""
+        with pytest.raises(SSZTypeError) as exception_info:
+            type("OddWidth", (BaseUint,), {"BITS": width})
+
+        assert str(exception_info.value) == (
+            f"OddWidth declares a width of {width} bits, "
+            "and a uint is one of (8, 16, 32, 64, 128, 256)"
+        )
+
+    def test_a_width_that_is_not_a_plain_integer_is_refused(self) -> None:
+        """A float compares equal to a width the list names, and then encodes as neither."""
+        with pytest.raises(SSZTypeError) as exception_info:
+            type("FloatWidth", (BaseUint,), {"BITS": 8.0})
+
+        assert str(exception_info.value) == "FloatWidth.BITS must be a plain integer, got float"

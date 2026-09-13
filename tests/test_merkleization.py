@@ -2769,12 +2769,6 @@ class Bytes33(ByteVector):
     LENGTH = 33
 
 
-class Uint512(BaseUint):
-    """Uint wide enough that its encoding spans two leaves."""
-
-    BITS = 512
-
-
 class MyUint64(Uint64):
     """User subclass of a declared width, reached by inheritance rather than registration."""
 
@@ -2806,7 +2800,7 @@ def every_shape() -> list[object]:
     """One value per type the library merkleizes, at the widths and edges that matter."""
     uint_values: list[object] = [
         uint_type(number)
-        for uint_type in (Uint8, Uint16, Uint32, Uint64, Uint128, Uint256, MyUint64, Uint512)
+        for uint_type in (Uint8, Uint16, Uint32, Uint64, Uint128, Uint256, MyUint64)
         for number in (0, 1, 2**uint_type.BITS - 1)
     ]
     boolean_values: list[object] = [
