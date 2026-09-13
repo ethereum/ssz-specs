@@ -367,6 +367,12 @@ class TestElementAcceptance:
             Uint8List10(data=[TypedUint8(7)])
         assert str(exception_info.value) == "expected Uint8, got TypedUint8"
 
+    def test_a_bare_bool_is_refused_by_an_element_type_that_is_not_a_boolean(self) -> None:
+        """True is how a boolean renders, and a numeric element type is not one."""
+        with pytest.raises(TypeOrValidationError) as exception_info:
+            Uint8List10(data=cast(Any, [True]))
+        assert str(exception_info.value) == "expected Uint8, got bool"
+
     def test_an_unrelated_class_is_refused_and_names_itself(self) -> None:
         """A boolean is neither the declared class nor an ancestor of it."""
         with pytest.raises(TypeOrValidationError) as exception_info:

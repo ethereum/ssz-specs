@@ -72,6 +72,12 @@ class ByteProgressiveList(ProgressiveList[Byte]):
     """The unbounded byte array, which only the elementwise spelling reaches."""
 
 
+class BooleanList4(List[Boolean]):
+    """Up to four bits under a sequence rather than a bitfield, so each keeps its own element."""
+
+    LIMIT = 4
+
+
 class BitVector5(BitVector):
     """Five bits, packed into the one byte they fit in."""
 
@@ -107,6 +113,7 @@ CASES: list[tuple[SSZType, Any]] = [
     (Uint16Vector3(data=[1, 2, 3]), ["1", "2", "3"]),
     (Uint16List4(data=[1, 2]), ["1", "2"]),
     (Uint16ProgressiveList(data=[1, 2]), ["1", "2"]),
+    (BooleanList4(data=[Boolean(True), Boolean(False)]), [True, False]),
     (ByteVector4(b"\x11\x22\x33\x44"), "0x11223344"),
     (ByteList8(data=b"\x11\x22"), "0x1122"),
     (ByteVector4Elementwise.of(0x11, 0x22, 0x33, 0x44), "0x11223344"),
