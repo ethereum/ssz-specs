@@ -60,7 +60,7 @@ def node_root(value: object, index: int) -> Root:
         #
         # So absence is provable in a bounded shape and not in a progressive one.
         #
-        # A bounded shape pads to its capacity, and that padding is a leaf like any other.
+        # A bounded shape pads to its capacity, and that padding is a leaf with nothing under it.
         #
         # Three packed eight-byte elements prove the fourth is zero, sharing chunk 0.
         # The fifth has no leaf to prove.
