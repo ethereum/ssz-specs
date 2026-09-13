@@ -183,6 +183,7 @@ def test_progressive_container_square(ssz_test: SSZTestFiller) -> None:
         case_id="progressive_container/interior_gap",
         type_name="SampleSquare",
         value=SampleSquare(side=Uint16(0x1234), color=Uint8(0x56)),
+        expected_root="0x5ebd038215d6c6868befbe172ffb9442b2f5ade276bd96eb304c1da38deff823",
     )
 
 
@@ -209,6 +210,7 @@ def test_progressive_container_circle(ssz_test: SSZTestFiller) -> None:
         case_id="progressive_container/leading_gap",
         type_name="SampleCircle",
         value=SampleCircle(radius=Uint16(0x1234), color=Uint8(0x56)),
+        expected_root="0x44dd01593fff4f0bea317b62a9e70d20f063e7413f331598d681d9e645fa8eae",
     )
 
 
@@ -233,6 +235,7 @@ def test_progressive_container_single_field(ssz_test: SSZTestFiller) -> None:
         case_id="progressive_container/single_field",
         type_name="SampleOneField",
         value=SampleOneField(a=Uint16(0xBEEF)),
+        expected_root="0xa88f083e786a9c55bf466e4954c4e25b3112cad5a5a2f85248d3a88d42b9fc58",
     )
 
 
@@ -259,6 +262,7 @@ def test_progressive_container_leading_gaps(ssz_test: SSZTestFiller) -> None:
         case_id="progressive_container/two_leading_gaps",
         type_name="SampleLeadingGaps",
         value=SampleLeadingGaps(c=Uint32(0x11223344)),
+        expected_root="0xee417c8b5e7a3051945e454ee09fc3e3b32a26352332a2d669a8912bcf4383d2",
     )
 
 
@@ -285,6 +289,7 @@ def test_progressive_container_multiple_gaps(ssz_test: SSZTestFiller) -> None:
         case_id="progressive_container/mixed_gap_widths",
         type_name="SampleMultipleGaps",
         value=SampleMultipleGaps(a=Uint8(1), b=Uint16(0x0203), c=Uint32(0x04050607)),
+        expected_root="0x4c581934216751d2ec29ea5bbaf238a78ae8c240c594afa8662b449eb51cd455",
     )
 
 
@@ -311,6 +316,7 @@ def test_progressive_container_widest_layout(ssz_test: SSZTestFiller) -> None:
         case_id="progressive_container/widest_layout",
         type_name="SampleWidestLayout",
         value=SampleWidestLayout(tail=Uint8(0xAB)),
+        expected_root="0x1bf935e375b4ebf1516fe0dae3e6d959168fd74f470b694b064e2d504491fba0",
     )
 
 
@@ -337,6 +343,7 @@ def test_progressive_container_opens_the_fourth_level(ssz_test: SSZTestFiller) -
         case_id="progressive_container/crosses_spine_level",
         type_name="SampleLevelBoundary",
         value=SampleLevelBoundary(first=Uint16(0x1234), last=Uint8(0x56)),
+        expected_root="0x4ced50eb70f7547000227b026e875c87dfe4d4daa3be3f308f570268c5a55dc7",
     )
 
 
@@ -365,6 +372,7 @@ def test_progressive_container_with_bounded_list_field(ssz_test: SSZTestFiller) 
             head=Uint64(7),
             body=SampleUint16List4(data=[Uint16(1), Uint16(2)]),
         ),
+        expected_root="0xabc61ac7614150aaab32d5a8ef1b71baa60a3d7f48a56e33599add004fbaa0ea",
     )
 
 
@@ -390,6 +398,7 @@ def test_progressive_container_with_empty_variable_field(ssz_test: SSZTestFiller
         case_id="progressive_container/empty_variable_field",
         type_name="SampleBoundedListField",
         value=SampleBoundedListField(head=Uint64(7), body=SampleUint16List4(data=[])),
+        expected_root="0xa1e6b73e491b250c41328bbff3f8bc31d3b44f3dd06cbed35ac370a2e386f69d",
     )
 
 
@@ -419,6 +428,7 @@ def test_progressive_container_with_progressive_fields(ssz_test: SSZTestFiller) 
             numbers=SampleUint64ProgressiveList(data=[Uint64(1), Uint64(2), Uint64(3)]),
             flags=ProgressiveBitList(data=[Boolean(True), Boolean(False), Boolean(True)]),
         ),
+        expected_root="0x0c621f05791743c263be5a717c45dec81b4c175d19572e4cca0d5933f7044f0e",
     )
 
 
@@ -447,6 +457,7 @@ def test_nested_progressive_containers(ssz_test: SSZTestFiller) -> None:
             head=Uint8(1),
             inner=SampleInnerShape(x=Uint16(0x0203), y=Uint8(4)),
         ),
+        expected_root="0xccf454ac88b0e70221c4458d2df7f53ff547eacfd8d15b00a3077bd611b7f6a1",
     )
 
 
@@ -477,6 +488,7 @@ def test_progressive_list_of_progressive_containers(ssz_test: SSZTestFiller) -> 
                 SampleSquare(side=Uint16(3), color=Uint8(4)),
             ]
         ),
+        expected_root="0xa892d5d4f0ef9b1f4e0c3f9fd9617f06d405561d56f676dcd9de228b2fbcbe59",
     )
 
 
@@ -505,6 +517,7 @@ def test_container_holding_a_progressive_container(ssz_test: SSZTestFiller) -> N
             tag=Uint8(0xFF),
             shape=SampleSquare(side=Uint16(0x1234), color=Uint8(0x56)),
         ),
+        expected_root="0x82a3af75922fff248c6e24745fc37f8946ce3e5af7b8bf4778f297ec48ea533c",
     )
 
 

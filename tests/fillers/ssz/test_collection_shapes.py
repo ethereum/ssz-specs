@@ -130,6 +130,7 @@ def test_uint8_vector_one_byte_shy_of_a_chunk(ssz_test: SSZTestFiller) -> None:
         case_id="collection_shape/uint8_vector31/ascending",
         type_name="ShapeUint8Vector31",
         value=ShapeUint8Vector31(data=[Uint8(index + 1) for index in range(31)]),
+        expected_root="0x0102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f00",
     )
 
 
@@ -157,6 +158,7 @@ def test_uint8_vector_filling_one_chunk(ssz_test: SSZTestFiller) -> None:
         case_id="collection_shape/uint8_vector32/ascending",
         type_name="ShapeUint8Vector32",
         value=ShapeUint8Vector32(data=[Uint8(index + 1) for index in range(32)]),
+        expected_root="0x0102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20",
     )
 
 
@@ -184,6 +186,7 @@ def test_uint8_vector_one_byte_past_a_chunk(ssz_test: SSZTestFiller) -> None:
         case_id="collection_shape/uint8_vector33/ascending",
         type_name="ShapeUint8Vector33",
         value=ShapeUint8Vector33(data=[Uint8(index + 1) for index in range(33)]),
+        expected_root="0xaa5a00f9223c8c444d33da8b3677b3ee50480d14d4da7cd7447ad69db255e1d5",
     )
 
 
@@ -211,6 +214,7 @@ def test_byte_vector_matching_the_uint8_vector(ssz_test: SSZTestFiller) -> None:
         case_id="collection_shape/bytevector32/ascending",
         type_name="ShapeBytes32",
         value=ShapeBytes32(bytes(range(1, 33))),
+        expected_root="0x0102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20",
     )
 
 
@@ -238,6 +242,7 @@ def test_uint64_vector_with_a_padded_chunk_count(ssz_test: SSZTestFiller) -> Non
         case_id="collection_shape/uint64_vector12/repdigits",
         type_name="ShapeUint64Vector12",
         value=ShapeUint64Vector12(data=REPDIGITS),
+        expected_root="0x4d7c35b953cfbc6bc9bd903453e01cef170e724f67565a5a62caa20ae112957b",
     )
 
 
@@ -265,6 +270,7 @@ def test_uint256_vector_of_chunk_wide_elements(ssz_test: SSZTestFiller) -> None:
         case_id="collection_shape/uint256_vector5/near_max",
         type_name="ShapeUint256Vector5",
         value=ShapeUint256Vector5(data=[Uint256(2**256 - offset) for offset in range(1, 6)]),
+        expected_root="0x3a7b22b1b1bd69f199c50c947de0e2607cb89c4b07612d09179b677ce416d76f",
     )
 
 
@@ -291,6 +297,7 @@ def test_boolean_vector_is_a_byte_per_element(ssz_test: SSZTestFiller) -> None:
         case_id="collection_shape/boolean_vector40/every_third",
         type_name="ShapeBooleanVector40",
         value=ShapeBooleanVector40(data=[Boolean(index % 3 == 0) for index in range(40)]),
+        expected_root="0x0e0b668739780b1ff24556d9313f43fba41a0a8dd1f7a7865691f6c4a3177e0d",
     )
 
 
@@ -317,6 +324,7 @@ def test_bitvector_beside_the_boolean_vector(ssz_test: SSZTestFiller) -> None:
         case_id="collection_shape/bitvector40/every_third",
         type_name="ShapeBitVector40",
         value=ShapeBitVector40(data=[Boolean(index % 3 == 0) for index in range(40)]),
+        expected_root="0x4992244992000000000000000000000000000000000000000000000000000000",
     )
 
 
@@ -344,6 +352,7 @@ def test_vector_of_composite_elements(ssz_test: SSZTestFiller) -> None:
         case_id="collection_shape/nested_uint64_vector3/at_full",
         type_name="ShapeNestedVector3",
         value=ShapeNestedVector3(data=NESTED_ELEMENTS),
+        expected_root="0x5b55ca88662f0132574b1b37c377d3b24c3d108472047209d76d3d9bd54b6013",
     )
 
 
@@ -371,6 +380,7 @@ def test_uint64_list_filled_to_its_limit(ssz_test: SSZTestFiller) -> None:
         case_id="collection_shape/uint64_list8/at_limit",
         type_name="ShapeUint64List8",
         value=ShapeUint64List8(data=REPDIGITS[:8]),
+        expected_root="0x83bacacbd481632fc2c69aff66ce17b78ee3aa15045f2f09efc4096e2b768d53",
     )
 
 
@@ -398,6 +408,7 @@ def test_uint64_list_one_element_short_of_its_limit(ssz_test: SSZTestFiller) -> 
         case_id="collection_shape/uint64_list8/one_short",
         type_name="ShapeUint64List8",
         value=ShapeUint64List8(data=REPDIGITS[:7]),
+        expected_root="0x9f02a471898db9cf1afb31211a7d0543eb3d03cf5fbc71c91b44f635933dfc4a",
     )
 
 
@@ -425,6 +436,7 @@ def test_uint64_list_whose_limit_pads_the_tree(ssz_test: SSZTestFiller) -> None:
         case_id="collection_shape/uint64_list12/at_limit",
         type_name="ShapeUint64List12",
         value=ShapeUint64List12(data=REPDIGITS),
+        expected_root="0x69211564323726154ae7c7117d81ac979e10f99003c5f841d3c8c8a34590cccf",
     )
 
 
@@ -452,6 +464,7 @@ def test_list_of_composite_elements_filled_to_its_limit(ssz_test: SSZTestFiller)
         case_id="collection_shape/nested_uint64_list3/at_limit",
         type_name="ShapeNestedList3",
         value=ShapeNestedList3(data=NESTED_ELEMENTS),
+        expected_root="0xc2c236a06d65c830d6d1282f29b427e1944f9fce67f54ba58c20fb1a8e5229f4",
     )
 
 
@@ -479,4 +492,5 @@ def test_byte_list_filled_to_its_limit(ssz_test: SSZTestFiller) -> None:
         case_id="collection_shape/bytelist80/at_limit",
         type_name="ShapeByteList80",
         value=ShapeByteList80(data=bytes(range(1, 81))),
+        expected_root="0xb37366403f38115eb6c656c305b08cf489d061700ac8f9ab5fe400c26a2e0267",
     )

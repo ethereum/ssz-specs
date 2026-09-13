@@ -83,6 +83,7 @@ def test_bitvector_length_one_all_set(ssz_test: SSZTestFiller) -> None:
         case_id="bitvector1/all_set",
         type_name="BoundaryBitVector1",
         value=BoundaryBitVector1(data=[Boolean(True)]),
+        expected_root="0x0100000000000000000000000000000000000000000000000000000000000000",
     )
 
 
@@ -107,6 +108,7 @@ def test_bitvector_length_seven_all_set(ssz_test: SSZTestFiller) -> None:
         case_id="bitvector7/all_set",
         type_name="BoundaryBitVector7",
         value=BoundaryBitVector7(data=[Boolean(True)] * 7),
+        expected_root="0x7f00000000000000000000000000000000000000000000000000000000000000",
     )
 
 
@@ -131,6 +133,7 @@ def test_bitvector_length_nine_all_set(ssz_test: SSZTestFiller) -> None:
         case_id="bitvector9/all_set",
         type_name="BoundaryBitVector9",
         value=BoundaryBitVector9(data=[Boolean(True)] * 9),
+        expected_root="0xff01000000000000000000000000000000000000000000000000000000000000",
     )
 
 
@@ -155,6 +158,7 @@ def test_bitvector_length_255_all_set(ssz_test: SSZTestFiller) -> None:
         case_id="bitvector255/all_set",
         type_name="BoundaryBitVector255",
         value=BoundaryBitVector255(data=[Boolean(True)] * 255),
+        expected_root="0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7f",
     )
 
 
@@ -179,6 +183,7 @@ def test_bitvector_length_256_all_set(ssz_test: SSZTestFiller) -> None:
         case_id="bitvector256/all_set",
         type_name="BoundaryBitVector256",
         value=BoundaryBitVector256(data=[Boolean(True)] * 256),
+        expected_root="0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
     )
 
 
@@ -203,6 +208,7 @@ def test_bitvector_length_257_all_set(ssz_test: SSZTestFiller) -> None:
         case_id="bitvector257/all_set",
         type_name="BoundaryBitVector257",
         value=BoundaryBitVector257(data=[Boolean(True)] * 257),
+        expected_root="0xe9bada28b960beb323e7992400b45875830bfce5a64f230c696cdddfafa551b8",
     )
 
 
@@ -228,6 +234,7 @@ def test_bitlist_filled_to_chunk_boundary_limit(ssz_test: SSZTestFiller) -> None
         case_id="bitlist256/at_limit",
         type_name="BoundaryBitList256",
         value=BoundaryBitList256(data=[Boolean(True)] * 256),
+        expected_root="0xbc16fae79b58a2e3dac0429d25b79cada399106276e08c5d3cfc3726db02b8ba",
     )
 
 
@@ -252,4 +259,5 @@ def test_uint64_list_with_misaligned_chunk_count(ssz_test: SSZTestFiller) -> Non
         case_id="uint64_list32/three_elements",
         type_name="BoundaryUint64List32",
         value=BoundaryUint64List32(data=[Uint64(1), Uint64(2), Uint64(3)]),
+        expected_root="0xeac541ed75add596f34e7d491f512397ad78e73126db30505ac611ea7eeca09c",
     )

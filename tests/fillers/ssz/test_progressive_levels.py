@@ -170,6 +170,7 @@ def test_progressive_bitlist_fills_second_level(ssz_test: SSZTestFiller) -> None
         case_id="spine/progressive_bitlist/fills_second_level",
         type_name="ProgressiveBitList",
         value=ProgressiveBitList(data=spine_bits(SPINE_CAPACITY[1] * BITS_PER_CHUNK)),
+        expected_root="0xd46068cde7f22d3fb7522508908bd9b0ad516df9d418ef40462952489f020977",
     )
 
 
@@ -195,6 +196,7 @@ def test_progressive_bitlist_opens_third_level(ssz_test: SSZTestFiller) -> None:
         case_id="spine/progressive_bitlist/opens_third_level",
         type_name="ProgressiveBitList",
         value=ProgressiveBitList(data=spine_bits(SPINE_CAPACITY[1] * BITS_PER_CHUNK + 1)),
+        expected_root="0x7a505457880fa0b81dbdd178618945158767c9aec30bcb0cf20e519e97199aa0",
     )
 
 
@@ -220,6 +222,7 @@ def test_progressive_bitlist_fills_third_level(ssz_test: SSZTestFiller) -> None:
         case_id="spine/progressive_bitlist/fills_third_level",
         type_name="ProgressiveBitList",
         value=ProgressiveBitList(data=spine_bits(SPINE_CAPACITY[2] * BITS_PER_CHUNK)),
+        expected_root="0x00cbd5f77ecbfcd5a38c51ff482d3851be239a004770af6c6f6b682e74eec75c",
     )
 
 
@@ -245,6 +248,7 @@ def test_progressive_bitlist_opens_fourth_level(ssz_test: SSZTestFiller) -> None
         case_id="spine/progressive_bitlist/opens_fourth_level",
         type_name="ProgressiveBitList",
         value=ProgressiveBitList(data=spine_bits(SPINE_CAPACITY[2] * BITS_PER_CHUNK + 1)),
+        expected_root="0xfbbf7411c07062cd9b7f920d24bc29a927659913518c79ae7a83054ffb94a666",
     )
 
 
@@ -270,6 +274,7 @@ def test_progressive_list_of_composites_fills_second_level(ssz_test: SSZTestFill
         case_id="spine/progressive_list/composites/fills_second_level",
         type_name="SampleBytes32ProgressiveList",
         value=SampleBytes32ProgressiveList(data=spine_elements(SPINE_CAPACITY[1])),
+        expected_root="0x183886e81b2e887d5960b2fa49b3464eabee62ec55ff5e6ee6f7e0495d8a01d1",
     )
 
 
@@ -295,6 +300,7 @@ def test_progressive_list_of_composites_fills_third_level(ssz_test: SSZTestFille
         case_id="spine/progressive_list/composites/fills_third_level",
         type_name="SampleBytes32ProgressiveList",
         value=SampleBytes32ProgressiveList(data=spine_elements(SPINE_CAPACITY[2])),
+        expected_root="0x93589633f10a1e8fe51bef0481731c7c19d7a87269127b6c6a19720668ee47da",
     )
 
 
@@ -320,6 +326,7 @@ def test_progressive_list_of_composites_opens_fourth_level(ssz_test: SSZTestFill
         case_id="spine/progressive_list/composites/opens_fourth_level",
         type_name="SampleBytes32ProgressiveList",
         value=SampleBytes32ProgressiveList(data=spine_elements(SPINE_CAPACITY[2] + 1)),
+        expected_root="0xe79bdcda4e58dd09c4b855964e1f1c01c99e215b6e01602f5302763effaf8637",
     )
 
 
@@ -347,6 +354,7 @@ def test_progressive_list_fills_fourth_level(ssz_test: SSZTestFiller) -> None:
         value=SampleUint64ProgressiveList(
             data=[Uint64(value) for value in range(SPINE_CAPACITY[3] * UINT64S_PER_CHUNK)]
         ),
+        expected_root="0xe394a4f11b4a86b7be1c65499f6fb9730eecc8edfebfb1e912b008f34ecb803d",
     )
 
 
@@ -374,6 +382,7 @@ def test_progressive_list_opens_fifth_level(ssz_test: SSZTestFiller) -> None:
         value=SampleUint64ProgressiveList(
             data=[Uint64(value) for value in range(SPINE_CAPACITY[3] * UINT64S_PER_CHUNK + 1)]
         ),
+        expected_root="0x55939153d3509f26c12df732567abbcffec22aaf10196c313e34303456ac17fd",
     )
 
 
@@ -400,6 +409,7 @@ def test_progressive_container_fills_third_level(ssz_test: SSZTestFiller) -> Non
         case_id="spine/progressive_container/fills_third_level",
         type_name="SampleThirdLevelExact",
         value=SampleThirdLevelExact(first=Uint16(0x1234), last=Uint8(0x56)),
+        expected_root="0x47de70d1be5ba47a6151d6d5d7ca476a3d5fbd46e7d043d7707c6cacd31216a2",
     )
 
 
@@ -425,6 +435,7 @@ def test_progressive_container_fills_fourth_level(ssz_test: SSZTestFiller) -> No
         case_id="spine/progressive_container/fills_fourth_level",
         type_name="SampleFourthLevelExact",
         value=SampleFourthLevelExact(first=Uint16(0x1234), last=Uint8(0x56)),
+        expected_root="0x0b72d4adc696b78bb53b1532c5cc8ee37f5e8ab9c4d1929a665607560a72d326",
     )
 
 
@@ -452,6 +463,7 @@ def test_progressive_container_opens_fifth_level(ssz_test: SSZTestFiller) -> Non
         case_id="spine/progressive_container/opens_fifth_level",
         type_name="SampleFifthLevelOpened",
         value=SampleFifthLevelOpened(first=Uint16(0x1234), last=Uint8(0x56)),
+        expected_root="0xac0d2ba9945e7856843d7e83156907b5eef8c2364f0b72a360418e8522ed9d71",
     )
 
 
@@ -521,4 +533,5 @@ def test_progressive_container_beacon_state_layout(ssz_test: SSZTestFiller) -> N
             p44=Uint64(44),
             p45=Uint64(45),
         ),
+        expected_root="0x8eab2370c2fd88f807c59c8ac8a6635d186ad52e9f2deb3f3876511c81971ff1",
     )

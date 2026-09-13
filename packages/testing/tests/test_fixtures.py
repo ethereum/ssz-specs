@@ -218,6 +218,20 @@ def test_a_vector_a_decoder_must_accept_reads_as_valid_and_carries_its_value() -
     }
 
 
+def test_a_pinned_root_that_still_holds_is_the_one_the_vector_carries() -> None:
+    """A case may state the root it stands for, and the fill emits exactly that root."""
+    pinned = "0x01" + "00" * 31
+    fixture = SSZTest(type_name="Uint8", value=Uint8(1), expected_root=pinned).generate()
+
+    assert fixture.root == pinned
+
+
+def test_a_pinned_root_the_tree_no_longer_produces_fails_the_fill() -> None:
+    """Merkleization moved under a case that pinned its root, which is the whole point of one."""
+    with pytest.raises(AssertionError, match="Uint8 merkleizes to the wrong root"):
+        SSZTest(type_name="Uint8", value=Uint8(1), expected_root="0x" + "ff" * 32).generate()
+
+
 def test_a_decode_failure_vector_needs_bytes_to_reject() -> None:
     """There is no decode failure to record without an input that was decoded."""
     with pytest.raises(ValueError, match="raw_bytes is required"):

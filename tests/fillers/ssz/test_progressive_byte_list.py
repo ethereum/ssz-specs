@@ -51,6 +51,7 @@ def test_progressive_byte_list_empty(ssz_test: SSZTestFiller) -> None:
         case_id="progressive_byte_list/empty",
         type_name="SampleProgressiveByteList",
         value=SampleProgressiveByteList(data=[]),
+        expected_root="0xf5a5fd42d16a20302798ef6ed309979b43003d2320d9f0e8ea9831a92759fb4b",
     )
 
 
@@ -75,6 +76,7 @@ def test_progressive_byte_list_single_byte(ssz_test: SSZTestFiller) -> None:
         case_id="progressive_byte_list/single_byte",
         type_name="SampleProgressiveByteList",
         value=SampleProgressiveByteList(data=counting_bytes(1)),
+        expected_root="0x905efb51c2764c2c7a4efb0548e372569df06db82115c3b1896c186632f3fe5b",
     )
 
 
@@ -99,6 +101,7 @@ def test_progressive_byte_list_fills_the_first_level(ssz_test: SSZTestFiller) ->
         case_id="progressive_byte_list/fills_first_level",
         type_name="SampleProgressiveByteList",
         value=SampleProgressiveByteList(data=counting_bytes(FULL_LEVEL_BYTES[0])),
+        expected_root="0x77a8c5b3ec7b888068f0d2f0237b535b7ac6dc38c9ce75ed40a3bb6250537bc9",
     )
 
 
@@ -123,6 +126,7 @@ def test_progressive_byte_list_opens_the_second_level(ssz_test: SSZTestFiller) -
         case_id="progressive_byte_list/opens_second_level",
         type_name="SampleProgressiveByteList",
         value=SampleProgressiveByteList(data=counting_bytes(FULL_LEVEL_BYTES[0] + 1)),
+        expected_root="0xdf00749d3e82d94a7387089bd73052561a0ef16458892d9281277aa016e7a121",
     )
 
 
@@ -147,6 +151,7 @@ def test_progressive_byte_list_fills_the_second_level(ssz_test: SSZTestFiller) -
         case_id="progressive_byte_list/fills_second_level",
         type_name="SampleProgressiveByteList",
         value=SampleProgressiveByteList(data=counting_bytes(FULL_LEVEL_BYTES[1])),
+        expected_root="0xae4d03514625bfdaa231076e638def8c8549cc1283810c9c71e9c7e850474cd1",
     )
 
 
@@ -170,6 +175,7 @@ def test_progressive_byte_list_opens_the_third_level(ssz_test: SSZTestFiller) ->
         case_id="progressive_byte_list/opens_third_level",
         type_name="SampleProgressiveByteList",
         value=SampleProgressiveByteList(data=counting_bytes(FULL_LEVEL_BYTES[1] + 1)),
+        expected_root="0xe91c5a9b8b61986948dfc4b5a3c0ff9b72eb1bfe4b0f0468abfff8b0f47ab9ff",
     )
 
 
@@ -194,6 +200,7 @@ def test_progressive_byte_list_fills_the_third_level(ssz_test: SSZTestFiller) ->
         case_id="progressive_byte_list/fills_third_level",
         type_name="SampleProgressiveByteList",
         value=SampleProgressiveByteList(data=counting_bytes(FULL_LEVEL_BYTES[2])),
+        expected_root="0x5c246e5b1d64b37a534f0e1d92f7fee9af6c2e00d7b61922781ac5dc031c1d9d",
     )
 
 
@@ -218,4 +225,5 @@ def test_progressive_byte_list_opens_the_fourth_level(ssz_test: SSZTestFiller) -
         case_id="progressive_byte_list/opens_fourth_level",
         type_name="SampleProgressiveByteList",
         value=SampleProgressiveByteList(data=counting_bytes(FULL_LEVEL_BYTES[2] + 1)),
+        expected_root="0xd8845348636e7302d36e81b8f00fd1519de00a5683659987ceb996ee25763605",
     )

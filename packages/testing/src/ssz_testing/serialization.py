@@ -65,8 +65,16 @@ class SSZTest(BaseTestSpec):
     raw_bytes: str | None = None
     """Hex malformed input, consulted only in decode-failure mode."""
 
+    expected_root: str | None = None
+    """
+    Hex tree root this case is held to, checked as the vector is filled.
+
+    A case that states none records whatever merkleization produces.
+    Stating one is what turns a changed merkleization rule into a failed fill.
+    """
+
     def generate(self) -> SSZFixture:
-        """Verify SSZ roundtrip and re-encoding, or decode-failure, and produce the output."""
+        """Verify roundtrip, re-encoding and any pinned root, or decode-failure, and emit."""
         if self.expected_rejection is not None:
             return self._generate_decode_failure()
 
@@ -89,14 +97,20 @@ class SSZTest(BaseTestSpec):
             f"Re-encoded: {to_hex(reencoded)}"
         )
 
-        root = hash_tree_root(self.value)
+        root = to_hex(hash_tree_root(self.value))
+        if self.expected_root is not None and root != self.expected_root:
+            raise AssertionError(
+                f"{self.type_name} merkleizes to the wrong root.\n"
+                f"  Expected root: {self.expected_root}\n"
+                f"  Actual root: {root}"
+            )
 
         return SSZFixture(
             type_name=self.type_name,
             ssz_type=type(self.value),
             serialized=to_hex(ssz_bytes),
             value=self.value,
-            root=to_hex(root),
+            root=root,
         )
 
     def _generate_decode_failure(self) -> SSZFixture:
