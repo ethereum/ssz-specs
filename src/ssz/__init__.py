@@ -99,7 +99,17 @@ from ssz.proofs import build_multiproof, build_proof, node_root
 from ssz.roots import hash_tree_root
 from ssz.ssz_base import SSZCollection, SSZModel, SSZType
 from ssz.trees import merkleize, merkleize_progressive
-from ssz.uint import BaseUint, Byte, Uint8, Uint16, Uint32, Uint64, Uint128, Uint256
+from ssz.uint import (
+    UINT_WIDTHS,
+    BaseUint,
+    Byte,
+    Uint8,
+    Uint16,
+    Uint32,
+    Uint64,
+    Uint128,
+    Uint256,
+)
 from ssz.union import MAX_SELECTOR, MIN_SELECTOR, CompatibleUnion, is_compatible
 from ssz.verification import (
     calculate_merkle_root,
@@ -151,6 +161,7 @@ __all__ = [
     "SSZTypeError",
     "SSZValueError",
     "TypeFault",
+    "UINT_WIDTHS",
     "Uint128",
     "Uint16",
     "Uint256",

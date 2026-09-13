@@ -39,6 +39,124 @@ NEGATIVE_CAPACITY_IS_UNLISTED: Final = (
 """What the specification says about a capacity below zero."""
 
 
+def test_a_uint_of_a_partial_byte_width_is_refused(ssz_type_rejection: TypeRejectionFiller) -> None:
+    """
+    Declaring an unsigned integer seven bits wide is refused.
+
+    Given
+    -----
+    - an unsigned integer declaring a width of 7 bits.
+
+    When
+    ----
+    - the declaration is built.
+
+    Then
+    ----
+    - it is refused, simple-serialize.md naming 8, 16, 32, 64, 128 and 256 and no others.
+    - seven bits round down to no bytes, leaving the values it admits nowhere to go.
+    """
+    ssz_type_rejection(
+        case_id="illegal/uint/partial_byte_width",
+        type_name="IllegalPartialByteUint",
+        type_descriptor=TypeDescriptor(kind="Uint7", bits=7),
+        rejection_reason=TypeFault.UINT_WIDTH,
+        exact_message=(
+            "IllegalPartialByteUint declares a width of 7 bits, "
+            "and a uint is one of (8, 16, 32, 64, 128, 256)"
+        ),
+    )
+
+
+def test_a_uint_of_no_width_is_refused(ssz_type_rejection: TypeRejectionFiller) -> None:
+    """
+    Declaring an unsigned integer zero bits wide is refused.
+
+    Given
+    -----
+    - an unsigned integer declaring a width of 0 bits.
+
+    When
+    ----
+    - the declaration is built.
+
+    Then
+    ----
+    - it is refused, for the reason a vector of zero elements is.
+    - a type spanning no bytes holds one value, and any number of them sit in one place.
+    """
+    ssz_type_rejection(
+        case_id="illegal/uint/zero_width",
+        type_name="IllegalZeroWidthUint",
+        type_descriptor=TypeDescriptor(kind="Uint0", bits=0),
+        rejection_reason=TypeFault.UINT_WIDTH,
+        exact_message=(
+            "IllegalZeroWidthUint declares a width of 0 bits, "
+            "and a uint is one of (8, 16, 32, 64, 128, 256)"
+        ),
+    )
+
+
+def test_a_uint_of_a_width_that_splits_a_chunk_is_refused(
+    ssz_type_rejection: TypeRejectionFiller,
+) -> None:
+    """
+    Declaring an unsigned integer twenty-four bits wide is refused.
+
+    Given
+    -----
+    - an unsigned integer declaring a width of 24 bits.
+
+    When
+    ----
+    - the declaration is built.
+
+    Then
+    ----
+    - it is refused, three bytes being a whole byte count the specification still omits.
+    - a chunk holds ten and two thirds of them, so packing splits a value across leaves.
+    """
+    ssz_type_rejection(
+        case_id="illegal/uint/width_splits_a_chunk",
+        type_name="IllegalChunkSplittingUint",
+        type_descriptor=TypeDescriptor(kind="Uint24", bits=24),
+        rejection_reason=TypeFault.UINT_WIDTH,
+        exact_message=(
+            "IllegalChunkSplittingUint declares a width of 24 bits, "
+            "and a uint is one of (8, 16, 32, 64, 128, 256)"
+        ),
+    )
+
+
+def test_a_uint_wider_than_a_chunk_is_refused(ssz_type_rejection: TypeRejectionFiller) -> None:
+    """
+    Declaring an unsigned integer five hundred and twelve bits wide is refused.
+
+    Given
+    -----
+    - an unsigned integer declaring a width of 512 bits.
+
+    When
+    ----
+    - the declaration is built.
+
+    Then
+    ----
+    - it is refused, 256 bits being the widest the specification names.
+    - one value would fill two leaves, where a uint is a leaf or part of one.
+    """
+    ssz_type_rejection(
+        case_id="illegal/uint/width_past_a_chunk",
+        type_name="IllegalOverWideUint",
+        type_descriptor=TypeDescriptor(kind="Uint512", bits=512),
+        rejection_reason=TypeFault.UINT_WIDTH,
+        exact_message=(
+            "IllegalOverWideUint declares a width of 512 bits, "
+            "and a uint is one of (8, 16, 32, 64, 128, 256)"
+        ),
+    )
+
+
 def test_a_vector_of_zero_elements_is_refused(ssz_type_rejection: TypeRejectionFiller) -> None:
     """
     Declaring a vector whose length is zero is refused.

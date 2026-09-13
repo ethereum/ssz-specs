@@ -13,6 +13,9 @@ from ssz.base import wrapping_schema
 from ssz.exceptions import SSZTypeError, SSZValueError, TypeFault, ValueFault
 from ssz.ssz_base import SSZType
 
+UINT_WIDTHS: Final = (8, 16, 32, 64, 128, 256)
+"""The widths the spec names, each a byte count that divides a 32-byte chunk evenly."""
+
 INTERN_BELOW = 256
 """How many of the smallest values each width shares, covering where consensus arithmetic stays."""
 
@@ -46,11 +49,24 @@ class BaseUint(int, SSZType):
         Cache the per-width constants so hot paths never recompute them.
 
         Raises:
-            SSZTypeError: When the width was never declared.
+            SSZTypeError: When the width was never declared, or is not a plain integer.
+            SSZTypeError: When the width is not one the spec names.
         """
         super().__init_subclass__(**kwargs)
         if not hasattr(cls, "BITS"):
             raise SSZTypeError(TypeFault.UNDECLARED, type=cls.__name__, requirement="BITS")
+        if not isinstance(cls.BITS, int):
+            raise SSZTypeError(
+                TypeFault.NOT_AN_INTEGER,
+                type=cls.__name__,
+                field="BITS",
+                got=type(cls.BITS).__name__,
+            )
+        # A width outside the set encodes a range it cannot hold, and packs a chunk unevenly.
+        if cls.BITS not in UINT_WIDTHS:
+            raise SSZTypeError(
+                TypeFault.UINT_WIDTH, type=cls.__name__, bits=cls.BITS, widths=UINT_WIDTHS
+            )
         cls.MAX_VALUE = 2**cls.BITS - 1
         cls.BYTE_LENGTH = cls.BITS // 8
         # One table per class, so a named subtype comes back as itself.
