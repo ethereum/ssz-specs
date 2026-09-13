@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 
 from ssz import Uint8
-from ssz_testing import SSZTest
+from ssz_testing import FIXTURE_FORMATS, SSZTest
 from ssz_testing.plugin import FixtureCollector
 from ssz_testing.vector_document import _stated_counts
 
@@ -232,6 +232,15 @@ def test_{filler_name}(ssz_test: SSZTestFiller) -> None:
 '''
 
 
+EVERY_FILLER_MODULE = '''
+"""One test asking for every filler fixture the registry names."""
+
+
+def test_every_filler({parameters}) -> None:
+    """Asking is the whole test: a format the plugin names no fixture for cannot be filled."""
+'''
+
+
 @pytest.fixture
 def project(pytester: pytest.Pytester) -> pytest.Pytester:
     """A project shaped like the repository: fillers, a unit test, and a test outside tests/."""
@@ -249,6 +258,18 @@ def project(pytester: pytest.Pytester) -> pytest.Pytester:
 def fill(project: pytest.Pytester, *arguments: str) -> pytest.RunResult:
     """Run the plugin over the project the way the fill command does."""
     return project.runpytest("-p", "ssz_testing.plugin", *arguments)
+
+
+def test_every_format_the_registry_names_has_a_fixture_a_filler_can_ask_for(
+    project: pytest.Pytester,
+) -> None:
+    """A format module cannot name itself, so the registry is what the plugin is held to."""
+    parameters = ", ".join(spec_class.format_name for spec_class in FIXTURE_FORMATS)
+    project.makepyfile(
+        **{"tests/fillers/test_every_filler": EVERY_FILLER_MODULE.format(parameters=parameters)}
+    )
+
+    fill(project, "--clean").assert_outcomes(passed=3)
 
 
 def test_each_test_reports_only_the_vector_it_wrote(project: pytest.Pytester) -> None:
