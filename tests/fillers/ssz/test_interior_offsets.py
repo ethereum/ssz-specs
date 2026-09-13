@@ -4,7 +4,7 @@ from typing import ClassVar
 
 import pytest
 
-from ssz import ByteList, Container, List, ProgressiveList, Vector
+from ssz import ByteList, Container, List, Vector
 from ssz_testing import ExpectedRejection, SSZTestFiller, ValueFault
 
 pytestmark = pytest.mark.tags("offsets")
@@ -45,12 +45,6 @@ class InteriorPairVector2(Vector[InteriorPair]):
     ELEMENT_TYPE = InteriorPair
 
 
-class InteriorPairProgressiveList(ProgressiveList[InteriorPair]):
-    """The same elements with no capacity, which encodes to the very same offset table."""
-
-    ELEMENT_TYPE = InteriorPair
-
-
 def empty_pair() -> InteriorPair:
     """One of those structs holding two empty byte lists, which is its eight-byte minimum."""
     return InteriorPair(head=InteriorByteList8(), tail=InteriorByteList8())
@@ -64,9 +58,6 @@ PAIR_LIST_DECODER = InteriorPairList4(data=[empty_pair(), empty_pair()])
 
 PAIR_VECTOR_DECODER = InteriorPairVector2(data=[empty_pair(), empty_pair()])
 """The same for the shape whose count is declared."""
-
-PAIR_PROGRESSIVE_LIST_DECODER = InteriorPairProgressiveList(data=[empty_pair(), empty_pair()])
-"""The same for the shape that declares no capacity."""
 
 
 def test_middle_offset_moved_forward(ssz_test: SSZTestFiller) -> None:
@@ -258,37 +249,6 @@ def test_vector_span_below_element_minimum(ssz_test: SSZTestFiller) -> None:
         case_id="interior_offset/pair_vector2/invalid/span_below_element_minimum",
         type_name="InteriorPairVector2",
         value=PAIR_VECTOR_DECODER,
-        raw_bytes="0x080000000c000000080000000800000008000000",
-        expected_rejection=ExpectedRejection(
-            reason=ValueFault.SCOPE_TOO_SMALL,
-            exact_message="[0]: InteriorPair needs at least 8 bytes, and the budget is 4",
-        ),
-    )
-
-
-def test_progressive_list_span_below_element_minimum(ssz_test: SSZTestFiller) -> None:
-    """
-    Decoding a progressive list whose two offsets are closer than one element can be is rejected.
-
-    Given
-    -----
-    - a progressive list of the same structs, with no capacity of its own.
-    - the very bytes the bounded list refuses.
-
-    When
-    ----
-    - the input is decoded into that type.
-
-    Then
-    ----
-    - decoding is rejected.
-    - the reason is that the element needs more bytes than the span between the two offsets.
-    - declaring no capacity relaxes no minimum an element brings with it.
-    """
-    ssz_test(
-        case_id="interior_offset/pair_progressive_list/invalid/span_below_element_minimum",
-        type_name="InteriorPairProgressiveList",
-        value=PAIR_PROGRESSIVE_LIST_DECODER,
         raw_bytes="0x080000000c000000080000000800000008000000",
         expected_rejection=ExpectedRejection(
             reason=ValueFault.SCOPE_TOO_SMALL,

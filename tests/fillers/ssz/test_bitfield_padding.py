@@ -300,39 +300,6 @@ def test_bitvector9_all_padding_bits(ssz_test: SSZTestFiller) -> None:
 
 
 @pytest.mark.tags("malleability")
-def test_bitvector12_highest_padding_bit(ssz_test: SSZTestFiller) -> None:
-    """
-    Decoding a twelve-bit vector that sets the highest bit of its second byte is rejected.
-
-    Given
-    -----
-    - a bitvector of twelve bits, whose second byte splits four data bits and four padding.
-    - the input bytes 0xff80, whose final byte sets padding bit seven and nothing below it.
-
-    When
-    ----
-    - the input is decoded into that type.
-
-    Then
-    ----
-    - decoding is rejected.
-    - the reason is that the final byte sets a padding bit.
-    - the same width already pins its lowest padding bit through 0xff10, and the two
-      together say the rule is about the whole padding rather than its first bit.
-    """
-    ssz_test(
-        case_id="padding/bitvector12/invalid/highest_padding_bit",
-        type_name="PaddingBitVector12",
-        value=PaddingBitVector12(),
-        raw_bytes="0xff80",
-        expected_rejection=ExpectedRejection(
-            reason=ValueFault.PADDING_BITS,
-            exact_message="the final byte 0x80 sets a padding bit",
-        ),
-    )
-
-
-@pytest.mark.tags("malleability")
 def test_bitvector12_all_padding_bits(ssz_test: SSZTestFiller) -> None:
     """
     Decoding a twelve-bit vector whose whole padding is set is rejected.

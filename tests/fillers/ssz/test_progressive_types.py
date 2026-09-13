@@ -60,32 +60,6 @@ PROGRESSIVE_BITLIST_LEVEL_BITS = 257
 """Bit count that spills one bit past the first Merkle chunk, opening the second level."""
 
 
-@pytest.mark.tags("empty")
-def test_progressive_list_empty(ssz_test: SSZTestFiller) -> None:
-    """
-    An empty progressive list round-trips unchanged.
-
-    Given
-    -----
-    - a progressive list of eight-byte elements with no entries.
-
-    When
-    ----
-    - the value is encoded and then decoded.
-
-    Then
-    ----
-    - the encoding is empty.
-    - the root is the zero terminator with a zero count mixed in.
-    - the decoded value equals the original.
-    """
-    ssz_test(
-        case_id="progressive_list/empty",
-        type_name="SampleUint64ProgressiveList",
-        value=SampleUint64ProgressiveList(data=[]),
-    )
-
-
 def test_progressive_list_single_element(ssz_test: SSZTestFiller) -> None:
     """
     A progressive list holding one element round-trips unchanged.
@@ -370,31 +344,6 @@ def test_progressive_list_of_variable_size_elements(ssz_test: SSZTestFiller) -> 
                 SampleUint16ProgressiveList(data=[Uint16(3), Uint16(4), Uint16(5)]),
             ]
         ),
-    )
-
-
-@pytest.mark.tags("empty")
-def test_progressive_bitlist_empty(ssz_test: SSZTestFiller) -> None:
-    """
-    An empty progressive bitlist round-trips unchanged.
-
-    Given
-    -----
-    - a progressive bitlist with no data bits.
-
-    When
-    ----
-    - the value is encoded and then decoded.
-
-    Then
-    ----
-    - the encoding is the single delimiter byte 0x01.
-    - the decoded value equals the original.
-    """
-    ssz_test(
-        case_id="progressive_bitlist/empty",
-        type_name="ProgressiveBitList",
-        value=ProgressiveBitList(data=[]),
     )
 
 

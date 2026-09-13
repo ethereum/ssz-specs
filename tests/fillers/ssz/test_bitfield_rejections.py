@@ -128,14 +128,14 @@ def test_bitvector8_empty_input(ssz_test: SSZTestFiller) -> None:
 
 
 @pytest.mark.tags("boundary")
-def test_bitvector8_bit_above_length_needs_a_second_byte(ssz_test: SSZTestFiller) -> None:
+def test_bitvector8_one_byte_long(ssz_test: SSZTestFiller) -> None:
     """
-    Decoding a bit vector handed a byte past the ones its bits pack into is rejected.
+    Decoding a bit vector from one byte more than its bits need is rejected.
 
     Given
     -----
     - a bitvector of eight bits, a length that fills its single byte exactly.
-    - the input bytes 0x0001, which set bit eight, the first bit above the declared eight.
+    - the input bytes 0x0001, one byte more than that, the extra one setting its lowest bit.
 
     When
     ----
@@ -145,11 +145,13 @@ def test_bitvector8_bit_above_length_needs_a_second_byte(ssz_test: SSZTestFiller
     ----
     - decoding is rejected.
     - the reason is that the input spans more bytes than the type does.
-    - a length that is a multiple of eight has no padding bits, so the byte count alone
-      is what refuses a bit set above it.
+    - this is the surplus side of the same width rule the two short inputs test from below,
+      so a decoder demanding only a floor rather than an exact count is caught here alone.
+    - a length that is a multiple of eight has no padding bits, so nothing about the extra
+      byte's contents is read: the count settles it before any bit is looked at.
     """
     ssz_test(
-        case_id="bitvector8/invalid/bit_above_length",
+        case_id="bitvector8/invalid/one_byte_long",
         type_name="SampleBitVector8",
         value=SampleBitVector8(),
         raw_bytes="0x0001",
