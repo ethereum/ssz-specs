@@ -22,7 +22,7 @@ def _hash_pair(left: bytes, right: bytes) -> Root:
     return Root._trusted(sha256(left + right).digest())
 
 
-def calculate_merkle_root(leaf: Chunk, proof: Sequence[Chunk], index: int) -> Root:
+def calculate_merkle_root(leaf: bytes, proof: Sequence[bytes], index: int) -> Root:
     """
     Rebuild a root from one leaf and its branch.
 
@@ -45,14 +45,14 @@ def calculate_merkle_root(leaf: Chunk, proof: Sequence[Chunk], index: int) -> Ro
     return Root._trusted(node)
 
 
-def verify_merkle_proof(leaf: Chunk, proof: Sequence[Chunk], index: int, root: Root) -> bool:
+def verify_merkle_proof(leaf: bytes, proof: Sequence[bytes], index: int, root: bytes) -> bool:
     """Whether one leaf and its branch rebuild the expected root, raising if it is malformed."""
-    # A well-formed proof succeeds exactly when its rebuilt root matches that commitment.
-    return calculate_merkle_root(leaf, proof, index) == root
+    # Comparing as plain bytes lets a wrong root of any spelling answer false rather than raise.
+    return bytes(calculate_merkle_root(leaf, proof, index)) == bytes(root)
 
 
 def calculate_multi_merkle_root(
-    leaves: Sequence[Chunk], proof: Sequence[Chunk], indices: Sequence[int]
+    leaves: Sequence[bytes], proof: Sequence[bytes], indices: Sequence[int]
 ) -> Root:
     """
     Rebuild a root from several leaves and the nodes they share.
@@ -90,8 +90,8 @@ def calculate_multi_merkle_root(
 
 
 def verify_merkle_multiproof(
-    leaves: Sequence[Chunk], proof: Sequence[Chunk], indices: Sequence[int], root: Root
+    leaves: Sequence[bytes], proof: Sequence[bytes], indices: Sequence[int], root: bytes
 ) -> bool:
     """Whether several leaves and their nodes rebuild the expected root, raising if malformed."""
-    # Shared branches must rebuild the same commitment as an ordinary proof.
-    return calculate_multi_merkle_root(leaves, proof, indices) == root
+    # Comparing as plain bytes lets a wrong root of any spelling answer false rather than raise.
+    return bytes(calculate_multi_merkle_root(leaves, proof, indices)) == bytes(root)
