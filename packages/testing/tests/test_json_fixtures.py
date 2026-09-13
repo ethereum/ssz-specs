@@ -31,9 +31,15 @@ class Digest(Vector[Byte]):
 
 
 class Either(CompatibleUnion):
-    """A union of one option, the shape this implementation writes but cannot read."""
+    """A union of one option, whose document names the option and the value under it."""
 
     OPTIONS = {1: Pair}
+
+
+class Choices(List[Either]):
+    """A list of unions, whose elements are read as documents rather than coerced as values."""
+
+    LIMIT = 4
 
 
 def test_a_written_document_carries_the_value_and_the_bytes_beside_it() -> None:
@@ -72,22 +78,6 @@ def test_a_vector_is_indexed_by_the_type_name_and_the_kind_it_states() -> None:
     assert fixture.case_type_name() == "Pair"
     assert fixture.case_kind() == "container"
     assert fixture.declared_types() == {"Pair": fixture.type_descriptor}
-
-
-def test_a_union_document_is_written_and_the_read_recorded_as_unavailable() -> None:
-    """A union renders a selector object, and no JSON reaches its option field to come back."""
-    note = "a union declares its option as an is-instance field"
-    fixture = JsonMappingTest(
-        type_name="Either",
-        ssz_type=Either,
-        value=Either(selector=Uint8(1), data=Pair(x=Uint16(1), y=Uint16(2))),
-        document={"selector": "1", "data": {"x": "1", "y": "2"}},
-        not_read_back=note,
-    ).generate()
-
-    assert fixture.json_dict["document"] == {"selector": "1", "data": {"x": "1", "y": "2"}}
-    assert fixture.json_dict["notReadBack"] == note
-    assert fixture.json_dict["serialized"] == "0x0101000200"
 
 
 def test_a_document_the_mapping_does_not_write_is_not_a_vector() -> None:
@@ -189,34 +179,18 @@ def test_a_refusal_for_another_reason_is_not_a_vector() -> None:
         spec.generate()
 
 
-def test_a_document_read_back_as_another_value_is_not_a_vector() -> None:
-    """Both directions are checked, so a reader disagreeing with the writer fails the fill."""
-
-    class OneWay(Container):
-        """A struct whose reader is bypassed below, standing in for one that disagrees."""
-
-        x: Uint16
-
-    spec = JsonMappingTest(
-        type_name="OneWay",
-        ssz_type=OneWay,
-        value=OneWay(x=Uint16(1)),
-        document={"x": "1"},
-        not_read_back="this type reads its own JSON back perfectly well",
-    )
-
-    with pytest.raises(AssertionError, match="now reads its own JSON back"):
-        spec.generate()
-
-
 @pytest.mark.parametrize(
     "value,document",
     [
         (Digest.of(0x11, 0x22), "0x1122"),
         (Numbers(data=[Uint16(1)]), ["1"]),
         (Pair(x=Uint16(1), y=Uint16(2)), {"x": "1", "y": "2"}),
+        (
+            Choices(data=[Either(selector=Uint8(1), data=Pair(x=Uint16(1), y=Uint16(2)))]),
+            [{"selector": "1", "data": {"x": "1", "y": "2"}}],
+        ),
     ],
-    ids=["vector_of_bytes", "list", "container"],
+    ids=["vector_of_bytes", "list", "container", "list_of_unions"],
 )
 def test_a_rebuilt_type_writes_the_same_document(value: Any, document: Any) -> None:
     """The descriptor is the whole contract, so the rebuilt type has to render alike."""

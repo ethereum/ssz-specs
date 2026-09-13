@@ -1,10 +1,11 @@
 """SSZ compatible union, per EIP-8016."""
 
+import json
 from collections.abc import Callable, Mapping
 from types import MappingProxyType
 from typing import IO, Any, ClassVar, Final, Self, override
 
-from pydantic import ConfigDict, field_serializer, model_validator
+from pydantic import ConfigDict, ValidationInfo, field_serializer, field_validator, model_validator
 
 from ssz.base import json_writer
 from ssz.bitfields import BitList, BitVector, ProgressiveBitList
@@ -12,7 +13,14 @@ from ssz.boolean import Boolean
 from ssz.byte_arrays import ByteList, ByteVector
 from ssz.collections import List, ProgressiveList, Vector
 from ssz.container import Container, ProgressiveContainer
-from ssz.exceptions import SSZError, SSZTypeError, SSZValueError, TypeFault, ValueFault
+from ssz.exceptions import (
+    SSZError,
+    SSZTypeError,
+    SSZValueError,
+    TypeFault,
+    ValueFault,
+    document_refusals,
+)
 from ssz.ssz_base import SSZModel, SSZType
 from ssz.uint import BaseUint, Uint8
 
@@ -97,11 +105,38 @@ class CompatibleUnion(SSZModel):
 
     @model_validator(mode="before")
     @classmethod
-    def _reject_a_default(cls, raw_input: Any) -> Any:
-        """Refuse the empty input that asks for a default, which this type does not have."""
-        if raw_input == {}:
-            raise SSZTypeError(TypeFault.NO_DEFAULT, type=cls.__name__)
+    def _reject_a_default(cls, raw_input: Any, info: ValidationInfo) -> Any:
+        """
+        Refuse the empty input that asks for a default, which this type does not have.
+
+        Raises:
+            SSZTypeError: When a value built in Python asks for the default.
+            ValueError: When a JSON document asks for it.
+        """
+        with document_refusals(info.mode):
+            if raw_input == {}:
+                raise SSZTypeError(TypeFault.NO_DEFAULT, type=cls.__name__)
         return raw_input
+
+    @field_validator("data", mode="before")
+    @classmethod
+    def _read_the_selected_option(cls, raw_input: Any, info: ValidationInfo) -> Any:
+        """
+        Read a document's option value through the declaration its selector names.
+
+        The field itself holds an SSZ value, which no JSON is until some type reads it.
+        The selector is what says which type that is, and it is validated before this field.
+
+        Raises:
+            SSZValueError: When the selector names no option of this union.
+        """
+        selector = info.data.get("selector")
+        if info.mode != "json" or selector is None:
+            return raw_input
+
+        # The option reads its own document, so it applies the rules a document is held to.
+        option = cls._option_named(int(selector))
+        return json_writer(option).validate_json(json.dumps(raw_input))
 
     @model_validator(mode="after")
     def _check_selected_option(self) -> Self:
@@ -113,19 +148,27 @@ class CompatibleUnion(SSZModel):
             SSZTypeError: When the value is a type other than the one named.
         """
         # A value is built field by field, so its selector may name nothing at all.
-        option = type(self).OPTIONS.get(int(self.selector))
-        if option is None:
-            raise SSZValueError(
-                ValueFault.UNKNOWN_SELECTOR,
-                selector=int(self.selector),
-                type=type(self).__name__,
-            )
+        option = self._option_named(int(self.selector))
+
         # A reader picks the tree shape from the selector, so the value must be that option.
         if not isinstance(self.data, option):
             raise SSZTypeError(
                 TypeFault.WRONG_TYPE, expected=option.__name__, got=type(self.data).__name__
             )
         return self
+
+    @classmethod
+    def _option_named(cls, selector: int) -> type[SSZType]:
+        """
+        The option a selector stands for, which is what fixes the tree shape a reader picks.
+
+        Raises:
+            SSZValueError: When the selector names no option of this union.
+        """
+        option = cls.OPTIONS.get(selector)
+        if option is None:
+            raise SSZValueError(ValueFault.UNKNOWN_SELECTOR, selector=selector, type=cls.__name__)
+        return option
 
     @classmethod
     @override
@@ -152,11 +195,7 @@ class CompatibleUnion(SSZModel):
             raise SSZValueError(ValueFault.NO_SELECTOR, scope=scope)
 
         selector = Uint8.deserialize(stream, selector_width)
-        option = cls.OPTIONS.get(int(selector))
-        if option is None:
-            raise SSZValueError(
-                ValueFault.UNKNOWN_SELECTOR, selector=int(selector), type=cls.__name__
-            )
+        option = cls._option_named(int(selector))
 
         # A refusal inside the option names the selector it was read under, as a path step.
         try:

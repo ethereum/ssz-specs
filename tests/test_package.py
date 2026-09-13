@@ -103,6 +103,7 @@ UNPUBLISHED = {
     "ZERO_CHUNK",
     "check_composite_size",
     "coerced_bytes",
+    "document_refusals",
     "field_names",
     "hold_to_bases",
     "layout_chunks",
