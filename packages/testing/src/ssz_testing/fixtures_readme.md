@@ -2,7 +2,7 @@
 
 Generated from the Python reference implementation in this repository by `just fill`.
 
-505 cases: 314 an implementation must accept, 191 it must refuse.
+<!-- case count -->
 Read [what a passing run proves](#what-a-passing-run-proves) before relying on them.
 
 ## Layout
