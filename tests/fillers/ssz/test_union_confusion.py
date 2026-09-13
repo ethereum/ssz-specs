@@ -280,7 +280,7 @@ def test_union_confusion_second_option_payload_under_the_third_selector(
     )
 
 
-@pytest.mark.tags("empty")
+@pytest.mark.tags("empty", "element-minimum")
 def test_union_confusion_selector_without_a_payload(ssz_test: SSZTestFiller) -> None:
     """
     Decoding a selector byte carrying no payload at all is rejected.

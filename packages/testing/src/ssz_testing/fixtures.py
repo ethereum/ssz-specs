@@ -368,6 +368,14 @@ class TypeDescriptor(CamelModel):
         """The kind this declaration states, spelled as a directory can hold it."""
         return _CAMEL_WORD_BREAK.sub("_", self.kind).lower()
 
+    @property
+    def holds_a_union(self) -> bool:
+        """Whether a union sits anywhere below, its selector mixed into every root above it."""
+        below = (self.element_type, *(field.type for field in self.fields or ()))
+        return self.kind == "CompatibleUnion" or any(
+            declared.holds_a_union for declared in below if declared is not None
+        )
+
 
 class DeclaredField(CamelModel):
     """One field of a container, against the declaration of what it holds."""

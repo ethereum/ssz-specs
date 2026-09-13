@@ -117,6 +117,7 @@ def test_middle_offset_moved_back(ssz_test: SSZTestFiller) -> None:
     )
 
 
+@pytest.mark.tags("element-minimum")
 def test_middle_offset_equal_to_the_first(ssz_test: SSZTestFiller) -> None:
     """
     Decoding a struct whose middle offset repeats the one before it is rejected by the element.
@@ -150,6 +151,7 @@ def test_middle_offset_equal_to_the_first(ssz_test: SSZTestFiller) -> None:
     )
 
 
+@pytest.mark.tags("element-minimum")
 def test_middle_offset_equal_to_the_last(ssz_test: SSZTestFiller) -> None:
     """
     Decoding a struct whose middle offset repeats the one after it is rejected by the element.
@@ -182,6 +184,7 @@ def test_middle_offset_equal_to_the_last(ssz_test: SSZTestFiller) -> None:
     )
 
 
+@pytest.mark.tags("element-minimum")
 def test_list_span_below_element_minimum(ssz_test: SSZTestFiller) -> None:
     """
     Decoding a list whose first two offsets are closer than one element can be is rejected.

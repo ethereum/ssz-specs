@@ -77,7 +77,7 @@ def test_bitlist_field_behind_offset(ssz_test: SSZTestFiller) -> None:
     )
 
 
-@pytest.mark.tags("offsets", "empty")
+@pytest.mark.tags("offsets", "empty", "element-minimum")
 def test_bitlist_field_empty_span(ssz_test: SSZTestFiller) -> None:
     """
     A container whose offset leaves the bitlist no bytes is rejected.

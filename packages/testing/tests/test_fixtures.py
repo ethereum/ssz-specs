@@ -89,6 +89,19 @@ class Shape(CompatibleUnion):
     OPTIONS = {1: Square, 2: Circle}
 
 
+class Choice(Container):
+    """A struct holding a union, for the search that descends through a field."""
+
+    shape: Shape
+
+
+class Choices(List[Choice]):
+    """A list of those structs, putting the union two levels below the declaration."""
+
+    LIMIT = 2
+    ELEMENT_TYPE = Choice
+
+
 INFO = FixtureInfo(
     test_id="uint8/one",
     generated_by="tests/fillers/test_x.py::test_x",
@@ -337,6 +350,16 @@ def test_a_declaration_writes_out_every_parameter_it_fixes() -> None:
             },
         ],
     }
+
+
+def test_a_union_anywhere_below_a_declaration_is_baked_into_the_roots_above_it() -> None:
+    """The selector's reading reaches every root above it, so a nested union counts as one."""
+    assert describe_type(Shape).holds_a_union
+    assert describe_type(Choice).holds_a_union
+    assert describe_type(Choices).holds_a_union
+
+    assert not describe_type(Pair).holds_a_union
+    assert not describe_type(Numbers).holds_a_union
 
 
 def test_a_vector_claims_its_type_name_for_the_declaration_of_its_value() -> None:
