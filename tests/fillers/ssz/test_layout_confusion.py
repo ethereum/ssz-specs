@@ -177,10 +177,9 @@ def test_field_added_at_an_interior_position(ssz_test: SSZTestFiller) -> None:
     Then
     ----
     - decoding is rejected.
-    - the reason is that the inserted field widens the shape to seventeen bytes, one past
-      the sixteen the payload carries.
-    - EIP-7495 gives a progressive container the serialization of an ordinary container, so
-      nothing on the wire announces which layout wrote these bytes.
+    - the reason is that the inserted field widens the shape to seventeen bytes.
+    - EIP-7495 gives a progressive container the serialization of an ordinary one.
+    - nothing on the wire announces which layout wrote these bytes.
     """
     ssz_test(
         case_id="layout/invalid/field_added_at_an_interior_position",
@@ -247,8 +246,7 @@ def test_field_moved_past_a_later_one(ssz_test: SSZTestFiller) -> None:
     ----
     - decoding is rejected.
     - the reason is that the leading four bytes read as an offset that does not end the fixed part.
-    - moving a field past another is the one layout edit the wire can catch, since it is the only
-      one that changes the order the fields are written in.
+    - moving a field past another is the one layout edit that changes the write order.
     """
     ssz_test(
         case_id="layout/invalid/field_moved_past_a_later_one",
@@ -347,10 +345,9 @@ def test_same_width_other_gap_positions(ssz_test: SSZTestFiller) -> None:
     Then
     ----
     - decoding is rejected.
-    - the reason is that the two shapes span different widths, the fields either side of the
-      moved gap being of different types.
-    - a gap that moves without disturbing the field types is refused by nothing at all, since
-      the encodings then match byte for byte.
+    - the reason is that the two shapes span different widths.
+    - the fields either side of the moved gap are of different types.
+    - a gap moving between fields of one type would leave the encodings matching byte for byte.
     """
     ssz_test(
         case_id="layout/invalid/same_width_other_gap_positions",
@@ -452,8 +449,8 @@ def test_collision_three_position_layout(ssz_test: SSZTestFiller) -> None:
     Then
     ----
     - the encoding is the nine bytes 0x070500000001000200.
-    - the four-position shape beside this one encodes to those very same nine bytes, and each
-      decodes the other's payload without complaint.
+    - the four-position shape beside this one encodes to those very same nine bytes.
+    - each decodes the other's payload without complaint.
     - only the root separates the two, the layout being all that is mixed in.
     """
     assert_collision(NARROW_COLLIDING_VALUE, WIDE_COLLIDING_VALUE)
@@ -480,8 +477,8 @@ def test_collision_four_position_layout(ssz_test: SSZTestFiller) -> None:
     Then
     ----
     - the encoding is the same nine bytes 0x070500000001000200 the narrower shape writes.
-    - the root differs from the narrower shape's, which is the whole of EIP-7495's guarantee:
-      a verifier told these apart by nothing but the mixed-in layout.
+    - the root differs from the narrower shape's.
+    - nothing but the mixed-in layout tells a verifier the two apart.
     """
     assert_collision(NARROW_COLLIDING_VALUE, WIDE_COLLIDING_VALUE)
     ssz_test(

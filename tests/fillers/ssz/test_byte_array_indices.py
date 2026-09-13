@@ -103,8 +103,8 @@ def test_a_byte_of_a_single_chunk_byte_vector(ssz_gindex_test: GindexTestFiller)
     Then
     ----
     - the index is 1, the root itself, because one leaf pads to a tree one wide.
-    - proving a byte of a 32-byte root therefore proves the root, and the branch is empty;
-      a client expecting an index below 1 here is holding a shape that has no below.
+    - proving a byte of a 32-byte root therefore proves the root, and the branch is empty.
+    - there is no index below 1 here.
     """
     ssz_gindex_test(
         case_id="byte_array_index/byte_vector/single_chunk_is_the_root",
@@ -348,10 +348,8 @@ def test_a_proof_of_a_byte_of_a_byte_list(proof_test: ProofTestFiller) -> None:
     Then
     ----
     - the path resolves to generalized index 8195.
-    - the branch holds thirteen nodes: two chunks of data, then ten zero subtrees, then
-      the mixed-in byte count.
-    - the value fills four chunks and the capacity declares 4096, so the depth is the
-      declaration's and the padding is what most of the branch carries.
+    - the branch holds thirteen nodes: two data chunks, ten zero subtrees, then the count.
+    - the value fills four chunks against a declared 4096, so the depth is the declaration's.
     - the branch rebuilds the value's root.
     """
     proof_test(

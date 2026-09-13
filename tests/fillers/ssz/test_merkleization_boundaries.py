@@ -47,11 +47,7 @@ class BoundaryBitVector257(BitVector):
 
 
 class BoundaryBitList256(BitList):
-    """
-    BitList whose limit is exactly one Merkle chunk.
-
-    When filled to the limit, the sentinel bit lands in a fresh byte.
-    """
+    """BitList whose limit is exactly one Merkle chunk, its sentinel landing in a fresh byte."""
 
     LIMIT: ClassVar[int] = 256
 

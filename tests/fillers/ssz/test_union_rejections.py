@@ -90,8 +90,7 @@ def test_union_decode_failure_first_reserved_selector(ssz_test: SSZTestFiller) -
     Then
     ----
     - decoding is rejected before the payload byte is read.
-    - the reason is that the selector names no option, the same reason an in-range
-      undeclared selector gives.
+    - the reason is that the selector names no option, as an undeclared in-range one does.
     """
     ssz_test(
         case_id="compatible_union/invalid/reserved_selector_128",
@@ -121,8 +120,7 @@ def test_union_decode_failure_top_of_byte_selector(ssz_test: SSZTestFiller) -> N
     ----
     - decoding is rejected.
     - the reason is that the selector names no option.
-    - a decoder that reads the selector as a signed byte, or that checks only the low
-      seven bits, would accept this input as selector 1.
+    - reading the selector as a signed byte, or as its low seven bits, gives selector 1.
     """
     ssz_test(
         case_id="compatible_union/invalid/reserved_selector_255",
@@ -187,8 +185,7 @@ def test_union_decode_failure_boolean_option_not_a_bit(ssz_test: SSZTestFiller) 
     ----
     - decoding is rejected.
     - the reason is the boolean's own, since the payload is read as the named option.
-    - the message opens with the selector as a path step, which is what shows the option
-      and not the union refused it.
+    - the message opens with the selector as a path step, showing the option refused it.
     """
     ssz_test(
         case_id="compatible_union/invalid/option_not_a_bit",
@@ -280,8 +277,7 @@ def test_union_decode_failure_bitlist_option_trailing_zeros(ssz_test: SSZTestFil
     ----
     - decoding is rejected.
     - the reason is the bitlist's canonicality rule, not the union's.
-    - a union option is bound by every rule its own type states, so the second encoding
-      of a one-bit list is no more admissible inside a union than outside one.
+    - a union option is bound by every rule its own type states.
     """
     ssz_test(
         case_id="compatible_union/invalid/option_trailing_zeros",
@@ -312,8 +308,7 @@ def test_union_decode_failure_bitvector_option_padding_bit(ssz_test: SSZTestFill
     ----
     - decoding is rejected.
     - the reason is the bitvector's padding rule, reported under the selector.
-    - the payload is one byte wide either way, so nothing but the option's own rule
-      separates this input from a valid one.
+    - the payload is one byte wide either way, so only the option's own rule refuses it.
     """
     ssz_test(
         case_id="compatible_union/invalid/option_padding_bit",

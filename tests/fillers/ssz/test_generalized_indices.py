@@ -793,8 +793,8 @@ def test_progressive_list_past_any_data_it_holds(ssz_gindex_test: GindexTestFill
     Then
     ----
     - the index is 1565807, on the seventh spine level.
-    - a path resolves against the declaration alone, and this declaration bounds nothing;
-      whether a value reaches that far is a question only a value can answer.
+    - a path resolves against the declaration alone, and this declaration bounds nothing.
+    - whether a value reaches that far only a value can answer.
     """
     ssz_gindex_test(
         case_id="gindex/progressive_list/far_past_any_data",
@@ -1005,8 +1005,8 @@ def test_gloas_finalized_root(ssz_gindex_test: GindexTestFiller) -> None:
     Then
     ----
     - position 20 ends the sixteen-wide third spine level at index 367, so the root is 735.
-    - a progressive layout keeps an index across a fork that appends a field; a padded one
-      does not, which is why these two states answer differently for one path.
+    - a progressive layout keeps an index across a fork that appends a field.
+    - a padded one does not, which is why the two states answer one path differently.
     """
     ssz_gindex_test(
         case_id="gindex/light_client/gloas/finalized_root",
@@ -1217,8 +1217,8 @@ def test_a_path_into_a_layout_gap_is_refused(ssz_gindex_test: GindexTestFiller) 
     Then
     ----
     - the type refuses with NO_SUCH_FIELD.
-    - the gap is a real zero leaf of the tree; a path reaches it only through an index,
-      never through a name, since a name is what a vacancy has none of.
+    - the gap is a real zero leaf of the tree.
+    - a path reaches it through an index and never through a name, a vacancy having none.
     """
     ssz_gindex_test(
         case_id="gindex/refused/into_a_layout_gap",
@@ -1271,8 +1271,8 @@ def test_a_position_before_the_first_is_refused(ssz_gindex_test: GindexTestFille
     Then
     ----
     - the type refuses with NO_SUCH_POSITION.
-    - unchecked, the arithmetic would answer index 3, the mixed-in element count, and the
-      caller would be handed a proof of a node it never asked about.
+    - unchecked, the arithmetic would answer index 3, the mixed-in element count.
+    - the caller would be handed a proof of a node it never asked about.
     """
     ssz_gindex_test(
         case_id="gindex/refused/before_the_first_position",

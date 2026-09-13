@@ -130,8 +130,7 @@ def test_union_confusion_first_option_payload_under_the_second_selector(
 
     Given
     -----
-    - a union whose first option holds a blob and a tag, and whose second holds a blob,
-      a mark byte and the same tag.
+    - a union whose first option holds a blob and a tag, the second adding a mark byte.
     - the bytes 0x0500000007aabb, which encode the first option holding a two-byte blob.
     - the input bytes 0x020500000007aabb, the same payload behind selector 2.
 
@@ -142,10 +141,8 @@ def test_union_confusion_first_option_payload_under_the_second_selector(
     Then
     ----
     - decoding is rejected.
-    - the reason is the first offset, which spells the fixed part of the option that wrote
-      it rather than the fixed part of the option reading it.
-    - seven payload bytes is a length the second option admits, so nothing but the offset
-      rule separates this input from a valid one.
+    - the reason is the first offset, which spells the writing option's fixed part.
+    - seven payload bytes is a length the second option admits, so only the offset refuses.
     """
     ssz_test(
         case_id="confusion/invalid/memo_payload_under_the_marked_selector",
@@ -181,8 +178,7 @@ def test_union_confusion_second_option_payload_under_the_first_selector(
     Then
     ----
     - decoding is rejected.
-    - the offset the first option expects is smaller, not larger, so a decoder that only
-      checked the offset against the budget would let this through.
+    - the offset the first option expects is smaller, not larger, so a budget check passes.
     - both directions carry seven payload bytes, so neither is caught by a length check.
     """
     ssz_test(
@@ -209,8 +205,7 @@ def test_union_confusion_third_option_payload_under_the_second_selector(
     Given
     -----
     - a union of three options, whose fixed parts end at five, six and nine bytes.
-    - the bytes 0x090000000900000007aa, which encode the third option holding an empty
-      blob and a one-byte blob.
+    - the bytes 0x090000000900000007aa, the third option holding an empty and a one-byte blob.
     - the input bytes 0x02090000000900000007aa, the same payload behind selector 2.
 
     When
@@ -220,8 +215,8 @@ def test_union_confusion_third_option_payload_under_the_second_selector(
     Then
     ----
     - decoding is rejected on the first offset.
-    - ten payload bytes is exactly what the second option spans holding a four-byte blob,
-      so the confusion survives every check but the offset's.
+    - ten payload bytes is what the second option spans holding a four-byte blob.
+    - the confusion survives every check but the offset's.
     """
     ssz_test(
         case_id="confusion/invalid/paired_payload_under_the_stamped_selector",
@@ -249,8 +244,7 @@ def test_union_confusion_second_option_payload_under_the_third_selector(
     Given
     -----
     - the same union of three.
-    - the bytes 0x06000000ee07aabbccdd, which encode the second option holding a full
-      four-byte blob.
+    - the bytes 0x06000000ee07aabbccdd, the second option holding a full four-byte blob.
     - the input bytes 0x0906000000ee07aabbccdd, the same payload behind selector 9.
 
     When
@@ -260,8 +254,7 @@ def test_union_confusion_second_option_payload_under_the_third_selector(
     Then
     ----
     - decoding is rejected on the first offset.
-    - ten payload bytes leaves the third option's own fixed part one data byte, so this
-      input is the right length for the option it is read as.
+    - ten payload bytes is the right length for the option this is read as.
     """
     ssz_test(
         case_id="confusion/invalid/stamped_payload_under_the_paired_selector",
@@ -297,8 +290,7 @@ def test_union_confusion_selector_without_a_payload(ssz_test: SSZTestFiller) -> 
     Then
     ----
     - decoding is rejected.
-    - the reason is the option's own minimum width against an empty budget, so the refusal
-      comes from the option and not from the union.
+    - the reason is the option's own minimum width against an empty budget.
     - the union itself is satisfied, the selector byte being present and declared.
     """
     ssz_test(
@@ -322,10 +314,8 @@ def test_union_confusion_payload_without_its_selector(ssz_test: SSZTestFiller) -
 
     Given
     -----
-    - the union of three, whose third option is declared under selector 9 and whose fixed
-      part also ends at nine bytes.
-    - the input bytes 0x090000000900000007aa, that option's payload with no selector ahead
-      of it.
+    - the union of three, whose third option has selector 9 and a nine-byte fixed part.
+    - the input bytes 0x090000000900000007aa, that option's payload with no selector.
 
     When
     ----
@@ -333,12 +323,10 @@ def test_union_confusion_payload_without_its_selector(ssz_test: SSZTestFiller) -
 
     Then
     ----
-    - the low byte of the first offset is read as the selector, and it names the very
-      option the payload belongs to, so the selector table does not catch the loss.
-    - decoding is rejected one step later, the remaining bytes reading as an offset of
-      150994944 against a fixed part ending at nine.
-    - a union declaring a selector that a first offset can spell is what makes a dropped
-      selector byte survive this far.
+    - the low byte of the first offset is read as the selector.
+    - it names the very option the payload belongs to, so the selector table lets it pass.
+    - decoding is rejected one step later, on an offset of 150994944 past a nine-byte part.
+    - a selector a first offset can spell is what lets a dropped one survive this far.
     """
     ssz_test(
         case_id="confusion/invalid/payload_without_its_selector",
@@ -365,8 +353,8 @@ def test_union_confusion_shared_payload_under_the_offset_selector(
 
     Given
     -----
-    - a union whose first option is variable-size, five bytes when its blob is empty, and
-      whose second is fixed at five bytes.
+    - a union whose first option is variable-size, five bytes when its blob is empty.
+    - its second option is fixed at five bytes.
     - a value holding the first option with an empty blob.
 
     When
@@ -376,8 +364,7 @@ def test_union_confusion_shared_payload_under_the_offset_selector(
     Then
     ----
     - the payload is 0x0500000007, an offset of 5 followed by the tag.
-    - those same five bytes are a valid encoding of the other option, so this is not a
-      confusion a decoder can refuse.
+    - those five bytes also encode the other option, so no decoder can refuse the pair.
     - the two readings root differently, which is what the selector byte is for.
     """
     check_one_payload_two_roots()
@@ -405,10 +392,8 @@ def test_union_confusion_shared_payload_under_the_word_selector(
 
     Then
     ----
-    - the payload is 0x0500000007 again, the bytes the other option spends on an offset
-      read here as data.
-    - the root differs from the same payload under selector 1, so nothing is lost by both
-      readings being legal.
+    - the payload is 0x0500000007 again, the other option's offset bytes read as data.
+    - the root differs from the same payload under selector 1.
     - only a decoder that ignored the selector could confuse the two.
     """
     check_one_payload_two_roots()

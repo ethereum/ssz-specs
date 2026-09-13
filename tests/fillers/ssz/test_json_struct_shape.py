@@ -47,8 +47,8 @@ def test_a_container_written_as_its_own_encoding(ssz_json_test: JsonMappingFille
 
     Then
     ----
-    - the document is refused, the mapping writing a struct as an object and a hex string
-      as a byte array.
+    - the document is refused, the mapping writing a struct as an object.
+    - a hex string is a byte array's rendering, not a struct's.
     """
     ssz_json_test(
         case_id="json_struct/container/invalid/hex_string",

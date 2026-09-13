@@ -232,8 +232,8 @@ def test_bitlists_of_two_capacities_are_refused(ssz_type_rejection: TypeRejectio
     Then
     ----
     - it is refused, two bitlists agreeing only when they share a capacity.
-    - both options pack into a single chunk and mix their bit count in above it, so an
-      implementation comparing only the emitted tree shape would let this pair through.
+    - both options pack into a single chunk and mix their bit count in above it.
+    - comparing the emitted tree shape alone would let this pair through.
     """
     ssz_type_rejection(
         case_id="compatibility/incompatible/bitlist_capacities",
@@ -259,8 +259,8 @@ def test_bitvectors_of_two_capacities_are_refused(ssz_type_rejection: TypeReject
     Then
     ----
     - it is refused, two bitvectors agreeing only when they share a capacity.
-    - both encode to one byte and root to one chunk, the capacity being the only thing
-      that separates them, and it reaches neither the wire nor the tree.
+    - both encode to one byte and root to one chunk.
+    - the capacity that separates them reaches neither the wire nor the tree.
     """
     ssz_type_rejection(
         case_id="compatibility/incompatible/bitvector_capacities",
@@ -277,8 +277,7 @@ def test_lists_of_two_capacities_are_refused(ssz_type_rejection: TypeRejectionFi
 
     Given
     -----
-    - a union offering an eight-byte-integer list capped at four elements and one capped
-      at eight.
+    - a union offering an eight-byte-integer list capped at four elements and one at eight.
 
     When
     ----
@@ -287,8 +286,7 @@ def test_lists_of_two_capacities_are_refused(ssz_type_rejection: TypeRejectionFi
     Then
     ----
     - it is refused, a list answering for its capacity as well as its element type.
-    - the capacity fixes the depth the elements are padded out to, so the two options
-      place the same element at two different generalized indices.
+    - the capacity fixes the padding depth, so one element sits at two generalized indices.
     """
     ssz_type_rejection(
         case_id="compatibility/incompatible/list_capacities",
@@ -305,8 +303,7 @@ def test_lists_over_two_element_types_are_refused(ssz_type_rejection: TypeReject
 
     Given
     -----
-    - a union offering a list of eight-byte integers and a list of thirty-two-byte ones,
-      both capped at four elements.
+    - a union offering lists of eight-byte and thirty-two-byte integers, both capped at four.
 
     When
     ----
@@ -315,8 +312,8 @@ def test_lists_over_two_element_types_are_refused(ssz_type_rejection: TypeReject
     Then
     ----
     - it is refused, the shared capacity settling only half of the rule.
-    - four of the narrower elements pack into a single chunk where four of the wider ones
-      fill four, so the two options root over trees of different depths.
+    - four narrow elements pack into one chunk where four wide ones fill four.
+    - the two options therefore root over trees of different depths.
     """
     ssz_type_rejection(
         case_id="compatibility/incompatible/list_element_types",
@@ -342,8 +339,8 @@ def test_vectors_of_two_lengths_are_refused(ssz_type_rejection: TypeRejectionFil
     Then
     ----
     - it is refused, a vector answering for its length as well as its element type.
-    - a vector mixes no length in, so the two options are told apart by their declarations
-      alone, and a reader that only counted chunks would find them alike.
+    - a vector mixes no length in, so only the declarations tell the two options apart.
+    - a reader that counted chunks alone would find them alike.
     """
     ssz_type_rejection(
         case_id="compatibility/incompatible/vector_lengths",
@@ -362,8 +359,7 @@ def test_containers_with_the_fields_reordered_are_refused(
 
     Given
     -----
-    - a union offering a struct of an eight-byte amount then a one-byte tag, and a struct
-      of the same two fields declared the other way round.
+    - a union offering an amount-then-tag struct and the same two fields the other way round.
 
     When
     ----
@@ -372,8 +368,8 @@ def test_containers_with_the_fields_reordered_are_refused(
     Then
     ----
     - it is refused, a struct answering for its field names in the order it declares them.
-    - both options hold one field of each name and root over two chunks, so only the order
-      separates them, and it decides which name each proof reaches.
+    - both options hold one field of each name and root over two chunks.
+    - only the order separates them, and it decides which name each proof reaches.
     """
     ssz_type_rejection(
         case_id="compatibility/incompatible/container_fields_reordered",
@@ -392,8 +388,8 @@ def test_containers_differing_by_a_field_name_are_refused(
 
     Given
     -----
-    - a union offering a struct of an amount and a tag, and a struct of an amount and a
-      label, the two second fields sharing a width and a position.
+    - a union offering a struct of an amount and a tag, and one of an amount and a label.
+    - the two second fields share a width and a position.
 
     When
     ----
@@ -402,9 +398,9 @@ def test_containers_differing_by_a_field_name_are_refused(
     Then
     ----
     - it is refused, the rule asking for shared names and not merely for matching types.
-    - one value of each option holding the same two numbers encodes to identical bytes and
-      roots identically, so nothing but the names distinguishes them, and a proof is
-      addressed by name.
+    - one value of each option holding the same two numbers encodes and roots identically.
+    - nothing but the names distinguishes them.
+    - a proof is addressed by name.
     """
     ssz_type_rejection(
         case_id="compatibility/incompatible/container_field_renamed",
@@ -423,8 +419,8 @@ def test_layouts_holding_two_names_at_one_position_are_refused(
 
     Given
     -----
-    - a union offering two progressive containers laid out alike, both setting positions 0
-      and 2, position 2 holding a tag in each.
+    - a union offering two progressive containers, both setting positions 0 and 2.
+    - position 2 holds a tag in each.
     - position 0 holds an amount in the first and a total in the second.
 
     When
@@ -453,8 +449,8 @@ def test_layouts_holding_one_name_at_two_positions_are_refused(
 
     Given
     -----
-    - a union offering a progressive container with an amount at position 0 and a tag at
-      position 2, and one with the amount at position 1 and the tag at position 2.
+    - a union offering a progressive container with an amount at 0 and a tag at 2.
+    - the other option puts the amount at position 1 and the tag at position 2.
 
     When
     ----
@@ -463,10 +459,9 @@ def test_layouts_holding_one_name_at_two_positions_are_refused(
     Then
     ----
     - it is refused, a name set in both types having to sit at one position.
-    - position 2 is the only one set in both layouts, and it holds the same tag in each,
-      so an implementation checking only the shared positions would accept this pair.
-    - a single proof for the amount would reach position 0 under one option and position 1
-      under the other.
+    - position 2 is the only one set in both layouts.
+    - it holds the same tag in each, so shared positions alone would accept this pair.
+    - a proof for the amount would reach position 0 under one option and 1 under the other.
     """
     ssz_type_rejection(
         case_id="compatibility/incompatible/layout_name_two_positions",
@@ -483,8 +478,8 @@ def test_union_over_a_byte_array_holding_the_array_spelling(ssz_test: SSZTestFil
 
     Given
     -----
-    - a union whose options are a four-byte string and a vector of four one-byte integers,
-      which the specification calls one type under two spellings.
+    - a union whose options are a four-byte string and a vector of four one-byte integers.
+    - the specification calls those one type under two spellings.
     - a value holding the four-byte string under selector 1.
 
     When
@@ -519,8 +514,7 @@ def test_union_over_a_byte_array_holding_the_element_spelling(ssz_test: SSZTestF
     Then
     ----
     - the payload bytes match the array case exactly, only the selector byte differing.
-    - the root differs from the array case, the selector being mixed in above an
-      identical subtree.
+    - the root differs from the array case, the selector mixing in above the same subtree.
     - the decoded value equals the original.
     """
     ssz_test(
@@ -541,8 +535,7 @@ def test_union_over_progressive_lists_holding_the_first_element_type(
 
     Given
     -----
-    - two progressive containers sharing position 2, one setting position 0 and the other
-      position 1, which makes them compatible.
+    - two compatible progressive containers, sharing position 2 and setting 0 and 1.
     - a union whose options are the unbounded runs of those two shapes.
     - a value holding two of the first shape under selector 1.
 
@@ -612,8 +605,8 @@ def test_union_over_two_distinct_containers_holding_the_first(ssz_test: SSZTestF
 
     Given
     -----
-    - two structs naming a tag and a shape in that order, over the two compatible
-      progressive containers, so the pair is not one declaration restated.
+    - two structs naming a tag and a shape in that order, over the two compatible layouts.
+    - the pair is therefore not one declaration restated.
     - a value holding the first struct under selector 1.
 
     When
@@ -622,8 +615,8 @@ def test_union_over_two_distinct_containers_holding_the_first(ssz_test: SSZTestF
 
     Then
     ----
-    - the declaration stands, the two structs sharing their field names in order and
-      holding compatible types at each of them.
+    - the declaration stands, the two structs sharing their field names in order.
+    - each of those names holds compatible types.
     - the decoded value equals the original.
     """
     ssz_test(
@@ -652,8 +645,8 @@ def test_union_over_two_distinct_containers_holding_the_second(ssz_test: SSZTest
 
     Then
     ----
-    - the two options encode to the same number of bytes, the shape field differing only
-      in which position its layout sets.
+    - the two options encode to the same number of bytes.
+    - their shape fields differ only in which position the layout sets.
     - the roots differ, each shape mixing its own layout in above its fields.
     - the decoded value equals the original.
     """

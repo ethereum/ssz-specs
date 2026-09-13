@@ -162,8 +162,8 @@ def test_progressive_bitlist_fills_second_level(ssz_test: SSZTestFiller) -> None
 
     Then
     ----
-    - the root needs no padding in either occupied level, and every level past them is the
-      terminator.
+    - the root needs no padding in either occupied level.
+    - every level past them is the terminator.
     - the decoded value equals the original.
     """
     ssz_test(
@@ -455,8 +455,8 @@ def test_progressive_container_opens_fifth_level(ssz_test: SSZTestFiller) -> Non
     Then
     ----
     - the 256-wide fifth level opens, holding the last field beside 255 zero leaves.
-    - the encoding matches the eighty-five-position shape byte for byte, the roots differing
-      only in the layout mixed in and the leaf the wider spine adds.
+    - the encoding matches the eighty-five-position shape byte for byte.
+    - the roots differ in the layout mixed in and the leaf the wider spine adds.
     - the decoded value equals the original.
     """
     ssz_test(

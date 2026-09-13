@@ -305,8 +305,7 @@ def test_container_of_every_width_all_zero(ssz_test: SSZTestFiller) -> None:
     ----
     - the encoding is 63 zero bytes, the sum of the six declared widths.
     - the root is the all-zero perfect tree of eight leaves, data and padding alike.
-    - a container is the only shape whose leaves are field roots, so this is where that
-      shortcut meets one.
+    - a container is the only shape whose leaves are field roots.
     - the decoded value equals the original.
     """
     ssz_test(
@@ -359,8 +358,7 @@ def test_bitfield_only_struct(ssz_test: SSZTestFiller) -> None:
 
     Given
     -----
-    - a container of a 5-bit bitlist, a 2-bit and a 1-bit bit vector, a 6-bit bitlist and an
-      8-bit bit vector.
+    - a container of 5- and 6-bit bitlists and 2-, 1- and 8-bit bit vectors.
     - each bit vector taking one whole byte of the fixed part, whatever its bit count.
 
     When
@@ -403,8 +401,7 @@ def test_bitfield_only_struct_first_offset_below_fixed_part(ssz_test: SSZTestFil
     Given
     -----
     - the encoding above, whose fixed part ends at eleven.
-    - a first offset of nine, which is what dividing each bit count by eight and discarding the
-      remainder gives for the three bit vectors.
+    - a first offset of nine, what rounding each bit vector's bit count down to bytes gives.
 
     When
     ----
@@ -414,8 +411,7 @@ def test_bitfield_only_struct_first_offset_below_fixed_part(ssz_test: SSZTestFil
     ----
     - decoding is rejected.
     - the reason is that the first offset must be the fixed part's width exactly.
-    - a decoder measuring the two sub-byte bit vectors as nothing accepts this and reads the
-      payload two bytes early.
+    - a decoder measuring the two sub-byte bit vectors as nothing reads the payload early.
     """
     ssz_test(
         case_id="bit_struct/invalid/first_offset_below_fixed_part",
@@ -437,8 +433,7 @@ def test_bitfield_only_struct_first_offset_above_fixed_part(ssz_test: SSZTestFil
     Given
     -----
     - the encoding above, whose fixed part ends at eleven.
-    - a first offset of nineteen, which is what counting each bit vector as one byte per bit
-      gives for the three of them.
+    - a first offset of nineteen, what counting a byte per bit of each bit vector gives.
 
     When
     ----
@@ -448,8 +443,7 @@ def test_bitfield_only_struct_first_offset_above_fixed_part(ssz_test: SSZTestFil
     ----
     - decoding is rejected.
     - the reason is that the first offset must be the fixed part's width exactly.
-    - the offset is settled before the table closes over the budget, so the thirteen bytes on
-      hand are never what the refusal is about.
+    - the offset is settled before the table closes over the budget.
     """
     ssz_test(
         case_id="bit_struct/invalid/first_offset_above_fixed_part",
