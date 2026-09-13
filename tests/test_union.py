@@ -597,7 +597,7 @@ class TestDeserialization:
         with pytest.raises(SSZValueError) as exception_info:
             Shape.decode_bytes(bytes.fromhex("0134"))
         # The selector the payload was read under is a path step, in front of the sentence.
-        assert str(exception_info.value) == "[1].side: Uint16 needs 2 bytes, the input holds 1"
+        assert str(exception_info.value) == "[1]: Square spans 3 bytes, and the budget is 1"
 
     def test_a_payload_the_option_cannot_parse_is_rejected(self) -> None:
         """A three-byte budget is not a whole number of two-byte elements."""

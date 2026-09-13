@@ -587,7 +587,8 @@ def test_compatible_union_decode_failure_truncated_payload(ssz_test: SSZTestFill
     Then
     ----
     - decoding is rejected.
-    - the reason surfaces from the option itself, since the rest of the budget is its own.
+    - the reason surfaces from the option itself, which weighs the budget it was handed
+      against the three bytes it spans.
     """
     ssz_test(
         case_id="compatible_union/invalid/truncated_payload",
@@ -598,7 +599,7 @@ def test_compatible_union_decode_failure_truncated_payload(ssz_test: SSZTestFill
         ),
         raw_bytes="0x0134",
         expected_rejection=ExpectedRejection(
-            reason=ValueFault.TRUNCATED,
-            exact_message="[1].side: Uint16 needs 2 bytes, the input holds 1",
+            reason=ValueFault.SCOPE,
+            exact_message="[1]: SampleSquare spans 3 bytes, and the budget is 1",
         ),
     )

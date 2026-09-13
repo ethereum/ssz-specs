@@ -177,7 +177,8 @@ def test_field_added_at_an_interior_position(ssz_test: SSZTestFiller) -> None:
     Then
     ----
     - decoding is rejected.
-    - the reason is that the trailing field runs off the end, the interior one having eaten a byte.
+    - the reason is that the inserted field widens the shape to seventeen bytes, one past
+      the sixteen the payload carries.
     - EIP-7495 gives a progressive container the serialization of an ordinary container, so
       nothing on the wire announces which layout wrote these bytes.
     """
@@ -190,8 +191,8 @@ def test_field_added_at_an_interior_position(ssz_test: SSZTestFiller) -> None:
             "0x01000000000000000100000000000000",
         ),
         expected_rejection=ExpectedRejection(
-            reason=ValueFault.TRUNCATED,
-            exact_message="index: Uint64 needs 8 bytes, the input holds 7",
+            reason=ValueFault.SCOPE,
+            exact_message="LayoutShapeV2 spans 17 bytes, and the budget is 16",
         ),
     )
 
@@ -313,7 +314,7 @@ def test_narrower_shape_into_a_wider_type(ssz_test: SSZTestFiller) -> None:
     Then
     ----
     - decoding is rejected.
-    - the reason is that the appended field finds nothing left to read.
+    - the reason is that the shape spans seventeen bytes and the older payload carries nine.
     """
     ssz_test(
         case_id="layout/invalid/narrower_shape_into_a_wider_type",
@@ -324,8 +325,8 @@ def test_narrower_shape_into_a_wider_type(ssz_test: SSZTestFiller) -> None:
             "0x010000000000000001",
         ),
         expected_rejection=ExpectedRejection(
-            reason=ValueFault.TRUNCATED,
-            exact_message="index: Uint64 needs 8 bytes, the input holds 0",
+            reason=ValueFault.SCOPE,
+            exact_message="LayoutShapeV2 spans 17 bytes, and the budget is 9",
         ),
     )
 

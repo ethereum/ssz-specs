@@ -194,7 +194,7 @@ def test_progressive_container_decode_failure_truncated_field(ssz_test: SSZTestF
     Then
     ----
     - decoding is rejected.
-    - the reason is that the stream ran out while the leading field was being read.
+    - the reason is that one byte is not the three the shape spans.
     """
     ssz_test(
         case_id="progressive_container/invalid/truncated_field",
@@ -202,8 +202,8 @@ def test_progressive_container_decode_failure_truncated_field(ssz_test: SSZTestF
         value=SampleSquare(side=Uint16(0x1234), color=Uint8(0x56)),
         raw_bytes="0x34",
         expected_rejection=ExpectedRejection(
-            reason=ValueFault.TRUNCATED,
-            exact_message="side: Uint16 needs 2 bytes, the input holds 1",
+            reason=ValueFault.SCOPE,
+            exact_message="SampleSquare spans 3 bytes, and the budget is 1",
         ),
     )
 

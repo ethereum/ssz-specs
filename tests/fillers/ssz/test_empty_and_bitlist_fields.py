@@ -321,8 +321,9 @@ def test_empty_input_fixed_container(ssz_test: SSZTestFiller) -> None:
     Then
     ----
     - decoding is rejected.
-    - the reason is that the stream ran out under the first field.
-    - the refusal names that field, so it fires before any field default is built.
+    - the reason is that a budget of nothing is not the nine bytes the container spans.
+    - the refusal names the container rather than a field, since the budget is settled before
+      any field is read.
     """
     ssz_test(
         case_id="empty_input/invalid/fixed_container",
@@ -330,8 +331,8 @@ def test_empty_input_fixed_container(ssz_test: SSZTestFiller) -> None:
         value=EmptyFixedPair.default(),
         raw_bytes="0x",
         expected_rejection=ExpectedRejection(
-            reason=ValueFault.TRUNCATED,
-            exact_message="head: Uint8 needs 1 bytes, the input holds 0",
+            reason=ValueFault.SCOPE,
+            exact_message="EmptyFixedPair spans 9 bytes, and the budget is 0",
         ),
     )
 

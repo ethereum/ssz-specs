@@ -197,8 +197,14 @@ class _SSZContainer(SSZModel):
         # Refuse an unrepresentable composite before consuming any field bytes.
         check_composite_size(scope)
 
+        # The budget is settled before any field, so the refusal names the input and not the buffer.
+        if cls._FIXED_SIZE is not None:
+            if scope != cls._FIXED_SIZE:
+                raise SSZValueError(
+                    ValueFault.SCOPE, type=cls.__name__, expected=cls._FIXED_SIZE, actual=scope
+                )
         # A fixed part wider than the window would read a sibling's bytes.
-        if not cls.is_fixed_size() and scope < cls._LEADING_WIDTH:
+        elif scope < cls._LEADING_WIDTH:
             raise SSZValueError(
                 ValueFault.SCOPE_TOO_SMALL,
                 type=cls.__name__,
@@ -227,12 +233,6 @@ class _SSZContainer(SSZModel):
                 raise
 
         if not variable_fields:
-            # With no tail, the fixed part just read is the whole encoding.
-            # A wider budget would leave bytes unread inside the window handed down.
-            if scope != bytes_read:
-                raise SSZValueError(
-                    ValueFault.SCOPE, type=cls.__name__, expected=bytes_read, actual=scope
-                )
             return cls(**fields)
 
         # The first offset lands on the end of the fixed part, which a struct measures itself.
