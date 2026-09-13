@@ -99,11 +99,11 @@ def test_a_branch_vector_is_filed_under_the_kind_it_is_about() -> None:
     ("step", "written"),
     [
         pytest.param("c", {"field": "c"}, id="field"),
-        pytest.param(1, {"position": "1"}, id="position"),
+        pytest.param(1, {"position": 1}, id="position"),
         pytest.param(LENGTH_KEY, {"mixin": LENGTH_KEY}, id="mixin"),
     ],
 )
-def test_a_path_step_is_written_as_the_one_shape_it_is(step: Any, written: dict[str, str]) -> None:
+def test_a_path_step_is_written_as_the_one_shape_it_is(step: Any, written: dict[str, Any]) -> None:
     """A name, a position and a reserved word are told apart rather than all being strings."""
     assert ProofPathStep.read(step).to_json(exclude_none=True) == written
 
@@ -115,7 +115,7 @@ def test_a_position_and_a_reserved_word_reach_the_vector() -> None:
         type_name="Numbers", value=NUMBERS, path=(LENGTH_KEY,), expected_index=3
     ).generate()
 
-    assert element.json_dict["path"] == [{"position": "1"}]
+    assert element.json_dict["path"] == [{"position": 1}]
     assert element.json_dict["leaf"] == to_hex(leaf(7)[:8] + leaf(8)[:8] + bytes(16))
     assert count.json_dict["path"] == [{"mixin": LENGTH_KEY}]
     assert count.json_dict["leaf"] == to_hex(leaf(2))

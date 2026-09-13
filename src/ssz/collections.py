@@ -25,6 +25,7 @@ Three variable-size bodies of widths 5, 3 and 7 encode to 27 bytes:
 """
 
 import io
+import json
 from abc import ABC
 from collections.abc import Iterable, Mapping, Sequence
 from typing import IO, Any, ClassVar, Self, cast, overload, override
@@ -149,8 +150,9 @@ class _SSZSequence[T: SSZType](SSZCollection[T], ABC):
             # Whole sequences of them arrive here whenever a value is revalidated.
             element_type = cls.ELEMENT_TYPE
             coerce = cls._validate_element
+            json_document = info.mode == "json"
             return [
-                element if type(element) is element_type else coerce(element)
+                element if type(element) is element_type else coerce(element, json_document)
                 for element in elements
             ]
         except SSZTypeError as fault:
@@ -162,13 +164,14 @@ class _SSZSequence[T: SSZType](SSZCollection[T], ABC):
 
     @classmethod
     @override
-    def _validate_element(cls, value: Any) -> SSZType:
+    def _validate_element(cls, value: Any, json_document: bool = False) -> SSZType:
         """
         Coerce one value into the declared element type, including its JSON rendering.
 
         Raises:
             SSZError: The refusal the element type itself raised, where it raised one.
             SSZTypeError: When the class is unrelated, or a foreign refusal named it.
+            ValueError: When a document is no rendering of the element type.
         """
         element_type = cls.ELEMENT_TYPE
         element_class = type(value)
@@ -176,6 +179,10 @@ class _SSZSequence[T: SSZType](SSZCollection[T], ABC):
         # An identity check on two type objects, not a walk of an abstract base.
         if element_class is element_type:
             return value
+
+        # An element is read as the document it came from, a Python build defaulting absent fields.
+        if json_document and issubclass(element_type, SSZModel):
+            return json_writer(element_type).validate_json(json.dumps(value))
 
         # Past here the class is accepted, so a failure is about the value's contents.
         try:
