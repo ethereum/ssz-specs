@@ -19,6 +19,7 @@ class TypeFault(Enum):
     NO_MERKLE_LAYOUT = "{type} has no Merkle layout"
     NOT_FIXED_SIZE = "{type} is a variable-size {kind}, and has no one byte length"
 
+    UINT_WIDTH = "{type} declares a width of {bits} bits, and a uint is one of {widths}"
     VECTOR_EMPTY = "{type} declares a length of zero, and a fixed count is at least one"
     CONTAINER_EMPTY = "a struct declares at least one field"
     NOT_ENTITLED = "{type} declares a {capacity} its shape has none of"
