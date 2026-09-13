@@ -144,12 +144,9 @@ def test_a_field_of_another_option_reads_as_zero(proof_test: ProofTestFiller) ->
     - the path resolves to generalized index 8, under the left child every option shares.
     - the leaf is 32 zero bytes, that position holding nothing under this option.
     - the branch rebuilds the value's root, so a verifier accepts the proof.
-    - accepting it is correct and says nothing about the first option: a zero here is the
-      absence of a field, not a field whose value is zero.
-    - EIP-8016 fixes one index per field across the options, which is what puts a vacancy
-      and a zero at the same place.
-    - a verifier that has to tell them apart reads the selector, which
-      absence/compatible_union/selector_mixin proves.
+    - the zero is the absence of a field, not a field whose value is zero.
+    - EIP-8016 fixes one index per field, putting a vacancy and a zero at the same place.
+    - the selector tells the two apart, as absence/compatible_union/selector_mixin proves.
     """
     proof_test(
         case_id="absence/compatible_union/vacant_position_reads_zero",
@@ -178,9 +175,8 @@ def test_a_shared_field_carries_what_the_option_holds(proof_test: ProofTestFille
     - the path resolves to generalized index 73, the index the second option gives it too.
     - the leaf carries 0x42, which is the value the second option actually holds.
     - the branch rebuilds the value's root.
-    - this is the other half of absence/compatible_union/vacant_position_reads_zero: at a
-      shared position the proof reads the held option's data, at a vacant one it reads zero,
-      and the leaf alone tells no verifier which of the two it is looking at.
+    - a shared position reads the held option's data where a vacant one reads zero.
+    - the leaf alone does not say which of the two a verifier is looking at.
     """
     assert get_generalized_index(AbsenceShape, 2, "color") == 73
     proof_test(
@@ -210,8 +206,7 @@ def test_the_selector_is_what_distinguishes_the_options(proof_test: ProofTestFil
     - the path resolves to generalized index 3, the right child of the root.
     - the leaf is the selector as a little-endian 32-byte word, so it reads 2.
     - the one-node branch is the root of the option's own tree, and rebuilds the value's root.
-    - a verifier pairing this with either of the two union cases beside it learns which
-      option it is reading, and only then may it call a zero leaf a field of value zero.
+    - reading a zero leaf as a field whose value is zero takes this selector first.
     """
     proof_test(
         case_id="absence/compatible_union/selector_mixin",
@@ -241,8 +236,7 @@ def test_a_composite_the_option_declares_can_be_descended_into(proof_test: Proof
     - the path resolves to generalized index 16, the left child of the position's own index 8.
     - the leaf carries 0x1234 little-endian, which is what the struct holds there.
     - the branch rebuilds the value's root.
-    - the position holding a value is the whole of what makes index 16 a node, which
-      absence/compatible_union/invalid/vacant_position_has_no_interior is the other half of.
+    - index 16 is a node only because the position holds a value.
     """
     proof_test(
         case_id="absence/compatible_union/declared_composite_has_an_interior",
@@ -269,12 +263,9 @@ def test_a_vacant_position_has_no_interior(proof_test: ProofTestFiller) -> None:
     Then
     ----
     - the path resolves to generalized index 16 again, path resolution reading the type alone.
-    - index 8 is still a node, and still reads as 32 zero bytes, as
-      absence/compatible_union/vacant_position_reads_zero proves of a basic field.
-    - index 16 is refused for PATH_INTO_GAP, the vacancy merkleizing to a leaf rather than to
-      a subtree of zero leaves.
-    - so a verifier is told the whole struct is absent and is told nothing about its fields:
-      a zero subtree would have let one prove a field of a struct that is not there.
+    - index 8 is still a node, and still reads as 32 zero bytes.
+    - index 16 is refused for PATH_INTO_GAP, the vacancy merkleizing to a leaf.
+    - a zero subtree would have let one prove a field of a struct that is not there.
     """
     assert bytes(node_root(VACANT, 8)) == bytes(32)
     proof_test(
@@ -307,10 +298,9 @@ def test_a_padded_element_of_a_bounded_list_reads_as_zero(proof_test: ProofTestF
     ----
     - the path resolves to generalized index 21, the contents sitting under the left child.
     - the leaf is 32 zero bytes, the tree padding out to its declared capacity of eight.
-    - the branch ends on the mixed-in element count at index 3, which is what tells a verifier
-      the position is past the end rather than an element that happens to be default.
-    - so absence is provable here, where absence/progressive_list/invalid/past_a_one_chunk_spine
-      shows a progressive shape having no padded slot to point at.
+    - the branch ends on the mixed-in element count at index 3.
+    - that count puts the position past the end rather than at a default element.
+    - absence is provable here, where a progressive shape has no padded slot to point at.
     """
     proof_test(
         case_id="absence/list/padded_element_reads_zero",
@@ -338,9 +328,8 @@ def test_a_padded_element_of_a_bounded_list_has_no_interior(proof_test: ProofTes
     ----
     - the path resolves to generalized index 42, the left child of the element's own index 21.
     - index 42 is refused for PATH_INTO_GAP, though index 21 is a node this value proves zero.
-    - the padding a bounded tree supplies is a zero leaf wherever the leaves are nested values,
-      so what a list pads with is not a default element: a default element would have an
-      interior, and a verifier could prove its fields one by one.
+    - a bounded tree pads with a zero leaf, not with a default element.
+    - a default element would have an interior, and its fields would be provable one by one.
     """
     proof_test(
         case_id="absence/list/invalid/into_a_padded_element",
@@ -371,15 +360,11 @@ def test_a_position_past_a_one_chunk_spine_has_no_node(proof_test: ProofTestFill
 
     Then
     ----
-    - the path resolves to generalized index 40, which is a path resolution over the type
-      alone and succeeds however short the value is.
+    - the path resolves to generalized index 40, path resolution reading the type alone.
     - position 3 is a node of this tree at index 4, sharing chunk 0 with positions 0 to 2.
-    - position 4 is refused for PATH_PAST_SPINE, the spine closing on a zero node that no turn
-      may be taken from.
-    - so there is no leaf and no branch, which is the mirror of
-      absence/compatible_union/vacant_position_reads_zero: a bounded shape pads to its capacity
-      and proves that padding as a leaf with nothing under it, a progressive one has no padded
-      slot to point at.
+    - position 4 is refused for PATH_PAST_SPINE, the spine closing on a zero node.
+    - there is no leaf and no branch.
+    - a bounded shape would have padded to its capacity and proved that padding as a leaf.
     """
     assert last_node(TWO, 3) == 4
     proof_test(
@@ -404,8 +389,7 @@ def test_a_position_past_a_five_chunk_spine_has_no_node(proof_test: ProofTestFil
 
     Given
     -----
-    - a progressive list of five eight-byte elements, whose second chunk opens the four-chunk
-      second level of the spine.
+    - a progressive list of five eight-byte elements, opening the four-chunk second level.
     - the two levels together hold positions 0 to 19.
     - position 20, the first of the sixteen-chunk third level that this value never reaches.
 
@@ -416,11 +400,10 @@ def test_a_position_past_a_five_chunk_spine_has_no_node(proof_test: ProofTestFil
     Then
     ----
     - the path resolves to generalized index 352.
-    - position 19 is a node of this tree at index 43, the second level being padded out to its
-      four chunks whether or not the value fills them.
+    - position 19 is a node at index 43, the second level padding out to its four chunks.
     - position 20 is refused for PATH_PAST_SPINE.
-    - a level the value opens is padded to its full width like a bounded subtree, and a level
-      it never opens is not there at all, which is where the boundary falls.
+    - a level the value opens is padded to its full width.
+    - a level it never opens is not there at all.
     """
     assert last_node(FIVE, 19) == 43
     proof_test(
@@ -445,8 +428,7 @@ def test_a_position_past_a_twenty_one_chunk_spine_has_no_node(proof_test: ProofT
 
     Given
     -----
-    - a progressive list of twenty-one eight-byte elements, whose sixth chunk opens the
-      sixteen-chunk third level of the spine.
+    - a progressive list of twenty-one eight-byte elements, opening the third level.
     - the three levels together hold positions 0 to 83.
     - position 84, the first of the sixty-four-chunk fourth level.
 
@@ -457,12 +439,10 @@ def test_a_position_past_a_twenty_one_chunk_spine_has_no_node(proof_test: ProofT
     Then
     ----
     - the path resolves to generalized index 2944.
-    - position 83 is a node of this tree at index 367, the third level being padded out to its
-      sixteen chunks whether or not the value fills them.
+    - position 83 is a node at index 367, the third level padding out to its sixteen chunks.
     - position 84 is refused for PATH_PAST_SPINE.
-    - the three boundaries here are 4, 20 and 84, which is 1, 1 + 4 and 1 + 4 + 16 chunks of
-      four elements each: what a value proves about itself is fixed by how far its spine runs,
-      never by the type, whose positions EIP-7916 leaves unbounded.
+    - the boundaries 4, 20 and 84 are 1, 1 + 4 and 1 + 4 + 16 chunks of four elements each.
+    - how far the spine runs fixes what is provable, the type leaving positions unbounded.
     """
     assert last_node(TWENTY_ONE, 83) == 367
     proof_test(

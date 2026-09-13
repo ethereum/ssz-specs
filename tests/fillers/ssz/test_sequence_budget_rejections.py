@@ -277,8 +277,7 @@ def test_fixed_size_container_given_fewer_bytes_than_its_width(ssz_test: SSZTest
     ----
     - decoding is rejected.
     - the reason is that five bytes are not the six the container spans.
-    - the refusal names the container and its width, not whichever field the missing byte
-      would have fallen in.
+    - the refusal names the container and its width, not the field the byte fell in.
     """
     ssz_test(
         case_id="fixed_pair/invalid/truncated_field",

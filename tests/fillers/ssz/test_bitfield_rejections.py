@@ -145,10 +145,10 @@ def test_bitvector8_one_byte_long(ssz_test: SSZTestFiller) -> None:
     ----
     - decoding is rejected.
     - the reason is that the input spans more bytes than the type does.
-    - this is the surplus side of the same width rule the two short inputs test from below,
-      so a decoder demanding only a floor rather than an exact count is caught here alone.
-    - a length that is a multiple of eight has no padding bits, so nothing about the extra
-      byte's contents is read: the count settles it before any bit is looked at.
+    - this is the surplus side of the width rule the two short inputs test from below.
+    - a decoder demanding a floor rather than an exact count is caught here alone.
+    - a length that is a multiple of eight has no padding bits.
+    - the count settles the refusal before any bit of the extra byte is read.
     """
     ssz_test(
         case_id="bitvector8/invalid/one_byte_long",
@@ -243,8 +243,7 @@ def test_bitlist16_no_delimiter(ssz_test: SSZTestFiller) -> None:
     ----
     - decoding is rejected.
     - the reason is that the encoding sets no delimiter bit.
-    - this pairs with the trailing-zeros case, which is the same two bytes with a
-      delimiter present but sitting below the final byte.
+    - the trailing-zeros case is the same two bytes with a delimiter below the final byte.
     """
     ssz_test(
         case_id="bitlist16/invalid/no_delimiter",
@@ -310,8 +309,8 @@ def test_bitlist16_two_trailing_zero_bytes(ssz_test: SSZTestFiller) -> None:
     ----
     - decoding is rejected.
     - the reason is that zero bytes past the delimiter give one value a second encoding.
-    - the rule counts no run of padding as short enough, so a decoder that trims trailing
-      zero bytes before hunting the delimiter accepts an unbounded family of encodings.
+    - the rule counts no run of padding as short enough.
+    - trimming trailing zero bytes before hunting the delimiter admits unbounded encodings.
     """
     ssz_test(
         case_id="bitlist16/invalid/two_trailing_zero_bytes",

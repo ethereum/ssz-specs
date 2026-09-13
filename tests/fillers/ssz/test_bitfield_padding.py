@@ -81,8 +81,8 @@ def test_bitvector4_highest_padding_bit(ssz_test: SSZTestFiller) -> None:
     ----
     - decoding is rejected.
     - the reason is that the final byte sets a padding bit.
-    - bit seven is where a mask built to the wrong width stops covering the padding, and
-      where a byte read as a signed value changes sign.
+    - bit seven is where a mask built to the wrong width stops covering the padding.
+    - it is also where a byte read as a signed value changes sign.
     """
     ssz_test(
         case_id="padding/bitvector4/invalid/highest_padding_bit",
@@ -146,9 +146,8 @@ def test_bitvector7_only_padding_bit(ssz_test: SSZTestFiller) -> None:
     ----
     - decoding is rejected.
     - the reason is that the final byte sets a padding bit.
-    - a length one below a multiple of eight is where the padding is a single bit, so the
-      lowest padding bit and the highest are the same bit and the check has no room to be
-      off by one in either direction.
+    - a length one below a multiple of eight leaves the padding a single bit.
+    - the lowest padding bit and the highest are then the same bit.
     """
     ssz_test(
         case_id="padding/bitvector7/invalid/only_padding_bit",
@@ -180,8 +179,7 @@ def test_bitvector9_highest_padding_bit(ssz_test: SSZTestFiller) -> None:
     ----
     - decoding is rejected.
     - the reason is that the final byte sets a padding bit.
-    - the padding here runs the full width of the byte bar one bit, so the distance between
-      the bit that is set and the bit a lazy check looks at is the widest it gets.
+    - the padding fills the byte bar one bit, the widest the gap to the lowest bit gets.
     """
     ssz_test(
         case_id="padding/bitvector9/invalid/highest_padding_bit",
@@ -267,8 +265,8 @@ def test_container_element_highest_padding_bit(ssz_test: SSZTestFiller) -> None:
     Given
     -----
     - a container holding a one-byte tag and a list of twelve-bit vectors behind an offset.
-    - the input bytes 0xaa05000000ff80ff0f, whose list opens at offset five and holds two
-      elements, the first of them setting padding bit seven of its second byte.
+    - the input bytes 0xaa05000000ff80ff0f, whose list opens at offset five and holds two.
+    - the first element sets padding bit seven of its second byte.
 
     When
     ----
@@ -278,9 +276,8 @@ def test_container_element_highest_padding_bit(ssz_test: SSZTestFiller) -> None:
     ----
     - decoding is rejected.
     - the reason is the bit vector's padding rule, reported at the element that broke it.
-    - the offending byte is the seventh of nine, so a decoder that reads the padding rule
-      as being about the last byte of its input rather than the last byte of the bit
-      vector accepts this.
+    - the offending byte is the seventh of nine, not the last of the input.
+    - a decoder reading the rule as being about the last input byte accepts this.
     """
     ssz_test(
         case_id="padding/tagged_bits/invalid/element_highest_padding_bit",
@@ -336,10 +333,9 @@ def test_bitlist1_at_limit(ssz_test: SSZTestFiller) -> None:
 
     Then
     ----
-    - the encoding is the single byte 0x03, the data bit at position zero and the
-      delimiter at position one.
-    - a cap of one is the smallest a bitlist can carry, and it is the only cap under which
-      a full list still leaves its delimiter inside the first byte.
+    - the encoding is 0x03, the data bit at position zero and the delimiter at one.
+    - a cap of one is the smallest a bitlist can carry.
+    - it is the only cap whose full list still keeps its delimiter inside the first byte.
     """
     ssz_test(
         case_id="padding/bitlist1/at_limit",
@@ -366,8 +362,8 @@ def test_bitlist1_over_limit(ssz_test: SSZTestFiller) -> None:
     ----
     - decoding is rejected.
     - the reason is that the implied bit-length exceeds the limit.
-    - one bit fewer, 0x03, is the one-bit encoding the type does admit, so the whole
-      accept-or-refuse boundary of this type lives in adjacent bits of a single byte.
+    - one bit fewer, 0x03, is the one-bit encoding the type does admit.
+    - the whole boundary of this type lives in adjacent bits of a single byte.
     """
     ssz_test(
         case_id="padding/bitlist1/invalid/over_limit",

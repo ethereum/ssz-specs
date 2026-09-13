@@ -278,8 +278,8 @@ def test_a_field_when_a_later_field_is_appended(ssz_gindex_test: GindexTestFille
     Then
     ----
     - the index is 41, unmoved by the field appended after it.
-    - a bounded struct pads its fields to a power of two, so the append that crosses the next
-      one drops every leaf a level and renumbers it, which is the breakage EIP-7495 avoids.
+    - a bounded struct pads to a power of two, an append past it renumbering every leaf.
+    - EIP-7495 avoids that breakage.
     """
     assert shared_index("body_root", *HEADER_LAYOUTS) == 41
     ssz_gindex_test(
@@ -477,8 +477,7 @@ def test_an_element_of_a_longer_progressive_list(proof_test: ProofTestFiller) ->
     Then
     ----
     - the path resolves to generalized index 352, the answer the six-element list gives.
-    - the root differs from the shorter list's, so this is a different tree and not the same
-      one filled twice.
+    - the root differs from the shorter list's, so this is a different tree.
     - the branch holds eight nodes here as it does there, the index alone fixing its length.
     """
     distinct_roots(SHORT_ROOT_LIST, MEDIUM_ROOT_LIST, LONG_ROOT_LIST)
@@ -506,8 +505,7 @@ def test_an_element_of_a_long_progressive_list(proof_test: ProofTestFiller) -> N
 
     Then
     ----
-    - the path resolves to generalized index 352 across all three lengths, which is what
-      EIP-7916 promises a verifier that hard-codes it.
+    - the path resolves to generalized index 352 across all three lengths, as EIP-7916 promises.
     - a bounded list of the same elements moves that index whenever its capacity is redeclared.
     """
     distinct_roots(SHORT_ROOT_LIST, MEDIUM_ROOT_LIST, LONG_ROOT_LIST)

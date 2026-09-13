@@ -165,8 +165,8 @@ def test_vector_of_six_chunks_folds_an_odd_level_above_the_leaves(
     Then
     ----
     - the root matches the expected layout.
-    - the leaf level folds whole, and the three-node level above it is closed by a zero
-      subtree spanning two leaves.
+    - the leaf level folds whole.
+    - the three-node level above it is closed by a zero subtree spanning two leaves.
     """
     ssz_test(
         case_id="tree_shape/vector6/odd_level_above_leaves",
@@ -256,8 +256,7 @@ def test_list_of_four_chunks_under_a_512_leaf_tree(ssz_test: SSZTestFiller) -> N
     Then
     ----
     - the root matches the expected layout.
-    - the data folds into a four-leaf subtree, which is then hashed against an all-zero
-      subtree once per height up to the full width.
+    - the data folds into a four-leaf subtree, hashed against a zero subtree per height.
     """
     ssz_test(
         case_id="tree_shape/list300/four_of_512_leaves",
@@ -286,8 +285,8 @@ def test_list_of_composites_below_a_non_power_of_two_limit(ssz_test: SSZTestFill
     Then
     ----
     - the root matches the expected layout.
-    - the odd leaf level is closed by a zero leaf, and the four-leaf subtree above it is
-      hashed against an all-zero subtree to reach the full width.
+    - the odd leaf level is closed by a zero leaf.
+    - the four-leaf subtree above it is hashed against an all-zero subtree.
     """
     ssz_test(
         case_id="tree_shape/list5/three_composite_elements",

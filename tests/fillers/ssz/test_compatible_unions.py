@@ -14,11 +14,7 @@ from ssz_testing import ExpectedRejection, SSZTestFiller, ValueFault
 
 
 class SampleSquare(ProgressiveContainer):
-    """
-    EIP-7495's own example: a field at position 0, a gap, then a field at position 2.
-
-    It is the first option of the union below, and shares position 2 with the second.
-    """
+    """EIP-7495's own example: a field at position 0, a gap, then a field at position 2."""
 
     ACTIVE_FIELDS = (1, 0, 1)
 
@@ -27,12 +23,7 @@ class SampleSquare(ProgressiveContainer):
 
 
 class SampleCircle(ProgressiveContainer):
-    """
-    The other half of that example: a leading gap, then fields at positions 1 and 2.
-
-    It encodes to the same three bytes as SampleSquare, so within a union the selector
-    byte is the only thing on the wire that tells the two options apart.
-    """
+    """The other half of that example: a leading gap, then fields at positions 1 and 2."""
 
     ACTIVE_FIELDS = (0, 1, 1)
 
@@ -76,12 +67,7 @@ class SampleNumbers(CompatibleUnion):
 
 
 class SampleEmptyProne(CompatibleUnion):
-    """
-    Union whose options differ only in the element type of a progressive list.
-
-    Both options root alike when the list is empty, so the selector is the only thing
-    separating the two values. This is the security consideration of EIP-8016.
-    """
+    """Union whose options differ only in a progressive list's element type, alike when empty."""
 
     OPTIONS = {1: SampleSquareProgressiveList, 2: SampleCircleProgressiveList}
 
@@ -275,10 +261,8 @@ def test_compatible_union_empty_list_options_separated_by_the_selector(
 
     Then
     ----
-    - the payload roots to the zero terminator with a zero count, as the other option
-      would too.
-    - the mixed-in selector is what separates this value from the same-shaped one under
-      selector 2.
+    - the payload roots to the zero terminator with a zero count, as the other would too.
+    - the mixed-in selector separates this from the same-shaped value under selector 2.
     - the decoded value equals the original.
     """
     ssz_test(
@@ -519,8 +503,7 @@ def test_compatible_union_decode_failure_reserved_zero_selector(ssz_test: SSZTes
     Then
     ----
     - decoding is rejected.
-    - the reason is that zero can never name an option, so an uninitialized value cannot
-      pass as a valid one.
+    - the reason is that zero can never name an option.
     """
     ssz_test(
         case_id="compatible_union/invalid/reserved_selector_zero",
@@ -587,8 +570,7 @@ def test_compatible_union_decode_failure_truncated_payload(ssz_test: SSZTestFill
     Then
     ----
     - decoding is rejected.
-    - the reason surfaces from the option itself, which weighs the budget it was handed
-      against the three bytes it spans.
+    - the reason surfaces from the option, weighing its budget against the bytes it spans.
     """
     ssz_test(
         case_id="compatible_union/invalid/truncated_payload",

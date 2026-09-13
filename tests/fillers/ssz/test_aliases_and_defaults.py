@@ -134,8 +134,8 @@ def test_byte_at_its_upper_bound(ssz_test: SSZTestFiller) -> None:
     ----
     - the encoding is the single byte 0xff.
     - that byte fills one chunk, so the root is 0xff followed by thirty-one zero bytes.
-    - both match the one-byte uint at the same value, and only the descriptor kind and the
-      JSON rendering, "0xff" against "255", tell the two apart.
+    - both match the one-byte uint at the same value.
+    - only the descriptor kind and the JSON, "0xff" against "255", tell the two apart.
     """
     ssz_test(case_id="byte/max", type_name="Byte", value=Byte(2**8 - 1))
 
@@ -235,8 +235,7 @@ def test_a_progressive_container_layout_holding_a_two_is_refused(
     Then
     ----
     - it is refused, a layout holding one bit per position and nothing wider.
-    - an implementation reading each entry for truth would take the 2 for a second field, and
-      mix a word into the root that no other implementation agrees on.
+    - reading each entry for truth would take the 2 for a second field.
     """
     ssz_type_rejection(
         case_id="illegal/progressive_container/layout_not_bits",
@@ -267,8 +266,7 @@ def test_a_progressive_container_without_a_layout_is_refused(
     Then
     ----
     - it is refused, EIP-7495 placing a field only where the layout says it sits.
-    - an implementation defaulting the layout to one set bit per field would accept this and
-      merkleize it as a plain struct, which is a different root for the same fields.
+    - defaulting the layout to one set bit per field would merkleize this as a plain struct.
     """
     ssz_type_rejection(
         case_id="illegal/progressive_container/no_layout",
@@ -329,8 +327,7 @@ def test_uint256_one_byte_short(ssz_test: SSZTestFiller) -> None:
     ----
     - decoding is rejected.
     - the reason is that the type's width and the budget disagree.
-    - the widest integer is the one an implementation is likeliest to decode through a
-      big-number path of its own, where the short input reads as a smaller number.
+    - through a big-number path of its own the short input reads as a smaller number.
     """
     ssz_test(
         case_id="uint256/invalid/one_byte_short",

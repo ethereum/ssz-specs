@@ -322,8 +322,7 @@ def test_empty_input_fixed_container(ssz_test: SSZTestFiller) -> None:
     ----
     - decoding is rejected.
     - the reason is that a budget of nothing is not the nine bytes the container spans.
-    - the refusal names the container rather than a field, since the budget is settled before
-      any field is read.
+    - the refusal names the container, the budget being settled before any field is read.
     """
     ssz_test(
         case_id="empty_input/invalid/fixed_container",

@@ -92,8 +92,8 @@ def test_alternating_chunks_fold_from_the_level_above_the_leaves(
     Then
     ----
     - the root matches the expected layout.
-    - the leaves are paired off in the ordinary way, and the level above them folds,
-      so the fold reads digests rather than the packed leaves.
+    - the leaves are paired off in the ordinary way, and the level above them folds.
+    - that fold reads digests rather than the packed leaves.
     """
     ssz_test(
         case_id="uniform/vector_uint8_128/alternating_chunks",
@@ -145,8 +145,7 @@ def test_three_identical_chunks_never_span_their_data_tree(ssz_test: SSZTestFill
     Then
     ----
     - the root matches the expected layout.
-    - no level folds, because a uniform level short of its data tree meets a zero
-      subtree as a sibling above it, and zero does not fold.
+    - no level folds, a uniform level short of its data tree meeting a zero sibling.
     """
     ssz_test(
         case_id="uniform/vector_uint8_96/all_max",
@@ -173,8 +172,8 @@ def test_list_filled_to_capacity_folds_below_its_length_mixin(ssz_test: SSZTestF
     Then
     ----
     - the root matches the expected layout.
-    - the leaf level folds twice with no padding above it, and the element count is
-      mixed in over the folded root.
+    - the leaf level folds twice with no padding above it.
+    - the element count is mixed in over the folded root.
     """
     ssz_test(
         case_id="uniform/list_uint64_16/at_limit_all_max",
@@ -191,8 +190,7 @@ def test_alternating_data_walks_then_folds_then_pads(ssz_test: SSZTestFiller) ->
 
     Given
     -----
-    - a byte list capped at thirty-two chunks, holding eight chunks alternating between
-      two bytes.
+    - a byte list capped at thirty-two chunks, holding eight chunks of two bytes in turn.
     - a leaf level that is not uniform, over a level of four equal parent digests.
 
     When
@@ -202,9 +200,10 @@ def test_alternating_data_walks_then_folds_then_pads(ssz_test: SSZTestFiller) ->
     Then
     ----
     - the root matches the expected layout.
-    - all three shapes the walk can take appear in one root: the leaves are paired off,
-      the level above them folds twice up to the data tree, and the result is hashed
-      against an all-zero subtree twice to reach the full width.
+    - all three shapes the walk can take appear in this one root.
+    - the leaves are paired off.
+    - the level above them folds twice up to the data tree.
+    - the result is hashed against an all-zero subtree twice to reach the full width.
     """
     ssz_test(
         case_id="uniform/list_uint8_1024/alternating_under_a_wide_limit",
@@ -221,8 +220,7 @@ def test_a_filled_progressive_level_folds_inside_the_spine(ssz_test: SSZTestFill
     Given
     -----
     - a progressive list of eight-byte elements holding twenty maximum values.
-    - five chunks, which is one chunk in the first spine level and four in the second,
-      filling that second level exactly.
+    - five chunks: one in the first spine level, and four filling the second exactly.
 
     When
     ----
@@ -231,8 +229,9 @@ def test_a_filled_progressive_level_folds_inside_the_spine(ssz_test: SSZTestFill
     Then
     ----
     - the root matches the expected layout.
-    - the first level is a lone leaf and needs no hashing, the second level folds twice
-      as a uniform leaf level, and the spine is closed by the zero node below them.
+    - the first level is a lone leaf and needs no hashing.
+    - the second level folds twice as a uniform leaf level.
+    - the spine is closed by the zero node below them.
     """
     ssz_test(
         case_id="uniform/progressive_list_uint64/filled_second_level",

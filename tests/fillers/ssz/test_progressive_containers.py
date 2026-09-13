@@ -31,12 +31,7 @@ class SampleUint64ProgressiveList(ProgressiveList[Uint64]):
 
 
 class SampleSquare(ProgressiveContainer):
-    """
-    EIP-7495's own example: a field at position 0, a gap, then a field at position 2.
-
-    The cleared bit leaves a zero leaf where no field sits, which is what keeps the
-    field at position 2 in place across versions of the shape.
-    """
+    """EIP-7495's own example: a field at position 0, a gap, then a field at position 2."""
 
     ACTIVE_FIELDS = (1, 0, 1)
 
@@ -45,12 +40,7 @@ class SampleSquare(ProgressiveContainer):
 
 
 class SampleCircle(ProgressiveContainer):
-    """
-    The other half of that example: a leading gap, then fields at positions 1 and 2.
-
-    It shares position 2 with SampleSquare and encodes to the very same bytes, so the
-    two are told apart only by the layout mixed into the root.
-    """
+    """The other half of that example: a leading gap, then fields at positions 1 and 2."""
 
     ACTIVE_FIELDS = (0, 1, 1)
 
@@ -85,11 +75,7 @@ class SampleMultipleGaps(ProgressiveContainer):
 
 
 class SampleWidestLayout(ProgressiveContainer):
-    """
-    Widest legal layout: 256 positions, the capacity of the mixed-in word.
-
-    Only the last position is occupied, so 255 zero leaves precede the single field.
-    """
+    """Widest legal layout: 256 positions, the mixed-in word's capacity, only the last set."""
 
     ACTIVE_FIELDS = (*([0] * 255), 1)
 
@@ -97,12 +83,7 @@ class SampleWidestLayout(ProgressiveContainer):
 
 
 class SampleLevelBoundary(ProgressiveContainer):
-    """
-    Twenty-two positions, so the leaves open the width-64 level of the spine.
-
-    Every position is a leaf, gap or not, which is what puts the leaf count one past
-    the cumulative capacity of the first three levels.
-    """
+    """Twenty-two positions, one past the first three spine levels, gaps counting as leaves."""
 
     ACTIVE_FIELDS = (1, *([0] * 20), 1)
 

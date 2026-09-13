@@ -54,8 +54,7 @@ def test_a_uint_of_a_partial_byte_width_is_refused(ssz_type_rejection: TypeRejec
     Then
     ----
     - it is refused, simple-serialize.md naming 8, 16, 32, 64, 128 and 256 and no others.
-    - seven bits round down to no bytes at all, so the values 1 through 127 the width
-      admits have nowhere in the encoding to go.
+    - seven bits round down to no bytes, leaving values 1 through 127 nowhere to go.
     """
     ssz_type_rejection(
         case_id="illegal/uint/partial_byte_width",
@@ -84,8 +83,7 @@ def test_a_uint_of_no_width_is_refused(ssz_type_rejection: TypeRejectionFiller) 
     Then
     ----
     - it is refused, for the reason a vector of zero elements is.
-    - such a type spans no bytes and holds one value, so any number of them sit at one
-      place in an encoding.
+    - such a type spans no bytes, so any number of them sit at one place in an encoding.
     """
     ssz_type_rejection(
         case_id="illegal/uint/zero_width",
@@ -116,8 +114,7 @@ def test_a_uint_of_a_width_that_splits_a_chunk_is_refused(
     Then
     ----
     - it is refused, three bytes being a whole byte count the specification still omits.
-    - a 32-byte chunk holds ten such values and two thirds of an eleventh, so packing a
-      sequence of them would place one value across two leaves.
+    - a chunk holds ten such values and two thirds of an eleventh, splitting one over two.
     """
     ssz_type_rejection(
         case_id="illegal/uint/width_splits_a_chunk",
@@ -146,8 +143,7 @@ def test_a_uint_wider_than_a_chunk_is_refused(ssz_type_rejection: TypeRejectionF
     Then
     ----
     - it is refused, 256 bits being the widest the specification names.
-    - one value would fill two leaves, where every uint is a leaf or part of one, so the
-      declaration names a tree the merkleization rules do not describe.
+    - one value would fill two leaves, where every uint is a leaf or part of one.
     """
     ssz_type_rejection(
         case_id="illegal/uint/width_past_a_chunk",
@@ -176,8 +172,8 @@ def test_a_vector_of_zero_elements_is_refused(ssz_type_rejection: TypeRejectionF
     Then
     ----
     - it is refused, an exact count of zero pinning the shape to holding nothing.
-    - such a shape spans no bytes, so any number of its values sit at one place in an
-      encoding, and nothing recovers how many were there.
+    - such a shape spans no bytes, so any number of its values sit at one place.
+    - nothing recovers how many were there.
     """
     ssz_type_rejection(
         case_id="illegal/vector/zero_length",
@@ -205,8 +201,7 @@ def test_a_bitvector_of_zero_bits_is_refused(ssz_type_rejection: TypeRejectionFi
     Then
     ----
     - it is refused, for the reason a zero-length vector is.
-    - a bitvector of no bits would encode to no bytes, where every other bitvector
-      encodes to at least one.
+    - it would encode to no bytes, where every other bitvector encodes to at least one.
     """
     ssz_type_rejection(
         case_id="illegal/bit_vector/zero_length",
@@ -235,8 +230,7 @@ def test_a_byte_vector_of_zero_bytes_is_refused(ssz_type_rejection: TypeRejectio
     Then
     ----
     - it is refused, the third fixed-count shape reading like the other two.
-    - an implementation keying its check on the kind, and not on the count, would let
-      this one through where it refuses the vector.
+    - a check keyed on the kind rather than the count would let this one through.
     """
     ssz_type_rejection(
         case_id="illegal/byte_vector/zero_length",
@@ -291,8 +285,7 @@ def test_a_list_declaring_a_length_is_refused(ssz_type_rejection: TypeRejectionF
     Then
     ----
     - it is refused, an exact count being a vector's rule.
-    - a list merkleizes from its bound and mixes in its own count, so a second count
-      rule would name a tree the shape does not have.
+    - a list merkleizes from its bound, so a second count names a tree it does not have.
     - this suite is stricter than the specification here, and the vector says so.
     """
     ssz_type_rejection(
@@ -320,8 +313,8 @@ def test_a_vector_declaring_a_limit_is_refused(ssz_type_rejection: TypeRejection
     Then
     ----
     - it is refused, the bound being a list's rule.
-    - the two agree here, and the declaration is refused anyway: a shape carries the
-      one capacity it has, not every capacity it could be reconciled with.
+    - the two agree here, and the declaration is refused anyway.
+    - a shape carries the one capacity it has.
     - this suite is stricter than the specification here, and the vector says so.
     """
     ssz_type_rejection(
@@ -381,8 +374,7 @@ def test_a_progressive_list_declaring_a_limit_is_refused(
     Then
     ----
     - it is refused, for the reason a declared length is.
-    - both capacities are named separately, so an implementation refusing one and
-      admitting the other is caught by exactly one of the two vectors.
+    - the two capacities are named separately, so exactly one vector catches each omission.
     - this suite is stricter than the specification here, and the vector says so.
     """
     ssz_type_rejection(
@@ -410,8 +402,7 @@ def test_a_negative_capacity_is_refused(ssz_type_rejection: TypeRejectionFiller)
     Then
     ----
     - it is refused, a capacity counting what a shape holds.
-    - an implementation reading the bound into an unsigned word would see a bound of
-      2**64 - 1 rather than a refusal.
+    - read into an unsigned word the bound would be 2**64 - 1 rather than a refusal.
     - this suite is stricter than the specification here, and the vector says so.
     """
     ssz_type_rejection(
@@ -443,8 +434,7 @@ def test_a_progressive_container_with_an_empty_layout_is_refused(
     Then
     ----
     - it is refused, a layout placing at least one position.
-    - this is the progressive counterpart of a field-less container, and it encodes to
-      zero bytes the same way.
+    - it is the progressive counterpart of a field-less container, encoding to zero bytes.
     """
     ssz_type_rejection(
         case_id="illegal/progressive_container/empty_layout",
@@ -472,8 +462,8 @@ def test_a_progressive_container_layout_ending_on_a_gap_is_refused(
     Then
     ----
     - it is refused, a layout ending on a field.
-    - (1, 0) and (1) place the one field alike and mix in different words, so a
-      trailing gap is a second spelling of one shape.
+    - (1, 0) and (1) place the one field alike and mix in different words.
+    - a trailing gap would be a second spelling of one shape.
     """
     ssz_type_rejection(
         case_id="illegal/progressive_container/layout_ends_on_a_gap",
@@ -503,8 +493,7 @@ def test_a_progressive_container_layout_counting_wrong_is_refused(
     Then
     ----
     - it is refused, the layout setting two positions against one declared field.
-    - fields fill the set positions in declaration order, so a mismatch leaves a set
-      position with nothing to merkleize at it.
+    - fields fill set positions in order, so a mismatch leaves one with nothing under it.
     """
     ssz_type_rejection(
         case_id="illegal/progressive_container/layout_field_count",
@@ -534,8 +523,7 @@ def test_a_progressive_container_layout_over_the_limit_is_refused(
     Then
     ----
     - it is refused, EIP-7495 mixing the whole layout in as one 32-byte word.
-    - 256 positions fit that word exactly, so the first position past it has nowhere
-      in the root to be recorded.
+    - 256 positions fit that word exactly, so the next has nowhere in the root to go.
     """
     ssz_type_rejection(
         case_id="illegal/progressive_container/layout_too_wide",
@@ -591,8 +579,7 @@ def test_a_union_selector_below_the_range_is_refused(
     Then
     ----
     - it is refused, EIP-8016 opening the selector range at 1.
-    - an implementation carrying the older union, whose selectors start at 0, would
-      accept this declaration.
+    - the older union, whose selectors start at 0, would accept this declaration.
     """
     ssz_type_rejection(
         case_id="illegal/compatible_union/selector_below_range",
@@ -622,8 +609,7 @@ def test_a_union_selector_above_the_range_is_refused(
     Then
     ----
     - it is refused, EIP-8016 closing the selector range at 127.
-    - a selector fits one byte either way, so only the reserved half of that byte
-      separates this declaration from a legal one.
+    - a selector fits one byte either way, only the reserved half separating this from legal.
     """
     ssz_type_rejection(
         case_id="illegal/compatible_union/selector_above_range",
@@ -653,8 +639,8 @@ def test_a_union_of_incompatible_options_is_refused(
     Then
     ----
     - it is refused, a compatible union resting on every option sharing one tree shape.
-    - both options merkleize to a single chunk, and the chunks hold different widths,
-      so a proof against one would read as the other.
+    - both options merkleize to a single chunk holding a different width.
+    - a proof against one would read as the other.
     """
     ssz_type_rejection(
         case_id="illegal/compatible_union/incompatible_options",

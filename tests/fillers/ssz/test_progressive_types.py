@@ -20,12 +20,7 @@ class Bytes32(ByteVector):
 
 
 class SampleUint64ProgressiveList(ProgressiveList[Uint64]):
-    """
-    Progressive list of eight-byte elements, with no capacity.
-
-    Four elements fill one 32-byte Merkle chunk, so the element counts below walk
-    the spine's level boundaries at 1, 5, 21, and 85 chunks.
-    """
+    """Progressive list of eight-byte elements, four to a 32-byte chunk, with no capacity."""
 
     ELEMENT_TYPE = Uint64
 

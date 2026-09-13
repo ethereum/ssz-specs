@@ -226,8 +226,8 @@ def test_bounded_list_of_uint64(ssz_test: SSZTestFiller) -> None:
     Then
     ----
     - the encoding is the 24 bytes 0x010000000000000002000000000000000300000000000000.
-    - the progressive list beside this one writes those very same 24 bytes, which is what
-      EIP-7688 means by a conversion that leaves serialization unchanged.
+    - the progressive list beside this one writes those very same 24 bytes.
+    - EIP-7688 calls that a conversion leaving serialization unchanged.
     - either type decodes the other's bytes, there being only one payload between them.
     - only the root separates the two, the capacity being all that shapes the tree here.
     """
@@ -261,8 +261,8 @@ def test_progressive_list_of_uint64(ssz_test: SSZTestFiller) -> None:
     Then
     ----
     - the encoding is the same 24 bytes the bounded list writes.
-    - the root differs from the bounded list's: the bounded tree pads to the four chunks its
-      capacity needs, and the progressive spine grows to the one chunk the data fills.
+    - the root differs from the bounded list's.
+    - the bounded tree pads to four chunks where the spine grows to the one the data fills.
     - a fork widening the capacity this way is therefore free on the wire and visible in the root.
     """
     check_one_payload_two_roots(
@@ -293,12 +293,9 @@ def test_bounded_list_at_a_second_capacity(ssz_test: SSZTestFiller) -> None:
 
     Then
     ----
-    - the encoding is the same 24 bytes both other shapes write, so a declared capacity
-      contributes no byte to a payload.
-    - the root here equals the progressive list's, two chunks of capacity padding to the same
-      pair of nodes the spine's first level and terminator make.
-    - so a conversion is not always visible in the root, and a consumer must not read a moved
-      root as the signal that one happened.
+    - the encoding is the same 24 bytes both other shapes write, a capacity costing no byte.
+    - the root here equals the progressive list's, two padded chunks matching spine and end.
+    - a conversion is therefore not always visible in the root.
     """
     check_one_payload_one_root(
         NARROWER_BOUNDED_INDICES,
@@ -331,8 +328,8 @@ def test_empty_bounded_list_of_uint64(ssz_test: SSZTestFiller) -> None:
     ----
     - the encoding is empty.
     - the progressive list beside this one encodes to nothing as well.
-    - the two roots still differ, both mixing in a count of zero over trees of different
-      shapes: four zeroed chunks here, and a bare zero node there.
+    - the two roots still differ, both mixing a count of zero over different tree shapes.
+    - four zeroed chunks here, and a bare zero node there.
     """
     check_one_payload_two_roots(
         EMPTY_BOUNDED_INDICES,
@@ -365,8 +362,7 @@ def test_empty_progressive_list_of_uint64(ssz_test: SSZTestFiller) -> None:
     Then
     ----
     - the encoding is empty, exactly as the bounded list's is.
-    - the root differs from the bounded list's, so the two are told apart on a payload that
-      carries nothing at all.
+    - the root differs from the bounded list's, on a payload carrying nothing at all.
     """
     check_one_payload_two_roots(
         EMPTY_BOUNDED_INDICES,
@@ -431,8 +427,7 @@ def test_progressive_bitlist(ssz_test: SSZTestFiller) -> None:
     Then
     ----
     - the encoding is the same two bytes 0x2d03 the bounded bitlist writes.
-    - the root differs from the bounded bitlist's: eight chunks of padded capacity there
-      against one occupied spine level here.
+    - the root differs, eight chunks of padded capacity there against one spine level here.
     """
     check_one_payload_two_roots(
         BOUNDED_BITS,
@@ -499,8 +494,7 @@ def test_empty_progressive_bitlist(ssz_test: SSZTestFiller) -> None:
     Then
     ----
     - the encoding is the single delimiter byte 0x01, exactly as the bounded bitlist's is.
-    - the root differs from the bounded bitlist's, so the bare delimiter still tells the
-      two shapes apart.
+    - the root differs from the bounded bitlist's, on the bare delimiter alone.
     """
     check_one_payload_two_roots(
         EMPTY_BOUNDED_BITS,
@@ -533,8 +527,8 @@ def test_bounded_list_of_variable_size_elements(ssz_test: SSZTestFiller) -> None
     Then
     ----
     - the encoding opens with a three-entry offset table, then the three bodies.
-    - the progressive list beside this one writes those very same 22 bytes, offset table
-      included, an offset being counted from the runtime element count and never the capacity.
+    - the progressive list beside this one writes those very same 22 bytes, table included.
+    - an offset counts from the runtime element count and never from the capacity.
     - only the root separates the two.
     """
     check_one_payload_two_roots(
@@ -567,8 +561,7 @@ def test_progressive_list_of_variable_size_elements(ssz_test: SSZTestFiller) -> 
     Then
     ----
     - the encoding is the same 22 bytes the bounded list writes, table and bodies alike.
-    - the root differs from the bounded list's, the element roots sitting on a spine here
-      rather than in a tree padded to four leaves.
+    - the root differs, the element roots sitting on a spine rather than in four leaves.
     """
     check_one_payload_two_roots(
         BOUNDED_NESTED,
@@ -600,8 +593,8 @@ def test_container_before_the_conversion(ssz_test: SSZTestFiller) -> None:
     Then
     ----
     - the encoding is the slot, two offsets, then the indices and the aggregation bits.
-    - the converted container beside this one writes those very same 42 bytes, which is the
-      fork step EIP-7688 describes: a node's payload is unchanged across it.
+    - the converted container beside this one writes those very same 42 bytes.
+    - EIP-7688 describes that fork step, a node's payload unchanged across it.
     - the root differs, so a verifier holding one root can tell which side of the fork it is on.
     """
     check_one_payload_two_roots(
@@ -634,8 +627,7 @@ def test_container_after_the_conversion(ssz_test: SSZTestFiller) -> None:
     Then
     ----
     - the encoding is the same 42 bytes the pre-conversion container writes.
-    - the root differs, both fields having moved to a progressive tree while the container's
-      own layout stayed put.
+    - the root differs, both fields having moved to a progressive tree.
     - so the conversion costs nothing on the wire and everything downstream of a root.
     """
     check_one_payload_two_roots(
