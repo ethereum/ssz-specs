@@ -4,6 +4,7 @@ import hashlib
 import json
 import re
 import shutil
+from collections.abc import Generator
 from dataclasses import dataclass
 from importlib.metadata import version
 from inspect import cleandoc
@@ -12,8 +13,26 @@ from typing import Any, Final
 
 import pytest
 
-from ssz_testing import FIXTURE_FORMATS
-from ssz_testing.fixtures import BaseConsensusFixture, FixtureInfo, TypeDescriptor
+from ssz_testing import (
+    GindexTest,
+    GindexTestFiller,
+    JsonMappingFiller,
+    JsonMappingTest,
+    MultiproofTest,
+    MultiproofTestFiller,
+    ProofTest,
+    ProofTestFiller,
+    SSZTest,
+    SSZTestFiller,
+    TypeRejectionFiller,
+    TypeRejectionTest,
+)
+from ssz_testing.fixtures import (
+    BaseConsensusFixture,
+    BaseTestSpec,
+    FixtureInfo,
+    TypeDescriptor,
+)
 from ssz_testing.vector_document import counted_document
 
 CASE_ID_PATTERN: Final = re.compile(r"[a-z0-9]+(?:_[a-z0-9]+)*(?:/[a-z0-9]+(?:_[a-z0-9]+)*)*")
@@ -33,7 +52,7 @@ def case_tags(item: pytest.Item) -> tuple[str, ...]:
     return tuple(sorted(declared | {filler_module.replace("_", "-")}))
 
 
-def json_document(payload: Any) -> str:
+def json_document(payload: dict[str, Any]) -> str:
     """The text one emitted JSON file holds: indented, and terminated like any POSIX line."""
     return json.dumps(payload, indent=4) + "\n"
 
@@ -52,7 +71,7 @@ class FixtureCollector:
     """Collects generated fixtures and writes them to disk."""
 
     def __init__(self, output_directory: Path):
-        """Initialize the fixture collector."""
+        """Start empty, writing every vector under the given directory."""
         self.output_directory = output_directory
         self.cases: list[CollectedCase] = []
         self.type_declarations: dict[str, tuple[str, TypeDescriptor]] = {}
@@ -135,7 +154,11 @@ class FixtureCollector:
         self.case_producers[case_id] = test_nodeid
 
     def add_fixture(
-        self, fixture_format: str, fixture: Any, item: pytest.Item, case_id: str
+        self,
+        fixture_format: str,
+        fixture: BaseConsensusFixture,
+        item: pytest.Item,
+        case_id: str,
     ) -> None:
         """
         Add a fixture to the collection, and record its path on the test that produced it.
@@ -214,7 +237,7 @@ FIXTURE_FORMAT_KEY: pytest.StashKey[str] = pytest.StashKey()
 
 
 def pytest_addoption(parser: pytest.Parser) -> None:
-    """Add command-line options for fixture generation."""
+    """Where the fill writes, and whether it may clear what is already there."""
     group = parser.getgroup("fill", "SSZ fixture generation")
     group.addoption(
         "--output",
@@ -296,16 +319,17 @@ def pytest_sessionstart(session: pytest.Session) -> None:
 
 
 def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:
-    """Write all collected fixtures at the end of the session."""
+    """Write the tree, unless the run was a preview that never stood a collector up."""
     if FIXTURE_COLLECTOR_KEY in session.config.stash:
         session.config.stash[FIXTURE_COLLECTOR_KEY].write_fixtures()
 
 
-@pytest.hookimpl(tryfirst=True, hookwrapper=True)
-def pytest_runtest_makereport(item: pytest.Item, call: pytest.CallInfo[None]) -> Any:
+@pytest.hookimpl(tryfirst=True, wrapper=True)
+def pytest_runtest_makereport(
+    item: pytest.Item, call: pytest.CallInfo[None]
+) -> Generator[None, pytest.TestReport, pytest.TestReport]:
     """Make each test's fixture json path available to the test report."""
-    outcome = yield
-    report = outcome.get_result()
+    report = yield
 
     if call.when == "call":
         stash = item.stash
@@ -318,6 +342,8 @@ def pytest_runtest_makereport(item: pytest.Item, call: pytest.CallInfo[None]) ->
             )
         if FIXTURE_FORMAT_KEY in stash:
             report.user_properties.append(("fixture_format", stash[FIXTURE_FORMAT_KEY]))
+
+    return report
 
 
 @pytest.fixture
@@ -342,48 +368,87 @@ def test_case_description(request: pytest.FixtureRequest) -> str:
     return combined_docstring
 
 
-def base_spec_filler_parametrizer(spec_class: Any) -> Any:
-    """Build a pytest fixture whose value fills and collects a fixture for the spec class."""
+def _filler(
+    spec_class: type[BaseTestSpec],
+    request: pytest.FixtureRequest,
+    description: str,
+) -> Any:
+    """Build what a filler fixture hands its test: a call that fills one case and collects it."""
+    # Untyped here, since the keyword fields differ per format: each fixture below names its own.
 
-    @pytest.fixture(
-        scope="function",
-        name=spec_class.format_name,
-    )
-    def base_spec_filler_parametrizer_func(
-        request: pytest.FixtureRequest,
-        test_case_description: str,
-    ) -> Any:
-        """Fixture whose value builds the spec, generates, and collects the result."""
+    def fill_and_collect(*, case_id: str, **spec_fields: Any) -> BaseConsensusFixture:
+        test_spec = spec_class(**spec_fields)
+        generated_fixture = test_spec.generate()
 
-        def fill_and_collect(*, case_id: str, **spec_fields: Any) -> Any:
-            test_spec = spec_class(**spec_fields)
-            generated_fixture = test_spec.generate()
-
-            filled_fixture = generated_fixture.with_info(
-                info=FixtureInfo(
-                    test_id=case_id,
-                    generated_by=request.node.nodeid,
-                    description=test_case_description,
-                    fixture_format=spec_class.format_name,
-                )
-            )
-
-            request.config.stash[FIXTURE_COLLECTOR_KEY].add_fixture(
+        filled_fixture = generated_fixture.with_info(
+            info=FixtureInfo(
+                test_id=case_id,
+                generated_by=request.node.nodeid,
+                description=description,
                 fixture_format=spec_class.format_name,
-                fixture=filled_fixture,
-                item=request.node,
-                case_id=case_id,
             )
-            return filled_fixture
+        )
 
-        return fill_and_collect
+        request.config.stash[FIXTURE_COLLECTOR_KEY].add_fixture(
+            fixture_format=spec_class.format_name,
+            fixture=filled_fixture,
+            item=request.node,
+            case_id=case_id,
+        )
+        return filled_fixture
 
-    return base_spec_filler_parametrizer_func
+    return fill_and_collect
 
 
-# Register one filler fixture per SSZ format from the canonical registry.
-# A new format needs no edit here.
-for fixture_format_class in FIXTURE_FORMATS:
-    globals()[fixture_format_class.format_name] = base_spec_filler_parametrizer(
-        fixture_format_class
-    )
+@pytest.fixture
+def ssz_test(
+    request: pytest.FixtureRequest,
+    test_case_description: str,
+) -> SSZTestFiller:
+    """Fill a serialization vector: a roundtrip, or bytes a decoder has to refuse."""
+    return _filler(SSZTest, request, test_case_description)
+
+
+@pytest.fixture
+def ssz_type_rejection(
+    request: pytest.FixtureRequest,
+    test_case_description: str,
+) -> TypeRejectionFiller:
+    """Fill a vector for a type declaration the specification refuses."""
+    return _filler(TypeRejectionTest, request, test_case_description)
+
+
+@pytest.fixture
+def ssz_gindex_test(
+    request: pytest.FixtureRequest,
+    test_case_description: str,
+) -> GindexTestFiller:
+    """Fill a vector resolving a path through a type to a generalized index."""
+    return _filler(GindexTest, request, test_case_description)
+
+
+@pytest.fixture
+def proof_test(
+    request: pytest.FixtureRequest,
+    test_case_description: str,
+) -> ProofTestFiller:
+    """Fill a vector for one Merkle branch against one generalized index."""
+    return _filler(ProofTest, request, test_case_description)
+
+
+@pytest.fixture
+def multiproof_test(
+    request: pytest.FixtureRequest,
+    test_case_description: str,
+) -> MultiproofTestFiller:
+    """Fill a vector for the nodes several generalized indices are proved by."""
+    return _filler(MultiproofTest, request, test_case_description)
+
+
+@pytest.fixture
+def ssz_json_test(
+    request: pytest.FixtureRequest,
+    test_case_description: str,
+) -> JsonMappingFiller:
+    """Fill a vector for the canonical JSON mapping of a type."""
+    return _filler(JsonMappingTest, request, test_case_description)
