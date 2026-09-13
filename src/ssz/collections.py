@@ -32,6 +32,7 @@ from typing import IO, Any, ClassVar, Self, cast, overload, override
 from pydantic import Field, ValidationInfo, field_validator, model_serializer
 
 from ssz.base import json_writer
+from ssz.boolean import Boolean
 from ssz.byte_arrays import ByteVector, coerced_bytes
 from ssz.exceptions import SSZError, SSZTypeError, SSZValueError, TypeFault, ValueFault
 from ssz.offsets import BYTES_PER_LENGTH_OFFSET, check_composite_size, offset_table_spans
@@ -180,6 +181,10 @@ class _SSZSequence[T: SSZType](SSZCollection[T], ABC):
         try:
             # An ancestor class is a raw value to wrap: an int for a uint.
             if issubclass(element_type, element_class):
+                return element_type(value)
+
+            # A bare true or false, whose class is a sibling of int and so no ancestor here.
+            if isinstance(value, bool) and issubclass(element_type, Boolean):
                 return element_type(value)
 
             # An object, an array or a hex string: whichever the element's own mapping spells.
