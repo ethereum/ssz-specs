@@ -6,6 +6,8 @@ import pytest
 
 from ssz import (
     BitList,
+    BitVector,
+    ByteList,
     ByteVector,
     CompatibleUnion,
     Container,
@@ -94,6 +96,42 @@ class GindexBitList512(BitList):
     """Bounded bit sequence spanning two chunks of capacity, 256 bits to a chunk."""
 
     LIMIT = 512
+
+
+class GindexBitVector300(BitVector):
+    """Fixed 300 bits, a 256-bit chunk and 44 bits over, so the spare bits need a chunk too."""
+
+    LENGTH = 300
+
+
+class GindexBitList300(BitList):
+    """The same 300-bit capacity with an element count mixed in."""
+
+    LIMIT = 300
+
+
+class GindexByteVector40(ByteVector):
+    """Fixed 40 bytes, a 32-byte chunk and 8 bytes over."""
+
+    LENGTH = 40
+
+
+class GindexByteList40(ByteList):
+    """The same 40-byte capacity with an element count mixed in."""
+
+    LIMIT = 40
+
+
+class GindexUint64Vector5(Vector[Uint64]):
+    """Exactly five eight-byte elements, 40 bytes, so the fifth spills past the first chunk."""
+
+    LENGTH = 5
+
+
+class GindexUint64List5(List[Uint64]):
+    """The same five-element capacity with an element count mixed in."""
+
+    LIMIT = 5
 
 
 class GindexUint64ProgressiveList(ProgressiveList[Uint64]):
@@ -439,6 +477,172 @@ def test_element_count_of_a_list(ssz_gindex_test: GindexTestFiller) -> None:
         ssz_type=GindexUint64List8,
         path=(ELEMENT_COUNT_STEP,),
         gindex=3,
+    )
+
+
+def test_bit_vector_capacity_rounds_up_to_whole_chunks(
+    ssz_gindex_test: GindexTestFiller,
+) -> None:
+    """
+    A declared bit count that is not whole chunks still merkleizes into whole chunks.
+
+    Given
+    -----
+    - a fixed sequence of 300 bits, one 256-bit chunk and 44 bits over.
+    - a path naming bit 0.
+
+    When
+    ----
+    - the path is resolved.
+
+    Then
+    ----
+    - the 44 spare bits take a chunk of their own, making the capacity two leaves.
+    - two leaves put the first chunk at index 2, where dropping the remainder would say 1.
+    """
+    ssz_gindex_test(
+        case_id="gindex/bit_vector/capacity_rounds_up_to_whole_chunks",
+        type_name="GindexBitVector300",
+        ssz_type=GindexBitVector300,
+        path=(0,),
+        gindex=2,
+    )
+
+
+def test_bit_list_capacity_rounds_up_to_whole_chunks(ssz_gindex_test: GindexTestFiller) -> None:
+    """
+    The same rounding decides the width of a bit sequence that mixes in its element count.
+
+    Given
+    -----
+    - a bitlist of at most 300 bits, one 256-bit chunk and 44 bits over.
+    - a path naming bit 0.
+
+    When
+    ----
+    - the path is resolved.
+
+    Then
+    ----
+    - the capacity is two leaves, so the data subtree at index 2 is one level deep.
+    - the first chunk is index 4, where dropping the remainder would say 2.
+    """
+    ssz_gindex_test(
+        case_id="gindex/bit_list/capacity_rounds_up_to_whole_chunks",
+        type_name="GindexBitList300",
+        ssz_type=GindexBitList300,
+        path=(0,),
+        gindex=4,
+    )
+
+
+def test_byte_vector_capacity_rounds_up_to_whole_chunks(
+    ssz_gindex_test: GindexTestFiller,
+) -> None:
+    """
+    A byte array rounds its declared length up the same way a bit sequence does.
+
+    Given
+    -----
+    - a fixed array of 40 bytes, one 32-byte chunk and 8 bytes over.
+    - a path naming byte 0.
+
+    When
+    ----
+    - the path is resolved.
+
+    Then
+    ----
+    - the 8 spare bytes take a chunk of their own, making the capacity two leaves.
+    - two leaves put the first chunk at index 2, where dropping the remainder would say 1.
+    """
+    ssz_gindex_test(
+        case_id="gindex/byte_vector/capacity_rounds_up_to_whole_chunks",
+        type_name="GindexByteVector40",
+        ssz_type=GindexByteVector40,
+        path=(0,),
+        gindex=2,
+    )
+
+
+def test_byte_list_capacity_rounds_up_to_whole_chunks(ssz_gindex_test: GindexTestFiller) -> None:
+    """
+    A byte sequence that mixes in its element count rounds its declared limit up too.
+
+    Given
+    -----
+    - a byte list of at most 40 bytes, one 32-byte chunk and 8 bytes over.
+    - a path naming byte 0.
+
+    When
+    ----
+    - the path is resolved.
+
+    Then
+    ----
+    - the capacity is two leaves, so the data subtree at index 2 is one level deep.
+    - the first chunk is index 4, where dropping the remainder would say 2.
+    """
+    ssz_gindex_test(
+        case_id="gindex/byte_list/capacity_rounds_up_to_whole_chunks",
+        type_name="GindexByteList40",
+        ssz_type=GindexByteList40,
+        path=(0,),
+        gindex=4,
+    )
+
+
+def test_vector_capacity_rounds_up_to_whole_chunks(ssz_gindex_test: GindexTestFiller) -> None:
+    """
+    A packed element count that does not fill its last chunk still claims the whole chunk.
+
+    Given
+    -----
+    - a vector of exactly five eight-byte elements, 40 bytes, four to a chunk.
+    - a path naming element 0.
+
+    When
+    ----
+    - the path is resolved.
+
+    Then
+    ----
+    - the fifth element takes a second chunk that only a quarter of it uses.
+    - two leaves put the first chunk at index 2, where dropping the remainder would say 1.
+    """
+    ssz_gindex_test(
+        case_id="gindex/vector/capacity_rounds_up_to_whole_chunks",
+        type_name="GindexUint64Vector5",
+        ssz_type=GindexUint64Vector5,
+        path=(0,),
+        gindex=2,
+    )
+
+
+def test_list_capacity_rounds_up_to_whole_chunks(ssz_gindex_test: GindexTestFiller) -> None:
+    """
+    The declared limit rounds up whether or not the collection ever holds that many.
+
+    Given
+    -----
+    - a list of at most five eight-byte elements, 40 bytes of capacity, four to a chunk.
+    - a path naming element 0.
+
+    When
+    ----
+    - the path is resolved.
+
+    Then
+    ----
+    - the capacity is two leaves, so the data subtree at index 2 is one level deep.
+    - the first chunk is index 4, where dropping the remainder would say 2.
+    """
+    ssz_gindex_test(
+        case_id="gindex/list/capacity_rounds_up_to_whole_chunks",
+        type_name="GindexUint64List5",
+        ssz_type=GindexUint64List5,
+        path=(0,),
+        gindex=4,
     )
 
 
