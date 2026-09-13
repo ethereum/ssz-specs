@@ -235,7 +235,7 @@ A verifier that only does the fourth passes on a wrong index, a wrong path resol
 
 `helperIndices` descending is a contract rather than an artifact. `get_helper_indices` sorts in reverse so that a request for a single index is exactly that index's branch, node for node: `multiproof/container/one_index_is_a_branch` pins that equivalence, and `multiproof/container/spec_worked_example` pins the three nodes `merkle-proofs.md` draws for indices 8, 9 and 14.
 
-An index is decimal digits in a string, like every other integer here, since a generalized index inside a beacon state runs past what a double holds.
+An index is decimal digits in a string, since a generalized index inside a beacon state runs past what a double holds.
 A path step is an object with exactly one key: `field` for a container field, `position` for an element, and `mixin` for a reserved word — `__len__`, `__active_fields__` or `__selector__` — naming a word the root is hashed against.
 
 `valid` is the whole verdict: false says a verifier must not accept this proof.
@@ -279,7 +279,6 @@ Requiring the name, and not merely a failure, is load-bearing: a decoder skippin
 | `SCOPE_TOO_SMALL` | Is shorter than the type's fixed part. |
 | `SCOPE_UNDIVIDED` | Is not a whole number of fixed-width elements. |
 | `TRAILING_ZEROS` | Is a bitlist with zero bytes past its delimiter, a second encoding of one value. |
-| `TRUNCATED` | Ran out while a value was being read. |
 | `UNKNOWN_SELECTOR` | Names a selector the union declares no option for. |
 
 A generalized-index case draws on both catalogues, since a path is refused by the type as often as by one of its steps. Both are closed, and a name from either is a hard failure if you do not know it. The middle column says which catalogue each name is a member of.
@@ -303,6 +302,7 @@ A proof case names one of these instead, refused while the branch or the request
 | `EMPTY_REQUEST` | Is a multiproof asking for no index at all. |
 | `LEAF_COUNT` | Gives a different number of leaves from indices. |
 | `NESTED_INDEX` | Asks for an index lying below another in the same request. |
+| `PATH_INTO_GAP` | Is about a position the value leaves empty, which merkleizes to a zero leaf holding no interior to descend into. |
 | `PATH_PAST_SPINE` | Is about a position past the end of the value's progressive spine, which holds no node there to read. |
 | `PROOF_LENGTH` | Holds a different number of nodes from the one the request needs. |
 | `REPEATED_INDEX` | Asks for the same index twice. |
@@ -310,7 +310,7 @@ A proof case names one of these instead, refused while the branch or the request
 
 Every name in the three tables above appears in this suite, and the `ValueFault` members left over are unreachable from a vector rather than merely unused.
 `OFFSET_OVERFLOW` needs a composite of at least 4 GiB to fire.
-`TRAILING_BYTES` and `SCOPE_NEGATIVE` need a budget a caller passed in, and a whole input is a budget of its own length that every type checks for itself, so `SCOPE` gets there first.
+`TRUNCATED`, `TRAILING_BYTES` and `SCOPE_NEGATIVE` need a budget a caller passed in, and a whole input is a budget of its own length that every type checks for itself, so `SCOPE` gets there first.
 `RANGE`, `NOT_HEX` and `FIELD_ABSENT` are raised while a JSON document is read, where a case names a `JsonFault` instead.
 The rest are about walking a value's own tree, merkleizing it and mixing in its words, which no vector exercises.
 
@@ -320,10 +320,10 @@ Two refusals above are named for where this implementation puts the check, and t
 
 | The input | This suite | A decoder checking elsewhere |
 | --- | --- | --- |
-| A span between two offsets narrower than the element's own minimum | `SCOPE_TOO_SMALL`, or `EMPTY_ENCODING` where the span is empty | An offset fault, the hardening list filing this under "Offsets: … mismatching minimum element size" |
+| A span the encoding cuts for an inner element, narrower than that element's own minimum | `SCOPE_TOO_SMALL`, or `EMPTY_ENCODING` where the element is a bit list | An offset fault, the hardening list filing this under "Offsets: … mismatching minimum element size" |
 | A `List` or `ProgressiveList` opening on an offset that is no whole number of table entries | `OFFSET_BELOW_TABLE`, or `OFFSET_UNALIGNED` where the offset is wide enough but unaligned | `FIRST_OFFSET`, which is what a `Vector` or a `Container` names, its table width being declared rather than read off that first offset |
 
-Six cases carry the first name and five the second, and neither is a rename on its own.
+Neither is a rename on its own: the first row names <!-- element minimum cases --> cases and the second <!-- list table cases -->.
 An element knows the minimum the table does not, and a list has no count until its first offset is read, so putting either check in the other place moves which rule fires first and drops the element and its minimum from the message.
 The path table is finer-grained than its text too: `merkle-proofs.md` turns a mixed-in count into a `uint64` and walks on, so one `assert not issubclass(typ, BasicValue)` refuses both a path past a basic value and a path past a mixed-in word, which are `NO_PARTS` and `NO_PARTS_MIXIN` here.
 
@@ -359,6 +359,7 @@ No name appears in both catalogues, so a consumer holding one table of reasons n
 | `LAYOUT_TRAILING_GAP` | Ends its layout on a gap rather than on a field. |
 | `LAYOUT_WIDTH` | Lays out no position at all. |
 | `NOT_ENTITLED` | Declares a capacity its shape has none of. |
+| `UINT_WIDTH` | Is an unsigned integer at a width other than 8, 16, 32, 64, 128 or 256 bits. |
 | `UNDECLARED` | Leaves out something its shape has to declare, such as a progressive container's field layout. |
 | `UNION_EMPTY` | Is a union offering no option. |
 | `UNION_INCOMPATIBLE` | Is a union whose options merkleize differently. |
@@ -393,6 +394,7 @@ It duplicates what an `ssz` case carries, and that is the point — no `ssz` cas
 4. Encode it, and compare the bytes against `serialized`.
 
 For an invalid case, parse `document` and require a failure naming `rejectionReason`.
+A document naming one field twice is settled by your JSON parser before the mapping sees it, and no case here turns on which value wins.
 
 
 ### `rejectionReason`
@@ -428,7 +430,8 @@ The specification says every field in the schema must be present with a value, a
 | A hex byte string with no `0x` | Carries the prefix | Accepted on a byte array, refused on `Byte` and on a bitfield |
 
 Rows one and three carry a vector. Row three's refusal is the spelling the mapping gives, and row one's is only permitted, so that case carries `stricterThanSpec`: a parser ignoring the undeclared field is as conformant as one refusing the document.
-Row two carries none: a vector either way would make one reading of an open question the contract, and the reading it would pin is this implementation's own leniency.
+Row two carries none. The mapping is written for the writer — integers *are encoded as* strings — and the one sentence it spends on reading is the fields one above, so the text neither requires a bare number to be refused nor permits it to be read; a parser that accepts one still owes the exactness the string is there for.
+A vector either way would settle in this suite what the specification leaves open.
 
 ## `_info`
 
@@ -451,7 +454,7 @@ Your implementation agrees with this one. Not that either agrees with the specif
 
 Every part of a vector comes from the same implementation: its encoder produced `serialized`, its decoder read the bytes back, and `hash_tree_root` produced `root`, which is recorded rather than checked against anything.
 The round-trip catches a decoder that disagrees with its own encoder, not an encoder and decoder that agree on something the specification does not say — a wrong root is recorded as confidently as a right one.
-One reading of a draft is baked into 32 of these roots: EIP-8016 writes the selector a `CompatibleUnion` mixes in as a `uint8`, and this suite zero-extends it to a full 32-byte word, as every implementation does and as every other mixed-in word already is.
+One reading of a draft is baked into every root a `CompatibleUnion` reaches, <!-- union roots --> of them here: EIP-8016 writes the selector a `CompatibleUnion` mixes in as a `uint8`, and this suite zero-extends it to a full 32-byte word, as every implementation does and as every other mixed-in word already is.
 Read literally the byte is the whole right-hand operand, which would hash a 33-byte pre-image and root every union differently.
 Invalid cases are checked harder within the same limit: the decoder must raise the fault the author named. The author and the decoder are still the same project.
 A proof case is no different: this implementation resolved the path, read the leaf off its own tree, built the branch and then verified it.

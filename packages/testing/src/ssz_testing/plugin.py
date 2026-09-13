@@ -14,6 +14,7 @@ import pytest
 
 from ssz_testing import FIXTURE_FORMATS
 from ssz_testing.fixtures import BaseConsensusFixture, FixtureInfo, TypeDescriptor
+from ssz_testing.vector_document import counted_document
 
 CASE_ID_PATTERN: Final = re.compile(r"[a-z0-9]+(?:_[a-z0-9]+)*(?:/[a-z0-9]+(?:_[a-z0-9]+)*)*")
 """A case id: slash-separated segments of lowercase words, such as `uint64/max`."""
@@ -181,7 +182,7 @@ class FixtureCollector:
             )
 
         (self.output_directory / "README.md").write_text(
-            _counted_document(index_rows), encoding="utf-8"
+            counted_document(self.cases), encoding="utf-8"
         )
         (self.output_directory / "index.json").write_text(
             json_document({"cases": index_rows}), encoding="utf-8"
@@ -197,31 +198,6 @@ class FixtureCollector:
             ),
             encoding="utf-8",
         )
-
-
-_VECTOR_DOCUMENT: Final = Path(__file__).parent / "fixtures_readme.md"
-"""How to read a vector, written into every fill as the output directory's README."""
-
-_CASE_COUNT_PLACEHOLDER: Final = "<!-- case count -->"
-"""Line of the document the fill replaces with the counts it just wrote."""
-
-
-def _counted_document(index_rows: list[dict[str, Any]]) -> str:
-    """
-    The vector document, with the counts of what was just written standing in for the placeholder.
-
-    Raises:
-        ValueError: When the document holds no placeholder to answer.
-    """
-    accepted = sum(1 for row in index_rows if row["valid"])
-    counts = (
-        f"{len(index_rows)} cases: {accepted} an implementation must accept, "
-        f"{len(index_rows) - accepted} it must refuse."
-    )
-    document = _VECTOR_DOCUMENT.read_text(encoding="utf-8")
-    if _CASE_COUNT_PLACEHOLDER not in document:
-        raise ValueError(f"'{_VECTOR_DOCUMENT.name}' holds no '{_CASE_COUNT_PLACEHOLDER}' line")
-    return document.replace(_CASE_COUNT_PLACEHOLDER, counts, 1)
 
 
 FIXTURE_COLLECTOR_KEY: pytest.StashKey[FixtureCollector] = pytest.StashKey()

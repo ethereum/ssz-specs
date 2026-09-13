@@ -4,17 +4,13 @@ import hashlib
 import json
 import tomllib
 from pathlib import Path
-from unittest.mock import patch
 
 import pytest
 
 from ssz import Uint8
-from ssz_testing import SSZTest, plugin
-from ssz_testing.plugin import (
-    _CASE_COUNT_PLACEHOLDER,
-    FixtureCollector,
-    _counted_document,
-)
+from ssz_testing import SSZTest
+from ssz_testing.plugin import FixtureCollector
+from ssz_testing.vector_document import _stated_counts
 
 REPOSITORY_ROOT = Path(__file__).parents[3]
 
@@ -610,14 +606,7 @@ def test_the_shipped_document_states_what_the_fill_wrote(project: pytest.Pyteste
 
     shipped = (project.path / "fixtures" / "README.md").read_text(encoding="utf-8")
     assert "1 cases: 1 an implementation must accept, 0 it must refuse." in shipped
-    assert _CASE_COUNT_PLACEHOLDER not in shipped
-
-
-def test_a_document_naming_no_count_fails_the_fill() -> None:
-    """A document edited past its placeholder would ship no counts, so it stops the fill."""
-    with pytest.raises(ValueError, match="holds no"):
-        with patch.object(plugin, "_VECTOR_DOCUMENT", Path(__file__)):
-            _counted_document([])
+    assert not any(placeholder in shipped for placeholder in _stated_counts([]))
 
 
 def test_one_type_name_for_two_shapes_fails_the_fill(project: pytest.Pytester) -> None:
