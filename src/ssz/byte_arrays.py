@@ -15,12 +15,18 @@ from collections.abc import Iterable, Sequence
 from enum import Enum
 from typing import IO, Any, ClassVar, NoReturn, Self, cast, overload, override
 
-from pydantic import Field, field_validator, model_serializer
+from pydantic import Field, ValidationInfo, field_validator, model_serializer
 from pydantic.annotated_handlers import GetCoreSchemaHandler
 from pydantic_core import core_schema
 
 from ssz.base import wrapping_schema
-from ssz.exceptions import SSZTypeError, SSZValueError, TypeFault, ValueFault
+from ssz.exceptions import (
+    SSZTypeError,
+    SSZValueError,
+    TypeFault,
+    ValueFault,
+    document_refusals,
+)
 from ssz.ssz_base import SSZCollection, SSZType
 
 
@@ -69,7 +75,15 @@ def coerced_bytes(type_name: str, value: Any) -> bytes:
             except ValueError as not_hex:
                 raise SSZValueError(ValueFault.NOT_HEX, type=type_name) from not_hex
         case Iterable():
-            return bytes(value)
+            # An element that is no byte fails the conversion below with a plain Python error.
+            try:
+                return bytes(value)
+            except TypeError as not_a_byte:
+                raise SSZTypeError(
+                    TypeFault.WRONG_TYPE,
+                    expected="iterable of byte values",
+                    got=type(value).__name__,
+                ) from not_a_byte
         case _:
             raise SSZTypeError(TypeFault.WRONG_TYPE, expected="bytes", got=type(value).__name__)
 
@@ -314,29 +328,32 @@ class ByteList(SSZCollection[int]):
 
     @field_validator("data", mode="before")
     @classmethod
-    def _validate_byte_list_data(cls, value: Any) -> bytes:
+    def _validate_byte_list_data(cls, value: Any, info: ValidationInfo) -> bytes:
         """
         Enforce the maximum byte count and coerce inputs into a plain bytes object.
 
         Raises:
-            SSZTypeError: When the limit was never declared, or no coercion accepts the input.
+            SSZTypeError: When the limit was never declared, or no coercion accepts a value
+                built in Python.
             SSZValueError: When the coerced byte count exceeds the declared limit.
+            ValueError: When a JSON document spells neither the hex nor the bytes of the value.
         """
-        # Subclasses must declare LIMIT before any instances can be validated.
-        if cls.LIMIT is None:
-            raise SSZTypeError(TypeFault.UNDECLARED, type=cls.__name__, requirement="LIMIT")
+        with document_refusals(info.mode):
+            # Subclasses must declare LIMIT before any instances can be validated.
+            if cls.LIMIT is None:
+                raise SSZTypeError(TypeFault.UNDECLARED, type=cls.__name__, requirement="LIMIT")
 
-        # Coerce the input first, then enforce the upper bound.
-        data = coerced_bytes(cls.__name__, value)
-        if len(data) > cls.LIMIT:
-            raise SSZValueError(
-                ValueFault.LIMIT,
-                type=cls.__name__,
-                limit=cls.LIMIT,
-                actual=len(data),
-                unit=cls.UNIT,
-            )
-        return data
+            # Coerce the input first, then enforce the upper bound.
+            data = coerced_bytes(cls.__name__, value)
+            if len(data) > cls.LIMIT:
+                raise SSZValueError(
+                    ValueFault.LIMIT,
+                    type=cls.__name__,
+                    limit=cls.LIMIT,
+                    actual=len(data),
+                    unit=cls.UNIT,
+                )
+            return data
 
     @model_serializer(mode="plain", when_used="json")
     def _serialize(self) -> str:

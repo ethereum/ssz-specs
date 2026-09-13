@@ -103,7 +103,6 @@ class JsonMappingFiller(Protocol):
         value: SSZType | None = None,
         rejection_reason: JsonFault | None = None,
         message_substring: str | None = None,
-        not_read_back: str | None = None,
         stricter_than_spec: str | None = None,
     ) -> JsonMappingFixture:
         """Build the spec from these fields, generate the vector, and collect it."""

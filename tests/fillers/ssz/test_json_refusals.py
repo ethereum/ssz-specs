@@ -4,6 +4,7 @@ import pytest
 
 from ssz import (
     BitList,
+    ByteList,
     ByteVector,
     CompatibleUnion,
     Container,
@@ -16,14 +17,17 @@ from ssz_testing import JsonFault, JsonMappingFiller
 
 pytestmark = pytest.mark.tags("json")
 
-UNION_REFUSES_EVERY_DOCUMENT = "Input should be an instance of SSZType"
-"""The refusal a union draws here, its option field being one no JSON value satisfies."""
-
 
 class RefusalBitList20(BitList):
     """Up to twenty bits, closed by a delimiter bit."""
 
     LIMIT = 20
+
+
+class RefusalByteList8(ByteList):
+    """Up to eight bytes of opaque data."""
+
+    LIMIT = 8
 
 
 class RefusalByteVector4(ByteVector):
@@ -270,7 +274,7 @@ def test_a_union_naming_an_undeclared_selector(ssz_json_test: JsonMappingFiller)
     Then
     ----
     - the document is refused, a reader taking the tree shape from the selector.
-    - this implementation reads no union document at all, so the selector is never reached.
+    - the value under an undeclared selector has no shape to be read against at all.
     """
     ssz_json_test(
         case_id="json_refusal/compatible_union/invalid/undeclared_selector",
@@ -278,5 +282,142 @@ def test_a_union_naming_an_undeclared_selector(ssz_json_test: JsonMappingFiller)
         ssz_type=RefusalShape,
         document={"selector": "3", "data": {"x": "1", "y": "2"}},
         rejection_reason=JsonFault.UNDECLARED_SELECTOR,
-        message_substring=UNION_REFUSES_EVERY_DOCUMENT,
+        message_substring="selector 3 names no option of RefusalShape",
+    )
+
+
+def test_a_union_asked_for_a_default(ssz_json_test: JsonMappingFiller) -> None:
+    """
+    An empty object is no rendering of a union value, no option standing above the others.
+
+    Given
+    -----
+    - the document {}, read against a union declaring selectors 1 and 2.
+
+    When
+    ----
+    - a parser reads it through the JSON mapping.
+
+    Then
+    ----
+    - the document is refused, the default value of a union being an error in the specification.
+    - every other SSZ type answers an empty object with its own zero value, and this one has none.
+    """
+    ssz_json_test(
+        case_id="json_refusal/compatible_union/invalid/no_default",
+        type_name="RefusalShape",
+        ssz_type=RefusalShape,
+        document={},
+        rejection_reason=JsonFault.NO_DEFAULT,
+        message_substring="RefusalShape has no default value",
+    )
+
+
+def test_a_bitfield_hex_string_without_its_prefix(ssz_json_test: JsonMappingFiller) -> None:
+    """
+    A bitfield hex byte string written without its 0x is no rendering of a value.
+
+    Given
+    -----
+    - the document "0d", the hex of the three bits 1, 0, 1 with the prefix left off.
+
+    When
+    ----
+    - a parser reads it through the JSON mapping.
+
+    Then
+    ----
+    - the document is refused, the prefix being part of the spelling and not decoration.
+    - a parser stripping an optional prefix would read these digits as those three bits.
+    """
+    ssz_json_test(
+        case_id="json_refusal/bit_list/invalid/no_hex_prefix",
+        type_name="RefusalBitList20",
+        ssz_type=RefusalBitList20,
+        document="0d",
+        rejection_reason=JsonFault.HEX_PREFIX,
+        message_substring="expected iterable, got str",
+    )
+
+
+def test_a_bitfield_written_as_an_empty_string(ssz_json_test: JsonMappingFiller) -> None:
+    """
+    The empty string is no rendering of a bitfield, prefix and delimiter both missing from it.
+
+    Given
+    -----
+    - the document "", read against a bit list admitting up to twenty bits.
+
+    When
+    ----
+    - a parser reads it through the JSON mapping.
+
+    Then
+    ----
+    - the document is refused, the empty bit list being written "0x01" and not "".
+    - a parser reading an empty string as an absent value would render one value two ways.
+    """
+    ssz_json_test(
+        case_id="json_refusal/bit_list/invalid/empty_string",
+        type_name="RefusalBitList20",
+        ssz_type=RefusalBitList20,
+        document="",
+        rejection_reason=JsonFault.HEX_PREFIX,
+        message_substring="expected iterable, got str",
+    )
+
+
+def test_a_bit_sequence_holding_something_other_than_a_bit(
+    ssz_json_test: JsonMappingFiller,
+) -> None:
+    """
+    An array holding a value that is no bit is no rendering of a bitfield.
+
+    Given
+    -----
+    - the document ["x"], read against a bit list admitting up to twenty bits.
+
+    When
+    ----
+    - a parser reads it through the JSON mapping.
+
+    Then
+    ----
+    - the document is refused, a bitfield being written as the hex of its own encoding.
+    - an array of true and false is read here beside that hex, and a string is no bit in one.
+    """
+    ssz_json_test(
+        case_id="json_refusal/bit_list/invalid/element_not_a_bit",
+        type_name="RefusalBitList20",
+        ssz_type=RefusalBitList20,
+        document=["x"],
+        rejection_reason=JsonFault.ELEMENT_KIND,
+        message_substring="expected bool or int, got str",
+    )
+
+
+def test_a_byte_list_written_as_an_array_of_strings(ssz_json_test: JsonMappingFiller) -> None:
+    """
+    An array of hex strings is no rendering of a byte list, which is one string whole.
+
+    Given
+    -----
+    - the document ["0x01", "0x02"], read against a byte list admitting up to eight bytes.
+
+    When
+    ----
+    - a parser reads it through the JSON mapping.
+
+    Then
+    ----
+    - the document is refused, the mapping writing the whole payload as "0x0102".
+    - an array of byte values is read here beside that hex, and a string is no byte in one.
+    """
+    ssz_json_test(
+        case_id="json_refusal/byte_list/invalid/element_not_a_byte",
+        type_name="RefusalByteList8",
+        ssz_type=RefusalByteList8,
+        document=["0x01", "0x02"],
+        rejection_reason=JsonFault.ELEMENT_KIND,
+        message_substring="expected iterable of byte values, got list",
     )

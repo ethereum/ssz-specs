@@ -35,7 +35,14 @@ from pydantic import Field, ValidationInfo, field_validator, model_serializer
 from ssz.base import json_writer
 from ssz.boolean import Boolean
 from ssz.byte_arrays import ByteVector, coerced_bytes
-from ssz.exceptions import SSZError, SSZTypeError, SSZValueError, TypeFault, ValueFault
+from ssz.exceptions import (
+    SSZError,
+    SSZTypeError,
+    SSZValueError,
+    TypeFault,
+    ValueFault,
+    document_refusals,
+)
 from ssz.offsets import BYTES_PER_LENGTH_OFFSET, check_composite_size, offset_table_spans
 from ssz.ssz_base import (
     SSZCollection,
@@ -133,13 +140,13 @@ class _SSZSequence[T: SSZType](SSZCollection[T], ABC):
             SSZTypeError: When a value built in Python is not one this shape holds.
             ValueError: When a JSON document holds neither the array nor the hex the type spells.
         """
-        cls._check_declaration()
+        with document_refusals(info.mode):
+            cls._check_declaration()
 
-        # The mapping spells a sequence of opaque bytes as the hex of its own encoding.
-        if isinstance(raw_input, str) and issubclass(cls.ELEMENT_TYPE, Byte):
-            raw_input = list(coerced_bytes(cls.__name__, raw_input))
+            # The mapping spells a sequence of opaque bytes as the hex of its own encoding.
+            if isinstance(raw_input, str) and issubclass(cls.ELEMENT_TYPE, Byte):
+                raw_input = list(coerced_bytes(cls.__name__, raw_input))
 
-        try:
             # Strings and non-iterables are refused, and a generator is materialized.
             elements = cls._shape_input(raw_input)
 
@@ -155,12 +162,6 @@ class _SSZSequence[T: SSZType](SSZCollection[T], ABC):
                 element if type(element) is element_type else coerce(element, json_document)
                 for element in elements
             ]
-        except SSZTypeError as fault:
-            # Reading a document answers with a validation error, which a type error is not.
-            # One escapes the reader whose whole contract is to refuse rather than raise.
-            if info.mode == "json":
-                raise ValueError(str(fault)) from fault
-            raise
 
     @classmethod
     @override

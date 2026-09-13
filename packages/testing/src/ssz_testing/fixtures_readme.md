@@ -379,7 +379,6 @@ The mapping is normative — an SSZ schema defines the JSON encoding too — and
 | `typeDescriptor` | always | That type's declaration, in full, exactly as an `ssz` case carries it. |
 | `document` | always | The JSON to hand the parser: the rendering of a value, or the input it must refuse. |
 | `serialized` | valid | The SSZ encoding of that same value. |
-| `notReadBack` | rarely | Why this implementation only wrote the document, and never read one back. |
 | `rejectionReason` | invalid | The name the parser must refuse with. |
 | `stricterThanSpec` | rarely | What the specification admits where this suite refuses it anyway. |
 
@@ -395,8 +394,6 @@ It duplicates what an `ssz` case carries, and that is the point — no `ssz` cas
 
 For an invalid case, parse `document` and require a failure naming `rejectionReason`.
 
-`notReadBack` marks a document this repository can write but not parse, so step 2 never ran here. It says nothing about your implementation: run every step anyway.
-One case carries it. A `CompatibleUnion` declares its option field as holding any SSZ value, which compiles to a check no JSON document passes.
 
 ### `rejectionReason`
 
@@ -415,6 +412,8 @@ A JSON refusal is named at the level of the mapping rather than of whichever mac
 | `OVER_LIMIT` | Holds more elements than its type admits. |
 | `STRUCT_NOT_AN_OBJECT` | Is a struct written as something other than an object, such as the hex of its own encoding. |
 | `UINT_RANGE` | Holds a number above what its uint type admits. |
+| `ELEMENT_KIND` | Holds an array element that is no value of the type the collection holds. |
+| `NO_DEFAULT` | Is an empty object asking for a default value of a type that has none. |
 | `UNDECLARED_FIELD` | Names a field its struct does not declare. |
 | `UNDECLARED_SELECTOR` | Names a selector its union does not declare. |
 

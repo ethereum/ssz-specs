@@ -27,11 +27,6 @@ from ssz_testing import JsonFault, JsonMappingFiller
 
 pytestmark = pytest.mark.tags("json")
 
-UNION_IS_WRITE_ONLY = (
-    "a compatible union declares its option as an is-instance field, which no JSON value satisfies"
-)
-"""Why the union document below is only written here, and never read back."""
-
 EXTRA_FIELDS_MAY_BE_IGNORED = (
     "simple-serialize.md admits an object naming a field the schema does not declare: a parser "
     "may ignore the additional field, and one that does is as conformant as one that refuses it"
@@ -666,7 +661,7 @@ def test_compatible_union(ssz_json_test: JsonMappingFiller) -> None:
     Then
     ----
     - the document is {"selector": "1", "data": {"x": "1", "y": "2"}}.
-    - this implementation does not read that document back, which the vector records.
+    - reading it back picks the option the selector names, and reads the value through that.
     """
     ssz_json_test(
         case_id="json/compatible_union",
@@ -674,7 +669,6 @@ def test_compatible_union(ssz_json_test: JsonMappingFiller) -> None:
         ssz_type=JsonShape,
         value=JsonShape(selector=Uint8(1), data=JsonCorner(x=Uint16(1), y=Uint16(2))),
         document={"selector": "1", "data": {"x": "1", "y": "2"}},
-        not_read_back=UNION_IS_WRITE_ONLY,
     )
 
 

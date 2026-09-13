@@ -1,5 +1,7 @@
 """The two ways SSZ refuses something, and the closed catalogue of reasons for each."""
 
+from collections.abc import Iterator
+from contextlib import contextmanager
 from enum import Enum
 from typing import Any
 
@@ -154,3 +156,23 @@ class SSZTypeError(SSZError[TypeFault], TypeError):
 
 class SSZValueError(SSZError[ValueFault], ValueError):
     """A value, or a byte string, is not one this SSZ type admits."""
+
+
+@contextmanager
+def document_refusals(mode: str) -> Iterator[None]:
+    """
+    Re-raise a type refusal as a value error for as long as a document is being read.
+
+    Pydantic turns a value error into a validation error, and lets a type error through.
+
+    A parser answers a bad document with a refusal, so a refusal it meets has to be a value error.
+
+    Nothing changes away from a document.
+    A value built in Python still meets the SSZ refusal itself, catalogue member and all.
+    """
+    try:
+        yield
+    except SSZTypeError as fault:
+        if mode != "json":
+            raise
+        raise ValueError(str(fault)) from fault

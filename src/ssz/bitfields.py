@@ -23,11 +23,17 @@ from typing import (
     override,
 )
 
-from pydantic import Field, field_validator, model_serializer
+from pydantic import Field, ValidationInfo, field_validator, model_serializer
 
 from ssz.boolean import Boolean
 from ssz.byte_arrays import coerced_bytes
-from ssz.exceptions import SSZTypeError, SSZValueError, TypeFault, ValueFault
+from ssz.exceptions import (
+    SSZTypeError,
+    SSZValueError,
+    TypeFault,
+    ValueFault,
+    document_refusals,
+)
 from ssz.ssz_base import SSZCollection
 
 
@@ -90,37 +96,40 @@ class BitVector(SSZCollection[Boolean]):
 
     @field_validator("data", mode="before")
     @classmethod
-    def _coerce_and_validate(cls, bits_input: Any) -> list[Boolean]:
+    def _coerce_and_validate(cls, bits_input: Any, info: ValidationInfo) -> list[Boolean]:
         """
         Enforce the exact bit count and coerce every input into a boolean.
 
         Raises:
-            SSZTypeError: When the bit count was never declared.
+            SSZTypeError: When the bit count was never declared, or a value built in Python
+                is not one this shape holds.
+            ValueError: When a JSON document spells neither the hex of a bitfield nor its bits.
         """
-        # A shape that never declared its bit count cannot judge any input.
-        if cls.LENGTH is None:
-            raise SSZTypeError(TypeFault.UNDECLARED, type=cls.__name__, requirement="LENGTH")
+        with document_refusals(info.mode):
+            # A shape that never declared its bit count cannot judge any input.
+            if cls.LENGTH is None:
+                raise SSZTypeError(TypeFault.UNDECLARED, type=cls.__name__, requirement="LENGTH")
 
-        # The JSON mapping spells a bitfield as the hex of its own encoding.
-        if isinstance(bits_input, str) and bits_input.startswith("0x"):
-            bits_input = cls.decode_bytes(coerced_bytes(cls.__name__, bits_input)).data
+            # The JSON mapping spells a bitfield as the hex of its own encoding.
+            if isinstance(bits_input, str) and bits_input.startswith("0x"):
+                bits_input = cls.decode_bytes(coerced_bytes(cls.__name__, bits_input)).data
 
-        # Materialize a length-checkable sequence, refusing strings and non-iterables.
-        #
-        # Bytes are refused here as they are everywhere else.
-        # Iterating one yields ints, so four bytes would silently pass for four bits.
-        bits = cls._shape_input(bits_input)
+            # Materialize a length-checkable sequence, refusing strings and non-iterables.
+            #
+            # Bytes are refused here as they are everywhere else.
+            # Iterating one yields ints, so four bytes would silently pass for four bits.
+            bits = cls._shape_input(bits_input)
 
-        # Fixed-length shape: the input must hold exactly the declared bit count.
-        cls._validate_length(len(bits))
+            # Fixed-length shape: the input must hold exactly the declared bit count.
+            cls._validate_length(len(bits))
 
-        # Each value is wrapped as a bit, which refuses anything outside 0 and 1.
-        #
-        # One already of exactly that class is the shared value for its bit.
-        # Wrapping it again would only hand back the object it already is.
-        #
-        # A named spelling is still converted, the test being on the exact class.
-        return [bit if type(bit) is Boolean else Boolean(bit) for bit in bits]
+            # Each value is wrapped as a bit, which refuses anything outside 0 and 1.
+            #
+            # One already of exactly that class is the shared value for its bit.
+            # Wrapping it again would only hand back the object it already is.
+            #
+            # A named spelling is still converted, the test being on the exact class.
+            return [bit if type(bit) is Boolean else Boolean(bit) for bit in bits]
 
     @model_serializer(mode="plain", when_used="json")
     def _serialize(self) -> str:
@@ -279,7 +288,7 @@ class _SSZBitList(SSZCollection[Boolean]):
 
     @field_validator("data", mode="before")
     @classmethod
-    def _coerce_and_validate(cls, bits_input: Any) -> list[Boolean]:
+    def _coerce_and_validate(cls, bits_input: Any, info: ValidationInfo) -> list[Boolean]:
         """
         Coerce every input into a boolean, under whatever bit count the shape allows.
 
@@ -288,27 +297,30 @@ class _SSZBitList(SSZCollection[Boolean]):
         A progressive bitlist declares none, so every count it is handed is valid.
 
         Raises:
-            SSZTypeError: When a bounded shape never declared its limit.
+            SSZTypeError: When a bounded shape never declared its limit, or a value built in
+                Python is not one this shape holds.
+            ValueError: When a JSON document spells neither the hex of a bitfield nor its bits.
         """
-        # A bounded shape needs its limit before it can judge any input.
-        # An undeclared limit cannot be told apart from the absence of one.
-        cls._check_declaration()
+        with document_refusals(info.mode):
+            # A bounded shape needs its limit before it can judge any input.
+            # An undeclared limit cannot be told apart from the absence of one.
+            cls._check_declaration()
 
-        # The JSON mapping spells a bitlist as the hex of its own encoding, delimiter included.
-        if isinstance(bits_input, str) and bits_input.startswith("0x"):
-            bits_input = cls.decode_bytes(coerced_bytes(cls.__name__, bits_input)).data
+            # The JSON mapping spells a bitlist as the hex of its own encoding, delimiter included.
+            if isinstance(bits_input, str) and bits_input.startswith("0x"):
+                bits_input = cls.decode_bytes(coerced_bytes(cls.__name__, bits_input)).data
 
-        # Materialize a length-checkable sequence, refusing strings and non-iterables.
-        bits = cls._shape_input(bits_input)
+            # Materialize a length-checkable sequence, refusing strings and non-iterables.
+            bits = cls._shape_input(bits_input)
 
-        # One rule reads whichever bound was declared, or waves through when none was.
-        cls._validate_length(len(bits))
+            # One rule reads whichever bound was declared, or waves through when none was.
+            cls._validate_length(len(bits))
 
-        # Each value is wrapped as a bit, which refuses anything outside 0 and 1.
-        #
-        # One already of exactly that class is the shared value for its bit.
-        # Wrapping it again would only hand back the object it already is.
-        return [bit if type(bit) is Boolean else Boolean(bit) for bit in bits]
+            # Each value is wrapped as a bit, which refuses anything outside 0 and 1.
+            #
+            # One already of exactly that class is the shared value for its bit.
+            # Wrapping it again would only hand back the object it already is.
+            return [bit if type(bit) is Boolean else Boolean(bit) for bit in bits]
 
     @model_serializer(mode="plain", when_used="json")
     def _serialize(self) -> str:

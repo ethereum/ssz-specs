@@ -29,10 +29,12 @@ class JsonFault(Enum):
     BITFIELD_TRAILING_ZEROS = "a bit list encoding carries zero bytes past its delimiter"
     UINT_RANGE = "a number stands above what its uint type admits"
     OVER_LIMIT = "a collection holds more elements than its type admits"
+    ELEMENT_KIND = "an array holds an element that is no value of the type the collection holds"
     UNDECLARED_FIELD = "an object names a field its struct does not declare"
     MISSING_FIELD = "an object leaves out a field its struct declares"
     STRUCT_NOT_AN_OBJECT = "a struct is written as an object, and this document is not one"
     UNDECLARED_SELECTOR = "an object names a selector its union does not declare"
+    NO_DEFAULT = "an empty object asks for a default value of a type that has none"
 
 
 class JsonMappingFixture(BaseConsensusFixture):
@@ -51,9 +53,6 @@ class JsonMappingFixture(BaseConsensusFixture):
 
     serialized: str | None = None
     """Hex encoding of the same value, absent on a document that renders no value."""
-
-    not_read_back: str | None = None
-    """Why this implementation only wrote the document, absent wherever it also read one."""
 
     rejection_reason: JsonFault | None = None
     """The fault a parser must refuse this document with, and the field clients assert on."""
@@ -101,9 +100,6 @@ class JsonMappingTest(BaseTestSpec):
     message_substring: str | None = None
     """Substring the refusal must contain, a fill-time self-check never carried into a vector."""
 
-    not_read_back: str | None = None
-    """Why the read direction is unavailable here, which the fill then requires to stay so."""
-
     def generate(self) -> JsonMappingFixture:
         """Write the value, read the document back, and emit the vector, or check a refusal."""
         if self.rejection_reason is not None:
@@ -120,38 +116,18 @@ class JsonMappingTest(BaseTestSpec):
             f"and the vector states {json.dumps(self.document)}"
         )
 
-        if self.not_read_back is None:
-            read_back = mapping.validate_json(json.dumps(self.document))
-            assert read_back == self.value, (
-                f"{self.type_name} reads {json.dumps(self.document)} back as {read_back}, "
-                f"and the vector states {self.value}"
-            )
-        else:
-            self._require_the_read_stays_unavailable(mapping)
+        read_back = mapping.validate_json(json.dumps(self.document))
+        assert read_back == self.value, (
+            f"{self.type_name} reads {json.dumps(self.document)} back as {read_back}, "
+            f"and the vector states {self.value}"
+        )
 
         return JsonMappingFixture(
             type_name=self.type_name,
             ssz_type=self.ssz_type,
             document=self.document,
             serialized=to_hex(self.value.encode_bytes()),
-            not_read_back=self.not_read_back,
             stricter_than_spec=self.stricter_than_spec,
-        )
-
-    def _require_the_read_stays_unavailable(self, mapping: Any) -> None:
-        """
-        Hold a vector to its own note, so a read that starts working turns the fill red.
-
-        Raises:
-            AssertionError: When the document this vector calls unreadable now reads back.
-        """
-        try:
-            mapping.validate_json(json.dumps(self.document))
-        except ValidationError:
-            return
-        raise AssertionError(
-            f"{self.type_name} now reads its own JSON back, so the vector's note is stale: "
-            f"{self.not_read_back}"
         )
 
     def _generate_refusal(self, fault: JsonFault) -> JsonMappingFixture:
