@@ -83,6 +83,7 @@ class GindexTestFiller(Protocol):
         path: tuple[GindexPathStep, ...] = (),
         gindex: int | None = None,
         refusal: TypeFault | ValueFault | None = None,
+        stricter_than_spec: str | None = None,
     ) -> GindexFixture:
         """Build the spec from these fields, generate the vector, and collect it."""
         ...

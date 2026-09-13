@@ -149,6 +149,7 @@ There are no bytes and no value, only a type, a path, and the generalized index 
 | `chunkCount` | bounded shapes | Leaves the type merkleizes into at its own level. |
 | `treeWidth` | bounded shapes | Power of two those leaves pad out to. |
 | `rejectionReason` | invalid | The name the type must refuse the path with. |
+| `stricterThanSpec` | rarely | What `merkle-proofs.md` resolves this path to, where it resolves one at all. |
 
 `gindex` is a decimal string for the same reason every integer in a `value` is: a deep path outgrows the 53 bits a JSON number is safely read into.
 `depth` is `gindex.bit_length() - 1` and `treeWidth` is `chunkCount` rounded up to a power of two, so both are redundant on purpose — an implementation whose index is wrong reads off *which* number it got wrong rather than only that the answer mismatched.
@@ -281,19 +282,18 @@ Requiring the name, and not merely a failure, is load-bearing: a decoder skippin
 | `TRUNCATED` | Ran out while a value was being read. |
 | `UNKNOWN_SELECTOR` | Names a selector the union declares no option for. |
 
-A generalized-index case may instead name a `TypeFault`, since a path is refused by the type as often as by one of its steps. Both catalogues are closed, and a name from either is a hard failure if you do not know it.
+A generalized-index case draws on both catalogues, since a path is refused by the type as often as by one of its steps. Both are closed, and a name from either is a hard failure if you do not know it. The middle column says which catalogue each name is a member of.
 
-| Name | The path |
-| --- | --- |
-| `NO_MIXIN` | Names a word this shape does not mix in. |
-| `NO_PARTS` | Carries on past a basic value, which is a run of bytes inside a chunk and no node of its own. |
-| `NO_PARTS_MIXIN` | Carries on past a mixed-in word, which is one leaf. |
-| `NO_SUCH_FIELD` | Names a field the struct does not declare — a vacant layout position among them. |
-| `NO_SUCH_OPTION` | Names a selector the union declares no option for. |
-| `NO_SUCH_POSITION` | Names a position outside what the shape declares, `-1` included. |
+| Name | Catalogue | The path |
+| --- | --- | --- |
+| `NOT_A_POSITION` | `ValueFault` | Spells a position, or a union's selector, as something other than a plain integer. |
+| `NO_MIXIN` | `TypeFault` | Names a word this shape does not mix in. |
+| `NO_PARTS` | `TypeFault` | Carries on past a basic value, which is a run of bytes inside a chunk and no node of its own. |
+| `NO_PARTS_MIXIN` | `TypeFault` | Carries on past a mixed-in word, which is one leaf. |
+| `NO_SUCH_FIELD` | `ValueFault` | Names a field the struct does not declare — a vacant layout position among them. |
+| `NO_SUCH_OPTION` | `ValueFault` | Names a selector the union declares no option for. |
+| `NO_SUCH_POSITION` | `ValueFault` | Names a position outside what the shape declares, `-1` included. |
 
-Every name in the two tables above appears in this suite. `OFFSET_OVERFLOW` completes the `ValueFault` vocabulary and needs a composite of at least 4 GiB to fire, so no vector names it.
-The rest of that catalogue covers constructing values and building proofs, which no vector exercises.
 A proof case names one of these instead, refused while the branch or the request was read rather than while bytes were.
 
 | Name | The proof |
@@ -308,8 +308,24 @@ A proof case names one of these instead, refused while the branch or the request
 | `REPEATED_INDEX` | Asks for the same index twice. |
 | `ROOT_HAS_NO_BRANCH` | Is about index 1, which sits on no branch of its own. |
 
-Every name in the two tables above appears in this suite. `OFFSET_OVERFLOW` completes the decoding vocabulary and needs a composite of at least 4 GiB to fire, so no vector names it.
-The rest of the catalogue covers constructing values and walking paths, which no vector exercises.
+Every name in the three tables above appears in this suite, and the `ValueFault` members left over are unreachable from a vector rather than merely unused.
+`OFFSET_OVERFLOW` needs a composite of at least 4 GiB to fire.
+`TRAILING_BYTES` and `SCOPE_NEGATIVE` need a budget a caller passed in, and a whole input is a budget of its own length that every type checks for itself, so `SCOPE` gets there first.
+`RANGE`, `NOT_HEX` and `FIELD_ABSENT` are raised while a JSON document is read, where a case names a `JsonFault` instead.
+The rest are about walking a value's own tree, merkleizing it and mixing in its words, which no vector exercises.
+
+### Where the name is this suite's own
+
+Two refusals above are named for where this implementation puts the check, and the text puts it elsewhere. The specification requires a refusal in both, so only the name is in question: a decoder holding the rule where the right-hand column holds it is conformant, and the case is passed by the name that column gives.
+
+| The input | This suite | A decoder checking elsewhere |
+| --- | --- | --- |
+| A span between two offsets narrower than the element's own minimum | `SCOPE_TOO_SMALL`, or `EMPTY_ENCODING` where the span is empty | An offset fault, the hardening list filing this under "Offsets: … mismatching minimum element size" |
+| A `List` or `ProgressiveList` opening on an offset that is no whole number of table entries | `OFFSET_BELOW_TABLE`, or `OFFSET_UNALIGNED` where the offset is wide enough but unaligned | `FIRST_OFFSET`, which is what a `Vector` or a `Container` names, its table width being declared rather than read off that first offset |
+
+Six cases carry the first name and five the second, and neither is a rename on its own.
+An element knows the minimum the table does not, and a list has no count until its first offset is read, so putting either check in the other place moves which rule fires first and drops the element and its minimum from the message.
+The path table is finer-grained than its text too: `merkle-proofs.md` turns a mixed-in count into a `uint64` and walks on, so one `assert not issubclass(typ, BasicValue)` refuses both a path past a basic value and a path past a mixed-in word, which are `NO_PARTS` and `NO_PARTS_MIXIN` here.
 
 ## Illegal type declarations
 
@@ -338,10 +354,12 @@ No name appears in both catalogues, so a consumer holding one table of reasons n
 | `CAPACITY_NEGATIVE` | Counts what it holds with a negative number. |
 | `CONTAINER_EMPTY` | Is a container naming no field. |
 | `LAYOUT_FIELD_COUNT` | Sets a number of layout positions other than its field count. |
+| `LAYOUT_NOT_BITS` | Writes a layout position as something other than 0 or 1. |
 | `LAYOUT_TOO_WIDE` | Lays out more than 256 positions, which one 32-byte word cannot hold. |
 | `LAYOUT_TRAILING_GAP` | Ends its layout on a gap rather than on a field. |
 | `LAYOUT_WIDTH` | Lays out no position at all. |
 | `NOT_ENTITLED` | Declares a capacity its shape has none of. |
+| `UNDECLARED` | Leaves out something its shape has to declare, such as a progressive container's field layout. |
 | `UNION_EMPTY` | Is a union offering no option. |
 | `UNION_INCOMPATIBLE` | Is a union whose options merkleize differently. |
 | `UNION_SELECTOR_RANGE` | Gives an option a selector outside 1 through 127. |
@@ -434,6 +452,8 @@ Your implementation agrees with this one. Not that either agrees with the specif
 
 Every part of a vector comes from the same implementation: its encoder produced `serialized`, its decoder read the bytes back, and `hash_tree_root` produced `root`, which is recorded rather than checked against anything.
 The round-trip catches a decoder that disagrees with its own encoder, not an encoder and decoder that agree on something the specification does not say — a wrong root is recorded as confidently as a right one.
+One reading of a draft is baked into 32 of these roots: EIP-8016 writes the selector a `CompatibleUnion` mixes in as a `uint8`, and this suite zero-extends it to a full 32-byte word, as every implementation does and as every other mixed-in word already is.
+Read literally the byte is the whole right-hand operand, which would hash a 33-byte pre-image and root every union differently.
 Invalid cases are checked harder within the same limit: the decoder must raise the fault the author named. The author and the decoder are still the same project.
 A proof case is no different: this implementation resolved the path, read the leaf off its own tree, built the branch and then verified it.
 

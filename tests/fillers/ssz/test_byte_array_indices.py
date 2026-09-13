@@ -19,6 +19,12 @@ from ssz_testing import ELEMENT_COUNT_STEP, GindexTestFiller, ProofTestFiller
 
 pytestmark = pytest.mark.tags("gindex", "proofs")
 
+A_NUMERIC_STRING_POSITION_IS_COERCED = (
+    'merkle-proofs.md reads an element position as int(step), so it takes the string "3" for '
+    "position 3 and answers a generalized index where this suite refuses the path"
+)
+"""What the specification does with a position spelled as the digits of an integer."""
+
 
 class ByteArrayRoot(ByteVector):
     """Thirty-two bytes, the width of one chunk, as a block root or a graffiti field is."""
@@ -402,6 +408,7 @@ def test_a_string_position_in_a_list_is_refused(ssz_gindex_test: GindexTestFille
     ----
     - the type refuses with NOT_A_POSITION.
     - a resolver that coerced would answer index 4 and never say that it had guessed.
+    - the specification is the resolver that coerces, and the vector says so.
     """
     ssz_gindex_test(
         case_id="byte_array_index/refused/string_position_in_a_list",
@@ -409,6 +416,7 @@ def test_a_string_position_in_a_list_is_refused(ssz_gindex_test: GindexTestFille
         ssz_type=ByteArrayUint64List8,
         path=("3",),
         refusal=ValueFault.NOT_A_POSITION,
+        stricter_than_spec=A_NUMERIC_STRING_POSITION_IS_COERCED,
     )
 
 

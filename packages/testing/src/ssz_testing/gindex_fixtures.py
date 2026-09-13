@@ -152,6 +152,7 @@ class GindexTest(BaseTestSpec):
             path=self.path,
             gindex=str(index),
             depth=gindex_depth(index),
+            stricter_than_spec=self.stricter_than_spec,
         )
 
     def _generate_refusal(self, refusal: TypeFault | ValueFault) -> GindexFixture:
@@ -180,4 +181,5 @@ class GindexTest(BaseTestSpec):
             ssz_type=self.ssz_type,
             path=self.path,
             rejection_reason=refusal,
+            stricter_than_spec=self.stricter_than_spec,
         )
