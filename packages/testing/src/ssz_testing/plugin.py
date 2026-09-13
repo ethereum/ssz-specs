@@ -180,6 +180,9 @@ class FixtureCollector:
                 }
             )
 
+        (self.output_directory / "README.md").write_text(
+            _counted_document(index_rows), encoding="utf-8"
+        )
         (self.output_directory / "index.json").write_text(
             json_document({"cases": index_rows}), encoding="utf-8"
         )
@@ -197,7 +200,29 @@ class FixtureCollector:
 
 
 _VECTOR_DOCUMENT: Final = Path(__file__).parent / "fixtures_readme.md"
-"""How to read a vector, copied into every fill as the output directory's README."""
+"""How to read a vector, written into every fill as the output directory's README."""
+
+_CASE_COUNT_PLACEHOLDER: Final = "<!-- case count -->"
+"""Line of the document the fill replaces with the counts it just wrote."""
+
+
+def _counted_document(index_rows: list[dict[str, Any]]) -> str:
+    """
+    The vector document, with the counts of what was just written standing in for the placeholder.
+
+    Raises:
+        ValueError: When the document holds no placeholder to answer.
+    """
+    accepted = sum(1 for row in index_rows if row["valid"])
+    counts = (
+        f"{len(index_rows)} cases: {accepted} an implementation must accept, "
+        f"{len(index_rows) - accepted} it must refuse."
+    )
+    document = _VECTOR_DOCUMENT.read_text(encoding="utf-8")
+    if _CASE_COUNT_PLACEHOLDER not in document:
+        raise ValueError(f"'{_VECTOR_DOCUMENT.name}' holds no '{_CASE_COUNT_PLACEHOLDER}' line")
+    return document.replace(_CASE_COUNT_PLACEHOLDER, counts, 1)
+
 
 FIXTURE_COLLECTOR_KEY: pytest.StashKey[FixtureCollector] = pytest.StashKey()
 """Stash key for the session's fixture collector."""
@@ -290,10 +315,6 @@ def pytest_sessionstart(session: pytest.Session) -> None:
         shutil.rmtree(output_directory)
 
     output_directory.mkdir(parents=True, exist_ok=True)
-
-    # The output directory is gitignored, and --clean removes it whole.
-    # The document is copied in on every fill rather than tracked where it is read.
-    shutil.copyfile(_VECTOR_DOCUMENT, output_directory / "README.md")
 
     config.stash[FIXTURE_COLLECTOR_KEY] = FixtureCollector(output_directory)
 
