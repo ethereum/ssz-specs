@@ -1532,6 +1532,31 @@ class TestProofNodeWidths:
             verify_merkle_multiproof([leaf], [sibling], [2], ZERO_ROOT)
 
 
+class TestVerificationFromPlainBytes:
+    """Verification spelled the way a consumer of the vectors spells it: plain bytes throughout."""
+
+    def test_a_branch_of_plain_bytes_is_answered_either_way(self) -> None:
+        """A vector carries hex, so every argument a consumer decodes it into is plain bytes."""
+        value = Quad(p=Uint64(1), q=Uint64(2), r=Uint64(3), z=Pair(a=Uint64(4), b=Uint64(5)))
+        index = get_generalized_index(Quad, "r")
+        leaf = bytes(node_root(value, index))
+        branch = [bytes(node) for node in build_proof(value, index)]
+        root = bytes(hash_tree_root(value))
+        assert verify_merkle_proof(leaf, branch, index, root)
+        # A root the branch does not rebuild is a verdict of false, never a refusal.
+        assert not verify_merkle_proof(leaf, branch, index, bytes([root[0] ^ 1]) + root[1:])
+
+    def test_a_multiproof_of_plain_bytes_is_answered_either_way(self) -> None:
+        """The shared-node form reads off a vector the same way, and answers the same way."""
+        value = Triple(x=Uint64(1), y=Uint64(2), z=Pair(a=Uint64(3), b=Uint64(4)))
+        indices = [get_generalized_index(Triple, "x"), get_generalized_index(Triple, "z")]
+        leaves = [bytes(node_root(value, index)) for index in indices]
+        proof = [bytes(node) for node in build_multiproof(value, indices)]
+        root = bytes(hash_tree_root(value))
+        assert verify_merkle_multiproof(leaves, proof, indices, root)
+        assert not verify_merkle_multiproof(leaves, proof, indices, bytes([root[0] ^ 1]) + root[1:])
+
+
 class TestNodeRoot:
     """What an index resolves to when it is read against real data rather than a type."""
 

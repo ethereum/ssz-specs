@@ -292,11 +292,8 @@ class ProofTest(BaseProofTest):
                 branch = tuple(bytes(sibling) for sibling in build_proof(self.value, index))
 
             leaf, branch = _mutated_proof(self.mutation, node, branch)
-            # Plain bytes, the way a consumer reads them off the vector: a node the width check
-            # refuses is one of the cases, and it is no Chunk to begin with.
-            raised, verified = _outcome(
-                lambda: verify_merkle_proof(leaf, branch, index, root)  # ty: ignore[invalid-argument-type]
-            )
+            # Plain bytes, the way a consumer reads them off the vector.
+            raised, verified = _outcome(lambda: verify_merkle_proof(leaf, branch, index, root))
             emitted_leaf = to_hex(leaf)
             emitted_branch = tuple(to_hex(sibling) for sibling in branch)
 
@@ -359,9 +356,7 @@ class MultiproofTest(BaseProofTest):
 
         leaves, proof = _mutated_multiproof(self.mutation, leaves, proof)
         # Plain bytes, the way a consumer reads them off the vector.
-        raised, verified = _outcome(
-            lambda: verify_merkle_multiproof(leaves, proof, indices, root)  # ty: ignore[invalid-argument-type]
-        )
+        raised, verified = _outcome(lambda: verify_merkle_multiproof(leaves, proof, indices, root))
 
         return MultiproofFixture(
             type_name=self.type_name,
