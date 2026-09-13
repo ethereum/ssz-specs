@@ -126,8 +126,8 @@ class ProofPathStep(CamelModel):
     field: str | None = None
     """Name of the container field this step selects."""
 
-    position: str | None = None
-    """Decimal position of the element this step selects."""
+    position: int | None = None
+    """Position of the element this step selects, a plain integer as a path resolver takes one."""
 
     mixin: str | None = None
     """Reserved word naming the mixed-in leaf this step ends on."""
@@ -137,7 +137,7 @@ class ProofPathStep(CamelModel):
         """Read one authored step as the single shape it is."""
         if isinstance(step, str):
             return cls(mixin=step) if step in MIXED_IN_WORDS else cls(field=step)
-        return cls(position=str(step))
+        return cls(position=step)
 
 
 def _written_path(path: Sequence[PathStep]) -> tuple[ProofPathStep, ...]:

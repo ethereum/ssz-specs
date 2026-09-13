@@ -7,6 +7,7 @@ from ssz import (
     ByteVector,
     CompatibleUnion,
     Container,
+    List,
     ProgressiveContainer,
     Uint8,
     Uint16,
@@ -36,6 +37,12 @@ class RefusalPoint(Container):
 
     x: Uint16
     y: Uint16
+
+
+class RefusalPointList2(List[RefusalPoint]):
+    """Up to two of those structs, which the mapping writes as an array of objects."""
+
+    LIMIT = 2
 
 
 class RefusalCorner(ProgressiveContainer):
@@ -216,6 +223,33 @@ def test_a_container_leaving_out_a_declared_field(ssz_json_test: JsonMappingFill
         type_name="RefusalPoint",
         ssz_type=RefusalPoint,
         document={"x": "1"},
+        rejection_reason=JsonFault.MISSING_FIELD,
+        message_substring="the document leaves y of RefusalPoint without a value",
+    )
+
+
+def test_a_sequence_element_leaving_out_a_declared_field(ssz_json_test: JsonMappingFiller) -> None:
+    """
+    An element of an array is held to the object rule its own struct is held to.
+
+    Given
+    -----
+    - the document [{"x": "1"}], read against a list of structs declaring both x and y.
+
+    When
+    ----
+    - a parser reads it through the JSON mapping.
+
+    Then
+    ----
+    - the document is refused, an element being read as a document and not built in Python.
+    - a parser that reads the element afresh defaults the absent field and accepts this.
+    """
+    ssz_json_test(
+        case_id="json_refusal/list/invalid/missing_field_in_an_element",
+        type_name="RefusalPointList2",
+        ssz_type=RefusalPointList2,
+        document=[{"x": "1"}],
         rejection_reason=JsonFault.MISSING_FIELD,
         message_substring="the document leaves y of RefusalPoint without a value",
     )
