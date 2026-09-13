@@ -700,12 +700,12 @@ class TestErrors:
         # The field the offsets belong to is a path step, in front of the sentence.
         assert str(exc_info.value) == "a: offset 8 is above the offset after it, 5"
 
-    def test_short_input_on_fixed_field_raises(self) -> None:
-        """A truncated stream on a fixed field surfaces the field type's own error."""
+    def test_short_input_raises(self) -> None:
+        """An input one byte shorter than the canonical encoding is rejected."""
         # 15 bytes is one short of the 16-byte fixed width.
         with pytest.raises(SSZValueError) as exc_info:
             TwoUint64.decode_bytes(b"\x00" * 15)
-        assert str(exc_info.value) == "b: Uint64 needs 8 bytes, the input holds 7"
+        assert str(exc_info.value) == "TwoUint64 spans 16 bytes, and the budget is 15"
 
     def test_trailing_bytes_raises(self) -> None:
         """An input one byte longer than the canonical encoding is rejected."""
@@ -807,6 +807,8 @@ class TestFixedSizeStructSpansItsOwnWidth:
             TwoUint64.deserialize(stream, 15)
 
         assert exception_info.value.args[0] == "TwoUint64 spans 16 bytes, and the budget is 15"
+        # The budget is weighed before any field, so the bytes around it are never reached.
+        assert stream.tell() == 0
 
     def test_the_exact_width_decodes(self) -> None:
         """The one budget that is the width decodes, and consumes all of it."""
@@ -1791,12 +1793,12 @@ class TestProgressiveContainerNesting:
 class TestProgressiveContainerDecodeErrors:
     """Malformed inputs a progressive-container decoder has to reject."""
 
-    def test_short_input_on_a_fixed_field_raises(self) -> None:
-        """A truncated stream on a fixed field surfaces the field type's own error."""
-        # Two bytes feed side and leave nothing for color.
+    def test_short_input_raises(self) -> None:
+        """An input one byte shorter than the canonical encoding is rejected."""
+        # Two bytes are one short of the three-byte fixed width.
         with pytest.raises(SSZValueError) as exception_info:
             Square.decode_bytes(bytes.fromhex("3412"))
-        assert str(exception_info.value) == "color: Uint8 needs 1 bytes, the input holds 0"
+        assert str(exception_info.value) == "Square spans 3 bytes, and the budget is 2"
 
     def test_trailing_bytes_raise(self) -> None:
         """An input one byte longer than the canonical encoding is rejected."""

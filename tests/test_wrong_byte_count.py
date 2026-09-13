@@ -49,13 +49,13 @@ class BoolVector3(Vector[Boolean]):
 
 
 class FixedStruct(Container):
-    """A fixed-size struct, which reads its fields out of the budget it was handed."""
+    """A fixed-size struct, whose width is the sum of its fields."""
 
     head: Uint16
     flag: Boolean
 
 
-LEAF_TYPES: Final[tuple[type[SSZType], ...]] = (
+FIXED_WIDTH_TYPES: Final[tuple[type[SSZType], ...]] = (
     Uint8,
     Uint16,
     Uint32,
@@ -69,11 +69,9 @@ LEAF_TYPES: Final[tuple[type[SSZType], ...]] = (
     BitVector12,
     Uint16Vector2,
     BoolVector3,
+    FixedStruct,
 )
-"""Every fixed-width type that measures a budget against its own width before reading."""
-
-FIXED_WIDTH_TYPES: Final[tuple[type[SSZType], ...]] = (*LEAF_TYPES, FixedStruct)
-"""Every fixed-width type, the struct included, which reads its fields before measuring."""
+"""Every fixed-width type, each of which weighs a budget against its own width before reading."""
 
 
 def _union_over(option: type[SSZType]) -> type[CompatibleUnion]:
@@ -105,7 +103,7 @@ def test_a_wrong_byte_count_reports_one_fault_wherever_the_value_sits(
 
 
 @pytest.mark.parametrize("surplus", [-1, 1], ids=["one_short", "one_over"])
-@pytest.mark.parametrize("fixed_type", LEAF_TYPES, ids=lambda cls: cls.__name__)
+@pytest.mark.parametrize("fixed_type", FIXED_WIDTH_TYPES, ids=lambda cls: cls.__name__)
 def test_a_budget_that_is_not_the_width_is_reported_as_the_budget_it_is(
     fixed_type: type[SSZType], surplus: int
 ) -> None:
@@ -117,17 +115,6 @@ def test_a_budget_that_is_not_the_width_is_reported_as_the_budget_it_is(
 
     assert refusal.fault is ValueFault.SCOPE
     assert refusal.message == f"{name} spans {width} bytes, and the budget is {count}"
-
-
-def test_a_struct_reads_its_fields_before_it_can_measure_its_budget() -> None:
-    over = _refusal(FixedStruct, bytes(4))
-    assert over.fault is ValueFault.SCOPE
-    assert str(over) == "FixedStruct spans 3 bytes, and the budget is 4"
-
-    # A short budget surfaces as the field that ran out, not as the budget.
-    short = _refusal(FixedStruct, bytes(2))
-    assert short.fault is ValueFault.TRUNCATED
-    assert str(short) == "flag: Boolean needs 1 bytes, the input holds 0"
 
 
 def test_the_alias_and_the_subtype_this_property_also_covers() -> None:

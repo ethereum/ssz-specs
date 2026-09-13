@@ -276,9 +276,9 @@ def test_fixed_size_container_given_fewer_bytes_than_its_width(ssz_test: SSZTest
     Then
     ----
     - decoding is rejected.
-    - the container reads its fields before it can measure the budget, so the second field
-      runs out first and the refusal names it rather than the container.
-    - the reason is that the stream ended inside a field, not that the budget is wrong.
+    - the reason is that five bytes are not the six the container spans.
+    - the refusal names the container and its width, not whichever field the missing byte
+      would have fallen in.
     """
     ssz_test(
         case_id="fixed_pair/invalid/truncated_field",
@@ -286,7 +286,7 @@ def test_fixed_size_container_given_fewer_bytes_than_its_width(ssz_test: SSZTest
         value=BudgetFixedPair(first=Uint32(0), second=Uint16(0)),
         raw_bytes="0x0100000002",
         expected_rejection=ExpectedRejection(
-            reason=ValueFault.TRUNCATED,
-            exact_message="second: Uint16 needs 2 bytes, the input holds 1",
+            reason=ValueFault.SCOPE,
+            exact_message="BudgetFixedPair spans 6 bytes, and the budget is 5",
         ),
     )
