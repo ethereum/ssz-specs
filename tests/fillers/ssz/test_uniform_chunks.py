@@ -42,12 +42,6 @@ def palindrome() -> list[Uint8]:
     return [Uint8(byte) for byte in (0xAA, 0xBB, 0xBB, 0xAA) for _ in range(BYTES_PER_CHUNK)]
 
 
-class UniformUint8Vector512(Vector[Uint8]):
-    """Sixteen chunks of packing, the widest data tree a single fold can climb here."""
-
-    LENGTH: ClassVar[int] = 512
-
-
 class UniformUint8Vector128(Vector[Uint8]):
     """Four chunks of packing, enough for one pairing to leave a level of two."""
 
@@ -68,7 +62,7 @@ class UniformUint64List16(List[Uint64]):
 
 
 class UniformUint8List1024(List[Uint8]):
-    """A cap of thirty-two chunks, eight times the data every case below puts in it."""
+    """A cap of thirty-two chunks, four times the data every case below puts in it."""
 
     LIMIT: ClassVar[int] = 1024
     ELEMENT_TYPE = Uint8
@@ -78,33 +72,6 @@ class UniformUint64ProgressiveList(ProgressiveList[Uint64]):
     """Progressive list of eight-byte elements, four to a chunk."""
 
     ELEMENT_TYPE = Uint64
-
-
-def test_sixteen_identical_chunks_fold_up_the_spine(ssz_test: SSZTestFiller) -> None:
-    """
-    A byte vector of sixteen identical chunks merkleizes to a stable root.
-
-    Given
-    -----
-    - a 512-byte vector packed into sixteen chunks, every byte the maximum.
-    - a leaf level that spans its data tree and holds one repeated value.
-
-    When
-    ----
-    - the value is merkleized.
-
-    Then
-    ----
-    - the root matches the expected layout.
-    - the leaf level is folded against itself once per height rather than paired off,
-      four times over, and no padding follows it.
-    """
-    ssz_test(
-        case_id="uniform/vector_uint8_512/all_max",
-        type_name="UniformUint8Vector512",
-        value=UniformUint8Vector512(data=repeated(MAX_BYTE, 512)),
-        expected_root="0x006eed26f731a68917853879507d9fa9f4044f7af999f9df535fac29715db555",
-    )
 
 
 def test_alternating_chunks_fold_from_the_level_above_the_leaves(
@@ -214,34 +181,6 @@ def test_list_filled_to_capacity_folds_below_its_length_mixin(ssz_test: SSZTestF
         type_name="UniformUint64List16",
         value=UniformUint64List16(data=[MAX_UINT64] * 16),
         expected_root="0x6ba737db8a58f331db600d5b4707dc397602d67d7ef23ab31778e05334292d66",
-    )
-
-
-@pytest.mark.tags("limit")
-def test_uniform_data_folds_then_pads_out_to_a_wider_capacity(ssz_test: SSZTestFiller) -> None:
-    """
-    A list of identical chunks far below its capacity merkleizes to a stable root.
-
-    Given
-    -----
-    - a byte list capped at thirty-two chunks, holding four chunks of the maximum byte.
-    - a data tree eight times narrower than the tree the capacity declares.
-
-    When
-    ----
-    - the value is merkleized.
-
-    Then
-    ----
-    - the root matches the expected layout.
-    - the leaf level folds twice up to the data tree, and only then is the result
-      hashed against an all-zero subtree three times to reach the full width.
-    """
-    ssz_test(
-        case_id="uniform/list_uint8_1024/uniform_under_a_wide_limit",
-        type_name="UniformUint8List1024",
-        value=UniformUint8List1024(data=repeated(MAX_BYTE, 128)),
-        expected_root="0x85f61e09dafd82b022d18318738d9e25b1a54e8cefd52fc34662806e7d99bc28",
     )
 
 

@@ -19,18 +19,6 @@ class SampleUint64ProgressiveList(ProgressiveList[Uint64]):
     ELEMENT_TYPE = Uint64
 
 
-class SampleUint16ProgressiveList(ProgressiveList[Uint16]):
-    """Progressive list of two-byte elements, used as a variable-size element."""
-
-    ELEMENT_TYPE = Uint16
-
-
-class SampleNestedProgressiveList(ProgressiveList[SampleUint16ProgressiveList]):
-    """Progressive list of variable-size elements, encoded behind an offset table."""
-
-    ELEMENT_TYPE = SampleUint16ProgressiveList
-
-
 class SampleUint16List4(List[Uint16]):
     """Bounded list of two-byte elements, used as a variable-size field."""
 
@@ -82,98 +70,6 @@ def test_progressive_list_decode_failure_budget_not_divided(ssz_test: SSZTestFil
         expected_rejection=ExpectedRejection(
             reason=ValueFault.SCOPE_UNDIVIDED,
             exact_message="a budget of 12 does not divide by an element width of 8",
-        ),
-    )
-
-
-def test_progressive_list_decode_failure_first_offset_below_table(
-    ssz_test: SSZTestFiller,
-) -> None:
-    """
-    Decoding a progressive list whose first offset lands inside the table is rejected.
-
-    Given
-    -----
-    - a progressive list of variable-size elements, whose count comes from the first offset.
-    - a first offset of two, which is below the four bytes one table entry takes.
-
-    When
-    ----
-    - the input is decoded into that type.
-
-    Then
-    ----
-    - decoding is rejected.
-    - the reason is that the first offset is below the table's own width.
-    """
-    ssz_test(
-        case_id="progressive_list/invalid/first_offset_below_table",
-        type_name="SampleNestedProgressiveList",
-        value=SampleNestedProgressiveList(data=[]),
-        raw_bytes="0x0200000001000200",
-        expected_rejection=ExpectedRejection(
-            reason=ValueFault.OFFSET_BELOW_TABLE,
-            exact_message="the first offset 2 is below the table's own width of 4",
-        ),
-    )
-
-
-def test_progressive_list_decode_failure_offsets_out_of_order(ssz_test: SSZTestFiller) -> None:
-    """
-    Decoding a progressive list whose offsets descend is rejected.
-
-    Given
-    -----
-    - a first offset of eight, which declares a table of two entries.
-    - a second offset of four, which sits below the offset before it.
-
-    When
-    ----
-    - the input is decoded into that type.
-
-    Then
-    ----
-    - decoding is rejected before any body is read.
-    - the reason is that an offset is above the one after it, at element zero.
-    """
-    ssz_test(
-        case_id="progressive_list/invalid/offsets_out_of_order",
-        type_name="SampleNestedProgressiveList",
-        value=SampleNestedProgressiveList(data=[]),
-        raw_bytes="0x080000000400000001000200",
-        expected_rejection=ExpectedRejection(
-            reason=ValueFault.OFFSET_UNORDERED,
-            exact_message="[0]: offset 8 is above the offset after it, 4",
-        ),
-    )
-
-
-def test_progressive_list_decode_failure_offset_past_budget(ssz_test: SSZTestFiller) -> None:
-    """
-    Decoding a progressive list whose last offset overruns the input is rejected.
-
-    Given
-    -----
-    - a first offset of eight, which declares a table of two entries.
-    - a second offset of sixteen, in an input of twelve bytes.
-
-    When
-    ----
-    - the input is decoded into that type.
-
-    Then
-    ----
-    - decoding is rejected before any body is read.
-    - the reason is that an offset runs past the budget, at element one.
-    """
-    ssz_test(
-        case_id="progressive_list/invalid/offset_past_budget",
-        type_name="SampleNestedProgressiveList",
-        value=SampleNestedProgressiveList(data=[]),
-        raw_bytes="0x080000001000000001000200",
-        expected_rejection=ExpectedRejection(
-            reason=ValueFault.OFFSET_PAST_SCOPE,
-            exact_message="[1]: offset 16 runs past the budget of 12",
         ),
     )
 

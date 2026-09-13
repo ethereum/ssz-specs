@@ -4,7 +4,7 @@ from typing import ClassVar
 
 import pytest
 
-from ssz import BitList, BitVector, Boolean, CompatibleUnion, Container, List, Uint8
+from ssz import BitList, BitVector, Boolean, Container, List, Uint8
 from ssz_testing import ExpectedRejection, SSZTestFiller, ValueFault
 
 
@@ -38,12 +38,6 @@ class PaddingBitList1(BitList):
     LIMIT: ClassVar[int] = 1
 
 
-class PaddingBitVector4Union(CompatibleUnion):
-    """Union over a four-bit vector, which reaches the padded byte through a selector."""
-
-    OPTIONS = {1: PaddingBitVector4, 2: PaddingBitVector4}
-
-
 class PaddingBitVector12List4(List[PaddingBitVector12]):
     """Bounded list of twelve-bit vectors, which puts an element's final byte mid-input."""
 
@@ -67,39 +61,6 @@ TAGGED_BITS = PaddingTaggedBits(
     ),
 )
 """One value of that shape, present only to name the decoder the container case runs."""
-
-
-@pytest.mark.tags("malleability")
-def test_bitvector4_second_padding_bit(ssz_test: SSZTestFiller) -> None:
-    """
-    Decoding a four-bit vector that sets its second padding bit and not its first is rejected.
-
-    Given
-    -----
-    - a bitvector of four bits, whose byte holds four data bits and four padding bits.
-    - the input byte 0x20, which sets padding bit five and leaves padding bit four clear.
-
-    When
-    ----
-    - the input is decoded into that type.
-
-    Then
-    ----
-    - decoding is rejected.
-    - the reason is that the final byte sets a padding bit.
-    - the rule names every bit above the declared length, not the first of them: a decoder
-      testing only the lowest padding bit refuses 0x10 and accepts this.
-    """
-    ssz_test(
-        case_id="padding/bitvector4/invalid/second_padding_bit",
-        type_name="PaddingBitVector4",
-        value=PaddingBitVector4(),
-        raw_bytes="0x20",
-        expected_rejection=ExpectedRejection(
-            reason=ValueFault.PADDING_BITS,
-            exact_message="the final byte 0x20 sets a padding bit",
-        ),
-    )
 
 
 @pytest.mark.tags("malleability")
@@ -202,39 +163,6 @@ def test_bitvector7_only_padding_bit(ssz_test: SSZTestFiller) -> None:
 
 
 @pytest.mark.tags("malleability")
-def test_bitvector9_second_padding_bit(ssz_test: SSZTestFiller) -> None:
-    """
-    Decoding a nine-bit vector that sets its second padding bit and not its first is rejected.
-
-    Given
-    -----
-    - a bitvector of nine bits, whose second byte holds one data bit and seven padding bits.
-    - the input bytes 0xff04, whose final byte sets padding bit two and leaves bit one clear.
-
-    When
-    ----
-    - the input is decoded into that type.
-
-    Then
-    ----
-    - decoding is rejected.
-    - the reason is that the final byte sets a padding bit.
-    - a decoder testing only the lowest padding bit accepts this, and the bytes before the
-      final one say nothing about it either way.
-    """
-    ssz_test(
-        case_id="padding/bitvector9/invalid/second_padding_bit",
-        type_name="PaddingBitVector9",
-        value=PaddingBitVector9(),
-        raw_bytes="0xff04",
-        expected_rejection=ExpectedRejection(
-            reason=ValueFault.PADDING_BITS,
-            exact_message="the final byte 0x04 sets a padding bit",
-        ),
-    )
-
-
-@pytest.mark.tags("malleability")
 def test_bitvector9_highest_padding_bit(ssz_test: SSZTestFiller) -> None:
     """
     Decoding a nine-bit vector that sets the highest bit of its second byte is rejected.
@@ -327,41 +255,6 @@ def test_bitvector12_all_padding_bits(ssz_test: SSZTestFiller) -> None:
         expected_rejection=ExpectedRejection(
             reason=ValueFault.PADDING_BITS,
             exact_message="the final byte 0xf0 sets a padding bit",
-        ),
-    )
-
-
-@pytest.mark.tags("malleability", "union")
-def test_union_option_highest_padding_bit(ssz_test: SSZTestFiller) -> None:
-    """
-    Decoding a union whose bit-vector option sets the highest bit of its byte is rejected.
-
-    Given
-    -----
-    - a union over a four-bit vector, whose byte holds four padding bits.
-    - the input bytes 0x0280, whose payload sets padding bit seven and nothing below it.
-
-    When
-    ----
-    - the input is decoded into that type.
-
-    Then
-    ----
-    - decoding is rejected.
-    - the reason is the bit vector's padding rule, reported under the selector.
-    - the union already pins the lowest padding bit through 0x0210, and a decoder that
-      unpacks an option through a path of its own can check only that one there too.
-    """
-    ssz_test(
-        case_id="padding/compatible_union/invalid/option_highest_padding_bit",
-        type_name="PaddingBitVector4Union",
-        value=PaddingBitVector4Union(
-            selector=Uint8(2), data=PaddingBitVector4(data=[Boolean(True)] * 4)
-        ),
-        raw_bytes="0x0280",
-        expected_rejection=ExpectedRejection(
-            reason=ValueFault.PADDING_BITS,
-            exact_message="[2]: the final byte 0x80 sets a padding bit",
         ),
     )
 

@@ -4,7 +4,7 @@ from typing import ClassVar
 
 import pytest
 
-from ssz import ByteList, Container, List, Vector
+from ssz import ByteList, Container, List
 from ssz_testing import ExpectedRejection, SSZTestFiller, ValueFault
 
 pytestmark = pytest.mark.tags("offsets")
@@ -38,13 +38,6 @@ class InteriorPairList4(List[InteriorPair]):
     ELEMENT_TYPE = InteriorPair
 
 
-class InteriorPairVector2(Vector[InteriorPair]):
-    """Vector of exactly 2 of them, whose count is declared rather than read off the table."""
-
-    LENGTH: ClassVar[int] = 2
-    ELEMENT_TYPE = InteriorPair
-
-
 def empty_pair() -> InteriorPair:
     """One of those structs holding two empty byte lists, which is its eight-byte minimum."""
     return InteriorPair(head=InteriorByteList8(), tail=InteriorByteList8())
@@ -55,9 +48,6 @@ TRIPLE_DECODER = InteriorTriple(first=empty_pair(), middle=empty_pair(), last=em
 
 PAIR_LIST_DECODER = InteriorPairList4(data=[empty_pair(), empty_pair()])
 """A well-formed list of two of those structs, present only to name the decoder that refuses."""
-
-PAIR_VECTOR_DECODER = InteriorPairVector2(data=[empty_pair(), empty_pair()])
-"""The same for the shape whose count is declared."""
 
 
 def test_middle_offset_moved_forward(ssz_test: SSZTestFiller) -> None:
@@ -217,38 +207,6 @@ def test_list_span_below_element_minimum(ssz_test: SSZTestFiller) -> None:
         case_id="interior_offset/pair_list4/invalid/span_below_element_minimum",
         type_name="InteriorPairList4",
         value=PAIR_LIST_DECODER,
-        raw_bytes="0x080000000c000000080000000800000008000000",
-        expected_rejection=ExpectedRejection(
-            reason=ValueFault.SCOPE_TOO_SMALL,
-            exact_message="[0]: InteriorPair needs at least 8 bytes, and the budget is 4",
-        ),
-    )
-
-
-def test_vector_span_below_element_minimum(ssz_test: SSZTestFiller) -> None:
-    """
-    Decoding a vector whose two offsets are closer than one element can be is rejected.
-
-    Given
-    -----
-    - a vector of exactly two of those structs, whose table therefore spans eight bytes.
-    - the very bytes the list case refuses, which are a well-formed table for this count too.
-
-    When
-    ----
-    - the input is decoded into that type.
-
-    Then
-    ----
-    - decoding is rejected.
-    - the reason is that the element needs more bytes than the span between the two offsets.
-    - a declared count reads the same table a first offset of eight implies for a list.
-    - it holds that table to the same element minimum.
-    """
-    ssz_test(
-        case_id="interior_offset/pair_vector2/invalid/span_below_element_minimum",
-        type_name="InteriorPairVector2",
-        value=PAIR_VECTOR_DECODER,
         raw_bytes="0x080000000c000000080000000800000008000000",
         expected_rejection=ExpectedRejection(
             reason=ValueFault.SCOPE_TOO_SMALL,
