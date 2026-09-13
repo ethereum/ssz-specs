@@ -765,7 +765,12 @@ def test_bytes64_typical(ssz_test: SSZTestFiller) -> None:
     ----
     - the decoded value equals the original.
     """
-    ssz_test(case_id="bytes64/uniform", type_name="Bytes64", value=Bytes64(b"\xef" * 64))
+    ssz_test(
+        case_id="bytes64/uniform",
+        type_name="Bytes64",
+        value=Bytes64(b"\xef" * 64),
+        expected_root="0xbcc682bf21a9a12a4357a35453d9d87391f3418ca3c2d69f68567c93d3e1d142",
+    )
 
 
 @pytest.mark.tags("empty")

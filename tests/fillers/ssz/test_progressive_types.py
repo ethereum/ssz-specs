@@ -81,6 +81,7 @@ def test_progressive_list_single_element(ssz_test: SSZTestFiller) -> None:
         case_id="progressive_list/single_element",
         type_name="SampleUint64ProgressiveList",
         value=SampleUint64ProgressiveList(data=[Uint64(1)]),
+        expected_root="0x905efb51c2764c2c7a4efb0548e372569df06db82115c3b1896c186632f3fe5b",
     )
 
 
@@ -106,6 +107,7 @@ def test_progressive_list_fills_first_level(ssz_test: SSZTestFiller) -> None:
         case_id="progressive_list/fills_first_level",
         type_name="SampleUint64ProgressiveList",
         value=SampleUint64ProgressiveList(data=[Uint64(value) for value in range(4)]),
+        expected_root="0xfb119bdda96d8ebf59b511db66fc19a40f4f1543a5aa87d8d9b4519655a8eda9",
     )
 
 
@@ -132,6 +134,7 @@ def test_progressive_list_opens_second_level(ssz_test: SSZTestFiller) -> None:
         case_id="progressive_list/opens_second_level",
         type_name="SampleUint64ProgressiveList",
         value=SampleUint64ProgressiveList(data=[Uint64(value) for value in range(5)]),
+        expected_root="0xb52da986d8c44ac58d43d54d5a6f27363363ad09e1249d211c38c21c5221e5f4",
     )
 
 
@@ -158,6 +161,7 @@ def test_progressive_list_fills_second_level(ssz_test: SSZTestFiller) -> None:
         case_id="progressive_list/fills_second_level",
         type_name="SampleUint64ProgressiveList",
         value=SampleUint64ProgressiveList(data=[Uint64(value) for value in range(20)]),
+        expected_root="0x1957d11b2bce3ef0c72872fca6fa4cffacc27e601c91b88ab8e6b28eebc6525c",
     )
 
 
@@ -184,6 +188,7 @@ def test_progressive_list_opens_third_level(ssz_test: SSZTestFiller) -> None:
         case_id="progressive_list/opens_third_level",
         type_name="SampleUint64ProgressiveList",
         value=SampleUint64ProgressiveList(data=[Uint64(value) for value in range(21)]),
+        expected_root="0x86a8ce9749021379ba7af31ac5d6f3b33e0e0791a5c9bb2e00580fe8d6aeb117",
     )
 
 
@@ -210,6 +215,7 @@ def test_progressive_list_fills_third_level(ssz_test: SSZTestFiller) -> None:
         case_id="progressive_list/fills_third_level",
         type_name="SampleUint64ProgressiveList",
         value=SampleUint64ProgressiveList(data=[Uint64(value) for value in range(84)]),
+        expected_root="0x765cd3f85263382f72bcf782dd80038ec9184206fdde9e0872f5ec4025ed992f",
     )
 
 
@@ -236,6 +242,7 @@ def test_progressive_list_opens_fourth_level(ssz_test: SSZTestFiller) -> None:
         case_id="progressive_list/opens_fourth_level",
         type_name="SampleUint64ProgressiveList",
         value=SampleUint64ProgressiveList(data=[Uint64(value) for value in range(85)]),
+        expected_root="0x44149f84b9899187d206378ab59b88e7e59ebd3ed84fd95b4b2ba58b08f98024",
     )
 
 
@@ -261,6 +268,7 @@ def test_progressive_list_of_composites_empty(ssz_test: SSZTestFiller) -> None:
         case_id="progressive_list/composites/empty",
         type_name="SampleBytes32ProgressiveList",
         value=SampleBytes32ProgressiveList(data=[]),
+        expected_root="0xf5a5fd42d16a20302798ef6ed309979b43003d2320d9f0e8ea9831a92759fb4b",
     )
 
 
@@ -285,6 +293,7 @@ def test_progressive_list_of_composites_single(ssz_test: SSZTestFiller) -> None:
         case_id="progressive_list/composites/single_element",
         type_name="SampleBytes32ProgressiveList",
         value=SampleBytes32ProgressiveList(data=[Bytes32(b"\xaa" * 32)]),
+        expected_root="0xbb93b54e640d8bb22570653bf0423df16e94fb3a1652e9ee7b218e5fa8eaaf5c",
     )
 
 
@@ -313,6 +322,7 @@ def test_progressive_list_of_composites_crosses_a_level(ssz_test: SSZTestFiller)
         value=SampleBytes32ProgressiveList(
             data=[Bytes32(bytes([value]) * 32) for value in range(1, 7)]
         ),
+        expected_root="0x690beb7f075e2dc91699aa3ee9354687772923889ce755458cb405ae95e34055",
     )
 
 
@@ -344,6 +354,7 @@ def test_progressive_list_of_variable_size_elements(ssz_test: SSZTestFiller) -> 
                 SampleUint16ProgressiveList(data=[Uint16(3), Uint16(4), Uint16(5)]),
             ]
         ),
+        expected_root="0xd0df6fea8320f394b0d6673861125069302ab339bbd80979dc41d998581d3a83",
     )
 
 
@@ -369,6 +380,7 @@ def test_progressive_bitlist_small(ssz_test: SSZTestFiller) -> None:
         case_id="progressive_bitlist/three_bits",
         type_name="ProgressiveBitList",
         value=ProgressiveBitList(data=[Boolean(True), Boolean(False), Boolean(True)]),
+        expected_root="0x45192380e83a4b9ee939ac3836a6dccc51d3451db8886d53668264ea2e2cb877",
     )
 
 
@@ -394,6 +406,7 @@ def test_progressive_bitlist_fills_one_chunk(ssz_test: SSZTestFiller) -> None:
         case_id="progressive_bitlist/fills_one_chunk",
         type_name="ProgressiveBitList",
         value=ProgressiveBitList(data=[Boolean(True)] * 256),
+        expected_root="0xb3327406854ffab96af59832dfa3f690f72c4f898e2ffd4ef3e90cc2fb876b43",
     )
 
 
@@ -420,6 +433,7 @@ def test_progressive_bitlist_opens_second_level(ssz_test: SSZTestFiller) -> None
         case_id="progressive_bitlist/opens_second_level",
         type_name="ProgressiveBitList",
         value=ProgressiveBitList(data=[Boolean(True)] * PROGRESSIVE_BITLIST_LEVEL_BITS),
+        expected_root="0xbe707c375a49431fdb06c00f7a4dcc9200d5613ea02999dc5e081913171bb8d0",
     )
 
 
@@ -449,6 +463,7 @@ def test_container_with_progressive_list_field(ssz_test: SSZTestFiller) -> None:
             b=SampleUint64ProgressiveList(data=[Uint64(1), Uint64(2), Uint64(3)]),
             c=Uint8(0xFF),
         ),
+        expected_root="0x74672f25a9fafa50effa21ab09753b79597c3c84c1d4604aee9d31b3452f7343",
     )
 
 
@@ -478,4 +493,5 @@ def test_container_with_empty_progressive_list_field(ssz_test: SSZTestFiller) ->
             b=SampleUint64ProgressiveList(data=[]),
             c=Uint8(0xFF),
         ),
+        expected_root="0xc889b4be0e0bca1fe0ffdd0235b1f6b4df7f356f1aa19a2743338a271843057e",
     )

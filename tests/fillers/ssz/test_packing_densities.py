@@ -167,6 +167,7 @@ def test_uint16_vector_filling_one_chunk(ssz_test: SSZTestFiller) -> None:
         case_id="density/uint16_vector16/one_chunk",
         type_name="DensityUint16Vector16",
         value=DensityUint16Vector16(data=UINT16_ASCENDING),
+        expected_root="0x0102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20",
     )
 
 
@@ -195,6 +196,7 @@ def test_uint32_vector_filling_one_chunk(ssz_test: SSZTestFiller) -> None:
         case_id="density/uint32_vector8/one_chunk",
         type_name="DensityUint32Vector8",
         value=DensityUint32Vector8(data=UINT32_ASCENDING),
+        expected_root="0x0102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20",
     )
 
 
@@ -223,6 +225,7 @@ def test_uint128_vector_filling_one_chunk(ssz_test: SSZTestFiller) -> None:
         case_id="density/uint128_vector2/one_chunk",
         type_name="DensityUint128Vector2",
         value=DensityUint128Vector2(data=UINT128_ASCENDING[:2]),
+        expected_root="0x0102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20",
     )
 
 
@@ -251,6 +254,7 @@ def test_uint128_vector_spilling_into_half_a_chunk(ssz_test: SSZTestFiller) -> N
         case_id="density/uint128_vector3/partial_chunk",
         type_name="DensityUint128Vector3",
         value=DensityUint128Vector3(data=UINT128_ASCENDING),
+        expected_root="0xc2eeebe3698f978911d8e7fee3d1cada347475930ae1b59ce2b2490a957dce79",
     )
 
 
@@ -279,6 +283,7 @@ def test_uint128_progressive_list_spilling_into_half_a_chunk(ssz_test: SSZTestFi
         case_id="density/uint128_progressive_list/partial_chunk",
         type_name="DensityUint128ProgressiveList",
         value=DensityUint128ProgressiveList(data=UINT128_ASCENDING),
+        expected_root="0x46147cf3dc3d14ea3602f0ce40bc7a38edf336170d3c37cf44da087ee31d0181",
     )
 
 
@@ -308,6 +313,7 @@ def test_container_of_every_width_all_zero(ssz_test: SSZTestFiller) -> None:
         case_id="density/container/all_zero",
         type_name="DensityWidthContainer",
         value=DensityWidthContainer.default(),
+        expected_root="0xc78009fdf07fc56a11f122370658a353aaa542ed63e44c4bc15ff4cd105ab33c",
     )
 
 
@@ -342,6 +348,7 @@ def test_container_of_every_width_all_max(ssz_test: SSZTestFiller) -> None:
             huge=Uint128(2**128 - 1),
             full=Uint256(2**256 - 1),
         ),
+        expected_root="0xcb96f7919dbf0e496d8bad47e89b9c1722b4cc37b7ff980ec72a5fd8a2d95f3b",
     )
 
 

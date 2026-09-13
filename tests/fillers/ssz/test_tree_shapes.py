@@ -143,6 +143,7 @@ def test_vector_of_three_chunks_pads_to_four_leaves(ssz_test: SSZTestFiller) -> 
         case_id="tree_shape/vector3/padded_to_four_leaves",
         type_name="TreeShapeVector3",
         value=TreeShapeVector3(data=[marker(0x11), marker(0x22), marker(0x33)]),
+        expected_root="0x8c737b85522a3cf473e681efdaff9abf9f04cff8544691c9770c6e149caa06fc",
     )
 
 
@@ -180,6 +181,7 @@ def test_vector_of_six_chunks_folds_an_odd_level_above_the_leaves(
                 marker(0x66),
             ]
         ),
+        expected_root="0x4993f2b965373c0b34cfe13a7bda7d4bf82b5f2a00f5f18e3d512e239215cfba",
     )
 
 
@@ -207,6 +209,7 @@ def test_vector_of_identical_chunks_takes_the_uniform_level_shortcut(
         case_id="tree_shape/vector8/uniform_leaves",
         type_name="TreeShapeVector8",
         value=TreeShapeVector8(data=[marker(0x77)] * 8),
+        expected_root="0xf719826690025ff4ae281f64cd14adb07b2a0cb44867a28b8d348c242241e642",
     )
 
 
@@ -232,6 +235,7 @@ def test_vector_zero_except_the_last_chunk_is_not_a_zero_tree(ssz_test: SSZTestF
         case_id="tree_shape/vector8/only_last_leaf_set",
         type_name="TreeShapeVector8",
         value=TreeShapeVector8(data=[TreeShapeBytes32.zero()] * 7 + [marker(0x01)]),
+        expected_root="0x9153276e9afdea3859c509820be0a27dda7001fe625f7e9d1f26d076cdeef485",
     )
 
 
@@ -261,6 +265,7 @@ def test_list_of_four_chunks_under_a_512_leaf_tree(ssz_test: SSZTestFiller) -> N
         value=TreeShapeBytes32List300(
             data=[marker(0x11), marker(0x22), marker(0x33), marker(0x44)]
         ),
+        expected_root="0x8cc48d74e7d87094a8f887391e2e1808f771d19982474a9dfc15b2dad11f8442",
     )
 
 
@@ -294,6 +299,7 @@ def test_list_of_composites_below_a_non_power_of_two_limit(ssz_test: SSZTestFill
                 TreeShapePair(a=Uint64(5), b=Uint32(6)),
             ]
         ),
+        expected_root="0x248661eea4208ca0698716367ed57ff481e6f134c91a7780b7be02f4db094cda",
     )
 
 
@@ -325,6 +331,7 @@ def test_container_with_five_fields(ssz_test: SSZTestFiller) -> None:
             d=Uint64(0x4444444444444444),
             e=Boolean(True),
         ),
+        expected_root="0x338fa2194fbecb1bfbb1fd5dc1b2de33ba74ba622e14470e4e7af459bd989fed",
     )
 
 
@@ -358,6 +365,7 @@ def test_container_with_seven_fields(ssz_test: SSZTestFiller) -> None:
             f=Uint8(0x55),
             g=Uint32(0x66666666),
         ),
+        expected_root="0xf3b1143710e70bd707d2a9a1856f802b2ffdee7cb42ade27ca09d3f10475ec2b",
     )
 
 
@@ -385,6 +393,7 @@ def test_expansion_holding_the_nested_container_whole(ssz_test: SSZTestFiller) -
         case_id="tree_shape/expansion/nested_container_held_whole",
         type_name="TreeShapeExpansion",
         value=TreeShapeExpansion(slot=Uint64(64), body=SUMMARIZED_BODY, flag=Boolean(True)),
+        expected_root="0xc6c4ff28c523c9e60361df9980447721d69211af96a1ca4c420984cf1b66e74d",
     )
 
 
@@ -418,4 +427,5 @@ def test_summary_holding_the_nested_root_in_its_place(ssz_test: SSZTestFiller) -
         case_id="tree_shape/summary/nested_root_in_place",
         type_name="TreeShapeSummary",
         value=summary,
+        expected_root="0xc6c4ff28c523c9e60361df9980447721d69211af96a1ca4c420984cf1b66e74d",
     )
