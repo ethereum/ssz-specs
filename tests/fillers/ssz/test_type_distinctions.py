@@ -217,7 +217,9 @@ def test_uint8_vector_alias_of_byte_vector(ssz_test: SSZTestFiller) -> None:
 
     Given
     -----
-    - the bytes 0xde, 0xad, 0xbe, 0xef held in a Vector[Uint8, 4].
+    - the bytes 0x00, 0x7f, 0x80, 0xff held in a Vector[Uint8, 4].
+    - four bytes that ascend, so a reversed encoding would not read back the same.
+    - the two either side of the signed boundary, which a signed element type would swap.
 
     When
     ----
@@ -225,14 +227,14 @@ def test_uint8_vector_alias_of_byte_vector(ssz_test: SSZTestFiller) -> None:
 
     Then
     ----
-    - the encoding is the four bytes themselves.
+    - the encoding is the four bytes themselves, in the order they were given.
     - the four packed bytes fill one chunk, so the root is that chunk unhashed.
     - both encoding and root equal those of the byte vector beside it.
     """
     ssz_test(
         case_id="distinction/uint8_vector4/alias_of_byte_vector",
         type_name="SampleUint8Vector4",
-        value=SampleUint8Vector4(data=[Uint8(0xDE), Uint8(0xAD), Uint8(0xBE), Uint8(0xEF)]),
+        value=SampleUint8Vector4(data=[Uint8(0x00), Uint8(0x7F), Uint8(0x80), Uint8(0xFF)]),
     )
 
 
@@ -243,7 +245,8 @@ def test_byte_vector_alias_of_uint8_vector(ssz_test: SSZTestFiller) -> None:
 
     Given
     -----
-    - the bytes 0xde, 0xad, 0xbe, 0xef held in a ByteVector[4].
+    - the bytes 0x00, 0x7f, 0x80, 0xff held in a ByteVector[4].
+    - the same four the uint8 vector beside it holds, and no other case in the suite.
 
     When
     ----
@@ -251,14 +254,14 @@ def test_byte_vector_alias_of_uint8_vector(ssz_test: SSZTestFiller) -> None:
 
     Then
     ----
-    - the encoding is the four bytes themselves.
+    - the encoding is the four bytes themselves, in the order they were given.
     - the four bytes fill one chunk, so the root is that chunk unhashed.
     - both encoding and root equal those of the uint8 vector beside it.
     """
     ssz_test(
         case_id="distinction/bytes4/alias_of_uint8_vector",
         type_name="Bytes4",
-        value=Bytes4(bytes.fromhex("deadbeef")),
+        value=Bytes4(bytes.fromhex("007f80ff")),
     )
 
 

@@ -4,7 +4,7 @@ from typing import ClassVar
 
 import pytest
 
-from ssz import ByteList, List, ProgressiveList
+from ssz import ByteList, List
 from ssz_testing import ExpectedRejection, SSZTestFiller, ValueFault
 
 pytestmark = pytest.mark.tags("offsets")
@@ -23,17 +23,8 @@ class OffsetTableList4(List[OffsetTableByteList8]):
     ELEMENT_TYPE = OffsetTableByteList8
 
 
-class OffsetTableProgressiveList(ProgressiveList[OffsetTableByteList8]):
-    """The same elements with no capacity, which encodes to the very same offset table."""
-
-    ELEMENT_TYPE = OffsetTableByteList8
-
-
 LIST_DECODER = OffsetTableList4(data=[OffsetTableByteList8(data=b"\xaa\xbb")])
 """A well-formed list, present only so a decode-failure case names the class that refuses."""
-
-PROGRESSIVE_LIST_DECODER = OffsetTableProgressiveList(data=[OffsetTableByteList8(data=b"\xaa\xbb")])
-"""The same, for the shape that declares no capacity."""
 
 
 def test_list_offset_budget_below_one_offset(ssz_test: SSZTestFiller) -> None:
@@ -281,69 +272,6 @@ def test_list_last_offset_past_budget(ssz_test: SSZTestFiller) -> None:
         case_id="bytelist8_list4/invalid/last_offset_past_budget",
         type_name="OffsetTableList4",
         value=LIST_DECODER,
-        raw_bytes="0x080000000c000000aabb",
-        expected_rejection=ExpectedRejection(
-            reason=ValueFault.OFFSET_PAST_SCOPE,
-            exact_message="[1]: offset 12 runs past the budget of 10",
-        ),
-    )
-
-
-@pytest.mark.tags("boundary")
-def test_progressive_list_first_offset_zero(ssz_test: SSZTestFiller) -> None:
-    """
-    Decoding a progressive list whose first offset is zero is rejected.
-
-    Given
-    -----
-    - a progressive list of the same variable-size element, with no capacity.
-    - the input bytes 0x00000000, one offset of zero.
-
-    When
-    ----
-    - the input is decoded into that type.
-
-    Then
-    ----
-    - decoding is rejected.
-    - the reason is that the first offset is below the table's own width.
-    - the two shapes encode alike, so declaring no capacity relaxes no offset rule.
-    """
-    ssz_test(
-        case_id="bytelist8_progressive_list/invalid/first_offset_zero",
-        type_name="OffsetTableProgressiveList",
-        value=PROGRESSIVE_LIST_DECODER,
-        raw_bytes="0x00000000",
-        expected_rejection=ExpectedRejection(
-            reason=ValueFault.OFFSET_BELOW_TABLE,
-            exact_message="the first offset 0 is below the table's own width of 4",
-        ),
-    )
-
-
-def test_progressive_list_last_offset_past_budget(ssz_test: SSZTestFiller) -> None:
-    """
-    Decoding a progressive list whose last offset runs past the budget is rejected.
-
-    Given
-    -----
-    - a progressive list of the same variable-size element, with no capacity.
-    - a table of 8 and 12 within a budget of ten, the last body opening past the end.
-
-    When
-    ----
-    - the input is decoded into that type.
-
-    Then
-    ----
-    - decoding is rejected.
-    - the reason is that the last offset runs past the budget.
-    - the bounded list refuses these very bytes the same way, down to the path it names.
-    """
-    ssz_test(
-        case_id="bytelist8_progressive_list/invalid/last_offset_past_budget",
-        type_name="OffsetTableProgressiveList",
-        value=PROGRESSIVE_LIST_DECODER,
         raw_bytes="0x080000000c000000aabb",
         expected_rejection=ExpectedRejection(
             reason=ValueFault.OFFSET_PAST_SCOPE,

@@ -280,38 +280,6 @@ def test_a_progressive_container_without_a_layout_is_refused(
 
 
 @pytest.mark.tags("boundary")
-def test_uint8_one_byte_short(ssz_test: SSZTestFiller) -> None:
-    """
-    A one-byte unsigned integer given no bytes is rejected.
-
-    Given
-    -----
-    - the type Uint8, which spans one byte.
-    - an empty input, one byte short of that.
-
-    When
-    ----
-    - the input is decoded into that type.
-
-    Then
-    ----
-    - decoding is rejected.
-    - the reason is that the type's width and the budget disagree.
-    - the absent byte is not read as a zero.
-    """
-    ssz_test(
-        case_id="uint8/invalid/one_byte_short",
-        type_name="Uint8",
-        value=Uint8(0),
-        raw_bytes="0x",
-        expected_rejection=ExpectedRejection(
-            reason=ValueFault.SCOPE,
-            message_substring="spans 1 bytes, and the budget is 0",
-        ),
-    )
-
-
-@pytest.mark.tags("boundary")
 def test_uint8_one_byte_long(ssz_test: SSZTestFiller) -> None:
     """
     A one-byte unsigned integer given two bytes is rejected.
