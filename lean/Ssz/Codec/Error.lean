@@ -31,6 +31,10 @@ inductive Err where
   | offsetBelowTable
   /-- Fewer bytes than the budget promised. -/
   | truncated
+  /-- A boolean written as a byte other than zero or one. -/
+  | notABit (value : Nat)
+  /-- A count of bytes, bits, or elements other than the one the type has. -/
+  | count (expected actual : Nat)
   /-- Padding bits set above the last declared bit. -/
   | paddingBits
   /-- An empty encoding, where even an empty value takes a byte. -/
@@ -45,6 +49,16 @@ inductive Err where
   | unknownSelector (selector : Nat)
   /-- A type whose parts do not pair up, which names no shape at all. -/
   | badDeclaration
+  /-- A position written as something other than a plain integer. -/
+  | notAPosition
+  /-- A capacity declared by a shape that has none to declare. -/
+  | notEntitled
+  /-- Something a shape has to declare and left out. -/
+  | undeclared
+  /-- A count written as a negative number. -/
+  | capacityNegative
+  /-- A layout position written as something other than a gap or a field. -/
+  | layoutNotBits
   /-- A number naming no node of any tree. -/
   | notAGindex (index : Nat)
   /-- The root, which sits on no branch of its own. -/
@@ -115,8 +129,34 @@ inductive Err where
   | offsetOverflow (offset : Nat)
   /-- A struct with no fields, whose encoding would be empty at any value. -/
   | containerEmpty
-  /-- A fixed-width shape declaring no positions, which encodes to nothing. -/
-  | widthZero
+  /-- A hex byte string written without the marker that opens one. -/
+  | hexPrefix
+  /-- A hex byte string holding a character that is no hex digit. -/
+  | hexDigits
+  /-- A hex byte string spanning a length the type does not have. -/
+  | hexLength (expected actual : Nat)
+  /-- A bitfield document setting a bit past the length its type declares. -/
+  | bitfieldPadding
+  /-- A bit list document whose encoding closes with no delimiter bit. -/
+  | bitfieldDelimiter
+  /-- A bit list document whose encoding carries zero bytes past its delimiter. -/
+  | bitfieldTrailingZeros
+  /-- A number above what its unsigned integer type admits. -/
+  | uintRange (limit actual : Nat)
+  /-- A collection document holding more elements than its type admits. -/
+  | documentOverLimit (limit actual : Nat)
+  /-- An array element that is no value of the type the collection holds. -/
+  | elementKind
+  /-- An empty object asking for a default value of a type that has none. -/
+  | noDefault
+  /-- An object naming a field its struct does not declare. -/
+  | undeclaredField (name : String)
+  /-- An object leaving out a field its struct declares. -/
+  | missingField (name : String)
+  /-- A struct written as something other than an object. -/
+  | structNotAnObject
+  /-- An object naming a selector its union does not declare. -/
+  | undeclaredSelector (selector : Nat)
   deriving Repr, BEq, DecidableEq
 
 /--
@@ -126,7 +166,7 @@ The reference tests carry this name for every encoding they expect to be refused
 A refusal is then checked for its reason, and not merely for happening.
 -/
 def Err.reason : Err → String
-  -- Diagnostic names distinguish malformed input, invalid declarations, and unreadable proof requests.
+  -- The names separate malformed input, an illegal declaration, and an unreadable request.
   | .typeMismatch => "WRONG_TYPE"
   | .overLimit _ _ => "LIMIT"
   | .scope _ _ => "SCOPE"
@@ -139,6 +179,8 @@ def Err.reason : Err → String
   | .offsetUnaligned => "OFFSET_UNALIGNED"
   | .offsetBelowTable => "OFFSET_BELOW_TABLE"
   | .truncated => "TRUNCATED"
+  | .notABit _ => "NOT_A_BIT"
+  | .count _ _ => "COUNT"
   | .paddingBits => "PADDING_BITS"
   | .emptyEncoding => "EMPTY_ENCODING"
   | .noDelimiter => "NO_DELIMITER"
@@ -179,8 +221,27 @@ def Err.reason : Err → String
   | .uintWidth _ => "UINT_WIDTH"
   | .offsetOverflow _ => "OFFSET_OVERFLOW"
   | .containerEmpty => "CONTAINER_EMPTY"
-  | .widthZero => "WIDTH_ZERO"
+  -- The JSON mapping keeps a catalogue of its own, sharing no name with the two above.
+  | .hexPrefix => "HEX_PREFIX"
+  | .hexDigits => "HEX_DIGITS"
+  | .hexLength _ _ => "HEX_LENGTH"
+  | .bitfieldPadding => "BITFIELD_PADDING"
+  | .bitfieldDelimiter => "BITFIELD_DELIMITER"
+  | .bitfieldTrailingZeros => "BITFIELD_TRAILING_ZEROS"
+  | .uintRange _ _ => "UINT_RANGE"
+  | .documentOverLimit _ _ => "OVER_LIMIT"
+  | .elementKind => "ELEMENT_KIND"
+  | .noDefault => "NO_DEFAULT"
+  | .undeclaredField _ => "UNDECLARED_FIELD"
+  | .missingField _ => "MISSING_FIELD"
+  | .structNotAnObject => "STRUCT_NOT_AN_OBJECT"
+  | .undeclaredSelector _ => "UNDECLARED_SELECTOR"
   | .proofIncomplete => "PROOF_INCOMPLETE"
   | .badDeclaration => "BAD_DECLARATION"
+  | .notAPosition => "NOT_A_POSITION"
+  | .notEntitled => "NOT_ENTITLED"
+  | .undeclared => "UNDECLARED"
+  | .capacityNegative => "CAPACITY_NEGATIVE"
+  | .layoutNotBits => "LAYOUT_NOT_BITS"
 
 end Ssz

@@ -178,7 +178,7 @@ def _descend(draw: Draw, ssz_type: type[ssz.SSZType], value: ssz.SSZType) -> Des
     if issubclass(ssz_type, (ssz.Container, ssz.ProgressiveContainer)):
         ordinal = draw.below(len(ssz_type._FIELD_TYPES))
         name, field_type = ssz_type._FIELD_TYPES[ordinal]
-        return Step(python=name, lean=ordinal), field_type, getattr(value, name)
+        return Step(python=name, lean=ordinal, name=name), field_type, getattr(value, name)
     # A byte array or a bitfield holds basic elements, so a step into one ends the path.
     if issubclass(ssz_type, (ssz.ByteVector, ssz.ByteList, ssz.BitVector, ssz.BitList)):
         position = draw.below(_declared_positions(ssz_type))

@@ -1,10 +1,10 @@
-"""Check that every SSZ module is reachable from the audited entry point."""
+"""Check that every specification module is reachable from the audited entry point."""
 
 import re
 import sys
 from pathlib import Path
 
-# Only specification modules belong to the axiom audit; executable test readers are separate.
+# The implementation and its proofs both belong to the audit; the fixture readers do not.
 root = Path(__file__).resolve().parents[1]
 modules = {
     ".".join(path.relative_to(root).with_suffix("").parts): path
@@ -12,8 +12,8 @@ modules = {
 }
 modules["Ssz"] = root / "Ssz.lean"
 
-# Follow transitive imports, so a proof can be included through its natural parent module.
-pending = ["Ssz"]
+# The proof root imports the implementation, so one walk from it covers both trees.
+pending = ["Ssz.Proofs"]
 visited: set[str] = set()
 while pending:
     module = pending.pop()
@@ -28,3 +28,19 @@ while pending:
 missing = sorted(modules.keys() - visited)
 if missing:
     sys.exit("SSZ modules missing from the audited import closure:\n" + "\n".join(missing))
+
+# A proof reached only through the implementation would make the split meaningless.
+implementation = {"Ssz"}
+pending = ["Ssz"]
+while pending:
+    module = pending.pop()
+    for line in modules[module].read_text().splitlines():
+        if match := re.match(r"^(?:public\s+)?import\s+(.+)", line):
+            for imported in match[1].split("--", 1)[0].split():
+                if imported in modules and imported not in implementation:
+                    implementation.add(imported)
+                    pending.append(imported)
+
+leaked = sorted(name for name in implementation if name.startswith("Ssz.Proofs"))
+if leaked:
+    sys.exit("proof modules imported by the implementation:\n" + "\n".join(leaked))

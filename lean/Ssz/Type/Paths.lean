@@ -13,6 +13,7 @@ def nextPow2 (count : Nat) : Nat := 2 ^ depthFor count
 One step of a path.
 
 A position is a field of a struct, an element of a sequence, or a union selector.
+
 The other three name the words a root is hashed against, and each ends the path.
 -/
 inductive PathStep where
@@ -38,6 +39,7 @@ def Desc.itemLength : Desc → Nat
 Leaves a type merkleizes into, counting only its own level.
 
 A basic value is one leaf, and bits and basic elements pack several to a leaf.
+
 A composite element or a field takes one of its own.
 -/
 def Desc.chunkCount : Desc → Except Err Nat
@@ -59,7 +61,6 @@ def Desc.chunkCount : Desc → Except Err Nat
 
 /-- The type reached by one step of a path. -/
 def Desc.elementType : Desc → PathStep → Except Err Desc
-  -- Field ordinals index declarations, including when their tree positions contain gaps.
   | .container _ fields, .position index =>
     match fields[index]? with
     | some field => .ok field
@@ -71,7 +72,6 @@ def Desc.elementType : Desc → PathStep → Except Err Desc
   | .bitVector _, _ => .ok .bool
   | .bitList _, _ => .ok .bool
   | .progressiveBitList, _ => .ok .bool
-  -- A byte array is a collection of single opaque bytes.
   | .byteVector _, _ => .ok (.uint 1)
   | .byteList _, _ => .ok (.uint 1)
   | .vector element _, _ => .ok element
@@ -85,7 +85,6 @@ Positions a shape declares, or none for one that grows with its data.
 A declared position is addressable whether or not a value fills it.
 -/
 def Desc.positionCount : Desc → Except Err (Option Nat)
-  -- A progressive shape grows with its data, so it declares no bound to report.
   | .progressiveList _ => .ok none
   | .progressiveBitList => .ok none
   | .vector _ length => .ok (some length)
@@ -98,13 +97,10 @@ def Desc.positionCount : Desc → Except Err (Option Nat)
 
 /-- Position of the requested set bit, counted from zero, or none if it is absent. -/
 def activePosition : List Bool → Nat → Option Nat
-  -- An empty layout has no remaining active field.
   | [], _ => none
   -- A gap shifts every subsequent field one position to the right.
   | false :: rest, ordinal => (activePosition rest ordinal).map (· + 1)
-  -- The first active field occupies this position.
   | true :: _, 0 => some 0
-  -- Passing an active field consumes both a position and a field ordinal.
   | true :: rest, ordinal + 1 => (activePosition rest ordinal).map (· + 1)
 
 /-- Layout position of a field, or an error identifying the missing field ordinal. -/
@@ -126,7 +122,6 @@ structure ChunkPosition where
 
 /-- Where one element sits: the node holding it, and its byte range inside that node. -/
 def Desc.chunkPosition (shape : Desc) (step : PathStep) : Except Err ChunkPosition := do
-  -- The child type determines whether the position shares a chunk or occupies a complete node.
   let width := (← shape.elementType step).itemLength
   match shape, step with
   -- A progressive container merkleizes a field at its layout position, not at its ordinal.
@@ -143,14 +138,13 @@ def Desc.chunkPosition (shape : Desc) (step : PathStep) : Except Err ChunkPositi
     | .bitVector _ | .bitList _ | .progressiveBitList =>
       return ⟨position / (8 * bytesPerChunk), 0, 0⟩
     | _ =>
-      -- Dividing the byte offset by thirty-two separates the chunk index from its internal byte range.
+      -- Dividing the byte offset by the node width splits the leaf from the range inside it.
       let start := position * width
       return ⟨start / bytesPerChunk, start % bytesPerChunk, start % bytesPerChunk + width⟩
   | _, _ => throw .notSteppable
 
 /-- Whether a type mixes in the word a reserved step names. -/
 def Desc.mixesIn : Desc → PathStep → Bool
-  -- Every variable-size shape hashes its contents against its own count.
   | .list _ _, .length => true
   | .byteList _, .length => true
   | .bitList _, .length => true
@@ -160,18 +154,15 @@ def Desc.mixesIn : Desc → PathStep → Bool
   | .progressiveContainer _ _ _, .activeFields => true
   -- A union mixes its selector in, which separates options holding equal data.
   | .compatibleUnion _ _, .selector => true
-  -- Every other pairing names a word the type does not have.
   | _, _ => false
 
 /-- One path step's relative node index and child type, or no child for a terminal mixing word. -/
 def Desc.resolveStep (shape : Desc) (step : PathStep) : Except Err (Nat × Option Desc) := do
-  -- Basic values are leaves, so neither positions nor mixing words exist below them.
   match shape with
   | .bool | .uint _ => throw .noParts
   | _ => pure ()
   match step with
   | .length | .activeFields | .selector =>
-    -- Reserved words are addressable only on types that actually commit to that word.
     if !shape.mixesIn step then throw .noMixin
     return (3, none)
   | .position ordinal =>
@@ -201,7 +192,6 @@ def getGeneralizedIndex (shape : Desc) : List PathStep → Except Err Nat
   -- An empty path selects the root, including for a basic value.
   | [] => .ok 1
   | step :: rest => do
-    -- Each step supplies both its relative address and the type available for further descent.
     let (index, target) ← shape.resolveStep step
     match target with
     | none =>

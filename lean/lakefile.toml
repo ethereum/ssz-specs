@@ -1,5 +1,5 @@
 name = "ssz"
-defaultTargets = ["Ssz", "conformance", "regressions"]
+defaultTargets = ["Ssz", "SszProofs", "conformance", "regressions"]
 
 # No third-party dependencies: proofs use Lean's standard logical axioms.
 
@@ -10,8 +10,14 @@ warningAsError = true
 autoImplicit = false
 relaxedAutoImplicit = false
 
+# The executable specification, which is what an implementer reads.
 [[lean_lib]]
 name = "Ssz"
+
+# The machine-checked properties of it, which nothing else depends on.
+[[lean_lib]]
+name = "SszProofs"
+roots = ["Ssz.Proofs"]
 
 [[lean_lib]]
 name = "Conformance"

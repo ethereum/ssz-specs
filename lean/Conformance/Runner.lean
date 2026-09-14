@@ -1,104 +1,68 @@
-import Conformance.Registry
+import Conformance.Cases
 
-/-! Running the reference tests the Python specification generates. -/
+/-! Running the conformance vectors the Python specification released. -/
 
 namespace Conformance
 
 open Ssz Lean
 
-/-- A refusal, as a line of text. -/
-def describe (fault : Err) : String := toString (repr fault)
+/-- Whether a vector must be accepted or refused. -/
+def verdict (vector : Json) : Except String Bool :=
+  match field? vector "valid" with
+  | some (.bool value) => .ok value
+  | _ => .error "no verdict in the vector"
 
-/--
-What one fixture asserts.
+/-- Check one vector, using the checker for the format that filled it. -/
+def checkVector (format : String) (vector : Json) : Except String Unit := do
+  let valid ← verdict vector
+  match format with
+  | "ssz_test" => checkSsz vector valid
+  | "ssz_type_rejection" => checkTypeRejection vector
+  | "ssz_gindex_test" => checkGindex vector valid
+  | "ssz_json_test" => checkJson vector valid
+  | "proof_test" => checkProof vector valid
+  | "multiproof_test" => checkMultiproof vector valid
+  -- The catalogue of formats is closed, so an unknown one is a failure rather than a skip.
+  | _ => .error s!"unknown fixture format: {format}"
 
-An encoding fixture pins the bytes, the root, and the value they decode back to.
-A refusal fixture pins only that the bytes are turned away.
--/
-def checkFixture (moduleName : String) (entry : Json) : Except String Unit := do
-  -- The fixture’s module and type name select the declaration used for every check.
-  let typeName ← (← entry.getObjVal? "typeName").getStr?
-  let some shape := lookupShape moduleName typeName
-    | throw s!"no type registered for {moduleName}/{typeName}"
-  match entry.getObjVal? "rejectionReason" with
-  | .ok reasonJson =>
-    -- A refusal fixture holds bytes no value encodes to, and names why.
-    let expectedReason ← reasonJson.getStr?
-    let raw ← fromHex (← (← entry.getObjVal? "rawBytes").getStr?)
-    match deserialize shape raw with
-    | .ok _ => throw s!"{typeName}: decoding should have been refused"
-    | .error fault =>
-      -- Rejecting malformed bytes is insufficient if the rejection category disagrees with the fixture.
-      if fault.reason != expectedReason then
-        throw s!"{typeName}: refused with {fault.reason}, expected {expectedReason}"
-      return ()
-  | .error _ =>
-    -- Successful fixtures independently pin the original value, serialized bytes, and Merkle root.
-    let value ← readValue shape (← entry.getObjVal? "value")
-    let expectedBytes ← fromHex (← (← entry.getObjVal? "serialized").getStr?)
-    let expectedRoot ← fromHex (← (← entry.getObjVal? "root").getStr?)
-    -- The encoding must be the bytes the specification produced, to the byte.
-    let encoded ← (serialize shape value).mapError fun fault =>
-      s!"{typeName}: encoding refused: {describe fault}"
-    if encoded != expectedBytes then
-      throw s!"{typeName}: encoded {toHex encoded}, expected {toHex expectedBytes}"
-    -- The root must match too, which pins the whole tree and not just the leaves.
-    let root ← (hashTreeRoot shape value).mapError fun fault =>
-      s!"{typeName}: rooting refused: {describe fault}"
-    if root != expectedRoot then
-      throw s!"{typeName}: rooted {toHex root}, expected {toHex expectedRoot}"
-    -- Decoding the bytes back must give the value they came from.
-    let decoded ← (deserialize shape expectedBytes).mapError fun fault =>
-      s!"{typeName}: decoding refused: {describe fault}"
-    if decoded != value then
-      throw s!"{typeName}: decoded a different value than the one encoded"
-    return ()
-
-/-- Every fixture file below a directory. -/
-partial def fixtureFiles (dir : System.FilePath) : IO (Array System.FilePath) := do
-  -- Only JSON files are collected, while directories are traversed recursively.
+/-- Every vector file below a directory. -/
+partial def vectorFiles (directory : System.FilePath) : IO (Array System.FilePath) := do
   let mut out := #[]
-  for entry in ← dir.readDir do
-    -- Fixtures sit one directory per module, so the walk descends rather than listing.
+  for entry in ← directory.readDir do
     if ← entry.path.isDir then
-      out := out ++ (← fixtureFiles entry.path)
+      out := out ++ (← vectorFiles entry.path)
     else if entry.path.toString.endsWith ".json" then
       out := out.push entry.path
   return out
 
-/-- How a run of the fixtures went. -/
+/-- How a run of the vectors went. -/
 structure Tally where
-  /-- Fixtures that asserted what they claim. -/
+  /-- Vectors that passed. -/
   passed : Nat := 0
-  /-- One line per fixture that did not. -/
+  /-- One line per vector that failed. -/
   failures : Array String := #[]
 
-/-- Running every fixture below a directory, and saying how it went. -/
+/-- The two files that describe the release rather than test anything. -/
+def isCatalogue (file : System.FilePath) : Bool :=
+  [some "index.json", some "manifest.json"].contains file.fileName
+
+/-- Run every vector below a directory. -/
 def run (root : System.FilePath) : IO Tally := do
-  let files ← fixtureFiles root
+  let files ← vectorFiles root
   let mut tally : Tally := {}
-  -- Sorting paths makes failure reports reproducible across filesystem iteration orders.
+  -- Sorting paths makes a failure report reproducible across filesystem iteration orders.
   for file in files.qsort (fun a b => a.toString < b.toString) do
-    -- The directory a fixture sits in names the module that declared its type.
-    let moduleName := (file.parent.bind System.FilePath.fileName).getD ""
-    let text ← IO.FS.readFile file
-    -- Unreadable JSON records a failure without preventing the remaining fixtures from running.
-    match Json.parse text with
+    if isCatalogue file then continue
+    let source ← IO.FS.readFile file
+    -- An unreadable vector records a failure without stopping the ones after it.
+    let outcome : Except String Unit := do
+      let vector ← Json.parse source
+      let format ← text (← field (← field vector "_info") "fixtureFormat")
+      checkVector format vector
+    match outcome with
+    | .ok _ => tally := { tally with passed := tally.passed + 1 }
     | .error message =>
-      let line := s!"{file}: unreadable: {message}"
-      tally := { tally with failures := tally.failures.push line }
-    | .ok json =>
-      -- One file holds its entries under the test that produced them.
-      let entries : List (String × Json) := match json.getObj? with
-        | .ok object => object.toList
-        | .error _ => []
-      -- Each named fixture contributes one success or one diagnostic to the final tally.
-      for (name, entry) in entries do
-        match checkFixture moduleName entry with
-        | .ok _ => tally := { tally with passed := tally.passed + 1 }
-        | .error message =>
-          let line := s!"{name}: {message}"
-          tally := { tally with failures := tally.failures.push line }
+      tally := { tally with failures := tally.failures.push s!"{file}: {message}" }
   return tally
 
 end Conformance

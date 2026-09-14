@@ -60,9 +60,10 @@ class PathClaim:
 
     def to_json(self) -> Json:
         """The claim as the corpus writes it, omitting what a refusal does not answer."""
-        written: Json = {"path": [step.to_json() for step in self.steps], "refused": self.refused}
+        written: Json = {"path": [step.to_json() for step in self.steps]}
         if not self.refused:
-            written |= {"gindex": self.gindex, "node": self.node, "proof": self.proof}
+            # An index is decimal digits in a string, as it is in every released vector.
+            written |= {"gindex": str(self.gindex), "node": self.node, "proof": self.proof}
         return written
 
 
@@ -93,7 +94,7 @@ class Multiproof:
 
     def to_json(self) -> Json:
         """The request as the corpus writes it."""
-        return {"indices": self.indices, "proof": self.proof}
+        return {"indices": [str(index) for index in self.indices], "proof": self.proof}
 
 
 @dataclass(frozen=True, slots=True)
@@ -143,7 +144,7 @@ class Case:
         """The case as the corpus writes it, omitting what the type does not have."""
         written: Json = {
             "name": self.name,
-            "desc": descriptor(self.ssz_type),
+            "typeDescriptor": descriptor(self.ssz_type),
             "value": json_value(self.value),
             "serialized": "0x" + self.value.encode_bytes().hex(),
             "root": "0x" + bytes(ssz.hash_tree_root(self.value)).hex(),

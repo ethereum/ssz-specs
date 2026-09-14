@@ -1,6 +1,6 @@
 import Conformance.Reader
-import Conformance.Registry
+import Conformance.Cases
 import Conformance.Runner
 import Conformance.Diff
 
-/-! Fixture readers and runners used at the Python-to-Lean conformance boundary. -/
+/-! Readers and runners for the conformance vectors and the differential corpus. -/

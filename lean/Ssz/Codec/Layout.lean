@@ -22,7 +22,6 @@ def chunksForBits (bitCount : Nat) : Nat :=
 
 /-- Nodes over a sequence of basic elements, packed back to back before being split. -/
 def packElements (parts : List Bytes) : Array Bytes :=
-  -- Concatenate basic element encodings before chunking so adjacent elements share 32-byte nodes.
   packBytes (parts.foldl (fun total part => total ++ part) #[])
 
 /-- What a shape puts under its tree. -/
@@ -35,7 +34,6 @@ inductive Leaves where
 
 /-- Leaves held, one entry per leaf, whether or not it carries a value. -/
 def Leaves.count : Leaves → Nat
-  -- Packed data counts nodes, since nothing below a node is addressable.
   | .packed chunks => chunks.size
   -- Nested values count positions, gaps included, since a gap is a leaf too.
   | .nested values => values.length
@@ -73,7 +71,7 @@ def MerkleLayout.nesting (values : List (Option (Desc × Value))) (limit : Optio
 
 /-- The option selector a compatible union mixes in, as one little-endian node. -/
 def selectorWord (selector : Nat) : Except Err Bytes := do
-  -- The spec writes one byte, and a hash operand is one node, so it is zero-extended.
+  -- EIP-8016 writes one byte, and a hash operand is one node, so it is zero-extended.
   if selector > 0xFF then throw (.unionSelectorRange selector 0 0xFF)
   return lengthWord selector
 
@@ -81,64 +79,14 @@ def selectorWord (selector : Nat) : Except Err Bytes := do
 def placeSlots : List Bool → List (Desc × Value) → Except Err (List (Option (Desc × Value)))
   | [], [] => .ok []
   | false :: active, fields => do
-    -- A gap consumes a tree position without consuming a field.
     return none :: (← placeSlots active fields)
   | true :: active, field :: fields => do
-    -- An active position consumes exactly one field, in declaration order.
     return some field :: (← placeSlots active fields)
   | _, _ => .error .badDeclaration
-
-/-- A successful layout preserves every field in order and has one slot per position. -/
-private theorem placeSlots_preserves {active : List Bool} {fields : List (Desc × Value)}
-    {slots : List (Option (Desc × Value))} (placed : placeSlots active fields = .ok slots) :
-    slots.filterMap id = fields ∧ slots.length = active.length := by
-  induction active generalizing fields slots with
-  | nil =>
-    -- With no positions left, success requires no fields left either.
-    cases fields <;> simp [placeSlots] at placed
-    subst slots
-    simp
-  | cons bit active ih =>
-    cases bit with
-    | false =>
-      -- Removing a gap keeps the field sequence and shortens the layout by one.
-      cases tail : placeSlots active fields with
-      | error fault => simp [placeSlots, tail, Bind.bind, Except.bind] at placed
-      | ok rest =>
-        simp [placeSlots, tail, Bind.bind, Except.bind, pure, Except.pure] at placed
-        subst slots
-        simpa using ih tail
-    | true =>
-      -- An occupied position keeps the first field and delegates the remaining positions.
-      cases fields with
-      | nil => simp [placeSlots] at placed
-      | cons field fields =>
-        cases tail : placeSlots active fields with
-        | error fault => simp [placeSlots, tail, Bind.bind, Except.bind] at placed
-        | ok rest =>
-          simp [placeSlots, tail, Bind.bind, Except.bind, pure, Except.pure] at placed
-          subst slots
-          obtain ⟨ordered, sized⟩ := ih tail
-          simp [ordered, sized]
-
-/-- Removing gaps from a successful layout recovers the declared fields in order. -/
-theorem placeSlots_fields {active : List Bool} {fields : List (Desc × Value)}
-    {slots : List (Option (Desc × Value))} (placed : placeSlots active fields = .ok slots) :
-    slots.filterMap id = fields :=
-  -- Field preservation follows independently of the number of gaps.
-  (placeSlots_preserves placed).1
-
-/-- A successful layout has exactly one slot for every declared position. -/
-theorem placeSlots_length {active : List Bool} {fields : List (Desc × Value)}
-    {slots : List (Option (Desc × Value))} (placed : placeSlots active fields = .ok slots) :
-    slots.length = active.length :=
-  -- Gaps occupy positions just as present fields do.
-  (placeSlots_preserves placed).2
 
 /-- Positions of a progressive container, each naming the field that sits there. -/
 def layoutSlots (active : List Bool) (fields : List Desc) (values : List Value) :
     Except Err (List (Option (Desc × Value))) := do
-  -- Every field has one value, so pairing the lists cannot discard any input.
   if fields.length != values.length then throw .typeMismatch
   -- EIP-7495 assigns one field to each set bit, including positions after gaps.
   let count := active.countP id
@@ -162,6 +110,7 @@ def fixedLeaf (shape : Desc) (value : Value) : Except Err MerkleLayout := do
 The subtree a sequence of elements takes.
 
 Basic elements share nodes, so they pack into one run of bytes.
+
 Anything else brings a root of its own, one leaf apiece.
 
 The positions are the sequence's declared capacity, or none where a spine bounds nothing.
@@ -172,13 +121,11 @@ def sequenceLayout (element : Desc) (elements : List Value) (positions : Option 
     -- Packed elements are counted in nodes, so a declared capacity is measured in bytes.
     let capacity := positions.map fun count => chunksForBytes (count * element.itemLength)
     return .packing (packElements (← serializeEach element elements)) capacity mixin
-  -- One leaf per element, so a declared capacity is already the node count.
   return .nesting (elements.map fun value => some (element, value)) positions mixin
 
 /-- How one value merkleizes: its leaves, their tree shape, and the word mixed in. -/
 def merkleLayout (shape : Desc) (value : Value) : Except Err MerkleLayout :=
   match shape, value with
-  -- Three shapes are their own encoding, and all three lay it down the same way.
   | .bool, _ | .uint _, _ | .byteVector _, _ => fixedLeaf shape value
   | .byteList limit, .bytes data => do
     if data.size > limit then throw (.overLimit limit data.size)
@@ -207,10 +154,9 @@ def merkleLayout (shape : Desc) (value : Value) : Except Err MerkleLayout :=
     sequenceLayout element elements none (lengthWord elements.length)
   | .container _ fields, .seq values => do
     if fields.length != values.length then throw .typeMismatch
-    -- A struct puts one leaf per field, each carrying that field's own root.
     return .nesting ((fields.zip values).map some) (some fields.length)
   | .progressiveContainer active _ fields, .seq values => do
-    -- One leaf per layout position, not per field, whatever the formula reads like.
+    -- One leaf per layout position, not per field.
     return .nesting (← layoutSlots active fields values) none (activeFieldsWord active)
   | .compatibleUnion selectors options, .union selector data => do
     -- The union adds no leaf of its own, so one leaf of capacity is a tree of no depth.

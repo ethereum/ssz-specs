@@ -1,54 +1,33 @@
+import Ssz.Hash.Sha256
+import Ssz.Type.Desc
+import Ssz.Type.Value
+import Ssz.Type.Valid
+import Ssz.Type.Default
+import Ssz.Type.Paths
+import Ssz.Codec.Error
+import Ssz.Codec.Serialize
+import Ssz.Codec.Deserialize
+import Ssz.Codec.Layout
+import Ssz.Codec.Json
+import Ssz.Codec.Root
+import Ssz.Codec.Proof
 import Ssz.Merkle.Chunk
 import Ssz.Merkle.Merkleize
 import Ssz.Merkle.Tree
 import Ssz.Merkle.Gindex
 import Ssz.Merkle.Verify
-import Ssz.Merkle.MultiproofBinding
-import Ssz.Merkle.Authentication
-import Ssz.Merkle.Multiproof
-import Ssz.Hash.Sha256
-import Ssz.Hash.Sha256Constants
-import Ssz.Hash.Sha256Laws
-import Ssz.Hash.Sha256Spec
-import Ssz.Type.Desc
-import Ssz.Type.Value
-import Ssz.Type.Paths
-import Ssz.Type.PathLaws
-import Ssz.Type.PathSteps
-import Ssz.Type.Valid
-import Ssz.Codec.Fits
-import Ssz.Type.Default
-import Ssz.Type.DefaultLaws
-import Ssz.Type.FitsLaws
-import Ssz.Type.Equality
-import Ssz.Type.CompatibilitySymmetry
-import Ssz.Type.CompatibilityIndices
-import Ssz.Codec.Error
-import Ssz.Codec.Serialize
-import Ssz.Codec.Deserialize
-import Ssz.Codec.Admits
-import Ssz.Codec.DecodeFits
-import Ssz.Codec.Canonicality
-import Ssz.Codec.Totality
-import Ssz.Codec.Size
-import Ssz.Codec.Aliases
-import Ssz.Codec.RoundTrip
-import Ssz.Codec.Layout
-import Ssz.Codec.Root
-import Ssz.Codec.RootDomain
-import Ssz.Codec.Binding
-import Ssz.Codec.Proof
-import Ssz.Codec.ProofCorrectness
-import Ssz.Codec.MultiproofConstruction
-import Ssz.Codec.PathValues
-import Ssz.Codec.PathDomain
-import Ssz.Codec.ProofTree
-import Ssz.Codec.LayoutProofTree
-import Ssz.Codec.NestedProof
-import Ssz.Flat.Fold
-import Ssz.Flat.Walk
-import Ssz.Flat.Bounded
-import Ssz.Audit
 
--- Check the complete imported specification, including every proof module.
-audit_ssz
+/-!
+# `Ssz`
+
+The executable specification: everything an implementer reads.
+
+    Ssz/Type    declarations, values, well-formedness, defaults, and paths
+    Ssz/Codec   serialization, deserialization, layouts, roots, and proofs
+    Ssz/Merkle  bounded and progressive trees, indices, and verification
+    Ssz/Hash    pure SHA-256
+
+Nothing here is a proof.
+
+The properties proved of these definitions sit under `Ssz/Proofs`, mirroring this layout.
+-/

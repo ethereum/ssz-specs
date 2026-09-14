@@ -13,7 +13,6 @@ inductive Slot where
 
 /-- The bytes a slot holds in place, a body having none of its own here. -/
 def Slot.held : Slot → Bytes
-  -- Only inline slots carry bytes directly in the header.
   | .inline bytes => bytes
   | .body _ => #[]
 
@@ -41,11 +40,11 @@ def unpackBits (data : Bytes) (count : Nat) : Array Bool :=
 /--
 Position of the highest set bit of a byte, counted from the low end.
 
-Returns zero for an all-zero byte.
-The delimited-bit decoder rejects that case before locating its delimiter.
+Zero is returned for an all-zero byte.
+
+The bitlist decoder rejects that case before it looks for a delimiter.
 -/
 def highestBit (byte : UInt8) : Nat :=
-  -- Search from bit seven downward so the first set bit is the delimiter position.
   if (byte >>> UInt8.ofNat 7) &&& 1 == 1 then 7
   else if (byte >>> UInt8.ofNat 6) &&& 1 == 1 then 6
   else if (byte >>> UInt8.ofNat 5) &&& 1 == 1 then 5
@@ -63,10 +62,10 @@ Width of each body, from the table and the budget it closes over.
     spans         12..17   17..20   20..27
 
 The whole table is settled before any body is read.
+
 A corrupt one is then refused as a table, not as whatever a bad span made of it.
 -/
 def offsetSpans : List Nat → Nat → Except Err (List Nat)
-  -- No bodies leaves no spans to measure.
   | [], _ => .ok []
   -- The final body is closed by the budget rather than by another offset.
   | [start], scope =>
@@ -78,7 +77,6 @@ def offsetSpans : List Nat → Nat → Except Err (List Nat)
 
 /-- Where each field's bytes sit inside a struct's encoding. -/
 def readSlots : List Desc → Bytes → Nat → Except Err (List Slot × Nat)
-  -- No fields left, so the fixed part ends here.
   | [], _, position => .ok ([], position)
   | field :: fields, data, position =>
     match field.fixedSize with
@@ -106,8 +104,22 @@ def takeSlots (data : Bytes) : List Slot → List Nat → Except Err (List Bytes
   -- A variable field consumes exactly one validated span and extracts those payload bytes.
   | .body start :: rest, span :: spans => do
       return data.extract start (start + span) :: (← takeSlots data rest spans)
-  -- A body with no span left is a table shorter than the fields that read it.
+  -- A body with no span left means a table shorter than the fields that read it.
   | .body _ :: _, [] => .error .badDeclaration
+
+/--
+The budget a struct encoding has to give, settled before any of its fields is read.
+
+Checking it here is what makes a refusal name the input rather than whichever field ran out.
+-/
+def structBudget (fields : List Desc) (scope : Nat) : Except Err Unit :=
+  match Desc.fieldsFixedSize fields with
+  -- A struct of fixed width encodes to that width exactly, at every value it holds.
+  | some width => if scope != width then .error (.scope width scope) else .ok ()
+  -- A fixed part wider than the budget would read bytes belonging to something else.
+  | none =>
+    let front := Desc.leadingWidth fields
+    if scope < front then .error (.scopeTooSmall front scope) else .ok ()
 
 /--
 Each field's own bytes, cut out of a struct encoding.
@@ -115,17 +127,16 @@ Each field's own bytes, cut out of a struct encoding.
 Fixed fields are read in place, and each variable one is reached through its offset.
 -/
 def structSlices (fields : List Desc) (data : Bytes) : Except Err (List Bytes) := do
-  -- Composite encodings must fit the same four-byte offset budget as serialization.
+  -- A composite encoding faces the same four-byte offset bound as serialization.
   if data.size ≥ 2 ^ (8 * bytesPerOffset) then throw (.offsetOverflow data.size)
-  -- Read field bytes and body references while tracking the end of the header.
+  structBudget fields data.size
   let (slots, leading) ← readSlots fields data 0
   let offsets := bodyStarts slots
   -- With no bodies, the slots just read are the whole encoding.
   if offsets.isEmpty then
     if data.size != leading then throw (.scope leading data.size)
     return slots.map Slot.held
-  -- The first body starts where the slots end.
-  -- Any other value leaves a gap or an overlap.
+  -- The first body starts where the slots end; anything else leaves a gap or an overlap.
   if offsets[0]! != leading then throw (.firstOffset leading offsets[0]!)
   -- Validate the complete offset order before extracting any variable payload.
   let spans ← offsetSpans offsets data.size
@@ -134,11 +145,9 @@ def structSlices (fields : List Desc) (data : Bytes) : Except Err (List Bytes) :
 /-- Byte ranges of a fixed-count sequence, with offsets only for variable-size elements. -/
 def vectorSlices (element : Desc) (length : Nat) (data : Bytes) :
     Except Err (List Bytes) := do
-  -- Fixed elements share the composite size bound even when no offsets are written.
   if data.size ≥ 2 ^ (8 * bytesPerOffset) then throw (.offsetOverflow data.size)
   match element.fixedSize with
   | some width =>
-    -- A known width and a known count fix the budget exactly.
     let expected := width * length
     if data.size != expected then throw (.scope expected data.size)
     return (List.range length).map fun i => data.extract (i * width) ((i + 1) * width)
@@ -149,18 +158,14 @@ def vectorSlices (element : Desc) (length : Nat) (data : Bytes) :
     if length == 0 then return []
     let offsets := readOffsets data length
     if offsets[0]! != expectedFirst then throw (.firstOffset expectedFirst offsets[0]!)
-    -- Validated spans pair each declared offset with its exact body interval.
     let spans ← offsetSpans offsets data.size
     return (offsets.zip spans).map fun (start, span) => data.extract start (start + span)
 
 /-- Where each element's bytes sit, for a sequence whose count the encoding carries. -/
 def listSlices (element : Desc) (limit : Option Nat) (data : Bytes) :
     Except Err (List Bytes) := do
-  -- Accept only budgets that the composite encoder can represent.
   if data.size ≥ 2 ^ (8 * bytesPerOffset) then throw (.offsetOverflow data.size)
-  -- All element intervals are bounded by this complete input length.
   let scope := data.size
-  -- An empty list fits every nonnegative capacity.
   if scope == 0 then return []
   match element.fixedSize with
   | some width =>
@@ -172,8 +177,7 @@ def listSlices (element : Desc) (limit : Option Nat) (data : Bytes) :
       if count > cap then throw (.overLimit cap count)
     return (List.range count).map fun i => data.extract (i * width) ((i + 1) * width)
   | none =>
-    -- The first offset is the table's own width.
-    -- It gives the count as well as the start.
+    -- The first offset is the table's own width, so it gives the count as well as the start.
     if scope < bytesPerOffset then throw (.scopeTooSmall bytesPerOffset scope)
     let first := readUint data 0 bytesPerOffset
     if first < bytesPerOffset then throw .offsetBelowTable
@@ -213,11 +217,10 @@ mutual
 def deserialize : Desc → Bytes → Except Err Value
   | .bool, data => do
     if data.size != 1 then throw (.scope 1 data.size)
-    -- Anything above one has no boolean it could have come from.
     match data[0]! with
     | 0 => return .bool false
     | 1 => return .bool true
-    | _ => throw .typeMismatch
+    | byte => throw (.notABit byte.toNat)
   | .uint width, data => do
     if data.size != width then throw (.scope width data.size)
     return .uint (readUint data 0 width)
@@ -252,17 +255,14 @@ def deserialize : Desc → Bytes → Except Err Value
     let slices ← structSlices fields data
     return .seq (← deserializeFields fields slices)
   | .compatibleUnion selectors options, data => do
-    -- One byte of selector comes first, and the option's own encoding follows.
     if data.size < 1 then throw .noSelector
     deserializeOption selectors options (data[0]!).toNat (data.extract 1 data.size)
 termination_by d => (sizeOf d, 0)
 
 /-- Each element of a sequence decoded on its own. -/
 def deserializeEach (element : Desc) : List Bytes → Except Err (List Value)
-  -- No slices left is no elements read.
   | [] => .ok []
   | slice :: rest => do
-    -- Each slice is decoded against the one element type they all share.
     let head ← deserialize element slice
     let tail ← deserializeEach element rest
     return head :: tail
@@ -270,14 +270,11 @@ termination_by slices => (sizeOf element, slices.length + 1)
 
 /-- Each field of a struct decoded on its own, against the type it was declared as. -/
 def deserializeFields : List Desc → List Bytes → Except Err (List Value)
-  -- Both lists run out together, which is what pairing one to one means.
   | [], [] => .ok []
   | field :: fields, slice :: slices => do
-    -- Each slice is decoded against the type its own field was declared as.
     let head ← deserialize field slice
     let tail ← deserializeFields fields slices
     return head :: tail
-  -- A struct given a different number of slices than it has fields fits no type.
   | _, _ => .error .typeMismatch
 termination_by fields => (sizeOf fields, 0)
 
@@ -285,6 +282,7 @@ termination_by fields => (sizeOf fields, 0)
 The value of the option a selector names, under that selector.
 
 The option is searched for here rather than looked up and returned.
+
 What is decoded then stays a part of the union's own type.
 -/
 def deserializeOption : List Nat → List Desc → Nat → Bytes → Except Err Value

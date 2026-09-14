@@ -4,6 +4,28 @@ A pure Lean 4 implementation of SSZ, with machine-checked codec and Merkle-tree 
 Types are represented as data, so one encoder, decoder, and merkleizer cover the implemented universe.
 The package has no third-party dependencies.
 
+## Reading this package
+
+The executable specification and the proofs about it live in two separate trees, and only the first is meant to be read.
+
+```text
+Ssz/            the executable specification, about 3,000 lines
+Ssz/Proofs/     the machine-checked properties of it, about 18,000 lines
+```
+
+`Ssz/Proofs` mirrors the layout of `Ssz`: what is proved about `Ssz.Codec.Serialize` sits in `Ssz.Proofs.Codec.Serialize`.
+Nothing under `Ssz/` imports anything under `Ssz/Proofs/`, and the build enforces that.
+An implementer therefore reads `Ssz/` and stops there; [Proven properties](#proven-properties) below says in prose what the other tree establishes.
+
+```text
+Ssz/Type      declarations, values, well-formedness, defaults, and paths
+Ssz/Codec     serialization, deserialization, the JSON mapping, layouts, roots, and proofs
+Ssz/Merkle    bounded and progressive trees, indices, and verification
+Ssz/Hash      pure SHA-256
+Conformance   readers for the released vectors and for the differential corpus
+Tests         independent regression checks
+```
+
 ## Scope
 
 The type universe covers unsigned integers, booleans, byte sequences, bitfields,
@@ -24,82 +46,99 @@ Proof requests deliberately reject the root itself, empty requests, duplicate in
 and ancestor/descendant pairs.
 This is stricter than the generalized-index arithmetic in the reference proof helpers.
 
-## Layout
-
-```text
-Ssz/Type      declarations, values, defaults, compatibility, and paths
-Ssz/Codec     serialization, deserialization, value roots, and proofs
-Ssz/Merkle    bounded and progressive trees, indices, and verification
-Ssz/Flat      the equivalent construction from leaves upward
-Ssz/Hash      pure SHA-256
-Ssz/Audit     automatic axiom audit over SSZ declarations
-Conformance   fixture and differential-test readers
-Tests         independent regression checks
-```
-
 For example, a progressive container with layout `[true, false, true]` has two fields.
 Its serialization contains only those two fields.
 Its Merkle tree contains three positions: the first field, a zero leaf, and the second field.
 The layout is mixed into the root so an absent field differs from a present zero-valued field.
+
+### The JSON mapping
+
+An SSZ schema defines a JSON encoding as well as a byte encoding, and both are implemented here.
+
+SSZ gives the byte alias and a one-byte unsigned integer the same type; the JSON mapping does not,
+writing the alias as a hex string where it writes the integer as decimal digits in a string.
+A declaration alone therefore does not say which document a value is written as, so the mapping
+takes a *spelling* beside the declaration: one node per node, marking where the alias was used.
+A declaration that never uses the alias needs no spelling of its own.
+
+Only the spelling the mapping gives is accepted, which is stricter than the Python implementation twice:
+
+| The document | Here | The Python implementation |
+| --- | --- | --- |
+| A bitfield or byte sequence written as an array of its elements | Refused as an element of the wrong kind | Accepted beside the hex string |
+| A hex byte string with no `0x` | Refused | Accepted on a byte array |
+
+Both are leniency in the reference rather than anything the mapping spells, and no vector asserts
+either: the invalid vectors that write an array assert only the name the refusal carries.
 
 ## Build and test
 
 Generate the local fixtures with `just fill` before running conformance tests.
 
 ```bash
+just lean-spec     # build the executable specification alone, without its proofs
 just lean          # build the package and check its proofs
-just lean-test     # run local fixtures and independent Lean regressions
+just lean-test     # run the released vectors and the independent Lean regressions
 just lean-parity   # compare generated cases with the Python implementation
 ```
 
 The toolchain is pinned in `lean-toolchain`.
 Warnings are errors, so unfinished proofs fail the build.
 The axiom audit checks public and private SSZ declarations automatically.
-The build recipe also rejects specification files omitted from the audited import closure.
-CI rebuilds the specification from source and runs the fixture, regression, and differential checks.
+The build recipe also rejects specification files omitted from the audited import closure,
+and rejects a proof module reached from the implementation tree.
+CI rebuilds the specification from source and runs the vector, regression, and differential checks.
 Only Lean's standard logical axioms are allowed: propositional extensionality,
 classical choice, and quotient soundness.
 Execution of compiled tests additionally trusts the Lean compiler and runtime.
 
-The local fixtures check serialization, roots, round trips, and rejection reasons.
-Differential tests also compare defaults, compatibility, paths, branches, and multiproofs.
-These fixtures are generated by this repository's Python implementation; agreement is not an independent proof of conformance.
+The released vectors check all six of the formats `fixtures/` carries: byte encodings and their
+roots, illegal declarations, generalized indices, JSON documents, single branches, and multiproofs.
+Each vector carries its own declaration, so no registry of named types is kept on this side.
+Differential tests additionally compare defaults, compatibility, paths, branches, and multiproofs
+on types neither implementation was written for.
+These vectors are generated by this repository's Python implementation; agreement is not an
+independent proof of conformance.
 The Lean regressions add independent SHA-256 answers, deep-tree checks, malformed inputs,
 and exhaustive canonical re-encoding checks for one- and two-byte inputs across twelve small types.
 
 ## Proven properties
 
-- [Codec equivalence](Ssz/Codec/Canonicality.lean): encoding and decoding describe the same relation for every well-formed implemented type.
+- [Codec equivalence](Ssz/Proofs/Codec/Canonicality.lean): encoding and decoding describe the same relation for every well-formed implemented type.
   Values survive round trips, and every accepted byte string is canonical.
-- [Admissibility](Ssz/Codec/DecodeFits.lean): successful decoding produces a value of the declared shape.
+- [Admissibility](Ssz/Proofs/Codec/DecodeFits.lean): successful decoding produces a value of the declared shape.
   Successful encoding also establishes admissibility for well-formed declarations.
-- [Encoding sizes](Ssz/Codec/Size.lean): structural byte counts and the four-byte offset bounds characterize successful serialization of admissible values, with exactly the predicted size.
+- [Encoding sizes](Ssz/Proofs/Codec/Size.lean): structural byte counts and the four-byte offset bounds characterize successful serialization of admissible values, with exactly the predicted size.
   An admissible value can fail serialization only through offset overflow.
-- [Defaults](Ssz/Type/DefaultLaws.lean): every successfully constructed default fits its declaration.
+- [Defaults](Ssz/Proofs/Type/DefaultLaws.lean): every successfully constructed default fits its declaration.
   The executable admissibility check agrees with the logical predicate for well-formed declarations.
-- [Compatibility](Ssz/Type/CompatibilitySymmetry.lean): checks are reflexive and symmetric, and matching progressive field positions preserve names and compatible types.
+- [Compatibility](Ssz/Proofs/Type/CompatibilitySymmetry.lean): checks are reflexive and symmetric, and matching progressive field positions preserve names and compatible types.
   Compatibility is deliberately not transitive, as a checked counterexample demonstrates.
-  [Shared addresses](Ssz/Type/CompatibilityIndices.lean): compatible progressive containers place a field of one name at one generalized index, so appending fields leaves earlier fields where a proof can still read them.
+  [Shared addresses](Ssz/Proofs/Type/CompatibilityIndices.lean): compatible progressive containers place a field of one name at one generalized index, so appending fields leaves earlier fields where a proof can still read them.
   Every option a union declares is compatible with every other, and each hangs at the same node whichever option the value carries.
-- [Byte aliases](Ssz/Codec/Aliases.lean): byte arrays and sequences of eight-bit integers have equal encodings within the composite offset range, and equal roots.
-- [Tree construction](Ssz/Merkle/Tree.lean): executable bounded and progressive trees agree with their mathematical definitions.
+- [Byte aliases](Ssz/Proofs/Codec/Aliases.lean): byte arrays and sequences of eight-bit integers have equal encodings within the composite offset range, and equal roots.
+- [Tree construction](Ssz/Proofs/Merkle/Tree.lean): executable bounded and progressive trees agree with their mathematical definitions.
   Padding, subtree extraction, and upward construction preserve roots at arbitrary depths.
-- [Value roots](Ssz/Codec/RootDomain.lean): every admissible value of a well-formed type has a 32-byte root, independently of serialization's offset limit.
-- [Constructed branches](Ssz/Codec/ProofCorrectness.lean): a branch built for any readable node reconstructs the value's root and passes verification, including across nested type boundaries.
-- [Multiproofs](Ssz/Merkle/Multiproof.lean): the computed helper frontier suffices for reconstruction, and proofs read from a finite tree rebuild its root.
-  [Construction from values](Ssz/Codec/MultiproofConstruction.lean) derives helper readability and reconstruction directly from successful value roots and claimed-node reads.
+- [Value roots](Ssz/Proofs/Codec/RootDomain.lean): every admissible value of a well-formed type has a 32-byte root, independently of serialization's offset limit.
+- [Constructed branches](Ssz/Proofs/Codec/ProofCorrectness.lean): a branch built for any readable node reconstructs the value's root and passes verification, including across nested type boundaries.
+- [Multiproofs](Ssz/Proofs/Merkle/Multiproof.lean): the computed helper frontier suffices for reconstruction, and proofs read from a finite tree rebuild its root.
+  [Construction from values](Ssz/Proofs/Codec/MultiproofConstruction.lean) derives helper readability and reconstruction directly from successful value roots and claimed-node reads.
   No parent equations are required below leaves.
-- [Type paths](Ssz/Codec/PathSelection.lean): recursive selections through present fields and elements agree with the value walker across every supported type family.
+- [Type paths](Ssz/Proofs/Codec/PathSelection.lean): recursive selections through present fields and elements agree with the value walker across every supported type family.
   Packed elements select their containing chunk, reserved steps select mixing words, and union descent follows the active option.
   A type-only index can name an absent position without asserting that a value is present; every readable padding node remains covered by the general branch theorem.
-- [Authentication](Ssz/Merkle/Authentication.lean): two accepted branches at the same index and root either open the same leaf or exhibit a SHA-256 collision between actual 64-byte branch inputs.
-  [Multiproof binding](Ssz/Merkle/MultiproofBinding.lean) gives the same guarantee for shared claims across different requests, with collision witnesses from the verifier's hash inputs.
-- [Whole-value binding](Ssz/Codec/Binding.lean): admissible values of the same well-formed type with equal roots are equal, or their Merkle computations contain distinct 64-byte inputs with equal SHA-256 hashes.
-  [CommitmentSized](Ssz/Codec/BindingDomain.lean) requires every nested variable collection count to fit its 256-bit mixing word.
+- [Authentication](Ssz/Proofs/Merkle/Authentication.lean): two accepted branches at the same index and root either open the same leaf or exhibit a SHA-256 collision between actual 64-byte branch inputs.
+  [Multiproof binding](Ssz/Proofs/Merkle/MultiproofBinding.lean) gives the same guarantee for shared claims across different requests, with collision witnesses from the verifier's hash inputs.
+- [Whole-value binding](Ssz/Proofs/Codec/Binding.lean): admissible values of the same well-formed type with equal roots are equal, or their Merkle computations contain distinct 64-byte inputs with equal SHA-256 hashes.
+  [CommitmentSized](Ssz/Proofs/Codec/BindingDomain.lean) requires every nested variable collection count to fit its 256-bit mixing word.
   The proof recovers lengths, selectors, packed data, and nested values; callers supply no tree-alignment assumption.
-- [SHA-256](Ssz/Hash/Sha256Spec.lean): the executable hash agrees with a separate mathematical model using 32-bit bitvectors, recursive message expansion, and the FIPS compression equations.
+- [SHA-256](Ssz/Proofs/Hash/Sha256Spec.lean): the executable hash agrees with a separate mathematical model using 32-bit bitvectors, recursive message expansion, and the FIPS compression equations.
   The theorem covers byte messages shorter than 2^61 bytes, as required by the 64-bit bit-length field.
-  [Published constants](Ssz/Hash/Sha256Constants.lean): the eight chaining words and sixty-four round constants are checked against the square and cube roots of the first primes, rather than trusted as literals.
+  [Published constants](Ssz/Proofs/Hash/Sha256Constants.lean): the eight chaining words and sixty-four round constants are checked against the square and cube roots of the first primes, rather than trusted as literals.
+
+The JSON mapping carries no proofs of its own.
+It is checked against the released JSON vectors, and against the Python writer on the types the
+differential corpus draws.
 
 Composite serialization and deserialization both require fewer than 2^32 bytes at each composite level.
 Primitive byte arrays have no offset table and therefore no such limit of their own.

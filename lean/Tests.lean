@@ -2,7 +2,7 @@ import Ssz
 
 /-! Regression checks independent of the Python SSZ implementation. -/
 
-open Ssz
+open Ssz Lean
 
 private def expect (label : String) (holds : Bool) : IO Unit := do
   -- A failed invariant stops the executable with a useful case name.
@@ -13,6 +13,13 @@ private def checkCanonical (shape : Desc) (bytes : Bytes) : IO Unit := do
   match deserialize shape bytes with
   | .error _ => pure ()
   | .ok value => expect "accepted bytes have a different encoding" ((serialize shape value).toOption == some bytes)
+
+private def checkDocument (shape : Desc) (spelling : Spelling) (value : Value) : IO Unit := do
+  -- The mapping is a round trip: what a value is written as must read back as that value.
+  let .ok document := jsonOf shape spelling value | throw (IO.userError "a value has no document")
+  match valueOf shape spelling document with
+  | .error _ => throw (IO.userError s!"a written document was refused: {document.compress}")
+  | .ok read => expect s!"document round trip for {document.compress}" (read == value)
 
 private def checkBranches (shape : Desc) (value : Value) : IO Unit := do
   -- Authenticate all readable nodes in a finite prefix, including padding and mixed-in words.
@@ -39,6 +46,10 @@ example (left right : Bytes) :
 def main : IO Unit := do
   -- A splice cannot turn a nonexistent outer node into a valid index.
   expect "zero outer index" ((gindexConcat 0 3).isOk == false)
+  -- SSZ names six integer widths, and a declaration of any other is refused as a width.
+  expect "uint of no width" ((Desc.uint 0).wellFormed.isOk == false)
+  expect "uint splitting a chunk" ((Desc.uint 3).wellFormed.isOk == false)
+  expect "uint past a chunk" ((Desc.uint 64).wellFormed.isOk == false)
   -- A fixed shape of no width encodes to nothing, so no count of them could be recovered.
   expect "zero-width bit vector" ((Desc.bitVector 0).wellFormed.isOk == false)
   expect "zero-width byte array" ((Desc.byteVector 0).wellFormed.isOk == false)
@@ -113,7 +124,7 @@ def main : IO Unit := do
     0xf5, 0x2b, 0x23, 0xdb, 0x1f, 0xbb, 0x6d, 0xed, 0x89, 0xef, 0x42, 0xa2, 0x3c, 0xe0, 0xc8, 0x92,
     0x2c, 0x45, 0xf2, 0x5c, 0x50, 0xb5, 0x68, 0xa9, 0x3b, 0xf1, 0xc0, 0x75, 0x42, 0x0b, 0xbb, 0x7c])
   -- Shifting one byte across a child boundary preserves concatenation but violates SSZ.
-  -- Mutation: two 32-byte children become lengths 31 and 33 while their concatenation stays 64 bytes.
+  -- Mutation: two 32-byte children become 31 and 33, concatenating to the same 64 bytes.
   let short := Array.replicate 31 (0 : UInt8)
   let long := Array.replicate 33 (0 : UInt8)
   let root := combine zeroChunk zeroChunk
@@ -134,7 +145,7 @@ def main : IO Unit := do
     .bitVector 9, .bitList 9, .progressiveBitList, .list .bool 2,
     .vector .bool 2, .progressiveList .bool, .compatibleUnion [1] [.bool]]
   for shape in shapes do
-    -- The empty byte string exercises rejection and empty-value encodings separately for each type.
+    -- The empty byte string covers both a refusal and an empty-value encoding.
     checkCanonical shape #[]
     -- Every possible first byte includes valid tags, invalid tags, and delimiter positions.
     for first in [0:256] do
@@ -142,6 +153,42 @@ def main : IO Unit := do
       -- Every possible second byte also tests partial final bytes and trailing-data rejection.
       for second in [0:256] do
         checkCanonical shape #[UInt8.ofNat first, UInt8.ofNat second]
+  -- The byte alias is hex where a one-byte integer of the very same type is decimal digits.
+  expect "byte alias document"
+    ((jsonOf (.uint 1) .byte (.uint 255)).toOption.map Json.compress == some "\"0xff\"")
+  expect "one-byte integer document"
+    ((jsonOf (.uint 1) .opaque (.uint 255)).toOption.map Json.compress == some "\"255\"")
+  -- A bitfield is the hex of its own encoding, so its delimiter bit is part of the document.
+  expect "bit list document"
+    ((jsonOf .progressiveBitList .opaque (.bits #[true, false, true])).toOption.map Json.compress
+      == some "\"0x0d\"")
+  -- An integer wider than a double is written as digits in a string, and survives being read.
+  checkDocument .uint64 .opaque (.uint (2 ^ 64 - 1))
+  checkDocument .uint256 .opaque (.uint (2 ^ 256 - 1))
+  -- Every shape of document the mapping writes has to read back as the value it came from.
+  checkDocument (.byteList 4) .opaque (.bytes #[1, 2, 3])
+  checkDocument (.bitList 9) .opaque (.bits #[true, false, true, true])
+  checkDocument (.vector (.uint 1) 2) (.plain [.byte]) (.seq [.uint 1, .uint 2])
+  checkDocument (.container ["a", "b"] [.uint16, .bool]) .opaque (.seq [.uint 7, .bool true])
+  checkDocument (.compatibleUnion [1, 2] [.uint16, .uint16]) .opaque (.union 2 (.uint 9))
+  -- The mapping writes a bitfield and a byte sequence as one hex string, never as an array.
+  expect "bit list written as an array"
+    ((valueOf (.bitList 20) .opaque (.arr #[.bool true])).isOk == false)
+  expect "byte list written as an array"
+    ((valueOf (.byteList 8) .opaque (.arr #[.str "0x01"])).isOk == false)
+  -- An empty object asks for a default, and no option of a union stands above the others.
+  expect "union written as an empty object"
+    ((valueOf (.compatibleUnion [1] [.uint16]) .opaque (Json.mkObj [])).isOk == false)
+  -- A hex string without its marker renders nothing the mapping writes.
+  expect "unmarked hex" ((valueOf (.byteVector 1) .opaque (.str "ff")).isOk == false)
+  -- An object is held to naming every field its struct declares, and no other.
+  let pair := Desc.container ["a", "b"] [.uint16, .uint16]
+  expect "object leaving out a field"
+    ((valueOf pair .opaque (Json.mkObj [("a", .str "1")])).isOk == false)
+  expect "object naming an undeclared field"
+    ((valueOf pair .opaque (Json.mkObj
+      [("a", .str "1"), ("b", .str "2"), ("c", .str "3")])).isOk == false)
+  expect "struct written as hex" ((valueOf pair .opaque (.str "0x01000200")).isOk == false)
   -- Equal offsets encode empty bodies, while a gap before the first body is invalid.
   let lists := Desc.list (.byteList 2) 2
   checkCanonical lists #[8, 0, 0, 0, 8, 0, 0, 0]

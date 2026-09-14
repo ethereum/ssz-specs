@@ -21,20 +21,16 @@ The default value of a type, which every type but one has.
 A composite builds from its parts, so a part with no default leaves it none.
 -/
 def Desc.default : Desc → Except Err Value
-  -- Scalar defaults are false or zero, independently of their encoded width.
   | .bool => .ok (.bool false)
   | .uint _ => .ok (.uint 0)
-  -- Fixed arrays preserve every declared position, filling it with zero.
   | .byteVector length => .ok (.bytes (Array.replicate length 0))
   | .bitVector length => .ok (.bits (Array.replicate length false))
-  -- A bounded or unbounded sequence holds nothing until something is put in it.
   | .byteList _ => .ok (.bytes #[])
   | .bitList _ => .ok (.bits #[])
   | .progressiveBitList => .ok (.bits #[])
   | .list _ _ => .ok (.seq [])
   | .progressiveList _ => .ok (.seq [])
   | .vector element length => do
-    -- Every position holds the element's own default, so the whole is built once.
     let one ← element.default
     return .seq (List.replicate length one)
   | .container _ fields => return .seq (← Desc.defaultFields fields)
@@ -44,12 +40,9 @@ def Desc.default : Desc → Except Err Value
 
 /-- The default of each field of a struct. -/
 def Desc.defaultFields : List Desc → Except Err (List Value)
-  -- A struct of no fields holds nothing to default.
   | [] => .ok []
   | field :: rest => do
-    -- Each field takes its own default, so a field with none leaves the struct with none.
     let head ← field.default
-    -- Every later field must also have a default before the container can be constructed.
     let tail ← Desc.defaultFields rest
     return head :: tail
 
@@ -57,7 +50,6 @@ end
 
 /-- Whether a value is the default of its own type, which the specification calls zeroed. -/
 def Desc.isZero (shape : Desc) (value : Value) : Except Err Bool := do
-  -- A type without a default reports an error rather than classifying its value as nonzero.
   return (← shape.default) == value
 
 end Ssz

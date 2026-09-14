@@ -34,13 +34,14 @@ def Desc.byteSequence : Desc → Option ByteShape
 
 /-- Layout position of each field of a progressive container, paired with its name. -/
 def placedFields (active : List Bool) (names : List String) : List (Nat × String) :=
-  -- Only active positions consume names, in declaration order.
   (active.zipIdx.filterMap fun (present, position) => if present then some position else none).zip names
 
-/-- The ordinal each field of a layout takes among the fields, paired with its position. -/
+/--
+The ordinal each field of a layout takes among the fields, paired with its position.
+
+Both are needed: the position addresses the tree, and the ordinal indexes the field list.
+-/
 def placedOrdinals (active : List Bool) (names : List String) : List (Nat × String × Nat) :=
-  -- The ordinal is where the field sits among the fields, not where it sits in the layout.
-  -- Both are needed: the position addresses the tree, the ordinal indexes the field list.
   (placedFields active names).zipIdx.map fun ((position, name), ordinal) =>
     (position, name, ordinal)
 
@@ -50,42 +51,38 @@ mutual
 Whether two types use compatible Merkle layouts.
 
 Reflexive and symmetric, but not transitive.
+
 Two layouts may each agree with a third on shared positions and still clash.
-The budget is the nesting of the two types, which is past anything the walk spends.
+
+The budget is the nesting of the two types, which is more than the walk can spend.
 -/
 def compatibleAt : Nat → Desc → Desc → Bool
-  -- An exhausted comparison cannot inspect another nested declaration.
   | 0, _, _ => false
   | budget + 1, left, right =>
-    -- One type is the shape of itself, and it is the only answer a bare shape has.
     if left == right then true
     else match left.byteSequence, right.byteSequence with
     -- A byte array and a sequence of single bytes are one shape, outranking what follows.
     | none, none =>
       match left, right with
       | .bool, .bool => true
-      -- A basic type answers for its width alone.
       | .uint a, .uint b => a == b
-      -- A bitfield answers for its capacity, and never across the three bitfield shapes.
+      -- No two of the three bitfield shapes agree, whatever capacity each declares.
       | .bitVector a, .bitVector b => a == b
       | .bitList a, .bitList b => a == b
-      -- A progressive bitfield carries no capacity, so any two of them agree on one.
+      -- A progressive bitfield declares no capacity, so any two of them agree.
       | .progressiveBitList, .progressiveBitList => true
-      -- A sequence answers for its capacity and its element type.
       | .vector leftElement a, .vector rightElement b =>
         a == b && compatibleAt budget leftElement rightElement
       | .list leftElement a, .list rightElement b =>
         a == b && compatibleAt budget leftElement rightElement
       | .progressiveList leftElement, .progressiveList rightElement =>
         compatibleAt budget leftElement rightElement
-      -- A struct names the same fields in the same order, holding compatible types.
       | .container leftNames leftFields, .container rightNames rightFields =>
         leftNames == rightNames && fieldsCompatible budget leftFields rightFields
       -- A progressive container answers for the positions its layout sets, not its width.
       | .progressiveContainer leftActive leftNames leftFields,
         .progressiveContainer rightActive rightNames rightFields =>
         layoutsAgree budget leftActive leftNames leftFields rightActive rightNames rightFields
-      -- Every option of one union must fit every option of the other.
       | .compatibleUnion _ leftOptions, .compatibleUnion _ rightOptions =>
         unionOptionsAgree budget leftOptions rightOptions
       | _, _ => false
@@ -94,9 +91,7 @@ termination_by budget => (budget, 0, 0)
 
 /-- Whether two field lists pair one to one, each pair compatible. -/
 def fieldsCompatible : Nat → List Desc → List Desc → Bool
-  -- Field comparisons succeed only when both lists end at the same ordinal.
   | _, [], [] => true
-  -- Every aligned field pair must agree, followed by all remaining pairs.
   | budget, left :: leftRest, right :: rightRest =>
     compatibleAt budget left right && fieldsCompatible budget leftRest rightRest
   | _, _, _ => false
@@ -106,43 +101,44 @@ termination_by budget left right => (budget, 2, sizeOf left + sizeOf right)
 def unionOptionsAgree : Nat → List Desc → List Desc → Bool
   | _, [], _ => true
   | budget, option :: rest, options =>
-    -- One crossing pair does not stand for the rest, the relation not being transitive.
+    -- Compatibility is not transitive, so one pair says nothing about the rest.
     optionAgainstAll budget option options && unionOptionsAgree budget rest options
 termination_by budget left right => (budget, 2, sizeOf left + sizeOf right)
 
 /-- Whether one option fits every option of another union. -/
 def optionAgainstAll : Nat → Desc → List Desc → Bool
-  -- Nothing left to disagree with.
   | _, _, [] => true
   | budget, option, other :: rest =>
-    -- Every pair is checked, the relation not carrying from one pair to the next.
     compatibleAt budget option other && optionAgainstAll budget option rest
 termination_by budget _ options => (budget, 1, sizeOf options)
 
 /--
 Whether two field layouts place the fields they share alike.
 
-A position set in both must hold one field name, of compatible types.
+A position set in both layouts must hold one field name, of compatible types.
+
 A name set in both must sit at one position.
+
 That does not follow from the first rule, since one name can sit at two positions.
+
 A position set in only one layout is free, the other leaving a zero leaf there.
 -/
 def layoutsAgree (budget : Nat) (leftActive : List Bool) (leftNames : List String)
     (leftFields : List Desc) (rightActive : List Bool) (rightNames : List String)
     (rightFields : List Desc) : Bool :=
-  -- Each crossing pair either shares one position or must use distinct names.
   (placedOrdinals leftActive leftNames).all fun left =>
     (placedOrdinals rightActive rightNames).all fun right =>
       layoutPairAgree budget leftFields rightFields left right
 termination_by (budget, 3, 0)
 
-/-- Shared positions require the same name and compatible types.
+/--
+Shared positions require the same name and compatible types.
+
 Distinct positions require distinct names.
 -/
 def layoutPairAgree (budget : Nat) (leftFields rightFields : List Desc)
     (left right : Nat × String × Nat) : Bool :=
   if left.1 == right.1 then
-    -- Matching positions must actually name fields on both sides.
     left.2.1 == right.2.1 &&
       match leftFields[left.2.2]?, rightFields[right.2.2]? with
       | some leftField, some rightField => compatibleAt budget leftField rightField
@@ -173,7 +169,9 @@ mutual
 Whether a declaration names a real type, and what it broke if it does not.
 
 Every rule here is one the specification lists under illegal types.
+
 Together they are what makes an encoding injective.
+
 A shape encoding to nothing at every value would let two values share one encoding.
 -/
 def Desc.wellFormed : Desc → Except Err Unit
@@ -184,9 +182,9 @@ def Desc.wellFormed : Desc → Except Err Unit
   | .vector element length => do
     if length == 0 then throw .vectorEmpty
     element.wellFormed
-  -- A fixed width of nothing encodes to nothing, which no count of them could recover.
-  | .bitVector length => if length == 0 then .error .widthZero else .ok ()
-  | .byteVector length => if length == 0 then .error .widthZero else .ok ()
+  -- A fixed count of nothing encodes to nothing, which no count of them could recover.
+  | .bitVector length => if length == 0 then .error .vectorEmpty else .ok ()
+  | .byteVector length => if length == 0 then .error .vectorEmpty else .ok ()
   | .list element _ => element.wellFormed
   | .progressiveList element => element.wellFormed
   | .container names fields => do
@@ -201,7 +199,6 @@ def Desc.wellFormed : Desc → Except Err Unit
     -- A layout holds at least one position, and never ends on a gap.
     if active.isEmpty then throw .layoutWidth
     if active.getLast! == false then throw .layoutTrailingGap
-    -- The complete active-position mask must fit the single 256-bit mixing word.
     if active.length > maxActiveFields then
       throw (.layoutTooWide active.length maxActiveFields)
     if fields.isEmpty then throw .containerEmpty
@@ -233,21 +230,18 @@ def Desc.wellFormed : Desc → Except Err Unit
 /-- Whether every type in a list names a real type. -/
 def Desc.allWellFormed : List Desc → Except Err Unit
   | [] => .ok ()
-  -- All nested declarations must be valid before the enclosing type can be accepted.
   | shape :: rest => do
     shape.wellFormed
     Desc.allWellFormed rest
 
 /-- Whether every pair of a union's options merkleizes alike. -/
 def Desc.optionsCompatible : List Nat → List Desc → Except Err Unit
-  -- One option, or none, has no pair to disagree.
   | _, [] => .ok ()
   | selectors, option :: rest => do
     -- This option is checked against every later one, so each pair is checked once.
     match (List.range rest.length).find? (fun slot => !isCompatible option rest[slot]!) with
     | some slot => throw (.unionIncompatible (selectors.headD 0) (selectors.getD (slot + 1) 0))
     | none => pure ()
-    -- Then the same again for the options that remain.
     Desc.optionsCompatible (selectors.drop 1) rest
 
 end

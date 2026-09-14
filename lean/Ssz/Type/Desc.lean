@@ -45,7 +45,6 @@ mutual
 
 /-- Structural equality, descending into nested components. -/
 def Desc.beq : Desc → Desc → Bool
-  -- Matching constructors compare their stored data, including every nested component.
   | .bool, .bool => true
   | .uint a, .uint b => a == b
   | .byteVector a, .byteVector b => a == b
@@ -62,20 +61,17 @@ def Desc.beq : Desc → Desc → Bool
       active == mask && names == others && Desc.beqList fields types
   | .compatibleUnion selectors options, .compatibleUnion others types =>
       selectors == others && Desc.beqList options types
-  -- Different constructors describe different objects, whatever their contents.
   | _, _ => false
 
 /-- Pairwise equality of nested components, preserving their order and count. -/
 def Desc.beqList : List Desc → List Desc → Bool
-  -- Lists agree only when both end together and each corresponding pair agrees.
-  -- Both component lists must end together, so extra fields cannot compare equal.
+  -- Both lists must end together, so extra fields cannot compare equal.
   | [], [] => true
   | x :: xs, y :: ys => Desc.beq x y && Desc.beqList xs ys
   | _, _ => false
 
 end
 
--- Boolean equality follows the complete nested declaration, including names and selectors.
 instance : BEq Desc := ⟨Desc.beq⟩
 
 mutual
@@ -86,30 +82,24 @@ Encoded width in bytes, where the type has one.
 Nothing is returned for a type whose encoding varies with the value it holds.
 -/
 def Desc.fixedSize : Desc → Option Nat
-  -- One byte carries a boolean, and its width is fixed by the encoding, not by the value.
   | .bool => some 1
   | .uint width => some width
   | .byteVector length => some length
   -- A fixed bit count still takes whole bytes, so the last one may be part padding.
   | .bitVector length => some ((length + 7) / 8)
-  -- A vector is fixed exactly when its element is.
-  -- It then holds that width once per element.
   | .vector element length => element.fixedSize.map (· * length)
   | .container _ fields => Desc.fieldsFixedSize fields
   -- A gap contributes no bytes, so only the declared fields are measured.
   | .progressiveContainer _ _ fields => Desc.fieldsFixedSize fields
-  -- Everything else carries a count that the encoding does not fix in advance.
   | _ => none
 
 /-- Total width of a field list, where every field has one. -/
 def Desc.fieldsFixedSize : List Desc → Option Nat
-  -- An empty field suffix contributes no additional encoded bytes.
   | [] => some 0
   | field :: rest =>
     match field.fixedSize, Desc.fieldsFixedSize rest with
-    -- Fixed fields concatenate without offsets, so their byte counts add.
     | some width, some remaining => some (width + remaining)
-    -- One variable field is enough to leave the whole struct variable.
+    -- One variable field leaves the whole struct variable.
     | _, _ => none
 
 end
@@ -119,15 +109,12 @@ mutual
 /--
 Levels of type nesting below this one.
 
-Bounds how far a path can descend.
-Each level of a path enters one nested type.
+This bounds how far a path can descend, since each step of a path enters one nested type.
 -/
 def Desc.nesting : Desc → Nat
-  -- A sequence adds one level above the type of its elements.
   | .vector element _ => element.nesting + 1
   | .list element _ => element.nesting + 1
   | .progressiveList element => element.nesting + 1
-  -- A field path can be only as deep as the deepest declared field.
   | .container _ fields => Desc.deepestNesting fields + 1
   | .progressiveContainer _ _ fields => Desc.deepestNesting fields + 1
   | .compatibleUnion _ options => Desc.deepestNesting options + 1
@@ -137,7 +124,6 @@ def Desc.nesting : Desc → Nat
 /-- The deepest nesting among a list of types. -/
 def Desc.deepestNesting : List Desc → Nat
   | [] => 0
-  -- The maximum covers every possible child selected by a later path.
   | shape :: rest => max shape.nesting (Desc.deepestNesting rest)
 
 end
@@ -145,9 +131,7 @@ end
 /--
 The six unsigned integers SSZ defines, named as the specification names them.
 
-Widths in declarations are byte counts.
-Eight bytes therefore describe a sixty-four-bit integer.
-The named widths use bit counts to match the SSZ specification.
+A width in a declaration is a byte count, so eight bytes is a sixty-four-bit integer.
 -/
 def Desc.uint8 : Desc := .uint 1
 
@@ -169,8 +153,8 @@ Width of the part of a struct's encoding that comes before the bodies.
 
 A fixed field sits there whole, and a variable one leaves an offset in its place.
 -/
-def Desc.leadingWidth (fields : List Desc) : Nat :=
-  -- Variable fields contribute four-byte offsets instead of their later bodies.
-  fields.foldl (fun total field => total + (field.fixedSize.getD bytesPerOffset)) 0
+def Desc.leadingWidth : List Desc → Nat
+  | [] => 0
+  | field :: rest => field.fixedSize.getD bytesPerOffset + Desc.leadingWidth rest
 
 end Ssz
