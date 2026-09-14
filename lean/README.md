@@ -138,8 +138,10 @@ and exhaustive canonical re-encoding checks for one- and two-byte inputs across 
   The proof recovers lengths, selectors, packed data, and nested values; callers supply no tree-alignment assumption.
 - [Summaries](Ssz/Proofs/Codec/Summary.lean): replacing a field by a 32-byte array holding that field's own root leaves the struct root unchanged.
   A party holding only the summary computes the root a party holding the value computes, so a proof about anything inside the replaced value verifies against both.
-- [The JSON mapping](Ssz/Proofs/Codec/JsonHex.lean): a hex string the mapping wrote reads back as the bytes it came from, in either letter case.
-  [Objects](Ssz/Proofs/Codec/JsonLaws.lean): a name written into an object is read back from it, and every name an object carries is one it was written from, so a written struct never trips the undeclared-field refusal.
+- [The JSON mapping](Ssz/Proofs/Codec/JsonLaws.lean): a document written for a value of any basic shape reads back as that value, which covers booleans, all six integer widths, the byte alias, both byte arrays, and all three bitfields.
+  A bitfield is the hex of its own encoding, so its case is the codec round trip.
+  [Hex](Ssz/Proofs/Codec/JsonHex.lean): a hex string the mapping wrote reads back as the bytes it came from.
+  Objects: a name written into one is read back from it, and every name an object carries is one it was written from, so a written struct never trips the undeclared-field refusal.
   The mapping is deliberately not canonical, and a checked counterexample gives two documents for one value.
 - [SHA-256](Ssz/Proofs/Hash/Sha256Spec.lean): the executable hash agrees with a separate mathematical model using 32-bit bitvectors, recursive message expansion, and the FIPS compression equations.
   The theorem covers byte messages shorter than 2^61 bytes, as required by the 64-bit bit-length field.
@@ -147,14 +149,12 @@ and exhaustive canonical re-encoding checks for one- and two-byte inputs across 
 
 ### What is not proved
 
-Four statements of the specification are checked only by vectors, and are named here rather than left to be discovered.
+Three statements of the specification are checked only by vectors, and are named here rather than left to be discovered.
 
-- The value-level JSON round trip, that writing a value and reading the document back returns it, for each of the thirteen shapes.
-  The hex layer and the object layer it rests on are proved above.
+- The JSON round trip for the six shapes that hold another: the two sequences, the unbounded sequence, both structs, and the union.
+  Every basic shape is proved above, as are the hex and object layers the composite cases rest on.
 - The size of a multiproof, which bounds the helper count by the claim count and the depth.
   What is proved is that the helper set is sound: an antichain, free of duplicates, and sufficient for reconstruction.
-- The closed forms of the progressive levels: the first chunk of each level, the cumulative capacity, and the depth of a chunk.
-  What is proved is that a chunk's path reaches the level and the leaf that hold it.
 - The cost of merkleizing with a capacity, which counts hash applications.
   Counting operations needs a cost-instrumented merkleizer beside the real one, which this package does not have.
 
