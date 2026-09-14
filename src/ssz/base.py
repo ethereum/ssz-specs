@@ -4,8 +4,10 @@ from collections.abc import Callable
 from functools import cache
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, TypeAdapter
+from pydantic import BaseModel, ConfigDict, TypeAdapter, ValidationInfo
 from pydantic_core import core_schema
+
+from ssz.exceptions import document_refusals
 
 
 class StrictBaseModel(BaseModel):
@@ -36,10 +38,13 @@ def wrapping_schema(
     - An instance is settled first, and reaches the field without meeting the constructor.
     - Every other accepted form is checked, then handed to the constructor.
     """
-    # The constructor accepts more than a field should.
-    # It refuses with an SSZ error, which pydantic does not recognize.
-    # Gating on the accepted forms first keeps every refusal a validation error.
-    wrap = core_schema.no_info_plain_validator_function(cls)
+
+    def build(value: Any, info: ValidationInfo) -> Any:
+        # A refusal pydantic does not recognize leaves a document a type error, not a fault.
+        with document_refusals(info.mode):
+            return cls(value)
+
+    wrap = core_schema.with_info_plain_validator_function(build)
     return core_schema.no_info_wrap_validator_function(
         # A field may hold a subclass of what it declares.
         # The constructor would narrow one back, refusing a value that was already right.

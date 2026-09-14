@@ -396,6 +396,34 @@ def test_a_bit_sequence_holding_something_other_than_a_bit(
     )
 
 
+def test_a_byte_vector_written_as_an_array_of_strings(ssz_json_test: JsonMappingFiller) -> None:
+    """
+    An array of hex strings is no rendering of a byte vector, which is one string whole.
+
+    Given
+    -----
+    - the document ["0x01", "0x02", "0x03", "0x04"], read against a byte vector of four bytes.
+
+    When
+    ----
+    - a parser reads it through the JSON mapping.
+
+    Then
+    ----
+    - the document is refused, the mapping writing the whole payload as "0x01020304".
+    - an array of byte values is read here beside that hex, and a string is no byte in one.
+    - the fixed count refuses the same way the limit of a byte list does.
+    """
+    ssz_json_test(
+        case_id="json_refusal/byte_vector/invalid/element_not_a_byte",
+        type_name="RefusalByteVector4",
+        ssz_type=RefusalByteVector4,
+        document=["0x01", "0x02", "0x03", "0x04"],
+        rejection_reason=JsonFault.ELEMENT_KIND,
+        message_substring="expected iterable of byte values, got list",
+    )
+
+
 def test_a_byte_list_written_as_an_array_of_strings(ssz_json_test: JsonMappingFiller) -> None:
     """
     An array of hex strings is no rendering of a byte list, which is one string whole.
