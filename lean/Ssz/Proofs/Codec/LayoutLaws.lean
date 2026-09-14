@@ -5,7 +5,7 @@ import Ssz.Proofs.Codec.Admits
 
 namespace Ssz
 
-private theorem nesting_le_deepest (shape : Desc) (fields : List Desc)
+theorem nesting_le_deepest (shape : Desc) (fields : List Desc)
     (member : shape ∈ fields) : shape.nesting ≤ Desc.deepestNesting fields := by
   -- The maximum over fields bounds each individual field depth.
   induction fields with
