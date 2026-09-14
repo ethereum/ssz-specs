@@ -151,7 +151,7 @@ test = [
     "ssz-testing",
 ]
 lint = [
-    "ty==0.0.78",
+    "ty==0.0.80",
     "ruff>=0.13.2,<1",
     "codespell>=2.4.1,<3",
 ]
