@@ -42,7 +42,7 @@ def Spelling.isByte : Spelling → Bool
   | .plain _ => false
 
 /-- The sixteen hex digits, in the lowercase the mapping uses. -/
-private def hexAlphabet : Array Char :=
+def hexAlphabet : Array Char :=
   #['0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'a', 'b', 'c', 'd', 'e', 'f']
 
 /-- Bytes as the mapping writes them: lowercase hex behind a two-character marker. -/
@@ -51,14 +51,14 @@ def toHex (data : Bytes) : String :=
     (text.push hexAlphabet[byte.toNat >>> 4]!).push hexAlphabet[byte.toNat &&& 0xF]!
 
 /-- The value of one hex digit, in either letter case. -/
-private def hexDigit (character : Char) : Except Err Nat :=
+def hexDigit (character : Char) : Except Err Nat :=
   if '0' ≤ character && character ≤ '9' then .ok (character.toNat - '0'.toNat)
   else if 'a' ≤ character && character ≤ 'f' then .ok (character.toNat - 'a'.toNat + 10)
   else if 'A' ≤ character && character ≤ 'F' then .ok (character.toNat - 'A'.toNat + 10)
   else .error .hexDigits
 
 /-- Two digits at a time, folded into the byte each pair holds. -/
-private def hexBytes : List Char → Except Err Bytes
+def hexBytes : List Char → Except Err Bytes
   | [] => .ok #[]
   | [_] => .error .hexDigits
   | high :: low :: rest => do
@@ -88,7 +88,7 @@ def byteElements (data : Bytes) : List Value :=
   data.toList.map fun byte => .uint byte.toNat
 
 /-- Digits in a string, which is how the mapping writes an integer. -/
-private def decimal (n : Nat) : Json := .str (toString n)
+def decimal (n : Nat) : Json := .str (toString n)
 
 /--
 The number a document holds.
@@ -97,7 +97,7 @@ An integer is digits in a string, so a wide one survives a parser using doubles.
 
 A bare number is accepted as well.
 -/
-private def readNat (document : Json) : Except Err Nat :=
+def readNat (document : Json) : Except Err Nat :=
   match document with
   | .str text => match text.toNat? with
     | some n => .ok n
@@ -114,14 +114,14 @@ A bitfield and a byte sequence are each written as a single hex string.
 
 An array in that place holds elements of the wrong kind for the collection.
 -/
-private def collectionHex (document : Json) : Except Err String :=
+def collectionHex (document : Json) : Except Err String :=
   match document with
   | .str text => .ok text
   | .arr _ => .error .elementKind
   | _ => .error .typeMismatch
 
 /-- The bits a bitfield document holds, read out of the encoding it is written as. -/
-private def readBitfield (shape : Desc) (document : Json) : Except Err Value := do
+def readBitfield (shape : Desc) (document : Json) : Except Err Value := do
   let data ← ofHex (← collectionHex document)
   -- A bitfield's hex is its own encoding, so the codec reads it back under the mapping's names.
   match deserialize shape data with
@@ -132,7 +132,7 @@ private def readBitfield (shape : Desc) (document : Json) : Except Err Value := 
   | .error fault => throw fault
 
 /-- The field names an object carries. -/
-private def objectNames (document : Json) : List String :=
+def objectNames (document : Json) : List String :=
   match document with
   | .obj fields => fields.toList.map fun (name, _) => name
   | _ => []
@@ -151,7 +151,8 @@ def jsonOf (shape : Desc) (spelling : Spelling) (value : Value) : Except Err Jso
   | .bool, .bool b => .ok (.bool b)
   | .uint width, .uint n =>
     if n ≥ 2 ^ (8 * width) then .error (.uintRange (2 ^ (8 * width)) n)
-    else if spelling.isByte then .ok (.str (toHex #[UInt8.ofNat n]))
+    -- The alias is a one-byte integer, so no wider integer is written as hex.
+    else if spelling.isByte && width == 1 then .ok (.str (toHex #[UInt8.ofNat n]))
     else .ok (decimal n)
   | .byteVector _, .bytes data | .byteList _, .bytes data => .ok (.str (toHex data))
   | .bitVector _, .bits _ | .bitList _, .bits _ | .progressiveBitList, .bits _ => do
@@ -210,7 +211,7 @@ def valueOf (shape : Desc) (spelling : Spelling) (document : Json) : Except Err 
     | .bool b => .ok (.bool b)
     | _ => .error .typeMismatch
   | .uint width => do
-    if spelling.isByte then
+    if spelling.isByte && width == 1 then
       let .str text := document | throw .typeMismatch
       let data ← ofHex text
       if data.size != 1 then throw (.hexLength 1 data.size)

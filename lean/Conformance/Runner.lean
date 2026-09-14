@@ -46,6 +46,19 @@ structure Tally where
 def isCatalogue (file : System.FilePath) : Bool :=
   [some "index.json", some "manifest.json"].contains file.fileName
 
+/--
+The number of cases the release says it holds.
+
+Comparing this with the number run catches a vector the walk never reached, which a
+passing count on its own would hide.
+-/
+def declaredCount (root : System.FilePath) : IO (Option Nat) := do
+  let manifest := root / "manifest.json"
+  if !(← manifest.pathExists) then return none
+  match Json.parse (← IO.FS.readFile manifest) with
+  | .error _ => return none
+  | .ok json => return (field? json "caseCount").bind fun count => count.getNat?.toOption
+
 /-- Run every vector below a directory. -/
 def run (root : System.FilePath) : IO Tally := do
   let files ← vectorFiles root

@@ -27,6 +27,13 @@ def main (args : List String) : IO UInt32 := do
       IO.eprintln s!"no fixtures at {root}"
       return 1
     let tally ← run root
+    -- A vector the walk never reached would otherwise leave a passing count behind.
+    let ran := tally.passed + tally.failures.size
+    let mut tally := tally
+    if let some declared ← declaredCount root then
+      if ran != declared then
+        let line := s!"ran {ran} cases, and the release declares {declared}"
+        tally := { tally with failures := tally.failures.push line }
     -- All fixture failures are printed before the final success count and exit status.
     for failure in tally.failures do
       IO.eprintln failure
