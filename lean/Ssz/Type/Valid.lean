@@ -29,7 +29,7 @@ def Desc.byteSequence : Desc → Option ByteShape
   | .vector (.uint 1) length => some (.asVector length)
   | .byteList limit => some (.asList limit)
   | .list (.uint 1) limit => some (.asList limit)
-  -- A progressive list of bytes carries no capacity, so no byte array spells its shape.
+  -- A progressive list of bytes hangs its bytes on a spine, which no byte array's tree is.
   | _ => none
 
 /-- Layout position of each field of a progressive container, paired with its name. -/
@@ -69,13 +69,13 @@ def compatibleAt : Nat → Desc → Desc → Bool
       -- No two of the three bitfield shapes agree, whatever capacity each declares.
       | .bitVector a, .bitVector b => a == b
       | .bitList a, .bitList b => a == b
-      -- A progressive bitfield declares no capacity, so any two of them agree.
-      | .progressiveBitList, .progressiveBitList => true
+      -- A bound never reaches the tree, so any two progressive bitfields agree on one.
+      | .progressiveBitList _, .progressiveBitList _ => true
       | .vector leftElement a, .vector rightElement b =>
         a == b && compatibleAt budget leftElement rightElement
       | .list leftElement a, .list rightElement b =>
         a == b && compatibleAt budget leftElement rightElement
-      | .progressiveList leftElement, .progressiveList rightElement =>
+      | .progressiveList leftElement _, .progressiveList rightElement _ =>
         compatibleAt budget leftElement rightElement
       | .container leftNames leftFields, .container rightNames rightFields =>
         leftNames == rightNames && fieldsCompatible budget leftFields rightFields
@@ -186,7 +186,7 @@ def Desc.wellFormed : Desc → Except Err Unit
   | .bitVector length => if length == 0 then .error .vectorEmpty else .ok ()
   | .byteVector length => if length == 0 then .error .vectorEmpty else .ok ()
   | .list element _ => element.wellFormed
-  | .progressiveList element => element.wellFormed
+  | .progressiveList element _ => element.wellFormed
   | .container names fields => do
     -- A struct of no fields encodes to nothing, whatever value it holds.
     if fields.isEmpty then throw .containerEmpty

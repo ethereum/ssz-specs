@@ -238,15 +238,15 @@ def deserialize : Desc → Bytes → Except Err Value
       if data[data.size - 1]! >>> UInt8.ofNat (length % 8) != 0 then throw .paddingBits
     return .bits (unpackBits data length)
   | .bitList limit, data => return .bits (← unpackDelimited (some limit) data)
-  | .progressiveBitList, data => return .bits (← unpackDelimited none data)
+  | .progressiveBitList limit, data => return .bits (← unpackDelimited limit data)
   | .vector element length, data => do
     let slices ← vectorSlices element length data
     return .seq (← deserializeEach element slices)
   | .list element limit, data => do
     let slices ← listSlices element (some limit) data
     return .seq (← deserializeEach element slices)
-  | .progressiveList element, data => do
-    let slices ← listSlices element none data
+  | .progressiveList element limit, data => do
+    let slices ← listSlices element limit data
     return .seq (← deserializeEach element slices)
   | .container _ fields, data => do
     let slices ← structSlices fields data

@@ -52,10 +52,10 @@ theorem Fits.checked {shape : Desc} {value : Value} (fitted : Fits shape value) 
   | byteList within => simpa [Value.fits] using within
   | bitVector exact => simpa [Value.fits] using exact
   | bitList within => simpa [Value.fits] using within
-  | progressiveBitList => simp [Value.fits]
+  | progressiveBitList within => simpa [Value.fits] using within
   | vector count each ih => simpa [Value.fits, count, Value.allFit_eq_true] using ih
   | list within each ih => simpa [Value.fits, within, Value.allFit_eq_true] using ih
-  | progressiveList each ih => simpa [Value.fits, Value.allFit_eq_true] using ih
+  | progressiveList within each ih => simpa [Value.fits, within, Value.allFit_eq_true] using ih
   | container paired each ih => simpa [Value.fits, Value.fieldsFit_eq_true, paired] using ih
   | progressiveContainer paired each ih => simpa [Value.fits, Value.fieldsFit_eq_true, paired] using ih
   | compatibleUnion bounded named inner ih =>
@@ -75,7 +75,9 @@ theorem fits_of_checked (shape : Desc) (value : Value) (sound : shape.wellFormed
   | byteList limit => cases value <;> simp [Value.fits] at checked; exact .byteList checked
   | bitVector length => cases value <;> simp [Value.fits] at checked; exact .bitVector checked
   | bitList limit => cases value <;> simp [Value.fits] at checked; exact .bitList checked
-  | progressiveBitList => cases value <;> simp [Value.fits] at checked; exact .progressiveBitList
+  | progressiveBitList limit =>
+    cases value <;> simp [Value.fits] at checked
+    exact .progressiveBitList checked
   -- Fixed and bounded sequences combine a count condition with every child’s admissibility.
   | vector element length ih =>
     cases value <;> simp [Value.fits, Value.allFit_eq_true] at checked
@@ -85,10 +87,10 @@ theorem fits_of_checked (shape : Desc) (value : Value) (sound : shape.wellFormed
     cases value <;> simp [Value.fits, Value.allFit_eq_true] at checked
     exact .list checked.1 (fun held member =>
       ih held (wellFormed_list sound) (checked.2 held member))
-  | progressiveList element ih =>
+  | progressiveList element limit ih =>
     cases value <;> simp [Value.fits, Value.allFit_eq_true] at checked
-    exact .progressiveList (fun held member =>
-      ih held (wellFormed_progressiveList sound) (checked held member))
+    exact .progressiveList checked.1 (fun held member =>
+      ih held (wellFormed_progressiveList sound) (checked.2 held member))
   -- A paired field is both declared and successfully checked at the same ordinal.
   | container names fields ih =>
     cases value <;> simp [Value.fits, Value.fieldsFit_eq_true] at checked

@@ -71,12 +71,12 @@ def Desc.elementType : Desc → PathStep → Except Err Desc
     | none => .error (.noSuchField index)
   | .bitVector _, _ => .ok .bool
   | .bitList _, _ => .ok .bool
-  | .progressiveBitList, _ => .ok .bool
+  | .progressiveBitList _, _ => .ok .bool
   | .byteVector _, _ => .ok (.uint 1)
   | .byteList _, _ => .ok (.uint 1)
   | .vector element _, _ => .ok element
   | .list element _, _ => .ok element
-  | .progressiveList element, _ => .ok element
+  | .progressiveList element _, _ => .ok element
   | _, _ => .error .notSteppable
 
 /--
@@ -85,8 +85,8 @@ Positions a shape declares, or none for one that grows with its data.
 A declared position is addressable whether or not a value fills it.
 -/
 def Desc.positionCount : Desc → Except Err (Option Nat)
-  | .progressiveList _ => .ok none
-  | .progressiveBitList => .ok none
+  | .progressiveList _ _ => .ok none
+  | .progressiveBitList _ => .ok none
   | .vector _ length => .ok (some length)
   | .byteVector length => .ok (some length)
   | .bitVector length => .ok (some length)
@@ -135,7 +135,7 @@ def Desc.chunkPosition (shape : Desc) (step : PathStep) : Except Err ChunkPositi
     | none => pure ()
     match shape with
     -- One bit occupies no whole byte, so a bit reports an empty range inside its node.
-    | .bitVector _ | .bitList _ | .progressiveBitList =>
+    | .bitVector _ | .bitList _ | .progressiveBitList _ =>
       return ⟨position / (8 * bytesPerChunk), 0, 0⟩
     | _ =>
       -- Dividing the byte offset by the node width splits the leaf from the range inside it.
@@ -148,8 +148,8 @@ def Desc.mixesIn : Desc → PathStep → Bool
   | .list _ _, .length => true
   | .byteList _, .length => true
   | .bitList _, .length => true
-  | .progressiveList _, .length => true
-  | .progressiveBitList, .length => true
+  | .progressiveList _ _, .length => true
+  | .progressiveBitList _, .length => true
   -- A progressive container mixes its layout in, which tells absent from zero.
   | .progressiveContainer _ _ _, .activeFields => true
   -- A union mixes its selector in, which separates options holding equal data.
@@ -173,7 +173,7 @@ def Desc.resolveStep (shape : Desc) (step : PathStep) : Except Err (Nat × Optio
       | some slot =>
         -- Every selected option occupies the contents child, opposite the selector word.
         return (2, some options[slot]!)
-    | .progressiveContainer _ _ _ | .progressiveList _ | .progressiveBitList =>
+    | .progressiveContainer _ _ _ | .progressiveList _ _ | .progressiveBitList _ =>
       -- Progressive chunks retain their positions as the right-hand spine grows.
       let placed ← shape.chunkPosition step
       return (progressiveChunkGindex placed.chunk, some (← shape.elementType step))

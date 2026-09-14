@@ -27,9 +27,9 @@ def Desc.default : Desc → Except Err Value
   | .bitVector length => .ok (.bits (Array.replicate length false))
   | .byteList _ => .ok (.bytes #[])
   | .bitList _ => .ok (.bits #[])
-  | .progressiveBitList => .ok (.bits #[])
+  | .progressiveBitList _ => .ok (.bits #[])
   | .list _ _ => .ok (.seq [])
-  | .progressiveList _ => .ok (.seq [])
+  | .progressiveList _ _ => .ok (.seq [])
   | .vector element length => do
     let one ← element.default
     return .seq (List.replicate length one)

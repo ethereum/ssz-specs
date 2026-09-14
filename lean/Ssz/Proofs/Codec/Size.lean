@@ -32,9 +32,9 @@ inductive Representable : Desc → Value → Nat → Prop where
   /-- Variable bitfields add a delimiter bit before rounding up. -/
   | bitList (limit : Nat) (data : Array Bool) :
       Representable (.bitList limit) (.bits data) ((data.size + 8) / 8)
-  /-- Unbounded bitfields use the same delimiter convention. -/
-  | progressiveBitList (data : Array Bool) :
-      Representable .progressiveBitList (.bits data) ((data.size + 8) / 8)
+  /-- Progressive bitfields use the same delimiter convention. -/
+  | progressiveBitList (limit : Option Nat) (data : Array Bool) :
+      Representable (.progressiveBitList limit) (.bits data) ((data.size + 8) / 8)
   /-- Each element is representable, and the vector's whole layout fits the offset range. -/
   | vector {element : Desc} {length : Nat} {values : List Value} {sizes : Value → Nat}
       (each : ∀ value ∈ values, Representable element value (sizes value))
@@ -47,11 +47,12 @@ inductive Representable : Desc → Value → Nat → Prop where
       (bounded : (values.map fun value => fieldSize element (sizes value)).sum < 2 ^ 32) :
       Representable (.list element limit) (.seq values)
         (values.map fun value => fieldSize element (sizes value)).sum
-  /-- Unbounded sequences still encode their composite layout within the offset range. -/
-  | progressiveList {element : Desc} {values : List Value} {sizes : Value → Nat}
+  /-- Progressive sequences still encode their composite layout within the offset range. -/
+  | progressiveList {element : Desc} {limit : Option Nat} {values : List Value}
+      {sizes : Value → Nat}
       (each : ∀ value ∈ values, Representable element value (sizes value))
       (bounded : (values.map fun value => fieldSize element (sizes value)).sum < 2 ^ 32) :
-      Representable (.progressiveList element) (.seq values)
+      Representable (.progressiveList element limit) (.seq values)
         (values.map fun value => fieldSize element (sizes value)).sum
   /-- A struct sums the contribution of each field, including each required offset. -/
   | container {names : List String} {fields : List Desc} {values : List Value}
@@ -370,9 +371,14 @@ theorem Representable.serialize {shape : Desc} {value : Value} {size : Nat}
     cases fitted with
     | bitList within =>
       exact ⟨packBitsDelimited data, by simp [Ssz.serialize, within], by simp [packBitsDelimited, packBits]⟩
-  | progressiveBitList data =>
-    intro _
-    exact ⟨packBitsDelimited data, by simp [Ssz.serialize], by simp [packBitsDelimited, packBits]⟩
+  | progressiveBitList limit data =>
+    intro fitted
+    cases fitted with
+    | progressiveBitList within =>
+      exact ⟨packBitsDelimited data,
+        by simp [Ssz.serialize, boundCheck_of_withinBound limit _ within, Bind.bind, Except.bind,
+          Pure.pure, Except.pure],
+        by simp [packBitsDelimited, packBits]⟩
   -- For sequences, construct each admissible child before applying the witnessed total size bound.
   | vector each bounded ih =>
     intro fitted
@@ -388,13 +394,15 @@ theorem Representable.serialize {shape : Desc} {value : Value} {size : Nat}
       obtain ⟨bytes, encoded, sized⟩ := sequence_complete _ _ _
         (fun held member => ih held member (admissible held member)) bounded
       exact ⟨bytes, by simp [Ssz.serialize, within, encoded], sized⟩
-  | progressiveList each bounded ih =>
+  | @progressiveList _ limit _ _ each bounded ih =>
     intro fitted
     cases fitted with
-    | progressiveList admissible =>
+    | progressiveList within admissible =>
       obtain ⟨bytes, encoded, sized⟩ := sequence_complete _ _ _
         (fun held member => ih held member (admissible held member)) bounded
-      exact ⟨bytes, by simpa only [Ssz.serialize] using encoded, sized⟩
+      exact ⟨bytes, by
+        simpa only [Ssz.serialize, boundCheck_of_withinBound limit _ within, Bind.bind,
+          Except.bind] using encoded, sized⟩
   -- For containers, matched field-value counts ensure that every declared field is encoded.
   | container each bounded ih =>
     intro fitted
@@ -471,10 +479,13 @@ theorem representable_of_serialize (shape : Desc) (value : Value) (bytes : Bytes
       subst bytes
       simpa [packBitsDelimited, packBits] using Representable.bitList limit _
     · cases wrote
-  | progressiveBitList =>
-    cases value <;> simp [Ssz.serialize] at wrote
-    subst bytes
-    simpa [packBitsDelimited, packBits] using Representable.progressiveBitList _
+  | progressiveBitList limit =>
+    cases value <;>
+      simp [Ssz.serialize, Bind.bind, Except.bind, Pure.pure, Except.pure] at wrote
+    split at wrote
+    · cases wrote
+    · rw [← Except.ok.inj wrote]
+      simpa [packBitsDelimited, packBits] using Representable.progressiveBitList limit _
   -- For composite sequences, recover child witnesses and the enclosing assembly bound.
   | vector element length ih =>
     cases value <;> simp [Ssz.serialize] at wrote
@@ -490,11 +501,13 @@ theorem representable_of_serialize (shape : Desc) (value : Value) (bytes : Bytes
       rw [measured]
       exact .list children bounded
     · cases wrote
-  | progressiveList element ih =>
-    cases value <;> simp [Ssz.serialize] at wrote
-    obtain ⟨sizes, children, measured, bounded⟩ := sequence_representable element _ bytes ih wrote
-    rw [measured]
-    exact .progressiveList children bounded
+  | progressiveList element limit ih =>
+    cases value <;> simp [Ssz.serialize, Bind.bind, Except.bind] at wrote
+    split at wrote
+    · cases wrote
+    · obtain ⟨sizes, children, measured, bounded⟩ := sequence_representable element _ bytes ih wrote
+      rw [measured]
+      exact .progressiveList children bounded
   -- Each successful field encoding supplies a witness under its own declared type.
   | container names fields ih =>
     cases value <;> simp [Ssz.serialize] at wrote

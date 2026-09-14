@@ -24,9 +24,9 @@ inductive CommitmentSized : Desc → Value → Prop
   /-- The actual bit count must fit the unsigned 256-bit mixing word. -/
   | bitList {limit : Nat} {data : Array Bool} (count : data.size < 2 ^ 256) :
       CommitmentSized (.bitList limit) (.bits data)
-  /-- An unbounded bit list still encodes its actual count in 256 bits. -/
-  | progressiveBitList {data : Array Bool} (count : data.size < 2 ^ 256) :
-      CommitmentSized .progressiveBitList (.bits data)
+  /-- A progressive bit list still encodes its actual count in 256 bits. -/
+  | progressiveBitList {limit : Option Nat} {data : Array Bool} (count : data.size < 2 ^ 256) :
+      CommitmentSized (.progressiveBitList limit) (.bits data)
   /-- A fixed element count needs no extra bound, but nested variable counts must fit. -/
   | vector {element : Desc} {length : Nat} {values : List Value}
       (each : ∀ value ∈ values, CommitmentSized element value) :
@@ -36,11 +36,11 @@ inductive CommitmentSized : Desc → Value → Prop
       (count : values.length < 2 ^ 256)
       (each : ∀ value ∈ values, CommitmentSized element value) :
       CommitmentSized (.list element limit) (.seq values)
-  /-- An unbounded element list retains the 256-bit count restriction at every nested level. -/
-  | progressiveList {element : Desc} {values : List Value}
+  /-- A progressive element list retains the 256-bit count restriction at every nested level. -/
+  | progressiveList {element : Desc} {limit : Option Nat} {values : List Value}
       (count : values.length < 2 ^ 256)
       (each : ∀ value ∈ values, CommitmentSized element value) :
-      CommitmentSized (.progressiveList element) (.seq values)
+      CommitmentSized (.progressiveList element limit) (.seq values)
   /-- Each field retains the count restrictions of its declared type. -/
   | container {names : List String} {fields : List Desc} {values : List Value}
       (each : ∀ pair ∈ fields.zip values, CommitmentSized pair.1 pair.2) :

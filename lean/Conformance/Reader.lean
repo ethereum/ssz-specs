@@ -91,17 +91,23 @@ private def isUintKind (kind : String) : Bool :=
 
 /-- The declaration keys each kind is entitled to, beyond the kind itself. -/
 private def entitledKeys : String → Except Err (List String)
-  | "Boolean" | "ProgressiveBitList" => .ok []
+  | "Boolean" => .ok []
+  | "ProgressiveBitList" => .ok ["limit"]
   | "Byte" => .ok ["bits"]
   | "BitVector" | "ByteVector" => .ok ["length"]
   | "BitList" | "ByteList" => .ok ["limit"]
   | "Vector" => .ok ["length", "elementType"]
   | "List" => .ok ["limit", "elementType"]
-  | "ProgressiveList" => .ok ["elementType"]
+  | "ProgressiveList" => .ok ["limit", "elementType"]
   | "Container" => .ok ["fields"]
   | "ProgressiveContainer" => .ok ["activeFields", "fields"]
   | "CompatibleUnion" => .ok ["options"]
   | kind => if isUintKind kind then .ok ["bits"] else .error .badDeclaration
+
+/-- The keys a kind may leave out, a progressive shape stating a bound only where it has one. -/
+private def optionalKeys : String → List String
+  | "ProgressiveBitList" | "ProgressiveList" => ["limit"]
+  | _ => []
 
 /-- The name a declaration gives a field. -/
 private def name (json : Json) : Except Err String :=
@@ -137,11 +143,15 @@ partial def readDescriptor (json : Json) : Except Err (Desc × Spelling) := do
   let allowed ← entitledKeys kind
   for name in names do
     if name != "kind" && !allowed.contains name then throw .notEntitled
+  let optional := optionalKeys kind
   for name in allowed do
-    if !names.contains name then throw .undeclared
+    if !names.contains name && !optional.contains name then throw .undeclared
   let stated (name : String) : Except Err Nat := do
     let .some value := field? json name | throw .undeclared
     count value
+  let bound : Except Err (Option Nat) := do
+    let .some value := field? json "limit" | return none
+    return some (← count value)
   let element : Except Err (Desc × Spelling) := do
     let .some value := field? json "elementType" | throw .undeclared
     readDescriptor value
@@ -160,7 +170,7 @@ partial def readDescriptor (json : Json) : Except Err (Desc × Spelling) := do
   | "Byte" => return (.uint 1, .byte)
   | "BitVector" => return (.bitVector (← stated "length"), .opaque)
   | "BitList" => return (.bitList (← stated "limit"), .opaque)
-  | "ProgressiveBitList" => return (.progressiveBitList, .opaque)
+  | "ProgressiveBitList" => return (.progressiveBitList (← bound), .opaque)
   | "ByteVector" => return (.byteVector (← stated "length"), .opaque)
   | "ByteList" => return (.byteList (← stated "limit"), .opaque)
   | "Vector" =>
@@ -171,7 +181,7 @@ partial def readDescriptor (json : Json) : Except Err (Desc × Spelling) := do
     return (.list shape (← stated "limit"), .plain [spelling])
   | "ProgressiveList" =>
     let (shape, spelling) ← element
-    return (.progressiveList shape, .plain [spelling])
+    return (.progressiveList shape (← bound), .plain [spelling])
   | "Container" =>
     let parts ← held "fields" "name"
     return (.container (← parts.mapM fun (label, _) => name label)

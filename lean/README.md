@@ -46,6 +46,9 @@ Proof requests deliberately reject the root itself, empty requests, duplicate in
 and ancestor/descendant pairs.
 This is stricter than the generalized-index arithmetic in the reference proof helpers.
 
+A progressive collection may declare a limit, which rules on its count alone.
+The spine is laid out from the data either way, so a declared bound never reaches the root.
+
 For example, a progressive container with layout `[true, false, true]` has two fields.
 Its serialization contains only those two fields.
 Its Merkle tree contains three positions: the first field, a zero leaf, and the second field.

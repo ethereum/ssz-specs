@@ -101,17 +101,19 @@ theorem canonical_bitList {limit : Nat} {data : Bytes} {value : Value}
     subst value
     simp [serialize, unpackDelimited_bound decoded, packBitsDelimited_unpackDelimited decoded]
 
-/-- Progressive bit lists have the same canonical delimiter rule without a capacity bound. -/
-theorem canonical_progressiveBitList {data : Bytes} {value : Value}
-    (read : deserialize .progressiveBitList data = .ok value) :
-    serialize .progressiveBitList value = .ok data := by
+/-- Progressive bit lists have the same canonical delimiter rule under their own bound. -/
+theorem canonical_progressiveBitList {limit : Option Nat} {data : Bytes} {value : Value}
+    (read : deserialize (.progressiveBitList limit) data = .ok value) :
+    serialize (.progressiveBitList limit) value = .ok data := by
   -- Successful decoding must have recovered a delimited bit sequence.
-  cases decoded : unpackDelimited none data with
+  cases decoded : unpackDelimited limit data with
   | error fault => simp [deserialize, decoded, Bind.bind, Except.bind] at read
   | ok bits =>
     simp [deserialize, decoded, Bind.bind, Except.bind, pure, Except.pure] at read
     -- Re-encode the recovered data bits with the same closing bit and padding.
     subst value
-    simp [serialize, packBitsDelimited_unpackDelimited decoded]
+    simp [serialize, boundCheck_of_withinBound limit _ (unpackDelimited_within decoded),
+      Bind.bind, Except.bind, Pure.pure, Except.pure,
+      packBitsDelimited_unpackDelimited decoded]
 
 end Ssz

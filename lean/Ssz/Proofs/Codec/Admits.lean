@@ -103,8 +103,8 @@ theorem wellFormed_list {element : Desc} {limit : Nat}
   exact sound
 
 /-- A progressive list declares the type of the elements it holds, and nothing else. -/
-theorem wellFormed_progressiveList {element : Desc}
-    (sound : (Desc.progressiveList element).wellFormed = .ok ()) :
+theorem wellFormed_progressiveList {element : Desc} {limit : Option Nat}
+    (sound : (Desc.progressiveList element limit).wellFormed = .ok ()) :
     element.wellFormed = .ok () := by
   rw [Desc.wellFormed] at sound
   exact sound
@@ -292,10 +292,12 @@ theorem fits_of_serialize : ∀ (shape : Desc) (value : Value),
     intro _ ⟨_, wrote⟩
     rw [serialize, if_neg bad] at wrote
     simp at wrote
-  -- Progressive bit lists impose no declared capacity.
-  | case12 _ =>
-    intro _ _
-    exact .progressiveBitList
+  | case12 limit data =>
+    intro _ ⟨_, wrote⟩
+    rw [serialize] at wrote
+    cases passed : boundCheck limit data.size with
+    | error _ => simp [passed, Bind.bind, Except.bind] at wrote
+    | ok _ => exact .progressiveBitList (withinBound_of_boundCheck limit data.size passed)
   -- A vector needs both the exact element count and admissibility of every element.
   | case13 _ _ _ count ih =>
     intro sound ⟨bytes, wrote⟩
@@ -317,10 +319,15 @@ theorem fits_of_serialize : ∀ (shape : Desc) (value : Value),
     rw [serialize, if_neg bad] at wrote
     simp at wrote
   -- A progressive list inherits admissibility from all of its elements.
-  | case17 _ _ ih =>
+  | case17 _ limit elements ih =>
     intro sound ⟨bytes, wrote⟩
     rw [serialize] at wrote
-    exact .progressiveList (ih (wellFormed_progressiveList sound) ⟨bytes, wrote⟩)
+    cases passed : boundCheck limit elements.length with
+    | error _ => simp [passed, Bind.bind, Except.bind] at wrote
+    | ok _ =>
+      simp only [passed, Bind.bind, Except.bind] at wrote
+      exact .progressiveList (withinBound_of_boundCheck limit elements.length passed)
+        (ih (wellFormed_progressiveList sound) ⟨bytes, wrote⟩)
   -- Ordinary containers require one admissible value per field.
   | case18 _ _ _ ih =>
     intro sound ⟨bytes, wrote⟩

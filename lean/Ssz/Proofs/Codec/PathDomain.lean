@@ -113,9 +113,9 @@ theorem PathSelects.bitList (limit : Nat) (data : Array Bool)
       rfl
 
 /-- A progressive bit-list position selects the occupied chunk containing that bit. -/
-theorem PathSelects.progressiveBitList (data : Array Bool) (ordinal : Nat)
-    (inside : ordinal < data.size) :
-    PathSelects .progressiveBitList (.bits data) [.position ordinal]
+theorem PathSelects.progressiveBitList {limit : Option Nat} (data : Array Bool)
+    (ordinal : Nat) (inside : ordinal < data.size) :
+    PathSelects (.progressiveBitList limit) (.bits data) [.position ordinal]
       (padded zeroChunk (packedBits data) (ordinal / (8 * bytesPerChunk))) := by
   -- An actual bit lies in an occupied chunk, which determines a finite level on the progressive spine.
   refine PathSelects.packedProgressive
@@ -191,16 +191,17 @@ theorem PathSelects.list_basic (element : Desc) (limit : Nat) (values : List Val
       rfl
 
 /-- A present basic progressive-list element selects an occupied chunk on the spine. -/
-theorem PathSelects.progressiveList_basic (element : Desc) (values : List Value)
-    (basic : element.isBasic = true) (sound : (Desc.progressiveList element).wellFormed = .ok ())
-    (fitted : Fits (.progressiveList element) (.seq values)) (ordinal : Nat)
+theorem PathSelects.progressiveList_basic (element : Desc) {limit : Option Nat}
+    (values : List Value) (basic : element.isBasic = true)
+    (sound : (Desc.progressiveList element limit).wellFormed = .ok ())
+    (fitted : Fits (.progressiveList element limit) (.seq values)) (ordinal : Nat)
     (inside : ordinal < values.length) :
     ∃ parts, serializeEach element values = .ok parts ∧
-      PathSelects (.progressiveList element) (.seq values) [.position ordinal]
+      PathSelects (.progressiveList element limit) (.seq values) [.position ordinal]
         (padded zeroChunk (packElements parts) (ordinal * element.itemLength / bytesPerChunk)) := by
   -- Present elements lie in occupied chunks, whose spine positions remain stable as the list grows.
   cases fitted with
-  | progressiveList each =>
+  | progressiveList _ each =>
     -- Basic elements always serialize successfully to a fixed-width stream without offset tables.
     obtain ⟨parts, wrote, size⟩ := serializeEach_basic_size basic values each
     have width := basic_width_positive element basic (wellFormed_progressiveList sound)

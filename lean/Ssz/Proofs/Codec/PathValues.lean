@@ -118,15 +118,16 @@ theorem PathSelects.listElement {element : Desc} {limit : Nat} {values : List Va
         Pure.pure, Except.pure]
 
 /-- A progressive composite list path follows the occupied element as the spine grows. -/
-theorem PathSelects.progressiveListElement {element : Desc} {values : List Value}
-    (composite : element.isBasic = false)
+theorem PathSelects.progressiveListElement {element : Desc} {limit : Option Nat}
+    {values : List Value} (composite : element.isBasic = false)
     {ordinal : Nat} {inner : Value} {rest : List PathStep} {node : Bytes}
     (selected : values[ordinal]? = some inner) (suffix : PathSelects element inner rest node) :
-    PathSelects (.progressiveList element) (.seq values) (.position ordinal :: rest) node := by
-  -- No capacity bounds the spine, while membership supplies the occupied leaf it must reach.
+    PathSelects (.progressiveList element limit) (.seq values) (.position ordinal :: rest)
+      node := by
+  -- A bound never reaches the spine, while membership supplies the leaf the path must reach.
   let layout := MerkleLayout.nesting (values.map fun value => some (element, value))
     none (lengthWord values.length)
-  have laid : merkleLayout (.progressiveList element) (.seq values) = .ok layout := by
+  have laid : merkleLayout (.progressiveList element limit) (.seq values) = .ok layout := by
     simp [merkleLayout, sequenceLayout, composite, layout, Pure.pure, Except.pure]
   apply PathSelects.nestedProgressive (ordinal := ordinal) laid rfl rfl rfl _ _ suffix
   · simp [List.getElem?_map, selected]

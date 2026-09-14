@@ -155,14 +155,15 @@ private theorem layoutDetermines_bitList (capacity : Nat) : LayoutDeterminesValu
           exact congrArg Value.bits (packedBits_injective counts
             (Leaves.packed.inj (congrArg MerkleLayout.leaves same)))
 
-/-- Progressive bit lists retain their exact bit counts despite having no capacity. -/
-private theorem layoutDetermines_progressiveBitList  : LayoutDeterminesValue (.progressiveBitList) := by
-  -- The absence of a capacity does not remove the need for an exact 256-bit length word.
+/-- Progressive bit lists retain their exact bit counts, bound or none. -/
+private theorem layoutDetermines_progressiveBitList (limit : Option Nat) :
+    LayoutDeterminesValue (.progressiveBitList limit) := by
+  -- A bound does not remove the need for an exact 256-bit length word.
   intro left right layout sound leftFits rightFits leftSized rightSized first second
   cases leftFits with
-  | progressiveBitList =>
+  | progressiveBitList _ =>
     cases rightFits with
-    | progressiveBitList =>
+    | progressiveBitList _ =>
       cases leftSized with
       | progressiveBitList bound =>
         cases rightSized with
@@ -209,13 +210,14 @@ private theorem layoutDetermines_list (element : Desc) (capacity : Nat) : Layout
             (sequenceLayout_count bound otherBound first second) each otherEach first second)
 
 /-- Progressive lists recover their count before comparing their element streams. -/
-private theorem layoutDetermines_progressiveList (element : Desc) : LayoutDeterminesValue (.progressiveList element) := by
+private theorem layoutDetermines_progressiveList (element : Desc) (limit : Option Nat) :
+    LayoutDeterminesValue (.progressiveList element limit) := by
   -- The exact length word determines how many elements the progressive layout must contain.
   intro left right layout sound leftFits rightFits leftSized rightSized first second
   cases leftFits with
-  | progressiveList each =>
+  | progressiveList _ each =>
     cases rightFits with
-    | progressiveList otherEach =>
+    | progressiveList _ otherEach =>
       cases leftSized with
       | progressiveList bound _ =>
         cases rightSized with
@@ -323,14 +325,16 @@ theorem merkleLayout_injective {shape : Desc} {left right : Value} {layout : Mer
     exact layoutDetermines_bitVector count sound leftFits rightFits leftSized rightSized first second
   | bitList capacity =>
     exact layoutDetermines_bitList capacity sound leftFits rightFits leftSized rightSized first second
-  | progressiveBitList  =>
-    exact layoutDetermines_progressiveBitList  sound leftFits rightFits leftSized rightSized first second
+  | progressiveBitList limit =>
+    exact layoutDetermines_progressiveBitList limit sound leftFits rightFits leftSized rightSized
+      first second
   | vector element count =>
     exact layoutDetermines_vector element count sound leftFits rightFits leftSized rightSized first second
   | list element capacity =>
     exact layoutDetermines_list element capacity sound leftFits rightFits leftSized rightSized first second
-  | progressiveList element =>
-    exact layoutDetermines_progressiveList element sound leftFits rightFits leftSized rightSized first second
+  | progressiveList element limit =>
+    exact layoutDetermines_progressiveList element limit sound leftFits rightFits leftSized
+      rightSized first second
   | container names fields =>
     exact layoutDetermines_container names fields sound leftFits rightFits leftSized rightSized first second
   | progressiveContainer active names fields =>

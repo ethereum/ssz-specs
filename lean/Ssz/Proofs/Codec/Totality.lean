@@ -111,13 +111,18 @@ private theorem overflow_of_fits {shape : Desc} {value : Value} (fits : Fits sha
   | byteList within => intro fault failed; simp [serialize, within] at failed
   | bitVector sized => intro fault failed; simp [serialize, sized] at failed
   | bitList within => intro fault failed; simp [serialize, within] at failed
-  | progressiveBitList => intro fault failed; simp [serialize] at failed
+  | @progressiveBitList limit _ within =>
+    intro fault failed
+    simp [serialize, boundCheck_of_withinBound limit _ within, Bind.bind, Except.bind,
+      Pure.pure, Except.pure] at failed
   -- Composite values inherit element failures and the final assembly size restriction.
   | vector sized _ ih =>
     simpa only [serialize, sized, beq_self_eq_true, if_pos] using overflow_sequence ih
   | list within _ ih =>
     simpa only [serialize, if_pos within] using overflow_sequence ih
-  | progressiveList _ ih => simpa only [serialize] using overflow_sequence ih
+  | @progressiveList _ limit _ within _ ih =>
+    simpa only [serialize, boundCheck_of_withinBound limit _ within, Bind.bind, Except.bind]
+      using overflow_sequence ih
   | container paired _ ih => simpa only [serialize] using overflow_struct paired ih
   | progressiveContainer paired _ ih => simpa only [serialize] using overflow_struct paired ih
   | compatibleUnion _ named _ ih =>

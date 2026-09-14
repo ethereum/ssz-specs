@@ -200,7 +200,7 @@ theorem layout_exists {shape : Desc} {value : Value}
     simpa [merkleLayout, Nat.not_lt.mpr within] using
       sequence_fits (wellFormed_list sound) each (some limit) (lengthWord elements.length)
         (by intro capacity named; cases named; exact within)
-  | progressiveList each =>
+  | progressiveList _ each =>
     exact sequence_fits (wellFormed_progressiveList sound) each _ _ (by simp)
   | @container names fields values paired each =>
     refine ⟨.nesting ((fields.zip values).map some) (some fields.length),

@@ -111,6 +111,21 @@ theorem listSlices_bound {element : Desc} {limit : Nat} {data : Bytes}
   all_goals try (subst slices; simp_all [readOffsets])
   all_goals omega
 
+/-- A bit count a delimiter recovered is one the capacity its shape declares admits. -/
+theorem unpackDelimited_within {limit : Option Nat} {data : Bytes} {bits : Array Bool}
+    (read : unpackDelimited limit data = .ok bits) : withinBound limit bits.size = true := by
+  cases limit with
+  | none => rfl
+  | some bound => simpa [withinBound] using unpackDelimited_bound read
+
+/-- An element count a decode recovered is one the capacity its shape declares admits. -/
+theorem listSlices_within {element : Desc} {limit : Option Nat} {data : Bytes}
+    {slices : List Bytes} (read : listSlices element limit data = .ok slices) :
+    withinBound limit slices.length = true := by
+  cases limit with
+  | none => rfl
+  | some bound => simpa [withinBound] using listSlices_bound read
+
 /-- Decoding a sequence preserves its count and establishes each element's domain. -/
 private theorem deserializeEach_fits {element : Desc}
     (inner : ∀ data value, deserialize element data = .ok value → Fits element value) :
@@ -264,15 +279,14 @@ theorem fits_of_deserialize (shape : Desc) :
       simp [deserialize, bits, Bind.bind, Except.bind, pure, Except.pure] at read
       subst value
       exact .bitList (unpackDelimited_bound bits)
-  -- Progressive bit sequences require valid delimiter decoding but no declared capacity.
-  | progressiveBitList =>
+  | progressiveBitList limit =>
     intro data value read
-    cases bits : unpackDelimited none data with
+    cases bits : unpackDelimited limit data with
     | error fault => simp [deserialize, bits, Bind.bind, Except.bind] at read
     | ok held =>
       simp [deserialize, bits, Bind.bind, Except.bind, pure, Except.pure] at read
       subst value
-      exact .progressiveBitList
+      exact .progressiveBitList (unpackDelimited_within bits)
   -- Slice count and element admissibility together establish the fixed sequence shape.
   | vector element count ih =>
     intro data value read
@@ -299,10 +313,9 @@ theorem fits_of_deserialize (shape : Desc) :
         subst value
         obtain ⟨sized, each⟩ := deserializeEach_fits ih slices values decoded
         exact .list (sized ▸ listSlices_bound parts) each
-  -- Without a fixed capacity, only the admissibility of each recovered element remains.
-  | progressiveList element ih =>
+  | progressiveList element limit ih =>
     intro data value read
-    cases parts : listSlices element none data with
+    cases parts : listSlices element limit data with
     | error fault => simp [deserialize, parts, Bind.bind, Except.bind] at read
     | ok slices =>
       cases decoded : deserializeEach element slices with
@@ -310,7 +323,8 @@ theorem fits_of_deserialize (shape : Desc) :
       | ok values =>
         simp [deserialize, parts, decoded, Bind.bind, Except.bind, pure, Except.pure] at read
         subst value
-        exact .progressiveList (deserializeEach_fits ih slices values decoded).2
+        obtain ⟨sized, each⟩ := deserializeEach_fits ih slices values decoded
+        exact .progressiveList (sized ▸ listSlices_within parts) each
   -- Both container families decode one admissible value per declared field.
   | container names fields ih | progressiveContainer active names fields ih =>
     intro data value read
@@ -361,7 +375,7 @@ theorem vectorSlices_overflow (element : Desc) (count : Nat) (data : Bytes)
 theorem listSlices_overflow (element : Desc) (limit : Option Nat) (data : Bytes)
     (large : data.size ≥ 2 ^ (8 * bytesPerOffset)) :
     listSlices element limit data = .error (.offsetOverflow data.size) := by
-  -- Even an unbounded element capacity does not enlarge the composite byte-offset range.
+  -- No declared element capacity enlarges the composite byte-offset range.
   simp [listSlices, large, throw_error, Bind.bind, Except.bind]
 
 end Ssz

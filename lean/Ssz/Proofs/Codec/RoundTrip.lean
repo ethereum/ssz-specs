@@ -64,10 +64,11 @@ theorem recovered {shape : Desc} (covered : Recovers shape) :
     intro _ admits
     cases admits with
     | bitList within => exact ⟨reads_back (roundTrip_bitList within), by simp [Desc.fixedSize]⟩
-  | progressiveBitList =>
+  | progressiveBitList _ =>
     intro _ admits
     cases admits with
-    | progressiveBitList => exact ⟨reads_back (roundTrip_progressiveBitList), by simp [Desc.fixedSize]⟩
+    | progressiveBitList within =>
+      exact ⟨reads_back (roundTrip_progressiveBitList within), by simp [Desc.fixedSize]⟩
   | @vectorFixed element length width fixed _ ih =>
     intro _ admits
     cases admits with
@@ -116,22 +117,24 @@ theorem recovered {shape : Desc} (covered : Recovers shape) :
         (by intro cap equal; cases equal; omega) (serializeSequence_size_lt wrote)
       simp only [deserialize, sliced, decoded, Bind.bind, Except.bind]
       rfl
-  | @progressiveListFixed element width fixed positive _ ih =>
+  | @progressiveListFixed element limit width fixed positive _ ih =>
     intro _ admits
     cases admits with
-    | progressiveList each =>
+    | progressiveList within each =>
       rename_i elements
       have facts : ∀ value ∈ elements, Recovered element value := fun value member =>
         ih (each value member)
       refine ⟨?_, by simp [Desc.fixedSize]⟩
       intro bytes wrote
-      simp only [serialize] at wrote
+      simp only [serialize, boundCheck_of_withinBound limit _ within, Bind.bind,
+        Except.bind] at wrote
       obtain ⟨parts, lengths, widths, bytesIs, decoded⟩ :=
         recovered_sequence element elements width fixed facts bytes wrote
       subst bytesIs
       -- Recover the common-width slices before invoking the element round trips.
-      have sliced := listSlices_concat_fixed fixed positive parts widths none
-        (by intro cap impossible; cases impossible) (serializeSequence_size_lt wrote)
+      have sliced := listSlices_concat_fixed fixed positive parts widths limit
+        (by intro cap named; rw [lengths]; simpa [withinBound, named] using within)
+        (serializeSequence_size_lt wrote)
       simp only [deserialize, sliced, decoded, Bind.bind, Except.bind]
       rfl
   | @vectorVarying element length varying _ ih =>
@@ -193,22 +196,23 @@ theorem recovered {shape : Desc} (covered : Recovers shape) :
         (by intro cap equal; cases equal; omega) nameable
       simp only [deserialize, sliced, decoded, Bind.bind, Except.bind]
       rfl
-  | @progressiveListVarying element varying _ ih =>
+  | @progressiveListVarying element limit varying _ ih =>
     intro _ admits
     cases admits with
-    | progressiveList each =>
+    | progressiveList within each =>
       rename_i elements
       have facts : ∀ value ∈ elements, Recovered element value := fun value member =>
         ih (each value member)
       refine ⟨?_, by simp [Desc.fixedSize]⟩
       intro bytes wrote
-      simp only [serialize] at wrote
+      simp only [serialize, boundCheck_of_withinBound limit _ within, Bind.bind,
+        Except.bind] at wrote
       obtain ⟨parts, lengths, bytesIs, nameable, decoded⟩ :=
         recovered_sequence_offset element elements varying facts bytes wrote
       subst bytesIs
       -- Recover the offset-delimited slices before invoking the element round trips.
-      have sliced := listSlices_offset_parts varying parts none
-        (by intro cap impossible; cases impossible) nameable
+      have sliced := listSlices_offset_parts varying parts limit
+        (by intro cap named; rw [lengths]; simpa [withinBound, named] using within) nameable
       simp only [deserialize, sliced, decoded, Bind.bind, Except.bind]
       rfl
   | @container _ fields _ ih =>
@@ -332,10 +336,10 @@ theorem recovers_of_wellFormed : ∀ (shape : Desc), shape.wellFormed = .ok () �
     -- The delimiter recovers the bit count, including an empty value.
     intro _
     exact ⟨.bitList limit, by simp [Desc.fixedSize]⟩
-  | progressiveBitList =>
-    -- Removing the capacity does not change the bit encoding.
+  | progressiveBitList limit =>
+    -- A bound rules on the count alone, leaving the bit encoding as it is.
     intro _
-    exact ⟨.progressiveBitList, by simp [Desc.fixedSize]⟩
+    exact ⟨.progressiveBitList limit, by simp [Desc.fixedSize]⟩
   | vector element length ih =>
     intro sound
     obtain ⟨covered, positive⟩ := ih (wellFormed_vector sound)
@@ -361,10 +365,10 @@ theorem recovers_of_wellFormed : ∀ (shape : Desc), shape.wellFormed = .ok () �
     cases fixedIs : element.fixedSize with
     | none => exact .listVarying fixedIs covered
     | some width => exact .listFixed fixedIs (positive width fixedIs) covered
-  | progressiveList element ih =>
+  | progressiveList element limit ih =>
     intro sound
     obtain ⟨covered, positive⟩ := ih (wellFormed_progressiveList sound)
-    -- The same element encoding works without a declared capacity.
+    -- The same element encoding works whether or not a bound is declared.
     refine ⟨?_, by simp [Desc.fixedSize]⟩
     cases fixedIs : element.fixedSize with
     | none => exact .progressiveListVarying fixedIs covered

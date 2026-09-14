@@ -104,6 +104,11 @@ def lookupOption : List Nat → List Desc → Nat → Except Err Desc
   -- Selectors and options that do not pair up name no union.
   | _, _, _ => .error .badDeclaration
 
+/-- A count held to the capacity its shape declares, where it declares one. -/
+def boundCheck : Option Nat → Nat → Except Err Unit
+  | none, _ => .ok ()
+  | some bound, count => if count ≤ bound then .ok () else .error (.overLimit bound count)
+
 mutual
 
 /-- The SSZ encoding of a value, read against the type it is meant to fit. -/
@@ -123,14 +128,18 @@ def serialize : Desc → Value → Except Err Bytes
   | .bitList limit, .bits data =>
     if data.size ≤ limit then .ok (packBitsDelimited data)
     else .error (.overLimit limit data.size)
-  | .progressiveBitList, .bits data => .ok (packBitsDelimited data)
+  | .progressiveBitList limit, .bits data => do
+    boundCheck limit data.size
+    return packBitsDelimited data
   | .vector element length, .seq elements =>
     if elements.length == length then serializeSequence element elements
     else .error (.scope length elements.length)
   | .list element limit, .seq elements =>
     if elements.length ≤ limit then serializeSequence element elements
     else .error (.overLimit limit elements.length)
-  | .progressiveList element, .seq elements => serializeSequence element elements
+  | .progressiveList element limit, .seq elements => do
+    boundCheck limit elements.length
+    serializeSequence element elements
   | .container _ fields, .seq values => serializeStruct fields values
   -- A gap holds no field, so a struct encodes exactly the fields it declares.
   | .progressiveContainer _ _ fields, .seq values => serializeStruct fields values

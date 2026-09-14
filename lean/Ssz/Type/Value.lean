@@ -62,13 +62,13 @@ def Value.fits : Desc → Value → Bool
   | .byteList limit, .bytes data => data.size ≤ limit
   | .bitVector length, .bits data => data.size == length
   | .bitList limit, .bits data => data.size ≤ limit
-  -- No limit bounds a progressive shape, so any count fits.
-  | .progressiveBitList, .bits _ => true
+  | .progressiveBitList limit, .bits data => withinBound limit data.size
   | .vector element length, .seq elements =>
       elements.length == length && Value.allFit element elements
   | .list element limit, .seq elements =>
       elements.length ≤ limit && Value.allFit element elements
-  | .progressiveList element, .seq elements => Value.allFit element elements
+  | .progressiveList element limit, .seq elements =>
+      withinBound limit elements.length && Value.allFit element elements
   | .container _ fields, .seq elements => Value.fieldsFit fields elements
   -- A struct holds one value per declared field, never one per layout position.
   | .progressiveContainer _ _ fields, .seq elements => Value.fieldsFit fields elements

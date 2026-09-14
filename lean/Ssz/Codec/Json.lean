@@ -155,10 +155,10 @@ def jsonOf (shape : Desc) (spelling : Spelling) (value : Value) : Except Err Jso
     else if spelling.isByte && width == 1 then .ok (.str (toHex #[UInt8.ofNat n]))
     else .ok (decimal n)
   | .byteVector _, .bytes data | .byteList _, .bytes data => .ok (.str (toHex data))
-  | .bitVector _, .bits _ | .bitList _, .bits _ | .progressiveBitList, .bits _ => do
+  | .bitVector _, .bits _ | .bitList _, .bits _ | .progressiveBitList _, .bits _ => do
     return .str (toHex (← serialize shape value))
   | .vector element _, .seq elements | .list element _, .seq elements
-  | .progressiveList element, .seq elements =>
+  | .progressiveList element _, .seq elements =>
     jsonOfSequence element (spelling.part 0) elements
   | .container names fields, .seq values | .progressiveContainer _ names fields, .seq values => do
     return .mkObj (names.zip (← jsonOfFields fields spelling 0 values))
@@ -227,7 +227,7 @@ def valueOf (shape : Desc) (spelling : Spelling) (document : Json) : Except Err 
     let data ← ofHex (← collectionHex document)
     if data.size > limit then throw (.documentOverLimit limit data.size)
     return .bytes data
-  | .bitVector _ | .bitList _ | .progressiveBitList => readBitfield shape document
+  | .bitVector _ | .bitList _ | .progressiveBitList _ => readBitfield shape document
   | .vector element length => do
     let elements ← valueOfSequence element (spelling.part 0) document
     if elements.length != length then throw (.count length elements.length)
@@ -236,8 +236,11 @@ def valueOf (shape : Desc) (spelling : Spelling) (document : Json) : Except Err 
     let elements ← valueOfSequence element (spelling.part 0) document
     if elements.length > limit then throw (.documentOverLimit limit elements.length)
     return .seq elements
-  | .progressiveList element => do
-    return .seq (← valueOfSequence element (spelling.part 0) document)
+  | .progressiveList element limit => do
+    let elements ← valueOfSequence element (spelling.part 0) document
+    if let some bound := limit then
+      if elements.length > bound then throw (.documentOverLimit bound elements.length)
+    return .seq elements
   | .container names fields | .progressiveContainer _ names fields => do
     let .obj _ := document | throw .structNotAnObject
     -- The specification permits ignoring an undeclared field; this refuses one instead.

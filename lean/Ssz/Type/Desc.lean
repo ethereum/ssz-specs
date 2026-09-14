@@ -25,14 +25,14 @@ inductive Desc where
   | bitVector (length : Nat)
   /-- A variable number of bits, up to a limit. -/
   | bitList (limit : Nat)
-  /-- A variable number of bits with no limit. -/
-  | progressiveBitList
+  /-- A variable number of bits, up to a limit where one is declared. -/
+  | progressiveBitList (limit : Option Nat)
   /-- A fixed number of elements. -/
   | vector (element : Desc) (length : Nat)
   /-- A variable number of elements, up to a limit. -/
   | list (element : Desc) (limit : Nat)
-  /-- A variable number of elements with no limit. -/
-  | progressiveList (element : Desc)
+  /-- A variable number of elements, up to a limit where one is declared. -/
+  | progressiveList (element : Desc) (limit : Option Nat)
   /-- A fixed sequence of named fields. -/
   | container (names : List String) (fields : List Desc)
   /-- Named fields that keep their tree positions as the set of them changes. -/
@@ -40,6 +40,11 @@ inductive Desc where
   /-- A choice between options that share one tree shape. -/
   | compatibleUnion (selectors : List Nat) (options : List Desc)
   deriving Repr, Inhabited
+
+/-- Whether a count is within a capacity its shape declares only where it has one. -/
+def withinBound : Option Nat → Nat → Bool
+  | none, _ => true
+  | some bound, count => count ≤ bound
 
 mutual
 
@@ -51,10 +56,10 @@ def Desc.beq : Desc → Desc → Bool
   | .byteList a, .byteList b => a == b
   | .bitVector a, .bitVector b => a == b
   | .bitList a, .bitList b => a == b
-  | .progressiveBitList, .progressiveBitList => true
+  | .progressiveBitList a, .progressiveBitList b => a == b
   | .vector a n, .vector b m => Desc.beq a b && n == m
   | .list a n, .list b m => Desc.beq a b && n == m
-  | .progressiveList a, .progressiveList b => Desc.beq a b
+  | .progressiveList a n, .progressiveList b m => Desc.beq a b && n == m
   | .container names fields, .container others types =>
       names == others && Desc.beqList fields types
   | .progressiveContainer active names fields, .progressiveContainer mask others types =>
@@ -114,7 +119,7 @@ This bounds how far a path can descend, since each step of a path enters one nes
 def Desc.nesting : Desc → Nat
   | .vector element _ => element.nesting + 1
   | .list element _ => element.nesting + 1
-  | .progressiveList element => element.nesting + 1
+  | .progressiveList element _ => element.nesting + 1
   | .container _ fields => Desc.deepestNesting fields + 1
   | .progressiveContainer _ _ fields => Desc.deepestNesting fields + 1
   | .compatibleUnion _ options => Desc.deepestNesting options + 1

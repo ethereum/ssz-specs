@@ -139,7 +139,7 @@ def merkleLayout (shape : Desc) (value : Value) : Except Err MerkleLayout :=
     if data.size > limit then throw (.overLimit limit data.size)
     return .packing (packedBits data) (some (chunksForBits limit)) (lengthWord data.size)
   -- No capacity bounds a progressive shape, so its nodes go on a spine instead.
-  | .progressiveBitList, .bits data =>
+  | .progressiveBitList _, .bits data =>
     -- The count mixed in is the bit count, not the number of packed nodes.
     return .packing (packedBits data) none (lengthWord data.size)
   | .vector element length, .seq elements => do
@@ -149,7 +149,7 @@ def merkleLayout (shape : Desc) (value : Value) : Except Err MerkleLayout :=
   | .list element limit, .seq elements => do
     if elements.length > limit then throw (.overLimit limit elements.length)
     sequenceLayout element elements (some limit) (lengthWord elements.length)
-  | .progressiveList element, .seq elements =>
+  | .progressiveList element _, .seq elements =>
     -- The count mixed in is the element count, never the number of nodes they packed into.
     sequenceLayout element elements none (lengthWord elements.length)
   | .container _ fields, .seq values => do

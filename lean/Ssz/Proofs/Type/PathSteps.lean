@@ -25,10 +25,10 @@ theorem resolveStep_list (element : Desc) (count ordinal : Nat) (inside : ordina
     Desc.chunkCount, Nat.not_le.mpr inside, Bind.bind, Except.bind, Pure.pure, Except.pure]
 
 /-- A progressive list element selects its packed chunk along the growing spine. -/
-theorem resolveStep_progressiveList (element : Desc) (ordinal : Nat) :
-    (Desc.progressiveList element).resolveStep (.position ordinal) = .ok
+theorem resolveStep_progressiveList (element : Desc) {limit : Option Nat} (ordinal : Nat) :
+    (Desc.progressiveList element limit).resolveStep (.position ordinal) = .ok
       (progressiveChunkGindex (ordinal * element.itemLength / bytesPerChunk), some element) := by
-  -- There is no declared capacity, so every position has a type-level address.
+  -- A bound never reaches the tree, so every position has a type-level address.
   simp [Desc.resolveStep, Desc.chunkPosition, Desc.elementType, Desc.positionCount,
     Bind.bind, Except.bind, Pure.pure, Except.pure]
 
@@ -74,8 +74,8 @@ theorem resolveStep_bitList (count ordinal : Nat) (inside : ordinal < count) :
     Desc.chunkCount, Nat.not_le.mpr inside, Bind.bind, Except.bind, Pure.pure, Except.pure]
 
 /-- A progressive bit list position selects its packed chunk along the spine. -/
-theorem resolveStep_progressiveBitList (ordinal : Nat) :
-    Desc.progressiveBitList.resolveStep (.position ordinal) = .ok
+theorem resolveStep_progressiveBitList {limit : Option Nat} (ordinal : Nat) :
+    (Desc.progressiveBitList limit).resolveStep (.position ordinal) = .ok
       (progressiveChunkGindex (ordinal / (8 * bytesPerChunk)), some .bool) := by
   -- The spine grows by chunks, independently of the bit's offset inside its chunk.
   simp [Desc.resolveStep, Desc.chunkPosition, Desc.elementType, Desc.positionCount,

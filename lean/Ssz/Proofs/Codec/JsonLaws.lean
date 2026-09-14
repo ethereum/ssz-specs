@@ -144,14 +144,17 @@ theorem valueOf_jsonOf_bitList {spelling : Spelling} {limit : Nat} {data : Array
     pure, Except.pure]
 
 @[inherit_doc valueOf_jsonOf_bitVector]
-theorem valueOf_jsonOf_progressiveBitList {spelling : Spelling} {data : Array Bool}
-    {document : Json}
-    (legal : Desc.progressiveBitList.wellFormed = .ok ())
-    (fitted : Fits .progressiveBitList (.bits data))
-    (written : jsonOf .progressiveBitList spelling (.bits data) = .ok document) :
-    valueOf .progressiveBitList spelling document = .ok (.bits data) := by
-  have wrote : serialize .progressiveBitList (.bits data) = .ok (packBitsDelimited data) := by
-    simp [serialize]
+theorem valueOf_jsonOf_progressiveBitList {spelling : Spelling} {limit : Option Nat}
+    {data : Array Bool} {document : Json}
+    (within : withinBound limit data.size = true)
+    (legal : (Desc.progressiveBitList limit).wellFormed = .ok ())
+    (fitted : Fits (.progressiveBitList limit) (.bits data))
+    (written : jsonOf (.progressiveBitList limit) spelling (.bits data) = .ok document) :
+    valueOf (.progressiveBitList limit) spelling document = .ok (.bits data) := by
+  have wrote : serialize (.progressiveBitList limit) (.bits data)
+      = .ok (packBitsDelimited data) := by
+    simp [serialize, boundCheck_of_withinBound limit _ within, Bind.bind, Except.bind,
+      Pure.pure, Except.pure]
   have back := roundTrip_of_wellFormed legal fitted wrote
   rw [jsonOf, wrote] at written
   simp only [Bind.bind, Except.bind, pure, Except.pure, Except.ok.injEq] at written

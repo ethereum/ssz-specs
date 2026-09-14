@@ -258,17 +258,21 @@ private theorem bitList_layout_shapes (limit : Nat) {left right : Value} {first 
           have sizes := lengthWord_injective count otherCount (Option.some.inj mixed)
           simp [MerkleLayout.packing, Leaves.shapes, packedBits, packBytes_size, packBits, sizes]
 
-private theorem progressiveBitList_layout_shapes {left right : Value} {first second : MerkleLayout}
-    (leftFits : Fits (Desc.progressiveBitList) left) (rightFits : Fits (Desc.progressiveBitList) right)
-    (leftSized : CommitmentSized (Desc.progressiveBitList) left) (rightSized : CommitmentSized (Desc.progressiveBitList) right)
-    (laid : merkleLayout (Desc.progressiveBitList) left = .ok first)
-    (other : merkleLayout (Desc.progressiveBitList) right = .ok second) (mixed : first.mixin = second.mixin) :
+private theorem progressiveBitList_layout_shapes {limit : Option Nat} {left right : Value}
+    {first second : MerkleLayout}
+    (leftFits : Fits (Desc.progressiveBitList limit) left)
+    (rightFits : Fits (Desc.progressiveBitList limit) right)
+    (leftSized : CommitmentSized (Desc.progressiveBitList limit) left)
+    (rightSized : CommitmentSized (Desc.progressiveBitList limit) right)
+    (laid : merkleLayout (Desc.progressiveBitList limit) left = .ok first)
+    (other : merkleLayout (Desc.progressiveBitList limit) right = .ok second)
+    (mixed : first.mixin = second.mixin) :
     first.limit = second.limit ∧ first.leaves.shapes = second.leaves.shapes := by
-  -- An exact bit count fixes the progressive spine's stored node count even without a capacity.
+  -- An exact bit count fixes the progressive spine's stored node count, bound or none.
   cases leftFits with
-  | @progressiveBitList data =>
+  | @progressiveBitList _ data _ =>
     cases rightFits with
-    | @progressiveBitList otherData =>
+    | @progressiveBitList _ otherData _ =>
       cases leftSized with
       | progressiveBitList count =>
         cases rightSized with
@@ -315,17 +319,21 @@ private theorem list_layout_shapes (element : Desc) (limit : Nat) {left right : 
           -- Recover equal counts from the words before aligning packed or nested leaves.
           exact sequenceLayout_shapes (lengthWord_injective count otherCount words) each otherEach laid other
 
-private theorem progressiveList_layout_shapes (element : Desc) {left right : Value} {first second : MerkleLayout}
-    (leftFits : Fits (Desc.progressiveList element) left) (rightFits : Fits (Desc.progressiveList element) right)
-    (leftSized : CommitmentSized (Desc.progressiveList element) left) (rightSized : CommitmentSized (Desc.progressiveList element) right)
-    (laid : merkleLayout (Desc.progressiveList element) left = .ok first)
-    (other : merkleLayout (Desc.progressiveList element) right = .ok second) (mixed : first.mixin = second.mixin) :
+private theorem progressiveList_layout_shapes (element : Desc) {limit : Option Nat}
+    {left right : Value} {first second : MerkleLayout}
+    (leftFits : Fits (Desc.progressiveList element limit) left)
+    (rightFits : Fits (Desc.progressiveList element limit) right)
+    (leftSized : CommitmentSized (Desc.progressiveList element limit) left)
+    (rightSized : CommitmentSized (Desc.progressiveList element limit) right)
+    (laid : merkleLayout (Desc.progressiveList element limit) left = .ok first)
+    (other : merkleLayout (Desc.progressiveList element limit) right = .ok second)
+    (mixed : first.mixin = second.mixin) :
     first.limit = second.limit ∧ first.leaves.shapes = second.leaves.shapes := by
   -- The mixing word aligns progressive element lists by their actual counts.
   cases leftFits with
-  | progressiveList each =>
+  | progressiveList _ each =>
     cases rightFits with
-    | progressiveList otherEach =>
+    | progressiveList _ otherEach =>
       cases leftSized with
       | progressiveList count _ =>
         cases rightSized with

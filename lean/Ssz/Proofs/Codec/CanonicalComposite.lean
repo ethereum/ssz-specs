@@ -4,6 +4,26 @@ import Ssz.Proofs.Codec.CanonicalTable
 
 namespace Ssz
 
+/-- A decode reads one value for each slice it was handed. -/
+private theorem deserializeEach_length {element : Desc} :
+    ∀ (slices : List Bytes) (values : List Value),
+      deserializeEach element slices = .ok values → slices.length = values.length
+  | [], values, read => by
+    simp only [deserializeEach, Except.ok.injEq] at read
+    simp [← read]
+  | slice :: rest, values, read => by
+    rw [deserializeEach] at read
+    cases head : deserialize element slice with
+    | error _ => simp [head, Bind.bind, Except.bind] at read
+    | ok first =>
+      cases tail : deserializeEach element rest with
+      | error _ => simp [head, tail, Bind.bind, Except.bind] at read
+      | ok others =>
+        simp only [head, tail, Bind.bind, Except.bind, pure, Except.pure,
+          Except.ok.injEq] at read
+        subst read
+        simp [deserializeEach_length rest others tail]
+
 /-- Re-encoding individually canonical elements recovers every original slice in order. -/
 theorem serializeEach_of_deserializeEach {element : Desc}
     (canonical : ∀ data value, deserialize element data = .ok value →
@@ -179,14 +199,15 @@ theorem canonical_list {element : Desc} {limit : Nat} {data : Bytes} {value : Va
           serializeEach_of_deserializeEach canonical slices values decoded,
           Bind.bind, Except.bind, listSlices_assemble parts]
 
-/-- An unbounded list of canonical elements has a canonical encoding. -/
-theorem canonical_progressiveList {element : Desc} {data : Bytes} {value : Value}
+/-- A progressive list of canonical elements has a canonical encoding. -/
+theorem canonical_progressiveList {element : Desc} {limit : Option Nat} {data : Bytes}
+    {value : Value}
     (canonical : ∀ data value, deserialize element data = .ok value →
       serialize element value = .ok data)
-    (read : deserialize (.progressiveList element) data = .ok value) :
-    serialize (.progressiveList element) value = .ok data := by
+    (read : deserialize (.progressiveList element limit) data = .ok value) :
+    serialize (.progressiveList element limit) value = .ok data := by
   -- Recover the element boundaries before considering the values inside those boundaries.
-  cases parts : listSlices element none data with
+  cases parts : listSlices element limit data with
   | error fault => simp [deserialize, parts, Bind.bind, Except.bind] at read
   | ok slices =>
     -- Each accepted slice supplies one decoded element in the original order.
@@ -196,7 +217,10 @@ theorem canonical_progressiveList {element : Desc} {data : Bytes} {value : Value
       simp [deserialize, parts, decoded, Bind.bind, Except.bind, pure, Except.pure] at read
       -- Re-encoding each element recovers its slice, and canonical assembly recovers the whole byte string.
       subst value
+      have counted : values.length = slices.length :=
+        (deserializeEach_length slices values decoded).symm
       simp [serialize, serializeSequence,
+        boundCheck_of_withinBound limit _ (counted ▸ listSlices_within parts),
         serializeEach_of_deserializeEach canonical slices values decoded,
         Bind.bind, Except.bind, listSlices_assemble parts]
 

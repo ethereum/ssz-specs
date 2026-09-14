@@ -40,19 +40,19 @@ theorem default_fits (shape : Desc) :
     intro value made
     cases made
     exact .bitList (by simp)
-  | case7 =>
+  | case7 limit =>
     intro value made
     cases made
-    exact .progressiveBitList
+    exact .progressiveBitList (by cases limit <;> simp [withinBound])
   -- An empty element sequence has no child-domain obligations.
   | case8 element limit =>
     intro value made
     cases made
     exact .list (by simp) (by simp)
-  | case9 element =>
+  | case9 element limit =>
     intro value made
     cases made
-    exact .progressiveList (by simp)
+    exact .progressiveList (by cases limit <;> simp [withinBound]) (by simp)
   | case10 element length ih =>
     intro value made
     -- Replication preserves admissibility of the element default at every position.

@@ -135,15 +135,15 @@ def main : IO Unit := do
   -- Both tree shapes and nested values must authenticate their readable nodes.
   checkBranches (.list .uint256 5) (.seq [.uint 1, .uint 2, .uint 3])
   -- An unbounded progressive spine must authenticate the same readable-node prefix.
-  checkBranches (.progressiveList .uint256) (.seq [.uint 1, .uint 2, .uint 3])
+  checkBranches (.progressiveList .uint256 none) (.seq [.uint 1, .uint 2, .uint 3])
   -- Gaps in a progressive container remain part of the authenticated tree layout.
   checkBranches shape (.seq [.bool true])
   -- A selected nested option must remain authenticated below its selector word.
   checkBranches (.compatibleUnion [1] [shape]) (.union 1 (.seq [.bool true]))
   -- Exhaust all one- and two-byte inputs for small packed and delimited types.
   let shapes : List Desc := [.bool, .uint8, .uint16, .byteVector 2, .byteList 2,
-    .bitVector 9, .bitList 9, .progressiveBitList, .list .bool 2,
-    .vector .bool 2, .progressiveList .bool, .compatibleUnion [1] [.bool]]
+    .bitVector 9, .bitList 9, .progressiveBitList none, .list .bool 2,
+    .vector .bool 2, .progressiveList .bool none, .compatibleUnion [1] [.bool]]
   for shape in shapes do
     -- The empty byte string covers both a refusal and an empty-value encoding.
     checkCanonical shape #[]
@@ -160,7 +160,7 @@ def main : IO Unit := do
     ((jsonOf (.uint 1) .opaque (.uint 255)).toOption.map Json.compress == some "\"255\"")
   -- A bitfield is the hex of its own encoding, so its delimiter bit is part of the document.
   expect "bit list document"
-    ((jsonOf .progressiveBitList .opaque (.bits #[true, false, true])).toOption.map Json.compress
+    ((jsonOf (.progressiveBitList none) .opaque (.bits #[true, false, true])).toOption.map Json.compress
       == some "\"0x0d\"")
   -- An integer wider than a double is written as digits in a string, and survives being read.
   checkDocument .uint64 .opaque (.uint (2 ^ 64 - 1))

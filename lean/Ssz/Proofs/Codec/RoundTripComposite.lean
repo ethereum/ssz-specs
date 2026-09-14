@@ -183,27 +183,28 @@ inductive Recovers : Desc → Prop
   | bitVector (length : Nat) : Recovers (.bitVector length)
   /-- A bounded bit sequence. -/
   | bitList (limit : Nat) : Recovers (.bitList limit)
-  /-- An unbounded bit sequence. -/
-  | progressiveBitList : Recovers .progressiveBitList
+  /-- A progressive bit sequence. -/
+  | progressiveBitList (limit : Option Nat) : Recovers (.progressiveBitList limit)
   /-- A sequence of fixed elements, once the element is covered. -/
   | vectorFixed {element : Desc} {length width : Nat} (fixed : element.fixedSize = some width)
       (inner : Recovers element) : Recovers (.vector element length)
   /-- A bounded sequence of fixed elements, whose count the data itself gives. -/
   | listFixed {element : Desc} {limit width : Nat} (fixed : element.fixedSize = some width)
       (positive : 0 < width) (inner : Recovers element) : Recovers (.list element limit)
-  /-- An unbounded sequence of fixed elements, on the same terms. -/
-  | progressiveListFixed {element : Desc} {width : Nat}
+  /-- A progressive sequence of fixed elements, on the same terms. -/
+  | progressiveListFixed {element : Desc} {limit : Option Nat} {width : Nat}
       (fixed : element.fixedSize = some width) (positive : 0 < width)
-      (inner : Recovers element) : Recovers (.progressiveList element)
+      (inner : Recovers element) : Recovers (.progressiveList element limit)
   /-- A sequence of variable elements, each reached through its offset. -/
   | vectorVarying {element : Desc} {length : Nat} (varying : element.fixedSize = none)
       (inner : Recovers element) : Recovers (.vector element length)
   /-- A bounded sequence of variable elements, whose count the table itself gives. -/
   | listVarying {element : Desc} {limit : Nat} (varying : element.fixedSize = none)
       (inner : Recovers element) : Recovers (.list element limit)
-  /-- An unbounded sequence of variable elements, on the same terms. -/
-  | progressiveListVarying {element : Desc} (varying : element.fixedSize = none)
-      (inner : Recovers element) : Recovers (.progressiveList element)
+  /-- A progressive sequence of variable elements, on the same terms. -/
+  | progressiveListVarying {element : Desc} {limit : Option Nat}
+      (varying : element.fixedSize = none)
+      (inner : Recovers element) : Recovers (.progressiveList element limit)
   /-- A struct, once every field it declares is covered. -/
   | container {names : List String} {fields : List Desc}
       (inner : ∀ field ∈ fields, Recovers field) : Recovers (.container names fields)

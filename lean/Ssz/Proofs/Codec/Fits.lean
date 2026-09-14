@@ -30,8 +30,10 @@ inductive Fits : Desc → Value → Prop
   /-- A bit sequence within the declared capacity. -/
   | bitList {limit : Nat} {data : Array Bool} (within : data.size ≤ limit) :
       Fits (.bitList limit) (.bits data)
-  /-- A bit sequence of any length, no capacity being declared. -/
-  | progressiveBitList {data : Array Bool} : Fits .progressiveBitList (.bits data)
+  /-- A bit sequence within the capacity declared, where one is. -/
+  | progressiveBitList {limit : Option Nat} {data : Array Bool}
+      (within : withinBound limit data.size = true) :
+      Fits (.progressiveBitList limit) (.bits data)
   /-- Exactly the declared count of elements, each fitting the element type. -/
   | vector {element : Desc} {length : Nat} {elements : List Value}
       (count : elements.length = length)
@@ -42,10 +44,11 @@ inductive Fits : Desc → Value → Prop
       (within : elements.length ≤ limit)
       (each : ∀ value ∈ elements, Fits element value) :
       Fits (.list element limit) (.seq elements)
-  /-- Elements of any count, no capacity being declared. -/
-  | progressiveList {element : Desc} {elements : List Value}
+  /-- Elements within the capacity declared, where one is, each fitting the element type. -/
+  | progressiveList {element : Desc} {limit : Option Nat} {elements : List Value}
+      (within : withinBound limit elements.length = true)
       (each : ∀ value ∈ elements, Fits element value) :
-      Fits (.progressiveList element) (.seq elements)
+      Fits (.progressiveList element limit) (.seq elements)
   /-- One value per declared field, each fitting the field it stands under. -/
   | container {names : List String} {fields : List Desc} {values : List Value}
       (paired : fields.length = values.length)
@@ -64,5 +67,22 @@ inductive Fits : Desc → Value → Prop
       (named : lookupOption selectors options selector = .ok option)
       (inner : Fits option data) :
       Fits (.compatibleUnion selectors options) (.union selector data)
+
+/-- A capacity check a successful encoding got past is one the count was within. -/
+theorem withinBound_of_boundCheck : ∀ (limit : Option Nat) (count : Nat),
+    boundCheck limit count = .ok () → withinBound limit count = true
+  | none, _, _ => rfl
+  | some bound, count, passed => by
+    by_cases small : count ≤ bound
+    · simpa [withinBound] using small
+    · rw [boundCheck, if_neg small] at passed
+      simp at passed
+
+/-- A count its shape admits passes that shape's capacity check. -/
+theorem boundCheck_of_withinBound : ∀ (limit : Option Nat) (count : Nat),
+    withinBound limit count = true → boundCheck limit count = .ok ()
+  | none, _, _ => rfl
+  | some bound, count, within => by
+    rw [boundCheck, if_pos (by simpa [withinBound] using within)]
 
 end Ssz

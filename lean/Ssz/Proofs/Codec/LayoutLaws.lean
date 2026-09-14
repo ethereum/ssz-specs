@@ -65,7 +65,7 @@ theorem merkleLayout_child_nesting (shape : Desc) (value : Value) (layout : Merk
       layout success slots nested child inner member
     simp [eq, Desc.nesting]
   -- Progressive tree depth does not increase the nesting depth of element types.
-  case progressiveList.seq element elements =>
+  case progressiveList.seq element limit elements =>
     have eq := sequenceLayout_depth element elements none (some (lengthWord elements.length))
       layout success slots nested child inner member
     simp [eq, Desc.nesting]

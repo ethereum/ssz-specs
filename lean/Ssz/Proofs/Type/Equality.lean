@@ -34,7 +34,7 @@ theorem Desc.beq_eq (left right : Desc) : Desc.beq left right = true ↔ left = 
       cases right <;> simp [Desc.beq]
   | vector element length ih | list element length ih =>
       cases right <;> simp [Desc.beq, ih]
-  | progressiveList element ih => cases right <;> simp [Desc.beq, ih]
+  | progressiveList element limit ih => cases right <;> simp [Desc.beq, ih]
   | container names fields ih => cases right <;> simp [Desc.beq, ih]
   | progressiveContainer active names fields ih =>
       cases right <;> simp [Desc.beq, ih, and_assoc]

@@ -380,10 +380,11 @@ theorem valueOf_jsonOf : ∀ (shape : Desc), shape.wellFormed = .ok () → Rewri
     intro sound _ _ _ fitted wrote
     cases fitted with
     | bitList within => exact valueOf_jsonOf_bitList within sound (.bitList within) wrote
-  | progressiveBitList =>
+  | progressiveBitList limit =>
     intro sound _ _ _ fitted wrote
     cases fitted with
-    | progressiveBitList => exact valueOf_jsonOf_progressiveBitList sound .progressiveBitList wrote
+    | progressiveBitList within =>
+      exact valueOf_jsonOf_progressiveBitList within sound (.progressiveBitList within) wrote
   | vector element length ih =>
     intro sound spelling _ document fitted wrote
     cases fitted with
@@ -402,15 +403,19 @@ theorem valueOf_jsonOf : ∀ (shape : Desc), shape.wellFormed = .ok () → Rewri
         document each wrote]
       simp [Nat.not_lt.mpr within, Bind.bind, Except.bind]
       rfl
-  | progressiveList element ih =>
+  | progressiveList element limit ih =>
     intro sound spelling _ document fitted wrote
     cases fitted with
-    | progressiveList each =>
+    | progressiveList within each =>
       rw [jsonOf] at wrote
       rw [valueOf, valueOfSequence_jsonOfSequence element _ (ih (wellFormed_progressiveList sound))
         _ document each wrote]
-      simp [Bind.bind, Except.bind]
-      rfl
+      cases limit with
+      | none => simp [Bind.bind, Except.bind]; rfl
+      | some bound =>
+        simp only [withinBound, decide_eq_true_eq] at within
+        simp [Nat.not_lt.mpr within, Bind.bind, Except.bind]
+        rfl
   | container names fields ih =>
     intro sound spelling value document fitted wrote
     cases fitted with

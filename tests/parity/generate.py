@@ -60,7 +60,10 @@ def build_type(draw: Draw, depth: int = 0) -> type[ssz.SSZType]:
     if kind == "bitList":
         return declare("GenBitList", ssz.BitList, {"LIMIT": draw.between(1, MAX_WIDTH)})
     if kind == "progBits":
-        return ssz.ProgressiveBitList
+        # A bound is optional, so both spellings of the shape are drawn.
+        if draw.flag():
+            return ssz.ProgressiveBitList
+        return declare("GenProgBits", ssz.ProgressiveBitList, {"LIMIT": draw.between(0, MAX_WIDTH)})
 
     if kind in {"vector", "list", "progList"}:
         element = build_type(draw, depth + 1)
@@ -71,7 +74,13 @@ def build_type(draw: Draw, depth: int = 0) -> type[ssz.SSZType]:
         if kind == "list":
             limit = draw.between(1, MAX_ELEMENTS)
             return declare("GenList", ssz.List, {"LIMIT": limit, "ELEMENT_TYPE": element})
-        return declare("GenProgList", ssz.ProgressiveList, {"ELEMENT_TYPE": element})
+        if draw.flag():
+            return declare("GenProgList", ssz.ProgressiveList, {"ELEMENT_TYPE": element})
+        return declare(
+            "GenProgList",
+            ssz.ProgressiveList,
+            {"LIMIT": draw.between(0, MAX_ELEMENTS), "ELEMENT_TYPE": element},
+        )
 
     if kind in {"container", "progContainer"}:
         names = list(FIELD_NAMES[: draw.between(1, len(FIELD_NAMES))])
@@ -116,7 +125,8 @@ def build_value(draw: Draw, ssz_type: type[ssz.SSZType]) -> ssz.SSZType:
     if issubclass(ssz_type, ssz.BitVector):
         return ssz_type(data=[draw.flag() for _ in range(ssz_type.declared_length())])
     if issubclass(ssz_type, ssz.ProgressiveBitList):
-        return ssz_type(data=[draw.flag() for _ in range(draw.between(0, 2 * MAX_ELEMENTS))])
+        room = 2 * MAX_ELEMENTS if ssz_type.LIMIT is None else ssz_type.LIMIT
+        return ssz_type(data=[draw.flag() for _ in range(draw.between(0, room))])
     if issubclass(ssz_type, ssz.BitList):
         count = draw.between(0, ssz_type.declared_limit())
         return ssz_type(data=[draw.flag() for _ in range(count)])
@@ -125,7 +135,8 @@ def build_value(draw: Draw, ssz_type: type[ssz.SSZType]) -> ssz.SSZType:
         return ssz_type(data=[build_value(draw, element) for _ in range(length)])
     if issubclass(ssz_type, ssz.ProgressiveList):
         element = ssz_type.ELEMENT_TYPE
-        return ssz_type(data=[build_value(draw, element) for _ in range(draw.below(MAX_ELEMENTS))])
+        room = MAX_ELEMENTS if ssz_type.LIMIT is None else min(ssz_type.LIMIT, MAX_ELEMENTS)
+        return ssz_type(data=[build_value(draw, element) for _ in range(draw.between(0, room))])
     if issubclass(ssz_type, ssz.List):
         element = ssz_type.ELEMENT_TYPE
         count = draw.between(0, min(ssz_type.declared_limit(), MAX_ELEMENTS))

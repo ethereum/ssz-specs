@@ -319,15 +319,19 @@ theorem roundTrip_bitList {limit : Nat} {data : Array Bool} (fits : data.size â‰
       exact fits)]
   rfl
 
-/-- An unbounded bit sequence survives being written and read back. -/
-theorem roundTrip_progressiveBitList {data : Array Bool} :
-    serialize .progressiveBitList (.bits data) >>= deserialize .progressiveBitList
+/-- A progressive bit sequence its capacity admits survives being written and read back. -/
+theorem roundTrip_progressiveBitList {limit : Option Nat} {data : Array Bool}
+    (within : withinBound limit data.size = true) :
+    serialize (.progressiveBitList limit) (.bits data)
+        >>= deserialize (.progressiveBitList limit)
       = .ok (.bits data) := by
-  -- No capacity is declared, so there is nothing for either side to refuse.
-  simp only [serialize]
-  show deserialize .progressiveBitList (packBitsDelimited data) = _
+  simp only [serialize, boundCheck_of_withinBound limit _ within, Bind.bind, Except.bind,
+    Pure.pure, Except.pure]
+  show deserialize (.progressiveBitList limit) (packBitsDelimited data) = _
   simp only [deserialize,
-    unpackDelimited_packBitsDelimited none data (fun _ named => by cases named)]
+    unpackDelimited_packBitsDelimited limit data (fun bound named => by
+      subst named
+      simpa [withinBound] using within)]
   rfl
 
 /-- A bounded byte string survives being written and read back. -/

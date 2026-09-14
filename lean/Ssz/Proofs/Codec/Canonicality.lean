@@ -31,7 +31,7 @@ theorem serialize_of_deserialize (shape : Desc) :
   | list element limit ih =>
     intro legal data value read
     exact canonical_list (ih (wellFormed_list legal)) read
-  | progressiveList element ih =>
+  | progressiveList element limit ih =>
     intro legal data value read
     exact canonical_progressiveList (ih (wellFormed_progressiveList legal)) read
   | container names fields ih | progressiveContainer active names fields ih =>
