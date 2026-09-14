@@ -79,6 +79,7 @@ import Ssz.Proofs.Merkle.MultiproofBinding
 import Ssz.Proofs.Merkle.MultiproofClaims
 import Ssz.Proofs.Merkle.MultiproofTrace
 import Ssz.Proofs.Merkle.MultiproofTree
+import Ssz.Proofs.Merkle.ProgressiveLevels
 import Ssz.Proofs.Merkle.Tree
 import Ssz.Proofs.Merkle.Verify
 import Ssz.Proofs.Merkle.Widths
