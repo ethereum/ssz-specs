@@ -129,6 +129,7 @@ def readBitfield (shape : Desc) (document : Json) : Except Err Value := do
   | .error .paddingBits => throw .bitfieldPadding
   | .error .noDelimiter => throw .bitfieldDelimiter
   | .error .trailingZeros => throw .bitfieldTrailingZeros
+  | .error (.overLimit limit actual) => throw (.documentOverLimit limit actual)
   | .error fault => throw fault
 
 /-- The field names an object carries. -/
