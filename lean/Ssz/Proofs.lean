@@ -34,6 +34,7 @@ import Ssz.Proofs.Codec.Fits
 import Ssz.Proofs.Codec.Layout
 import Ssz.Proofs.Codec.JsonHex
 import Ssz.Proofs.Codec.JsonLaws
+import Ssz.Proofs.Codec.JsonRoundTrip
 import Ssz.Proofs.Codec.LayoutLaws
 import Ssz.Proofs.Codec.LayoutMixin
 import Ssz.Proofs.Codec.LayoutProofTree

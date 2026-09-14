@@ -241,8 +241,8 @@ def valueOf (shape : Desc) (spelling : Spelling) (document : Json) : Except Err 
   | .container names fields | .progressiveContainer _ names fields => do
     let .obj _ := document | throw .structNotAnObject
     -- The specification permits ignoring an undeclared field; this refuses one instead.
-    for name in objectNames document do
-      if !names.contains name then throw (.undeclaredField name)
+    if let some extra := (objectNames document).find? fun name => !names.contains name then
+      throw (.undeclaredField extra)
     return .seq (← valueOfFields fields names spelling 0 document)
   | .compatibleUnion selectors options => do
     let .obj _ := document | throw .structNotAnObject

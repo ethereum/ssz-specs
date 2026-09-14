@@ -152,6 +152,25 @@ theorem wellFormed_union {selectors : List Nat} {options : List Desc}
     repeat' split at sound
     all_goals simp at sound
 
+/-- A struct names every field exactly once. -/
+theorem wellFormed_container_names {names : List String} {fields : List Desc}
+    (sound : (Desc.container names fields).wellFormed = .ok ()) :
+    names.length = fields.length ∧ firstDuplicate names = none := by
+  rw [Desc.wellFormed] at sound
+  simp only [Bind.bind, Except.bind, throw_error] at sound
+  repeat' split at sound
+  all_goals simp_all
+
+@[inherit_doc wellFormed_container_names]
+theorem wellFormed_progressiveContainer_names {active : List Bool} {names : List String}
+    {fields : List Desc}
+    (sound : (Desc.progressiveContainer active names fields).wellFormed = .ok ()) :
+    names.length = fields.length ∧ firstDuplicate names = none := by
+  rw [Desc.wellFormed] at sound
+  simp only [Bind.bind, Except.bind, throw_error] at sound
+  repeat' split at sound
+  all_goals simp_all
+
 /-- A union declares every one of its selectors inside the one byte that carries it. -/
 theorem wellFormed_union_selectors {selectors : List Nat} {options : List Desc}
     (sound : (Desc.compatibleUnion selectors options).wellFormed = .ok ()) :

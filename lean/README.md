@@ -65,13 +65,11 @@ Only the spelling the mapping gives is accepted, which is stricter than the Pyth
 
 | The document | Here | The Python implementation |
 | --- | --- | --- |
-| A bitfield or byte sequence written as an array of its elements | Refused as an element of the wrong kind | Accepted on a byte list and a bitfield, refused on a byte vector |
+| A bitfield or byte sequence written as an array of its elements | Refused as an element of the wrong kind | Accepted, on all three kinds |
 | A hex byte string with no `0x` | Refused | Accepted on a byte array, refused on a bitfield |
 
 Both are leniency in the reference rather than anything the mapping spells, and no vector asserts
 either: the invalid vectors that write an array assert only the name the refusal carries.
-The reference is also inconsistent between the two byte-array kinds, and refuses a byte vector
-written as an array without naming a fault from its own catalogue.
 
 ## Build and test
 
@@ -123,6 +121,7 @@ and exhaustive canonical re-encoding checks for one- and two-byte inputs across 
 - [Byte aliases](Ssz/Proofs/Codec/Aliases.lean): byte arrays and sequences of eight-bit integers have equal encodings within the composite offset range, and equal roots.
 - [Tree construction](Ssz/Proofs/Merkle/Tree.lean): executable bounded and progressive trees agree with their mathematical definitions.
   Padding, subtree extraction, and upward construction preserve roots at arbitrary depths.
+  [Progressive levels](Ssz/Proofs/Merkle/ProgressiveLevels.lean): a chunk of a progressive collection keeps its index however long the collection grows, and sits three levels deeper per factor of four.
 - [Value roots](Ssz/Proofs/Codec/RootDomain.lean): every admissible value of a well-formed type has a 32-byte root, independently of serialization's offset limit.
 - [Constructed branches](Ssz/Proofs/Codec/ProofCorrectness.lean): a branch built for any readable node reconstructs the value's root and passes verification, including across nested type boundaries.
 - [Multiproofs](Ssz/Proofs/Merkle/Multiproof.lean): the computed helper frontier suffices for reconstruction, and proofs read from a finite tree rebuild its root.
@@ -138,7 +137,8 @@ and exhaustive canonical re-encoding checks for one- and two-byte inputs across 
   The proof recovers lengths, selectors, packed data, and nested values; callers supply no tree-alignment assumption.
 - [Summaries](Ssz/Proofs/Codec/Summary.lean): replacing a field by a 32-byte array holding that field's own root leaves the struct root unchanged.
   A party holding only the summary computes the root a party holding the value computes, so a proof about anything inside the replaced value verifies against both.
-- [The JSON mapping](Ssz/Proofs/Codec/JsonLaws.lean): a document written for a value of any basic shape reads back as that value, which covers booleans, all six integer widths, the byte alias, both byte arrays, and all three bitfields.
+- [The JSON mapping](Ssz/Proofs/Codec/JsonRoundTrip.lean): a document written for an admissible value of any well-formed type reads back as that value, at every shape of the universe.
+  [Basic shapes](Ssz/Proofs/Codec/JsonLaws.lean) cover booleans, all six integer widths, the byte alias, both byte arrays, and all three bitfields.
   A bitfield is the hex of its own encoding, so its case is the codec round trip.
   [Hex](Ssz/Proofs/Codec/JsonHex.lean): a hex string the mapping wrote reads back as the bytes it came from.
   Objects: a name written into one is read back from it, and every name an object carries is one it was written from, so a written struct never trips the undeclared-field refusal.
@@ -149,14 +149,14 @@ and exhaustive canonical re-encoding checks for one- and two-byte inputs across 
 
 ### What is not proved
 
-Three statements of the specification are checked only by vectors, and are named here rather than left to be discovered.
+Two statements of the specification are checked only by vectors, and are named here rather than left to be discovered.
 
-- The JSON round trip for the six shapes that hold another: the two sequences, the unbounded sequence, both structs, and the union.
-  Every basic shape is proved above, as are the hex and object layers the composite cases rest on.
 - The size of a multiproof, which bounds the helper count by the claim count and the depth.
   What is proved is that the helper set is sound: an antichain, free of duplicates, and sufficient for reconstruction.
 - The cost of merkleizing with a capacity, which counts hash applications.
   Counting operations needs a cost-instrumented merkleizer beside the real one, which this package does not have.
+
+### Domains and limits
 
 Composite serialization and deserialization both require fewer than 2^32 bytes at each composite level.
 Primitive byte arrays have no offset table and therefore no such limit of their own.
