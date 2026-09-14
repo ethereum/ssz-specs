@@ -677,7 +677,7 @@ class TestProgressiveBitListCapacity:
 
         assert (
             str(exception_info.value)
-            == "PinnedProgressiveBitList declares a LENGTH its shape has none of"
+            == "PinnedProgressiveBitList declares LENGTH, which is unsupported"
         )
 
 

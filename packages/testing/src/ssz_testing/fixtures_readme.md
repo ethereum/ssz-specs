@@ -358,7 +358,7 @@ No name appears in both catalogues, so a consumer holding one table of reasons n
 | `LAYOUT_TOO_WIDE` | Lays out more than 256 positions, which one 32-byte word cannot hold. |
 | `LAYOUT_TRAILING_GAP` | Ends its layout on a gap rather than on a field. |
 | `LAYOUT_WIDTH` | Lays out no position at all. |
-| `NOT_ENTITLED` | Declares a capacity its shape has none of. |
+| `NOT_ENTITLED` | Declares a capacity its shape does not support. |
 | `UINT_WIDTH` | Is an unsigned integer at a width other than 8, 16, 32, 64, 128 or 256 bits. |
 | `UNDECLARED` | Leaves out something its shape has to declare, such as a progressive container's field layout. |
 | `UNION_EMPTY` | Is a union offering no option. |

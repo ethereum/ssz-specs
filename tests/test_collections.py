@@ -2168,7 +2168,7 @@ class TestUnentitledCapacity:
             class BoundedVector(Vector[Uint8]):
                 LIMIT = 2
 
-        assert str(exception_info.value) == "BoundedVector declares a LIMIT its shape has none of"
+        assert str(exception_info.value) == "BoundedVector declares LIMIT, which is unsupported"
 
     def test_a_vector_refuses_a_bound_beside_its_own_count(self) -> None:
         """Two count rules can contradict, and a vector's default is the first casualty."""
@@ -2179,7 +2179,7 @@ class TestUnentitledCapacity:
                 LENGTH = 4
                 LIMIT = 2
 
-        assert str(exception_info.value) == "BothCounts declares a LIMIT its shape has none of"
+        assert str(exception_info.value) == "BothCounts declares LIMIT, which is unsupported"
 
     def test_a_list_refuses_an_exact_count(self) -> None:
         """A list holds any count up to its bound, and pinning one exactly is a vector."""
@@ -2189,7 +2189,7 @@ class TestUnentitledCapacity:
                 LIMIT = 4
                 LENGTH = 2
 
-        assert str(exception_info.value) == "PinnedList declares a LENGTH its shape has none of"
+        assert str(exception_info.value) == "PinnedList declares LENGTH, which is unsupported"
 
     def test_a_progressive_list_refuses_an_exact_count(self) -> None:
         """The spine grows with the data, so no exact count names a level of it."""
@@ -2200,7 +2200,7 @@ class TestUnentitledCapacity:
 
         assert (
             str(exception_info.value)
-            == "PinnedProgressiveList declares a LENGTH its shape has none of"
+            == "PinnedProgressiveList declares LENGTH, which is unsupported"
         )
 
 
