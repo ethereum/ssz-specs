@@ -50,6 +50,7 @@ class SSZTestFiller(Protocol):
         raw_bytes: str | None = None,
         expected_root: str | None = None,
         expected_rejection: ExpectedRejection | None = None,
+        stricter_than_spec: str | None = None,
     ) -> SSZFixture:
         """Build the spec from these fields, generate the vector, and collect it."""
         ...

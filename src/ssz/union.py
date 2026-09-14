@@ -242,7 +242,7 @@ def _byte_sequence(ssz_type: type[SSZType]) -> tuple[type[SSZType], int] | None:
         return None if ssz_type.LENGTH is None else (Vector, ssz_type.LENGTH)
     if issubclass(ssz_type, ByteList) or (of_bytes and issubclass(ssz_type, List)):
         return None if ssz_type.LIMIT is None else (List, ssz_type.LIMIT)
-    # A progressive list of bytes carries no capacity, so no byte array spells its shape.
+    # A progressive list of bytes hangs its bytes on a spine, which no byte array's tree is.
     return None
 
 
@@ -356,7 +356,7 @@ _SHAPE_RULES: Final[Mapping[type[SSZType], Callable[[Any, Any], bool]]] = {
     # A bitfield answers for its capacity, and never across the three bitfield shapes.
     BitVector: lambda left, right: _capacities_agree(left.LENGTH, right.LENGTH),
     BitList: lambda left, right: _capacities_agree(left.LIMIT, right.LIMIT),
-    # A progressive bitfield carries no capacity, so any two of them agree on one.
+    # A bound never reaches the tree, so any two progressive bitfields agree on the shape.
     ProgressiveBitList: lambda _left, _right: True,
     # A sequence answers for its capacity and its element type.
     Vector: lambda left, right: (

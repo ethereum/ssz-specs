@@ -7,7 +7,7 @@ Three flavors are defined by the SSZ spec, the third added by EIP-7916:
 
 - Fixed-length: exactly N bits encoded in ceil(N / 8) bytes.
 - Variable-length: 0 to N bits encoded with a trailing delimiter bit that marks the end.
-- Progressive: any number of bits, encoded exactly like the variable-length flavor.
+- Progressive: encoded exactly like the variable-length flavor, and bounded only if it says so.
 
 All three flavors pack bits little-endian within each byte.
 Bit i of the input lands in byte i // 8 at position i % 8.
@@ -253,7 +253,7 @@ class _SSZBitList(SSZCollection[Boolean]):
     The bounded bitlist and the progressive bitlist both build on this base:
 
     - A bounded bitlist caps its bit count at a declared limit.
-    - A progressive bitlist accepts any bit count.
+    - A progressive bitlist accepts any bit count, unless it declares a limit of its own.
 
     The base carries the bit field, and each shape carries its own count rule.
 
@@ -294,7 +294,7 @@ class _SSZBitList(SSZCollection[Boolean]):
 
         A bounded bitlist declares a limit and is held to it.
 
-        A progressive bitlist declares none, so every count it is handed is valid.
+        A progressive bitlist declares one only if it bounds itself.
 
         Raises:
             SSZTypeError: When a bounded shape never declared its limit, or a value built in
@@ -332,7 +332,7 @@ class _SSZBitList(SSZCollection[Boolean]):
         """
         Refuse a shape that has not declared what it needs to hold a value.
 
-        A progressive bitlist needs nothing, since a bit is a bit and any count is valid.
+        A progressive bitlist needs nothing, since its bound is optional.
 
         The bounded shape names the limit it enforces.
         """
@@ -589,7 +589,7 @@ class BitList(_SSZBitList):
 
 class ProgressiveBitList(_SSZBitList):
     """
-    Variable-length SSZ bitfield with no capacity, per EIP-7916.
+    Variable-length SSZ bitfield whose tree grows with its data, per EIP-7916.
 
     Any number of bits, packed and delimited like a bounded bitlist:
 
@@ -605,13 +605,33 @@ class ProgressiveBitList(_SSZBitList):
 
     The merkleization module builds that tree.
 
-    Nothing is declared to use the type, so it is instantiated directly:
+    Nothing has to be declared to use the type, so it is instantiated directly:
 
         ProgressiveBitList(data=[1, 0, 1])
 
-    Nothing else is declared here.
+    A bound is optional, and it counts data bits alone:
 
-    The count rule this shape inherits is "no bound".
+        class Answers(ProgressiveBitList):
+            LIMIT = 20
 
-    Declaring no limit already says exactly that.
+    Declared, it is held on construction and again on decode.
+
+    The delimiter is none of the bits it counts.
+
+    Left out, every bit count is valid.
+
+    The spine is laid out from the data either way, so a bound never reaches the root.
     """
+
+    @classmethod
+    def __pydantic_init_subclass__(cls, **kwargs: Any) -> None:
+        """
+        Refuse an exact count, which a delimiter recovers rather than a declaration.
+
+        Raises:
+            SSZTypeError: When the shape pins an exact bit count.
+        """
+        super().__pydantic_init_subclass__(**kwargs)
+
+        if cls.LENGTH is not None:
+            raise SSZTypeError(TypeFault.NOT_ENTITLED, type=cls.__name__, capacity="LENGTH")

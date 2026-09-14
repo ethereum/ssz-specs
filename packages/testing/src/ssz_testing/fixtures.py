@@ -349,7 +349,7 @@ class TypeDescriptor(CamelModel):
     """Exact element count of a vector, a bitvector or a byte vector."""
 
     limit: int | None = None
-    """Maximum element count of a list, a bitlist or a byte list."""
+    """Maximum element count, which a progressive shape carries only where it declares one."""
 
     element_type: "TypeDescriptor | None" = None
     """Declaration of what a sequence holds."""

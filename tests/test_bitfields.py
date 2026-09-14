@@ -10,6 +10,7 @@ from pydantic import BaseModel, ValidationError
 from ssz.bitfields import BitList, BitVector, ProgressiveBitList
 from ssz.boolean import Boolean
 from ssz.exceptions import SSZTypeError, SSZValueError, ValueFault
+from ssz.layout import merkle_layout
 
 # Errors that may be raised either directly or wrapped by Pydantic at construction time.
 ValueOrValidationError = (SSZValueError, ValidationError)
@@ -325,6 +326,24 @@ class TestBitList:
         assert "BitList4 holds at most 4 bits, got 5" in str(exception_info.value)
 
 
+class ProgressiveBitList4(ProgressiveBitList):
+    """A progressive bitlist bounded at four bits."""
+
+    LIMIT = 4
+
+
+class ProgressiveBitList8(ProgressiveBitList):
+    """A progressive bitlist bounded at eight bits, where the delimiter takes a byte of its own."""
+
+    LIMIT = 8
+
+
+class ProgressiveBitList0(ProgressiveBitList):
+    """A progressive bitlist bounded at zero bits, whose one value is still delimited."""
+
+    LIMIT = 0
+
+
 class TestProgressiveBitList:
     """Tests for the uncapped ProgressiveBitList type."""
 
@@ -584,6 +603,82 @@ class TestProgressiveBitList:
         # The same bytes therefore decode under either shape.
         assert BitList8.decode_bytes(progressive.encode_bytes()) == bounded
         assert ProgressiveBitList.decode_bytes(bounded.encode_bytes()) == progressive
+
+
+class TestProgressiveBitListCapacity:
+    """A progressive bitlist may bound its bit count, and the bound never reaches the tree."""
+
+    def test_a_declared_bound_stands(self) -> None:
+        """The shape carries the bound it declares, where it declares one at all."""
+        assert ProgressiveBitList4.LIMIT == 4
+
+    def test_a_bit_count_at_the_bound_is_admitted(self) -> None:
+        """The bound is a maximum, so the count it names is one the shape holds."""
+        assert len(ProgressiveBitList4(data=bits_of(1, 0, 1, 1))) == 4
+
+    def test_a_bit_count_past_the_bound_is_refused(self) -> None:
+        """One bit more than the bound names is one the shape does not hold."""
+        with pytest.raises(ValueOrValidationError) as exception_info:
+            ProgressiveBitList4(data=bits_of(1, 0, 1, 1, 0))
+        assert "ProgressiveBitList4 holds at most 4 bits, got 5" in str(exception_info.value)
+
+    def test_the_bound_counts_data_bits_and_not_the_delimiter(self) -> None:
+        """One byte carries both cases, so a rule phrased in bytes gets one of them wrong."""
+        # 0b00011111: four data bits, then the delimiter at position 4.
+        assert ProgressiveBitList4.decode_bytes(bytes([0b00011111])) == ProgressiveBitList4(
+            data=bits_of(1, 1, 1, 1)
+        )
+
+        # 0b00101111: the same byte with the delimiter moved out to position 5.
+        with pytest.raises(SSZValueError) as exception_info:
+            ProgressiveBitList4.decode_bytes(bytes([0b00101111]))
+        assert str(exception_info.value) == "ProgressiveBitList4 holds at most 4 bits, got 5"
+
+    def test_a_delimiter_in_a_byte_of_its_own_is_still_not_counted(self) -> None:
+        """A bound on a byte boundary pushes the delimiter into a byte of its own, uncounted."""
+        assert len(ProgressiveBitList8.decode_bytes(b"\xff\x01")) == 8
+
+        with pytest.raises(SSZValueError) as exception_info:
+            ProgressiveBitList8.decode_bytes(b"\xff\x03")
+        assert str(exception_info.value) == "ProgressiveBitList8 holds at most 8 bits, got 9"
+
+    def test_a_bound_of_zero_admits_only_the_delimiter(self) -> None:
+        """A bound of zero is a count and not an omission, so it is read as one."""
+        assert ProgressiveBitList0.decode_bytes(b"\x01") == ProgressiveBitList0()
+
+        with pytest.raises(SSZValueError) as exception_info:
+            ProgressiveBitList0.decode_bytes(b"\x02")
+        assert str(exception_info.value) == "ProgressiveBitList0 holds at most 0 bits, got 1"
+
+    def test_appending_past_the_bound_is_refused(self) -> None:
+        """A mutation is held to the same count rule construction is, and leaves the value whole."""
+        bits = ProgressiveBitList4(data=bits_of(1, 0, 1, 1))
+        with pytest.raises(SSZValueError) as exception_info:
+            bits.append(Boolean(True))
+        assert str(exception_info.value) == "ProgressiveBitList4 holds at most 4 bits, got 5"
+        assert bits == ProgressiveBitList4(data=bits_of(1, 0, 1, 1))
+
+    def test_a_bound_moves_neither_the_encoding_nor_the_root(self) -> None:
+        """A count rule says which values exist, never what one of them encodes or hashes to."""
+        bits = bits_of(1, 0, 1)
+        bounded = ProgressiveBitList4(data=bits)
+        free = ProgressiveBitList(data=bits)
+
+        assert bounded.encode_bytes() == free.encode_bytes()
+        assert bounded.hash_tree_root() == free.hash_tree_root()
+        assert merkle_layout(bounded).limit is None
+
+    def test_an_exact_count_is_refused(self) -> None:
+        """A delimiter is what recovers the count, so a shape declaring one is a bitvector."""
+        with pytest.raises(SSZTypeError) as exception_info:
+
+            class PinnedProgressiveBitList(ProgressiveBitList):
+                LENGTH = 4
+
+        assert (
+            str(exception_info.value)
+            == "PinnedProgressiveBitList declares LENGTH, which is unsupported"
+        )
 
 
 class TestBitfieldSSZ:

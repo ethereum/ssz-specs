@@ -56,12 +56,12 @@ Read off the declared class. `kind` is always present; the rest depends on it.
 | `Boolean` | — | `boolean` |
 | `BitVector` | `length` | `bit_vector` |
 | `BitList` | `limit` | `bit_list` |
-| `ProgressiveBitList` | — | `progressive_bit_list` |
+| `ProgressiveBitList` | `limit`, where one is declared | `progressive_bit_list` |
 | `ByteVector` | `length` | `byte_vector` |
 | `ByteList` | `limit` | `byte_list` |
 | `Vector` | `length`, `elementType` | `vector` |
 | `List` | `limit`, `elementType` | `list` |
-| `ProgressiveList` | `elementType` | `progressive_list` |
+| `ProgressiveList` | `elementType`, and `limit` where one is declared | `progressive_list` |
 | `Container` | `fields` | `container` |
 | `ProgressiveContainer` | `activeFields`, `fields` | `progressive_container` |
 | `CompatibleUnion` | `options` | `compatible_union` |
@@ -358,7 +358,7 @@ No name appears in both catalogues, so a consumer holding one table of reasons n
 | `LAYOUT_TOO_WIDE` | Lays out more than 256 positions, which one 32-byte word cannot hold. |
 | `LAYOUT_TRAILING_GAP` | Ends its layout on a gap rather than on a field. |
 | `LAYOUT_WIDTH` | Lays out no position at all. |
-| `NOT_ENTITLED` | Declares a capacity its shape has none of. |
+| `NOT_ENTITLED` | Declares a capacity its shape does not support. |
 | `UINT_WIDTH` | Is an unsigned integer at a width other than 8, 16, 32, 64, 128 or 256 bits. |
 | `UNDECLARED` | Leaves out something its shape has to declare, such as a progressive container's field layout. |
 | `UNION_EMPTY` | Is a union offering no option. |

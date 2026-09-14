@@ -52,7 +52,7 @@ def test_a_declaration_the_specification_never_calls_illegal_is_marked_as_strict
         type_name="IllegalLimitBearingVector",
         type_descriptor=TypeDescriptor(kind="Vector", length=4, limit=4, element_type=UINT8),
         rejection_reason=TypeFault.NOT_ENTITLED,
-        exact_message="IllegalLimitBearingVector declares a LIMIT its shape has none of",
+        exact_message="IllegalLimitBearingVector declares LIMIT, which is unsupported",
         stricter_than_spec=unlisted,
     ).generate()
 

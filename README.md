@@ -202,11 +202,15 @@ Answers(data=[1, 0, 1])
 
 ### `ProgressiveList`
 
-A variable number of elements with no limit.
+A variable number of elements, with an optional limit.
 
 ```python
 class Temperatures(ProgressiveList[Uint16]):
     pass
+
+
+class RecentTemperatures(ProgressiveList[Uint16]):
+    LIMIT = 24
 
 
 Temperatures(data=[20, 21, 19])
@@ -214,7 +218,7 @@ Temperatures(data=[20, 21, 19])
 
 ### `ProgressiveByteList`
 
-A variable number of bytes with no limit.
+A variable number of bytes, with an optional limit.
 
 ```python
 ProgressiveByteList(data="0xdeadbeef")
@@ -222,7 +226,7 @@ ProgressiveByteList(data="0xdeadbeef")
 
 ### `ProgressiveBitList`
 
-A variable number of bits with no limit.
+A variable number of bits, with an optional limit.
 
 ```python
 ProgressiveBitList(data=[1, 0, 1])

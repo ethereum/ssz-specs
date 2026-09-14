@@ -24,7 +24,7 @@ class TypeFault(Enum):
     UINT_WIDTH = "{type} declares a width of {bits} bits, and a uint is one of {widths}"
     VECTOR_EMPTY = "{type} declares a length of zero, and a fixed count is at least one"
     CONTAINER_EMPTY = "a struct declares at least one field"
-    NOT_ENTITLED = "{type} declares a {capacity} its shape has none of"
+    NOT_ENTITLED = "{type} declares {capacity}, which is unsupported"
 
     LAYOUT_NOT_BITS = "a field layout holds only 0 and 1"
     LAYOUT_WIDTH = "a field layout holds at least one position, got {width}"
