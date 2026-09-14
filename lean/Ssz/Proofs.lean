@@ -74,10 +74,12 @@ import Ssz.Proofs.Merkle.HelperAntichain
 import Ssz.Proofs.Merkle.HelperFrontier
 import Ssz.Proofs.Merkle.HelperUniqueness
 import Ssz.Proofs.Merkle.Merkleize
+import Ssz.Proofs.Merkle.MerkleizeCost
 import Ssz.Proofs.Merkle.Multiproof
 import Ssz.Proofs.Merkle.MultiproofAcceptance
 import Ssz.Proofs.Merkle.MultiproofBinding
 import Ssz.Proofs.Merkle.MultiproofClaims
+import Ssz.Proofs.Merkle.MultiproofSize
 import Ssz.Proofs.Merkle.MultiproofTrace
 import Ssz.Proofs.Merkle.MultiproofTree
 import Ssz.Proofs.Merkle.ProgressiveLevels

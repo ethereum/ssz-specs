@@ -121,12 +121,18 @@ and exhaustive canonical re-encoding checks for one- and two-byte inputs across 
 - [Byte aliases](Ssz/Proofs/Codec/Aliases.lean): byte arrays and sequences of eight-bit integers have equal encodings within the composite offset range, and equal roots.
 - [Tree construction](Ssz/Proofs/Merkle/Tree.lean): executable bounded and progressive trees agree with their mathematical definitions.
   Padding, subtree extraction, and upward construction preserve roots at arbitrary depths.
+  [Merkleization cost](Ssz/Proofs/Merkle/MerkleizeCost.lean): merkleizing a nonempty `k` chunks under a width of `w` costs fewer than `2 * k + log2 w` hashes, so a capacity far above the data adds only its logarithm.
+  The hashes counted are the ones the implementation performs, established through a counting twin of the recursion that produces the same root.
+  Materializing every leaf instead would cost `w - 1`, which is what the precomputed zero subtrees save.
   [Progressive levels](Ssz/Proofs/Merkle/ProgressiveLevels.lean): a chunk of a progressive collection keeps its index however long the collection grows, and sits three levels deeper per factor of four.
 - [Value roots](Ssz/Proofs/Codec/RootDomain.lean): every admissible value of a well-formed type has a 32-byte root, independently of serialization's offset limit.
 - [Constructed branches](Ssz/Proofs/Codec/ProofCorrectness.lean): a branch built for any readable node reconstructs the value's root and passes verification, including across nested type boundaries.
 - [Multiproofs](Ssz/Proofs/Merkle/Multiproof.lean): the computed helper frontier suffices for reconstruction, and proofs read from a finite tree rebuild its root.
   [Construction from values](Ssz/Proofs/Codec/MultiproofConstruction.lean) derives helper readability and reconstruction directly from successful value roots and claimed-node reads.
   No parent equations are required below leaves.
+  [Multiproof size](Ssz/Proofs/Merkle/MultiproofSize.lean): the helper count and twice the claim count together come to the number of distinct claim ancestors plus two, which fixes the count exactly for any claim set at one depth.
+  Claiming a whole level therefore needs no helpers, and claiming any `k` nodes of a level of depth `d` needs at most `k * (d - log2 k)`.
+  A run of consecutive claims needs at least `d - log2 k`, so the shape of that bound cannot be improved.
 - [Type paths](Ssz/Proofs/Codec/PathSelection.lean): recursive selections through present fields and elements agree with the value walker across every supported type family.
   Packed elements select their containing chunk, reserved steps select mixing words, and union descent follows the active option.
   A type-only index can name an absent position without asserting that a value is present; every readable padding node remains covered by the general branch theorem.
@@ -146,15 +152,6 @@ and exhaustive canonical re-encoding checks for one- and two-byte inputs across 
 - [SHA-256](Ssz/Proofs/Hash/Sha256Spec.lean): the executable hash agrees with a separate mathematical model using 32-bit bitvectors, recursive message expansion, and the FIPS compression equations.
   The theorem covers byte messages shorter than 2^61 bytes, as required by the 64-bit bit-length field.
   [Published constants](Ssz/Proofs/Hash/Sha256Constants.lean): the eight chaining words and sixty-four round constants are checked against the square and cube roots of the first primes, rather than trusted as literals.
-
-### What is not proved
-
-Two statements of the specification are checked only by vectors, and are named here rather than left to be discovered.
-
-- The size of a multiproof, which bounds the helper count by the claim count and the depth.
-  What is proved is that the helper set is sound: an antichain, free of duplicates, and sufficient for reconstruction.
-- The cost of merkleizing with a capacity, which counts hash applications.
-  Counting operations needs a cost-instrumented merkleizer beside the real one, which this package does not have.
 
 ### Domains and limits
 
