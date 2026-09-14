@@ -343,8 +343,9 @@ def test_a_progressive_list_declaring_a_length_is_refused(
 
     Then
     ----
-    - it is refused, EIP-7916 giving this shape no capacity at all.
+    - it is refused, an exact count being a vector's rule.
     - its tree grows with what it holds, so a declared count names no level of the spine.
+    - a bound is a different declaration, which this shape carries.
     - this suite is stricter than the specification here, and the vector says so.
     """
     ssz_type_rejection(
@@ -357,15 +358,15 @@ def test_a_progressive_list_declaring_a_length_is_refused(
     )
 
 
-def test_a_progressive_list_declaring_a_limit_is_refused(
+def test_a_progressive_bitlist_declaring_a_length_is_refused(
     ssz_type_rejection: TypeRejectionFiller,
 ) -> None:
     """
-    Declaring a progressive list that carries a bound is refused.
+    Declaring a progressive bitlist that pins an exact count is refused.
 
     Given
     -----
-    - a progressive list of bytes declaring a limit of four.
+    - a progressive bitlist declaring a length of two.
 
     When
     ----
@@ -373,16 +374,18 @@ def test_a_progressive_list_declaring_a_limit_is_refused(
 
     Then
     ----
-    - it is refused, for the reason a declared length is.
-    - the two capacities are named separately, so exactly one vector catches each omission.
+    - it is refused, for the reason a progressive list declaring one is.
+    - a delimiter is what recovers the count, so a shape declaring one is a bitvector.
     - this suite is stricter than the specification here, and the vector says so.
     """
     ssz_type_rejection(
-        case_id="illegal/progressive_list/declares_a_limit",
-        type_name="IllegalLimitBearingProgressiveList",
-        type_descriptor=TypeDescriptor(kind="ProgressiveList", limit=4, element_type=UINT8),
+        case_id="illegal/progressive_bit_list/declares_a_length",
+        type_name="IllegalLengthBearingProgressiveBitList",
+        type_descriptor=TypeDescriptor(kind="ProgressiveBitList", length=2),
         rejection_reason=TypeFault.NOT_ENTITLED,
-        exact_message="IllegalLimitBearingProgressiveList declares a LIMIT its shape has none of",
+        exact_message=(
+            "IllegalLengthBearingProgressiveBitList declares a LENGTH its shape has none of"
+        ),
         stricter_than_spec=SURPLUS_CAPACITY_IS_UNLISTED,
     )
 

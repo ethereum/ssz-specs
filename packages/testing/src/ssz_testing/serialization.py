@@ -111,6 +111,7 @@ class SSZTest(BaseTestSpec):
             serialized=to_hex(ssz_bytes),
             value=self.value,
             root=root,
+            stricter_than_spec=self.stricter_than_spec,
         )
 
     def _generate_decode_failure(self) -> SSZFixture:
@@ -138,4 +139,5 @@ class SSZTest(BaseTestSpec):
             rejection_reason=self.assert_decode_rejection(
                 exception_raised, f"{decoder.__name__}.decode_bytes"
             ),
+            stricter_than_spec=self.stricter_than_spec,
         )

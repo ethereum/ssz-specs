@@ -413,6 +413,24 @@ class Uint32ProgressiveList(ProgressiveList[Uint32]):
     """Progressive list of uint32."""
 
 
+class Uint16ProgressiveList3(ProgressiveList[Uint16]):
+    """Progressive list of uint16 bounded at three, whose bound never reaches its tree."""
+
+    LIMIT = 3
+
+
+class Uint16ProgressiveList8(ProgressiveList[Uint16]):
+    """The same shape bounded at eight, so a pair of them differs only in the count rule."""
+
+    LIMIT = 8
+
+
+class BoundedFlags(ProgressiveBitList):
+    """Progressive bitlist bounded at four bits."""
+
+    LIMIT = 4
+
+
 class SquareProgressiveList(ProgressiveList[Square]):
     """Progressive list of progressive containers."""
 
@@ -593,6 +611,30 @@ SEQUENCE_PAIRS = [
         Uint32ProgressiveList,
         False,
         id="progressive_lists_over_two_element_widths",
+    ),
+    pytest.param(
+        Uint16ProgressiveList,
+        Uint16ProgressiveList3,
+        True,
+        id="a_progressive_list_and_a_bounded_one",
+    ),
+    pytest.param(
+        Uint16ProgressiveList3,
+        Uint16ProgressiveList8,
+        True,
+        id="progressive_lists_under_two_bounds",
+    ),
+    pytest.param(
+        Uint16ProgressiveList3,
+        Uint16List4,
+        False,
+        id="a_bounded_progressive_list_and_a_bounded_list",
+    ),
+    pytest.param(
+        ProgressiveBitList,
+        BoundedFlags,
+        True,
+        id="a_progressive_bitlist_and_a_bounded_one",
     ),
     pytest.param(
         SquareProgressiveList,

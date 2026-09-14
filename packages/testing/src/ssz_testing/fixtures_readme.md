@@ -56,12 +56,12 @@ Read off the declared class. `kind` is always present; the rest depends on it.
 | `Boolean` | — | `boolean` |
 | `BitVector` | `length` | `bit_vector` |
 | `BitList` | `limit` | `bit_list` |
-| `ProgressiveBitList` | — | `progressive_bit_list` |
+| `ProgressiveBitList` | `limit`, where one is declared | `progressive_bit_list` |
 | `ByteVector` | `length` | `byte_vector` |
 | `ByteList` | `limit` | `byte_list` |
 | `Vector` | `length`, `elementType` | `vector` |
 | `List` | `limit`, `elementType` | `list` |
-| `ProgressiveList` | `elementType` | `progressive_list` |
+| `ProgressiveList` | `elementType`, and `limit` where one is declared | `progressive_list` |
 | `Container` | `fields` | `container` |
 | `ProgressiveContainer` | `activeFields`, `fields` | `progressive_container` |
 | `CompatibleUnion` | `options` | `compatible_union` |

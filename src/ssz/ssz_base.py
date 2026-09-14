@@ -589,7 +589,7 @@ class SSZCollection[T](SSZModel, Sequence[T], ABC):
         """
         Check a prospective element count against whatever bound the shape declares.
 
-        LENGTH pins an exact count, LIMIT bounds one, and a progressive shape declares neither.
+        LENGTH pins an exact count and LIMIT bounds one, each read only where it was declared.
 
         Raises:
             SSZValueError: When a pinned count is not met exactly.

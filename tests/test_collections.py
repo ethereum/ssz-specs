@@ -18,6 +18,8 @@ from ssz.exceptions import (
     SSZTypeError,
     SSZValueError,
 )
+from ssz.layout import merkle_layout
+from ssz.offsets import BYTES_PER_LENGTH_OFFSET
 from ssz.roots import hash_tree_root
 from ssz.ssz_base import SSZType
 from ssz.union import CompatibleUnion
@@ -207,6 +209,30 @@ class VariableContainerProgressiveList(ProgressiveList[VariableContainer]):
 
 class NestedProgressiveList(ProgressiveList[Uint16ProgressiveList]):
     """A progressive list whose elements are themselves progressive lists."""
+
+
+class Uint16ProgressiveList3(ProgressiveList[Uint16]):
+    """A progressive list of Uint16 values bounded at three."""
+
+    LIMIT = 3
+
+
+class Uint16ProgressiveList0(ProgressiveList[Uint16]):
+    """A progressive list bounded at zero, which admits the empty value and no other."""
+
+    LIMIT = 0
+
+
+class VariableContainerProgressiveList2(ProgressiveList[VariableContainer]):
+    """A bounded progressive list whose count is recovered from the offset table."""
+
+    LIMIT = 2
+
+
+class ProgressiveByteList2(ProgressiveByteList):
+    """A progressive list of opaque bytes bounded at two, which still counts elements."""
+
+    LIMIT = 2
 
 
 class FixedContainerUnion(CompatibleUnion):
@@ -1211,6 +1237,132 @@ class TestProgressiveListClassMetadata:
         )
 
 
+class TestProgressiveListCapacity:
+    """A progressive list may bound its element count, and the bound never reaches the tree."""
+
+    def test_a_declared_bound_stands(self) -> None:
+        """The shape carries the bound it declares, where it declares one at all."""
+        assert Uint16ProgressiveList3.LIMIT == 3
+        assert Uint16ProgressiveList.LIMIT is None
+
+    def test_a_count_at_the_bound_is_admitted(self) -> None:
+        """The bound is a maximum, so the count it names is one the shape holds."""
+        assert len(Uint16ProgressiveList3.of(1, 2, 3)) == 3
+
+    def test_a_count_past_the_bound_is_refused(self) -> None:
+        """One element more than the bound names is one the shape does not hold."""
+        with pytest.raises(ValueOrValidationError) as exception_info:
+            Uint16ProgressiveList3.of(1, 2, 3, 4)
+        assert "Uint16ProgressiveList3 holds at most 3 elements, got 4" in str(exception_info.value)
+
+    def test_appending_past_the_bound_is_refused(self) -> None:
+        """A mutation is held to the same count rule construction is, and leaves the value whole."""
+        values = Uint16ProgressiveList3.of(1, 2, 3)
+        with pytest.raises(SSZValueError) as exception_info:
+            values.append(Uint16(4))
+        assert str(exception_info.value) == "Uint16ProgressiveList3 holds at most 3 elements, got 4"
+        assert values == Uint16ProgressiveList3.of(1, 2, 3)
+
+    def test_concatenating_past_the_bound_is_refused(self) -> None:
+        """Concatenation builds a new value through the constructor, which asks the count rule."""
+        with pytest.raises(ValueOrValidationError) as exception_info:
+            Uint16ProgressiveList3.of(1, 2) + [Uint16(3), Uint16(4)]
+        assert "Uint16ProgressiveList3 holds at most 3 elements, got 4" in str(exception_info.value)
+
+    def test_a_range_of_a_bounded_list_keeps_its_type(self) -> None:
+        """A range holds no more than the value it came from, so the bound admits every one."""
+        sliced = Uint16ProgressiveList3.of(1, 2, 3)[0:2]
+
+        assert type(sliced) is Uint16ProgressiveList3
+        assert sliced == Uint16ProgressiveList3.of(1, 2)
+
+    def test_a_bound_of_zero_admits_the_empty_value_and_nothing_else(self) -> None:
+        """A bound of zero is a count and not an omission, so it is read as one."""
+        assert Uint16ProgressiveList0.decode_bytes(b"") == Uint16ProgressiveList0()
+
+        with pytest.raises(SSZValueError) as exception_info:
+            Uint16ProgressiveList0.decode_bytes(b"\x01\x00")
+        assert str(exception_info.value) == "Uint16ProgressiveList0 holds at most 0 elements, got 1"
+
+    def test_a_bound_on_opaque_bytes_counts_elements(self) -> None:
+        """A progressive list of bytes counts what it holds, which the hex spelling also does."""
+        with pytest.raises(ValueOrValidationError) as exception_info:
+            ProgressiveByteList2(data="0xdeadbe")
+        assert "ProgressiveByteList2 holds at most 2 elements, got 3" in str(exception_info.value)
+
+    def test_a_bound_moves_neither_the_encoding_nor_the_root(self) -> None:
+        """A count rule says which values exist, never what one of them encodes or hashes to."""
+        bounded = Uint16ProgressiveList3.of(1, 2, 3)
+        free = Uint16ProgressiveList.of(1, 2, 3)
+
+        assert bounded.encode_bytes() == free.encode_bytes()
+        assert hash_tree_root(bounded) == hash_tree_root(free)
+
+        # Two trees can agree on a root by chance, so the shape itself is asserted.
+        assert merkle_layout(bounded).limit is None
+
+    @given(values=st.lists(st.integers(min_value=0, max_value=2**16 - 1), max_size=3))
+    def test_every_value_the_bound_admits_hashes_as_the_unbounded_shape_does(
+        self, values: list[int]
+    ) -> None:
+        """The spine is laid out from the data, so two shapes holding one value root alike."""
+        elements = [Uint16(value) for value in values]
+        bounded = Uint16ProgressiveList3(data=elements)
+        free = Uint16ProgressiveList(data=elements)
+
+        assert bounded.encode_bytes() == free.encode_bytes()
+        assert hash_tree_root(bounded) == hash_tree_root(free)
+
+        assert list(Uint16ProgressiveList3.decode_bytes(free.encode_bytes())) == elements
+
+
+class TestProgressiveListCapacityOnDecode:
+    """A decode is held to the declared bound, and refuses before it reads what it was promised."""
+
+    def test_a_payload_at_the_bound_is_decoded(self) -> None:
+        """The budget divides into the count the bound names, which is a count it holds."""
+        assert Uint16ProgressiveList3.decode_bytes(b"\x01\x00\x02\x00\x03\x00") == (
+            Uint16ProgressiveList3.of(1, 2, 3)
+        )
+
+    def test_a_payload_past_the_bound_is_refused(self) -> None:
+        """The count comes off the budget, and is judged before a single element is read."""
+        with pytest.raises(SSZValueError) as exception_info:
+            Uint16ProgressiveList3.decode_bytes(b"\x01\x00" * 4)
+        assert str(exception_info.value) == "Uint16ProgressiveList3 holds at most 3 elements, got 4"
+
+    def test_a_shape_without_a_bound_decodes_any_count(self) -> None:
+        """A bound left out is a declaration of its own, and the budget is the only rule left."""
+        assert len(Uint16ProgressiveList.decode_bytes(b"\x01\x00" * 50)) == 50
+
+    def test_a_count_claimed_by_an_offset_table_is_refused_before_the_table_is_read(
+        self,
+    ) -> None:
+        """A budget is not an input: a claimed count past the bound costs one offset to refuse."""
+        # The budget names a megabyte, and the four bytes present are the first offset alone.
+        stream = io.BytesIO((12).to_bytes(BYTES_PER_LENGTH_OFFSET, "little"))
+
+        with pytest.raises(SSZValueError) as exception_info:
+            VariableContainerProgressiveList2.deserialize(stream, 10**6)
+        assert str(exception_info.value) == (
+            "VariableContainerProgressiveList2 holds at most 2 elements, got 3"
+        )
+
+        # Reading the rest of the table would have moved the stream further.
+        assert stream.tell() == BYTES_PER_LENGTH_OFFSET
+
+    def test_a_count_claimed_by_a_budget_is_refused_before_any_element_is_read(self) -> None:
+        """The same holds where the count divides out of the budget rather than off a table."""
+        stream = io.BytesIO(b"")
+
+        with pytest.raises(SSZValueError) as exception_info:
+            Uint16ProgressiveList3.deserialize(stream, 1 << 20)
+        assert str(exception_info.value) == (
+            "Uint16ProgressiveList3 holds at most 3 elements, got 524288"
+        )
+        assert stream.tell() == 0
+
+
 class TestProgressiveListAccessors:
     """Tests for ProgressiveList accessor, factory, and concatenation behavior."""
 
@@ -2040,7 +2192,7 @@ class TestUnentitledCapacity:
         assert str(exception_info.value) == "PinnedList declares a LENGTH its shape has none of"
 
     def test_a_progressive_list_refuses_an_exact_count(self) -> None:
-        """EIP-7916 gives the shape no capacity, an exact count included."""
+        """The spine grows with the data, so no exact count names a level of it."""
         with pytest.raises(SSZTypeError) as exception_info:
 
             class PinnedProgressiveList(ProgressiveList[Uint8]):
@@ -2049,18 +2201,6 @@ class TestUnentitledCapacity:
         assert (
             str(exception_info.value)
             == "PinnedProgressiveList declares a LENGTH its shape has none of"
-        )
-
-    def test_a_progressive_list_refuses_a_bound(self) -> None:
-        """A bound reads as a bounded list on construction, and never reaches the tree."""
-        with pytest.raises(SSZTypeError) as exception_info:
-
-            class BoundedProgressiveList(ProgressiveList[Uint8]):
-                LIMIT = 2
-
-        assert (
-            str(exception_info.value)
-            == "BoundedProgressiveList declares a LIMIT its shape has none of"
         )
 
 

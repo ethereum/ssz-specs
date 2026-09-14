@@ -5,7 +5,7 @@ Three sequence shapes are defined by the SSZ spec, the third added by EIP-7916:
 
 - A vector holds exactly LENGTH elements of one declared type.
 - A list holds between zero and LIMIT elements of one declared type.
-- A progressive list holds any number of elements of one declared type.
+- A progressive list holds any number of elements, bounded only where it declares a LIMIT.
 
 The encoding shape follows from the element type:
 
@@ -671,21 +671,34 @@ class List[T: SSZType](_SSZList[T]):
 
 class ProgressiveList[T: SSZType](_SSZList[T]):
     """
-    Variable-length SSZ sequence with no capacity, per EIP-7916.
+    Variable-length SSZ sequence whose tree grows with its data, per EIP-7916.
 
     It encodes to the same bytes as a bounded list, and only the Merkle trees differ.
+
+    A bound is optional, and it rules on the count alone:
+
+        class Temperatures(ProgressiveList[Uint16]):
+            LIMIT = 24
+
+    Declared, it is held on construction and again on decode.
+
+    Left out, every count is valid.
+
+    The spine is laid out from the data either way, so a bound never reaches the root.
     """
 
     @classmethod
     def __pydantic_init_subclass__(cls, **kwargs: Any) -> None:
-        """Refuse a capacity, there being no such thing here."""
+        """
+        Refuse an exact count, the spine being laid out from the data and not a declaration.
+
+        Raises:
+            SSZTypeError: When the shape pins an exact count.
+        """
         super().__pydantic_init_subclass__(**kwargs)
 
-        # EIP-7916 gives this shape no capacity, and its tree grows with what it holds.
         if cls.LENGTH is not None:
             raise SSZTypeError(TypeFault.NOT_ENTITLED, type=cls.__name__, capacity="LENGTH")
-        if cls.LIMIT is not None:
-            raise SSZTypeError(TypeFault.NOT_ENTITLED, type=cls.__name__, capacity="LIMIT")
 
 
 ProgressiveByteList = ProgressiveList[Byte]
