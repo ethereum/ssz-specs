@@ -18,6 +18,7 @@ from ssz import (
     ProgressiveContainer,
     ProgressiveList,
     SSZType,
+    SSZTypeError,
     Uint8,
     Uint16,
     Uint64,
@@ -116,3 +117,22 @@ def test_a_consumer_rebuilds_the_type_from_the_descriptor_alone(value: SSZType) 
     assert to_hex(decoded.encode_bytes()) == emitted["serialized"]
     assert to_hex(hash_tree_root(decoded)) == emitted["root"]
     assert json_writer(rebuilt).dump_python(decoded, mode="json") == emitted["value"]
+
+
+@pytest.mark.parametrize(
+    "key, capacity",
+    [pytest.param("limit", "LIMIT", id="limit"), pytest.param("length", "LENGTH", id="length")],
+)
+def test_a_descriptor_stating_a_capacity_as_null_is_refused(key: str, capacity: str) -> None:
+    """A document states a capacity as a number, and a shape without one leaves the key out."""
+    # Read as a declaration, a null would say the shape counts nothing.
+    # The emitted form says that by carrying no key at all, so a null is no emitted descriptor.
+    descriptor = {
+        "kind": "ProgressiveList",
+        key: None,
+        "elementType": {"kind": "Uint16", "bits": 16},
+    }
+
+    with pytest.raises(SSZTypeError) as exception_info:
+        build_declaration(descriptor, "Rebuilt")
+    assert str(exception_info.value) == f"Rebuilt.{capacity} must be a plain integer, got NoneType"
