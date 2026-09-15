@@ -18,6 +18,8 @@ from ssz import (
     ProgressiveContainer,
     ProgressiveList,
     SSZType,
+    SSZTypeError,
+    TypeFault,
     Vector,
 )
 
@@ -58,10 +60,15 @@ def build_declaration(descriptor: Mapping[str, Any], type_name: str | None = Non
     if base is None:
         return type(name, (BaseUint,), body | {"BITS": descriptor["bits"]})
 
-    if "length" in descriptor:
-        body["LENGTH"] = descriptor["length"]
-    if "limit" in descriptor:
-        body["LIMIT"] = descriptor["limit"]
+    # A capacity a document states is a number, and a key holding null states none.
+    # No emitted descriptor carries one, since a capacity the shape has not got is left out.
+    for key, capacity in (("length", "LENGTH"), ("limit", "LIMIT")):
+        if key in descriptor:
+            if (stated := descriptor[key]) is None:
+                raise SSZTypeError(
+                    TypeFault.NOT_AN_INTEGER, type=name, field=capacity, got="NoneType"
+                )
+            body[capacity] = stated
     if "elementType" in descriptor:
         body["ELEMENT_TYPE"] = build_declaration(descriptor["elementType"])
     if "activeFields" in descriptor:

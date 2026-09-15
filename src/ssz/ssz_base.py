@@ -37,14 +37,20 @@ def _as_written(value: Any) -> str:
     return repr(value)
 
 
-def _narrowed_capacity(cls: type, name: str, declared: Any) -> int:
+def _narrowed_capacity(cls: type, name: str, declared: Any) -> int | None:
     """
     A declared capacity as the plain integer this library stores, compares and reports.
+
+    None is the absence of a capacity, which a declaration may write rather than leave unsaid.
 
     Raises:
         SSZTypeError: A capacity that is not a whole number at or above zero.
         SSZTypeError: An exact count of zero, which pins a shape to holding nothing.
     """
+    # Nothing to narrow, and the shape reads exactly as one that left the name out.
+    if declared is None:
+        return None
+
     if type(declared) is not int:
         # A boolean is a flag, not a count, so narrowing one would read True as a capacity of 1.
         if not isinstance(declared, int) or isinstance(declared, bool):
@@ -97,7 +103,7 @@ class SSZType(ABC):
     """Abstract base for every SSZ-encodable type."""
 
     LENGTH: ClassVar[int | None] = None
-    """Exact element count, or None where the shape declares none."""
+    """Exact element count, or None where the shape declares none, left out or written."""
 
     LIMIT: ClassVar[int | None] = None
     """Maximum element count, read the same way: None means no count, never a count of zero."""
