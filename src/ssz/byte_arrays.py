@@ -245,11 +245,11 @@ class ByteVector(bytes, SSZType):
     def __get_pydantic_core_schema__(
         cls, source_type: Any, handler: GetCoreSchemaHandler
     ) -> core_schema.CoreSchema:
-        """Provide a Pydantic core schema for strict byte-array validation."""
+        """Provide a Pydantic core schema reading every spelling the constructor accepts."""
+        # A gate on the shape would report itself in place of the fault the constructor names.
         return wrapping_schema(
             cls,
-            core_schema.bytes_schema(min_length=cls.LENGTH, max_length=cls.LENGTH),
-            core_schema.str_schema(),
+            core_schema.any_schema(),
             to_json=lambda instance: "0x" + instance.hex(),
         )
 

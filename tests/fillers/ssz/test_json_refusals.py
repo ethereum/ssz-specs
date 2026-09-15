@@ -9,6 +9,7 @@ from ssz import (
     CompatibleUnion,
     Container,
     List,
+    ProgressiveBitList,
     ProgressiveContainer,
     Uint8,
     Uint16,
@@ -22,6 +23,18 @@ class RefusalBitList20(BitList):
     """Up to twenty bits, closed by a delimiter bit."""
 
     LIMIT = 20
+
+
+class RefusalBitList4(BitList):
+    """Up to four bits, so a fifth is one bit past the bound."""
+
+    LIMIT = 4
+
+
+class RefusalProgressiveBitList4(ProgressiveBitList):
+    """A progressive bitfield bounded at four bits, per EIP-7916."""
+
+    LIMIT = 4
 
 
 class RefusalByteList8(ByteList):
@@ -393,6 +406,88 @@ def test_a_bit_sequence_holding_something_other_than_a_bit(
         document=["x"],
         rejection_reason=JsonFault.ELEMENT_KIND,
         message_substring="expected bool or int, got str",
+    )
+
+
+def test_a_bitfield_past_its_bound(ssz_json_test: JsonMappingFiller) -> None:
+    """
+    A bitfield document holding more bits than its type admits renders no value of it.
+
+    Given
+    -----
+    - the document "0x3f", read against a bit list admitting up to four bits.
+
+    When
+    ----
+    - a parser reads it through the JSON mapping.
+
+    Then
+    ----
+    - the document is refused, the delimiter putting five data bits under a bound of four.
+    - the fault is the one a collection past its limit draws, a bitfield being one.
+    """
+    ssz_json_test(
+        case_id="json_refusal/bit_list/invalid/past_the_bound",
+        type_name="RefusalBitList4",
+        ssz_type=RefusalBitList4,
+        document="0x3f",
+        rejection_reason=JsonFault.OVER_LIMIT,
+        message_substring="holds at most 4 bits, got 5",
+    )
+
+
+def test_a_progressive_bitfield_past_its_bound(ssz_json_test: JsonMappingFiller) -> None:
+    """
+    A progressive bitfield document past the bound its type declares renders no value of it.
+
+    Given
+    -----
+    - the document "0x3f", read against a progressive bitfield bounded at four bits.
+
+    When
+    ----
+    - a parser reads it through the JSON mapping.
+
+    Then
+    ----
+    - the document is refused, the bound ruling on the five data bits the delimiter leaves.
+    - a progressive shape holds its bound the same way a bounded one does.
+    """
+    ssz_json_test(
+        case_id="json_refusal/progressive_bit_list/invalid/past_the_bound",
+        type_name="RefusalProgressiveBitList4",
+        ssz_type=RefusalProgressiveBitList4,
+        document="0x3f",
+        rejection_reason=JsonFault.OVER_LIMIT,
+        message_substring="holds at most 4 bits, got 5",
+    )
+
+
+def test_a_byte_vector_written_as_an_array_of_strings(ssz_json_test: JsonMappingFiller) -> None:
+    """
+    An array of hex strings is no rendering of a byte vector, which is one string whole.
+
+    Given
+    -----
+    - the document ["0x01", "0x02", "0x03", "0x04"], read against a byte vector of four bytes.
+
+    When
+    ----
+    - a parser reads it through the JSON mapping.
+
+    Then
+    ----
+    - the document is refused, the mapping writing the whole payload as "0x01020304".
+    - an array of byte values is read here beside that hex, and a string is no byte in one.
+    - the fixed count refuses the same way the limit of a byte list does.
+    """
+    ssz_json_test(
+        case_id="json_refusal/byte_vector/invalid/element_not_a_byte",
+        type_name="RefusalByteVector4",
+        ssz_type=RefusalByteVector4,
+        document=["0x01", "0x02", "0x03", "0x04"],
+        rejection_reason=JsonFault.ELEMENT_KIND,
+        message_substring="expected iterable of byte values, got list",
     )
 
 
