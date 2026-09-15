@@ -682,7 +682,7 @@ class ProgressiveList[T: SSZType](_SSZList[T]):
 
     Declared, it is held on construction and again on decode.
 
-    Left out, every count is valid.
+    Left out, or written as None, every count is valid.
 
     The spine is laid out from the data either way, so a bound never reaches the root.
     """

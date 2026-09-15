@@ -2,9 +2,10 @@
 
 from collections.abc import Callable, Iterator
 from decimal import Decimal
-from typing import IO, Any, cast
+from typing import IO, Any, Final, cast
 
 import pytest
+from hypothesis import given, settings, strategies as st
 from pydantic import ValidationError
 
 from ssz import (
@@ -29,6 +30,7 @@ from ssz.roots import hash_tree_root
 from ssz.ssz_base import _TYPE_PARAMETERS, SSZCollection, SSZModel, SSZType
 from ssz.uint import BaseUint
 from ssz.union import CompatibleUnion
+from ssz_testing import describe_type
 
 
 class Uint16List4(List[Uint16]):
@@ -1286,6 +1288,43 @@ class TestSSZCollectionOf:
             cast(Any, TwoFieldContainer)(Uint8(1), Uint16(2))
 
 
+class WrittenNoneProgressiveList(ProgressiveList[Uint16]):
+    """A progressive list writing out the bound it does not have."""
+
+    LIMIT = None
+
+
+class OmittedNoneProgressiveList(ProgressiveList[Uint16]):
+    """The same shape leaving the name out, which is what the other is read against."""
+
+
+class WrittenNoneProgressiveBitList(ProgressiveBitList):
+    """A progressive bitlist writing out the bound it does not have."""
+
+    LIMIT = None
+
+
+class OmittedNoneProgressiveBitList(ProgressiveBitList):
+    """The same shape leaving the name out."""
+
+
+UNBOUNDED_TWINS: Final = [
+    pytest.param(
+        WrittenNoneProgressiveList,
+        OmittedNoneProgressiveList,
+        st.lists(st.integers(min_value=0, max_value=2**16 - 1), max_size=300),
+        id="progressive_list",
+    ),
+    pytest.param(
+        WrittenNoneProgressiveBitList,
+        OmittedNoneProgressiveBitList,
+        st.lists(st.booleans(), max_size=300),
+        id="progressive_bit_list",
+    ),
+]
+"""Each shape that counts nothing, declared both ways, beside what it holds."""
+
+
 class TestDeclaredCapacity:
     """
     Tests for declaring how many elements a shape holds with a typed value.
@@ -1393,7 +1432,6 @@ class TestDeclaredCapacity:
             pytest.param(4.0, "float", id="whole_float"),
             pytest.param("4", "str", id="digit_string"),
             pytest.param(Decimal(4), "Decimal", id="decimal"),
-            pytest.param(None, "NoneType", id="none"),
             pytest.param(True, "bool", id="host_language_true"),
             pytest.param(False, "bool", id="host_language_false"),
         ],
@@ -1802,6 +1840,189 @@ class TestDeclaredCapacity:
         # A proof sizes the tree from the bound, and reaches the same report.
         with pytest.raises(SSZTypeError):
             chunk_count(NoLimit)
+
+
+class TestACapacityWrittenAsNone:
+    """
+    Tests for writing None as a capacity, which declares the absence of one.
+
+    A shape that bounds nothing usually says so by leaving the name out.
+
+    Writing it out is the same declaration, said where a reader will look for it:
+
+        class Temperatures(ProgressiveList[Uint16]):
+            LIMIT = None
+
+    Nothing tells the two apart.
+
+    Every reader of a capacity asks what it holds, and none asks whether it was written.
+    """
+
+    def test_a_bound_written_as_none_declares_the_absence_of_one(self) -> None:
+        """The name is written, and what it holds is the None that counts nothing."""
+        assert WrittenNoneProgressiveList.__dict__["LIMIT"] is None
+        assert WrittenNoneProgressiveList.LIMIT is None
+
+    def test_a_bound_written_as_none_bounds_nothing(self) -> None:
+        """Construction, mutation and decoding are three arrivals at one count rule."""
+        assert len(WrittenNoneProgressiveList.of(*range(70))) == 70
+
+        values = WrittenNoneProgressiveList.of(*range(10))
+        values.append(Uint16(10))
+        assert len(values) == 11
+
+        payload = OmittedNoneProgressiveList.of(*range(70)).encode_bytes()
+        assert len(WrittenNoneProgressiveList.decode_bytes(payload)) == 70
+
+    def test_a_bound_written_as_none_is_still_no_bound_where_one_is_needed(self) -> None:
+        """A caller that needs a number is told none was stated, not handed a None."""
+        with pytest.raises(SSZTypeError) as exception_info:
+            WrittenNoneProgressiveList.declared_limit()
+        assert str(exception_info.value) == "WrittenNoneProgressiveList must declare LIMIT"
+
+    @pytest.mark.parametrize(
+        "rejected",
+        [
+            pytest.param(True, id="host_language_true"),
+            pytest.param(False, id="host_language_false"),
+        ],
+    )
+    def test_a_boolean_is_still_not_a_count(self, rejected: bool) -> None:
+        """A flag is refused where a count belongs, and false is a flag and not an absence."""
+        # An absence is None and nothing else.
+        # Reading it as whatever is falsy would take false for a declaration of no bound.
+        with pytest.raises(SSZTypeError) as exception_info:
+
+            class Flagged(List[Uint8]):
+                LIMIT = rejected
+
+        assert str(exception_info.value) == "Flagged.LIMIT must be a plain integer, got bool"
+
+    def test_a_bound_of_zero_is_a_bound_and_not_the_absence_of_one(self) -> None:
+        """Zero and None are both falsy, and they are two different declarations."""
+
+        class BoundedAtNothing(ProgressiveList[Uint8]):
+            LIMIT = 0
+
+        assert BoundedAtNothing.declared_limit() == 0
+        with pytest.raises((SSZValueError, ValidationError)) as exception_info:
+            BoundedAtNothing.of(1)
+        assert "BoundedAtNothing holds at most 0 elements, got 1" in str(exception_info.value)
+
+    @pytest.mark.parametrize(
+        "base, capacity, first_use, message",
+        [
+            pytest.param(
+                Vector[Uint8],
+                "LENGTH",
+                lambda shape: shape.of(1),
+                "Unstated must declare ELEMENT_TYPE and LENGTH",
+                id="vector_length",
+            ),
+            pytest.param(
+                BitVector,
+                "LENGTH",
+                lambda shape: shape.of(True),
+                "Unstated must declare LENGTH",
+                id="bitvector_length",
+            ),
+            pytest.param(
+                List[Uint8],
+                "LIMIT",
+                lambda shape: shape.of(1),
+                "Unstated must declare ELEMENT_TYPE and LIMIT",
+                id="list_limit",
+            ),
+            pytest.param(
+                BitList,
+                "LIMIT",
+                lambda shape: shape.of(True),
+                "Unstated must declare LIMIT",
+                id="bitlist_limit",
+            ),
+            pytest.param(
+                ByteList,
+                "LIMIT",
+                lambda shape: shape(data=b"\x01"),
+                "Unstated must declare LIMIT",
+                id="bytelist_limit",
+            ),
+        ],
+    )
+    def test_writing_none_where_a_shape_needs_a_count_refuses_the_first_value(
+        self,
+        base: type[SSZType],
+        capacity: str,
+        first_use: Callable[[type[Any]], object],
+        message: str,
+    ) -> None:
+        """The declaration stands and the shape refuses every value, as an omission does."""
+        # An abstract layer that binds an element type and leaves the count below it is
+        # already this shape, spelled by saying nothing.
+        # Writing the absence down puts the same layer where a reader can see it.
+        unstated = type("Unstated", (base,), {"__module__": __name__, capacity: None})
+
+        assert unstated.__dict__[capacity] is None
+        with pytest.raises(SSZTypeError) as exception_info:
+            first_use(unstated)
+        assert str(exception_info.value) == message
+
+    def test_a_shape_cannot_unbind_a_bound_its_base_fixed(self) -> None:
+        """A bounded base pads its tree to the bound, so dropping it names a second tree."""
+
+        class Bounded(ByteList):
+            LIMIT = 64
+
+        with pytest.raises(SSZTypeError) as exception_info:
+
+            class Unbounded(Bounded):
+                LIMIT = None
+
+        assert str(exception_info.value) == (
+            "Unbounded sets LIMIT to None, and Bounded fixes it to 64"
+        )
+
+    def test_a_shape_may_bound_what_its_base_left_unbounded(self) -> None:
+        """A base that counts nothing fixes nothing, however it spells that."""
+
+        class Bound(WrittenNoneProgressiveList):
+            LIMIT = 4
+
+        assert Bound.LIMIT == 4
+        with pytest.raises((SSZValueError, ValidationError)):
+            Bound.of(1, 2, 3, 4, 5)
+
+
+@pytest.mark.parametrize(("written", "omitted", "contents"), UNBOUNDED_TWINS)
+@given(data=st.data())
+@settings(derandomize=True)
+def test_writing_none_and_leaving_it_out_are_one_declaration(
+    written: type[Any],
+    omitted: type[Any],
+    contents: st.SearchStrategy[Any],
+    data: st.DataObject,
+) -> None:
+    """Whatever a shape holds, the two spellings agree on every byte and every node."""
+    held = data.draw(contents)
+    left, right = written(data=held), omitted(data=held)
+
+    # The two are separate classes, so what they produce is what can be compared.
+    assert left.encode_bytes() == right.encode_bytes()
+    assert hash_tree_root(left) == hash_tree_root(right)
+
+    # Bytes written under either spelling read back under the other.
+    assert written.decode_bytes(right.encode_bytes()) == left
+
+
+@pytest.mark.parametrize(("written", "omitted", "contents"), UNBOUNDED_TWINS)
+def test_the_two_spellings_emit_one_declaration(
+    written: type[Any], omitted: type[Any], contents: st.SearchStrategy[Any]
+) -> None:
+    """A consumer rebuilds a type from what is emitted, and one thing is emitted."""
+    # The emitted form is filtered on what a capacity holds, so an absence leaves no key.
+    # That is what keeps this spelling out of the conformance vectors entirely.
+    assert describe_type(written) == describe_type(omitted)
+    assert "limit" not in describe_type(written).to_json(exclude_none=True)
 
 
 class TestFixedSize:

@@ -618,7 +618,7 @@ class ProgressiveBitList(_SSZBitList):
 
     The delimiter is none of the bits it counts.
 
-    Left out, every bit count is valid.
+    Left out, or written as None, every bit count is valid.
 
     The spine is laid out from the data either way, so a bound never reaches the root.
     """
