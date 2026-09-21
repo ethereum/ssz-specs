@@ -402,4 +402,4 @@ def test_a_described_fixture_that_reads_off_no_declaration_cannot_be_built() -> 
         pass
 
     with pytest.raises(TypeError, match="type_descriptor"):
-        Undeclared(type_name="Undeclared")
+        Undeclared(type_name="Undeclared")  # ty: ignore[call-non-callable]
