@@ -34,7 +34,7 @@ jobs:
           cache-dependency-glob: "**/uv.lock"
 
       - name: Install just
-        uses: taiki-e/install-action@9983c65e42da123ff25d1f78505eb6de315aa172 # v2.87.20
+        uses: taiki-e/install-action@83ac0ad63c0167e6f06796fab0fce28db1bf3db0 # v2.87.22
         with:
           tool: just
 
@@ -65,7 +65,7 @@ jobs:
           cache-dependency-glob: "**/uv.lock"
 
       - name: Install just
-        uses: taiki-e/install-action@9983c65e42da123ff25d1f78505eb6de315aa172 # v2.87.20
+        uses: taiki-e/install-action@83ac0ad63c0167e6f06796fab0fce28db1bf3db0 # v2.87.22
         with:
           tool: just
 
@@ -91,7 +91,7 @@ jobs:
           cache-dependency-glob: "**/uv.lock"
 
       - name: Install just
-        uses: taiki-e/install-action@9983c65e42da123ff25d1f78505eb6de315aa172 # v2.87.20
+        uses: taiki-e/install-action@83ac0ad63c0167e6f06796fab0fce28db1bf3db0 # v2.87.22
         with:
           tool: just
 
@@ -117,7 +117,7 @@ jobs:
           cache-dependency-glob: "**/uv.lock"
 
       - name: Install just
-        uses: taiki-e/install-action@9983c65e42da123ff25d1f78505eb6de315aa172 # v2.87.20
+        uses: taiki-e/install-action@83ac0ad63c0167e6f06796fab0fce28db1bf3db0 # v2.87.22
         with:
           tool: just
 
@@ -143,12 +143,12 @@ jobs:
           cache-dependency-glob: "**/uv.lock"
 
       - name: Install just
-        uses: taiki-e/install-action@9983c65e42da123ff25d1f78505eb6de315aa172 # v2.87.20
+        uses: taiki-e/install-action@83ac0ad63c0167e6f06796fab0fce28db1bf3db0 # v2.87.22
         with:
           tool: just
 
       - name: Build the Lean specification and audit its axioms
-        uses: leanprover/lean-action@50fcf42d2e460296f1a34b402e990d1b24f8b596 # v1
+        uses: leanprover/lean-action@f061402b660e0c34644504b324e830f2991d4865 # v1
         with:
           lake-package-directory: lean
           auto-config: false
@@ -184,7 +184,7 @@ jobs:
           cache-dependency-glob: "**/uv.lock"
 
       - name: Install just
-        uses: taiki-e/install-action@9983c65e42da123ff25d1f78505eb6de315aa172 # v2.87.20
+        uses: taiki-e/install-action@83ac0ad63c0167e6f06796fab0fce28db1bf3db0 # v2.87.22
         with:
           tool: just
 
