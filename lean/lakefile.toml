@@ -22,6 +22,10 @@ roots = ["Ssz.Proofs"]
 [[lean_lib]]
 name = "Conformance"
 
+[[lean_lib]]
+name = "Sha256Tests"
+roots = ["Tests.Hash.Sha256"]
+
 [[lean_exe]]
 name = "conformance"
 root = "Main"

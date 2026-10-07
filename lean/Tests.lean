@@ -1,4 +1,5 @@
 import Ssz
+import Tests.Hash.Sha256
 
 /-! Regression checks independent of the Python SSZ implementation. -/
 
@@ -44,6 +45,9 @@ example (left right : Bytes) :
   rfl
 
 def main : IO Unit := do
+  -- Published vectors validate SHA-256 before it is used in the SSZ regressions.
+  Tests.Sha256.run
+
   -- A splice cannot turn a nonexistent outer node into a valid index.
   expect "zero outer index" ((gindexConcat 0 3).isOk == false)
   -- SSZ names six integer widths, and a declaration of any other is refused as a width.
