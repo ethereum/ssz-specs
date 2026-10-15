@@ -170,3 +170,4 @@ ssz-test-vectors-*.tar.gz.sha256
 
 # Lean build output
 lean/.lake/
+lean/riscv/

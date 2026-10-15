@@ -169,6 +169,18 @@ The low-level `lengthWord` keeps the low 256 bits outside that domain, so unrest
 SSZ does not separate roots by type; the whole-value theorem compares values under one declaration.
 Its finite hash computation expands cached zero subtrees, preserving their mathematical hashes.
 
+## Verified assembly
+
+`Asm/` holds RV64I routines proved against the specification, and `lake exe asm <dir>` writes them as assembly files.
+
+```text
+ssz_sha256_compress   one SHA-256 block, equal to the specification's compression
+ssz_merkleize         a padded tree of chunks, equal to the bounded merkleizer
+ssz_hash_plan         a fixed-size type's root from its encoding, equal to the hash tree root
+```
+
+The machine model is written here, so it and the assembler are trusted.
+
 ## Trust boundary
 
 The proofs establish the stated properties of the formal definitions.
