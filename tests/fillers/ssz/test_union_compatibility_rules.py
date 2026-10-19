@@ -1,7 +1,5 @@
 """SSZ conformance test vectors for the compatible-merkleization rules EIP-8016 unions rest on."""
 
-from typing import ClassVar
-
 import pytest
 
 from ssz import (
@@ -48,55 +46,55 @@ def union_of(left: type[SSZType], right: type[SSZType]) -> TypeDescriptor:
 class CompatBitList4(BitList):
     """Bitlist capped at four bits."""
 
-    LIMIT: ClassVar[int] = 4
+    LIMIT = 4
 
 
 class CompatBitList8(BitList):
     """Bitlist capped at eight bits, twice the capacity of the four-bit one."""
 
-    LIMIT: ClassVar[int] = 8
+    LIMIT = 8
 
 
 class CompatBitVector4(BitVector):
     """Bitvector of four bits."""
 
-    LENGTH: ClassVar[int] = 4
+    LENGTH = 4
 
 
 class CompatBitVector8(BitVector):
     """Bitvector of eight bits, twice the width of the four-bit one."""
 
-    LENGTH: ClassVar[int] = 8
+    LENGTH = 8
 
 
 class CompatUint64List4(List[Uint64]):
     """List of eight-byte integers capped at four elements."""
 
-    LIMIT: ClassVar[int] = 4
+    LIMIT = 4
 
 
 class CompatUint64List8(List[Uint64]):
     """List of eight-byte integers capped at eight elements."""
 
-    LIMIT: ClassVar[int] = 8
+    LIMIT = 8
 
 
 class CompatUint256List4(List[Uint256]):
     """List of thirty-two-byte integers capped at four elements, the same capacity, wider."""
 
-    LIMIT: ClassVar[int] = 4
+    LIMIT = 4
 
 
 class CompatUint64Vector4(Vector[Uint64]):
     """Four eight-byte integers."""
 
-    LENGTH: ClassVar[int] = 4
+    LENGTH = 4
 
 
 class CompatUint64Vector8(Vector[Uint64]):
     """Eight eight-byte integers."""
 
-    LENGTH: ClassVar[int] = 8
+    LENGTH = 8
 
 
 class CompatPair(Container):
@@ -150,13 +148,13 @@ class CompatAmountAtOne(ProgressiveContainer):
 class CompatBytes4(ByteVector):
     """Four-byte string, the specification's alias for four single bytes in a row."""
 
-    LENGTH: ClassVar[int] = 4
+    LENGTH = 4
 
 
 class CompatUint8Vector4(Vector[Uint8]):
     """The same four bytes written out as a vector of one-byte integers."""
 
-    LENGTH: ClassVar[int] = 4
+    LENGTH = 4
 
 
 class CompatByteSpellingUnion(CompatibleUnion):

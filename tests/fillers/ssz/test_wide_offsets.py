@@ -1,7 +1,5 @@
 """SSZ conformance vectors for offsets whose value does not fit the one byte a small case uses."""
 
-from typing import ClassVar
-
 import pytest
 
 from ssz import BitVector, Boolean, ByteList, Container, List
@@ -23,7 +21,7 @@ def every_third_bit(count: int) -> list[Boolean]:
 class WideByteList512(ByteList):
     """Byte list of up to 512 bytes, wide enough for a body that pushes the offset after it."""
 
-    LIMIT: ClassVar[int] = 512
+    LIMIT = 512
 
 
 class WideOffsetPair(Container):
@@ -36,25 +34,25 @@ class WideOffsetPair(Container):
 class WideBits256(BitVector):
     """Bit vector of exactly one chunk."""
 
-    LENGTH: ClassVar[int] = 256
+    LENGTH = 256
 
 
 class WideBits257(BitVector):
     """Bit vector one bit past a chunk, so its 33 bytes leave the next offset slot unaligned."""
 
-    LENGTH: ClassVar[int] = 257
+    LENGTH = 257
 
 
 class WideBits1280(BitVector):
     """Bit vector of exactly five chunks."""
 
-    LENGTH: ClassVar[int] = 1280
+    LENGTH = 1280
 
 
 class WideBits1281(BitVector):
     """Bit vector one bit past five chunks."""
 
-    LENGTH: ClassVar[int] = 1281
+    LENGTH = 1281
 
 
 class WideSpacedOffsets(Container):
@@ -73,13 +71,13 @@ class WideSpacedOffsets(Container):
 class WideTableByteList8(ByteList):
     """Byte list of up to 8 bytes, the smallest thing a long offset table can point at."""
 
-    LIMIT: ClassVar[int] = 8
+    LIMIT = 8
 
 
 class WideTableList64(List[WideTableByteList8]):
     """List of up to 64 of them, whose full table is 256 bytes and opens past one byte's reach."""
 
-    LIMIT: ClassVar[int] = 64
+    LIMIT = 64
     ELEMENT_TYPE = WideTableByteList8
 
 
@@ -147,13 +145,13 @@ def test_struct_offsets_spaced_by_wide_fixed_fields(ssz_test: SSZTestFiller) -> 
         type_name="WideSpacedOffsets",
         value=WideSpacedOffsets(
             first=WideByteList512(data=counting_bytes(4, 0x10)),
-            flags_256=WideBits256(data=every_third_bit(WideBits256.LENGTH)),
+            flags_256=WideBits256(data=every_third_bit(WideBits256.declared_length())),
             second=WideByteList512(data=counting_bytes(8, 0x20)),
-            flags_257=WideBits257(data=every_third_bit(WideBits257.LENGTH)),
+            flags_257=WideBits257(data=every_third_bit(WideBits257.declared_length())),
             third=WideByteList512(data=counting_bytes(12, 0x30)),
-            flags_1280=WideBits1280(data=every_third_bit(WideBits1280.LENGTH)),
+            flags_1280=WideBits1280(data=every_third_bit(WideBits1280.declared_length())),
             fourth=WideByteList512(data=counting_bytes(16, 0x40)),
-            flags_1281=WideBits1281(data=every_third_bit(WideBits1281.LENGTH)),
+            flags_1281=WideBits1281(data=every_third_bit(WideBits1281.declared_length())),
         ),
         expected_root="0xeda5971a89368b676a90a74f255c88aa37b190171ee03631ce77ed06edb2a71a",
     )
@@ -185,7 +183,7 @@ def test_list_table_wholly_above_one_byte(ssz_test: SSZTestFiller) -> None:
         value=WideTableList64(
             data=[
                 WideTableByteList8(data=bytes([byte]))
-                for byte in counting_bytes(WideTableList64.LIMIT, 0xA0)
+                for byte in counting_bytes(WideTableList64.declared_limit(), 0xA0)
             ]
         ),
         expected_root="0xc7305e1f4dd66cf1ddf6076c80121237047c1c26a0525043567b3e3b047343d3",

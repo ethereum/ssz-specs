@@ -1,7 +1,5 @@
 """SSZ conformance test vectors for every padding bit a bitfield's final byte has to leave clear."""
 
-from typing import ClassVar
-
 import pytest
 
 from ssz import BitList, BitVector, Boolean, Container, List, Uint8
@@ -11,37 +9,37 @@ from ssz_testing import ExpectedRejection, SSZTestFiller, ValueFault
 class PaddingBitVector4(BitVector):
     """Four-bit vector, the width a beacon state gives its justification bits."""
 
-    LENGTH: ClassVar[int] = 4
+    LENGTH = 4
 
 
 class PaddingBitVector7(BitVector):
     """Seven-bit vector, the narrowest padding there is: one bit, and it is the byte's highest."""
 
-    LENGTH: ClassVar[int] = 7
+    LENGTH = 7
 
 
 class PaddingBitVector9(BitVector):
     """Nine-bit vector, the widest padding there is: seven bits above a single data bit."""
 
-    LENGTH: ClassVar[int] = 9
+    LENGTH = 9
 
 
 class PaddingBitVector12(BitVector):
     """Twelve-bit vector, whose second byte splits evenly into four data bits and four padding."""
 
-    LENGTH: ClassVar[int] = 12
+    LENGTH = 12
 
 
 class PaddingBitList1(BitList):
     """Bitlist capped at one bit, so its delimiter sits at bit zero or bit one of a single byte."""
 
-    LIMIT: ClassVar[int] = 1
+    LIMIT = 1
 
 
 class PaddingBitVector12List4(List[PaddingBitVector12]):
     """Bounded list of twelve-bit vectors, which puts an element's final byte mid-input."""
 
-    LIMIT: ClassVar[int] = 4
+    LIMIT = 4
 
 
 class PaddingTaggedBits(Container):

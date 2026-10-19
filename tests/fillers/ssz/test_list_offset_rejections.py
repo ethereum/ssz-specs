@@ -1,7 +1,5 @@
 """SSZ conformance vectors for a list offset table that does not hold."""
 
-from typing import ClassVar
-
 import pytest
 
 from ssz import ByteList, List
@@ -13,13 +11,13 @@ pytestmark = pytest.mark.tags("offsets")
 class OffsetTableByteList8(ByteList):
     """Byte list of up to 8 bytes, the short variable-size element these tables index."""
 
-    LIMIT: ClassVar[int] = 8
+    LIMIT = 8
 
 
 class OffsetTableList4(List[OffsetTableByteList8]):
     """Variable-length list of up to 4 variable-size elements, encoded behind an offset table."""
 
-    LIMIT: ClassVar[int] = 4
+    LIMIT = 4
     ELEMENT_TYPE = OffsetTableByteList8
 
 

@@ -1,7 +1,5 @@
 """SSZ conformance test vectors for the inputs an EIP-8016 compatible union refuses."""
 
-from typing import ClassVar
-
 import pytest
 
 from ssz import (
@@ -22,19 +20,19 @@ pytestmark = pytest.mark.tags("union")
 class ChosenBitList8(BitList):
     """Bitlist capped at eight bits, whose delimiter rules a union option must still obey."""
 
-    LIMIT: ClassVar[int] = 8
+    LIMIT = 8
 
 
 class ChosenBitVector4(BitVector):
     """Four-bit bitvector, whose four padding bits a union option must still leave clear."""
 
-    LENGTH: ClassVar[int] = 4
+    LENGTH = 4
 
 
 class ChosenByteList4(ByteList):
     """Byte list capped at four bytes, whose limit a union option must still respect."""
 
-    LIMIT: ClassVar[int] = 4
+    LIMIT = 4
 
 
 class BooleanChoice(CompatibleUnion):

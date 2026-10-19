@@ -1,7 +1,5 @@
 """SSZ: how a vector's length and a list's limit shape the tree over its elements."""
 
-from typing import ClassVar
-
 import pytest
 
 from ssz import BitVector, Boolean, ByteList, ByteVector, List, Uint8, Uint64, Uint256, Vector
@@ -11,88 +9,88 @@ from ssz_testing import SSZTestFiller
 class ShapeUint8Vector31(Vector[Uint8]):
     """One byte shy of a chunk. The final byte of the single chunk is zero padding."""
 
-    LENGTH: ClassVar[int] = 31
+    LENGTH = 31
 
 
 class ShapeUint8Vector32(Vector[Uint8]):
     """Exactly one chunk of bytes, so the root is the packed data itself."""
 
-    LENGTH: ClassVar[int] = 32
+    LENGTH = 32
 
 
 class ShapeUint8Vector33(Vector[Uint8]):
     """One byte past a chunk. The spilled byte forces a second leaf."""
 
-    LENGTH: ClassVar[int] = 33
+    LENGTH = 33
 
 
 class ShapeBytes32(ByteVector):
     """The declared alias of a 32-element uint8 vector, filled to pin the two as equivalent."""
 
-    LENGTH: ClassVar[int] = 32
+    LENGTH = 32
 
 
 class ShapeUint64Vector12(Vector[Uint64]):
     """96 bytes of packing: three leaves under a tree padded to four."""
 
-    LENGTH: ClassVar[int] = 12
+    LENGTH = 12
 
 
 class ShapeUint256Vector5(Vector[Uint256]):
     """One chunk per element: five leaves under a tree padded to eight."""
 
-    LENGTH: ClassVar[int] = 5
+    LENGTH = 5
 
 
 class ShapeBooleanVector40(Vector[Boolean]):
     """Forty booleans at one byte each, which is 40 bytes and not the 5 of a bitvector."""
 
-    LENGTH: ClassVar[int] = 40
+    LENGTH = 40
 
 
 class ShapeBitVector40(BitVector):
     """Forty bits at one bit each, held next to the boolean vector of the same length."""
 
-    LENGTH: ClassVar[int] = 40
+    LENGTH = 40
 
 
 class ShapeUint64Vector6(Vector[Uint64]):
     """Two full chunks of packing, used as the composite element of the shapes below."""
 
-    LENGTH: ClassVar[int] = 6
+    LENGTH = 6
 
 
 class ShapeNestedVector3(Vector[ShapeUint64Vector6]):
     """Three element roots, not packed bytes, under a tree padded to four."""
 
-    LENGTH: ClassVar[int] = 3
+    LENGTH = 3
 
 
 class ShapeUint64List8(List[Uint64]):
     """Eight uint64 at most, a limit of exactly two chunks."""
 
-    LIMIT: ClassVar[int] = 8
+    LIMIT = 8
     ELEMENT_TYPE = Uint64
 
 
 class ShapeUint64List12(List[Uint64]):
     """Twelve uint64 at most, a limit of three chunks that the tree pads to four."""
 
-    LIMIT: ClassVar[int] = 12
+    LIMIT = 12
     ELEMENT_TYPE = Uint64
 
 
 class ShapeNestedList3(List[ShapeUint64Vector6]):
     """Three composite elements at most, a limit the tree pads to four."""
 
-    LIMIT: ClassVar[int] = 3
+    LIMIT = 3
     ELEMENT_TYPE = ShapeUint64Vector6
 
 
 class ShapeByteList80(ByteList):
     """Eighty bytes at most, a limit of three chunks that the tree pads to four."""
 
-    LIMIT: ClassVar[int] = 80
+    LIMIT = 80
 
 
 REPDIGITS = [Uint64(0x1111111111111111 * digit) for digit in range(1, 13)]

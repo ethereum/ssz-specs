@@ -1,7 +1,6 @@
 """SSZ conformance test vectors for the deeper levels of the EIP-7916 progressive spine."""
 
 from itertools import accumulate
-from typing import ClassVar
 
 import pytest
 
@@ -40,7 +39,7 @@ BEACON_STATE_GAPS = (8, 9, 10, 28)
 class Bytes32(ByteVector):
     """Composite element of one Merkle leaf, so a leaf count is an element count."""
 
-    LENGTH: ClassVar[int] = 32
+    LENGTH = 32
 
 
 class SampleUint64ProgressiveList(ProgressiveList[Uint64]):

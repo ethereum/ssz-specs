@@ -318,7 +318,7 @@ class ByteList(SSZCollection[int]):
 
     KIND = "byte list"
 
-    data: bytes = Field(default=b"")
+    data: bytes = Field(default=b"")  # ty: ignore[invalid-mutable-override]
     """
     The raw bytes stored in this list.
 

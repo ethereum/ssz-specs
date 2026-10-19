@@ -1,7 +1,5 @@
 """SSZ: hash_tree_root vectors for the fold a level of identical nodes takes."""
 
-from typing import ClassVar
-
 import pytest
 
 from ssz import (
@@ -45,26 +43,26 @@ def palindrome() -> list[Uint8]:
 class UniformUint8Vector128(Vector[Uint8]):
     """Four chunks of packing, enough for one pairing to leave a level of two."""
 
-    LENGTH: ClassVar[int] = 128
+    LENGTH = 128
 
 
 class UniformUint8Vector96(Vector[Uint8]):
     """Three chunks of packing, a count no level of a four-leaf tree can match."""
 
-    LENGTH: ClassVar[int] = 96
+    LENGTH = 96
 
 
 class UniformUint64List16(List[Uint64]):
     """Sixteen eight-byte elements, four chunks of capacity and four chunks of data."""
 
-    LIMIT: ClassVar[int] = 16
+    LIMIT = 16
     ELEMENT_TYPE = Uint64
 
 
 class UniformUint8List1024(List[Uint8]):
     """A cap of thirty-two chunks, four times the data every case below puts in it."""
 
-    LIMIT: ClassVar[int] = 1024
+    LIMIT = 1024
     ELEMENT_TYPE = Uint8
 
 

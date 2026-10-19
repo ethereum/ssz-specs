@@ -1,7 +1,5 @@
 """SSZ: how many elements a chunk holds at each basic width, and the container shapes around it."""
 
-from typing import ClassVar
-
 import pytest
 
 from ssz import (
@@ -24,25 +22,25 @@ from ssz_testing import ExpectedRejection, SSZTestFiller, ValueFault
 class DensityUint16Vector16(Vector[Uint16]):
     """Sixteen two-byte elements, the count that fills one chunk at that width."""
 
-    LENGTH: ClassVar[int] = 16
+    LENGTH = 16
 
 
 class DensityUint32Vector8(Vector[Uint32]):
     """Eight four-byte elements, the count that fills one chunk at that width."""
 
-    LENGTH: ClassVar[int] = 8
+    LENGTH = 8
 
 
 class DensityUint128Vector2(Vector[Uint128]):
     """Two sixteen-byte elements, the count that fills one chunk at that width."""
 
-    LENGTH: ClassVar[int] = 2
+    LENGTH = 2
 
 
 class DensityUint128Vector3(Vector[Uint128]):
     """Three sixteen-byte elements, so the second chunk is half data and half padding."""
 
-    LENGTH: ClassVar[int] = 3
+    LENGTH = 3
 
 
 class DensityUint128ProgressiveList(ProgressiveList[Uint128]):
@@ -63,31 +61,31 @@ class DensityWidthContainer(Container):
 class BitsList5(BitList):
     """Five bits at most, the first variable field of the bitfield-only struct."""
 
-    LIMIT: ClassVar[int] = 5
+    LIMIT = 5
 
 
 class BitsVector2(BitVector):
     """Two bits, which occupy one whole byte of the fixed part."""
 
-    LENGTH: ClassVar[int] = 2
+    LENGTH = 2
 
 
 class BitsVector1(BitVector):
     """One bit, which occupies one whole byte of the fixed part."""
 
-    LENGTH: ClassVar[int] = 1
+    LENGTH = 1
 
 
 class BitsList6(BitList):
     """Six bits at most, the second variable field of the bitfield-only struct."""
 
-    LIMIT: ClassVar[int] = 6
+    LIMIT = 6
 
 
 class BitsVector8(BitVector):
     """Eight bits, the only field of the struct whose bit count is already a byte."""
 
-    LENGTH: ClassVar[int] = 8
+    LENGTH = 8
 
 
 class BitsStruct(Container):

@@ -1015,7 +1015,7 @@ class TestTheUnitABitfieldReports:
 
     def test_a_bitlist_bounds_a_count_of_bits(self) -> None:
         """One bit past the limit, in the bytes the uncapped shape writes for that many."""
-        over_limit = BitList8.LIMIT + 1
+        over_limit = BitList8.declared_limit() + 1
         encoded = ProgressiveBitList(data=[Boolean(True)] * over_limit).encode_bytes()
         with pytest.raises(SSZValueError) as exception_info:
             BitList8.decode_bytes(encoded)

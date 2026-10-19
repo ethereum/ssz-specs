@@ -1,7 +1,5 @@
 """SSZ conformance vectors holding every offset to its neighbours, not only to the table's ends."""
 
-from typing import ClassVar
-
 import pytest
 
 from ssz import ByteList, Container, List
@@ -13,7 +11,7 @@ pytestmark = pytest.mark.tags("offsets")
 class InteriorByteList8(ByteList):
     """Byte list of up to 8 bytes, the innermost variable-size value these tables reach."""
 
-    LIMIT: ClassVar[int] = 8
+    LIMIT = 8
 
 
 class InteriorPair(Container):
@@ -34,7 +32,7 @@ class InteriorTriple(Container):
 class InteriorPairList4(List[InteriorPair]):
     """List of up to 4 of those structs, each body having 8 bytes as its own smallest span."""
 
-    LIMIT: ClassVar[int] = 4
+    LIMIT = 4
     ELEMENT_TYPE = InteriorPair
 
 

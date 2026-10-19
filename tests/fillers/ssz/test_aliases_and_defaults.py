@@ -1,6 +1,6 @@
 """SSZ conformance vectors for the byte-array alias, the last default rows, and two refusals."""
 
-from typing import ClassVar, Final
+from typing import Final
 
 import pytest
 
@@ -30,20 +30,20 @@ from ssz_testing import (
 class SampleAliasByteList8(ByteList):
     """Up to eight opaque bytes, the shorthand half of the pair against a list of byte elements."""
 
-    LIMIT: ClassVar[int] = 8
+    LIMIT = 8
 
 
 class SampleAliasByteElementList8(List[Byte]):
     """Up to eight byte elements, the spelled-out half of that pair."""
 
-    LIMIT: ClassVar[int] = 8
+    LIMIT = 8
     ELEMENT_TYPE = Byte
 
 
 class SampleBitList16(BitList):
     """Up to sixteen packed bits, a bounded bitfield whose default is empty."""
 
-    LIMIT: ClassVar[int] = 16
+    LIMIT = 16
 
 
 class SampleDefaultedShape(ProgressiveContainer):

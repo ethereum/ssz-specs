@@ -1,7 +1,5 @@
 """SSZ conformance vectors for basic and fixed-width inputs a decoder has to refuse."""
 
-from typing import ClassVar
-
 import pytest
 
 from ssz import Boolean, ByteList, ByteVector, Uint16, Uint64, Vector
@@ -11,19 +9,19 @@ pytestmark = pytest.mark.tags("boundary")
 
 
 class Bytes4(ByteVector):
-    LENGTH: ClassVar[int] = 4
+    LENGTH = 4
 
 
 class ByteList4(ByteList):
     """Byte list capped at four bytes, small enough to hand it one byte past the cap."""
 
-    LIMIT: ClassVar[int] = 4
+    LIMIT = 4
 
 
 class BooleanVector3(Vector[Boolean]):
     """Three booleans, so a refusal of the middle one carries the element path."""
 
-    LENGTH: ClassVar[int] = 3
+    LENGTH = 3
 
 
 def test_uint16_one_byte_short(ssz_test: SSZTestFiller) -> None:

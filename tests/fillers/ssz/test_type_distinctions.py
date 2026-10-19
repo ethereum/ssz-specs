@@ -1,7 +1,5 @@
 """SSZ conformance test vectors for the types the spec keeps apart, and for every default value."""
 
-from typing import ClassVar
-
 import pytest
 
 from ssz import (
@@ -23,69 +21,69 @@ from ssz_testing import SSZTestFiller
 class Bytes4(ByteVector):
     """Four-byte fixed byte array, the alias half of the ByteVector against Vector pair."""
 
-    LENGTH: ClassVar[int] = 4
+    LENGTH = 4
 
 
 class Bytes32(ByteVector):
     """Thirty-two-byte fixed byte array, exactly one Merkle chunk."""
 
-    LENGTH: ClassVar[int] = 32
+    LENGTH = 32
 
 
 class SampleBooleanVector8(Vector[Boolean]):
     """Eight booleans, one byte each, against the bitvector that packs the same bits."""
 
-    LENGTH: ClassVar[int] = 8
+    LENGTH = 8
 
 
 class SampleBitVector8(BitVector):
     """Eight bits packed into one byte, against the boolean vector holding the same bits."""
 
-    LENGTH: ClassVar[int] = 8
+    LENGTH = 8
 
 
 class SampleBitVector12(BitVector):
     """Twelve bits, whose two encoded bytes leave four padding bits clear."""
 
-    LENGTH: ClassVar[int] = 12
+    LENGTH = 12
 
 
 class SampleBooleanList8(List[Boolean]):
     """Up to eight booleans, one byte each, against the bitlist holding the same bits."""
 
-    LIMIT: ClassVar[int] = 8
+    LIMIT = 8
     ELEMENT_TYPE = Boolean
 
 
 class SampleBitList8(BitList):
     """Up to eight packed bits, against the boolean list holding the same bits."""
 
-    LIMIT: ClassVar[int] = 8
+    LIMIT = 8
 
 
 class SampleUint8Vector4(Vector[Uint8]):
     """Four one-byte uints, the spelled-out form of the four-byte byte vector."""
 
-    LENGTH: ClassVar[int] = 4
+    LENGTH = 4
 
 
 class SampleBytes32Vector2(Vector[Bytes32]):
     """Two composite elements, one Merkle leaf each, whose default is the element default twice."""
 
-    LENGTH: ClassVar[int] = 2
+    LENGTH = 2
 
 
 class SampleUint64List8(List[Uint64]):
     """Up to eight eight-byte elements, a variable-size shape whose default is empty."""
 
-    LIMIT: ClassVar[int] = 8
+    LIMIT = 8
     ELEMENT_TYPE = Uint64
 
 
 class SampleByteList32(ByteList):
     """Up to thirty-two bytes, a variable-size byte string whose default is empty."""
 
-    LIMIT: ClassVar[int] = 32
+    LIMIT = 32
 
 
 class SampleUint64ProgressiveList(ProgressiveList[Uint64]):

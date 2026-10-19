@@ -108,7 +108,7 @@ class WideHeader(Container):
 
 
 class Summary(ProgressiveContainer):
-    ACTIVE_FIELDS = [1, 0, 1]
+    ACTIVE_FIELDS = (1, 0, 1)
     epoch: Uint64
     root: Bytes32
 

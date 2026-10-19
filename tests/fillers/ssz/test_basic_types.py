@@ -1,7 +1,5 @@
 """SSZ conformance test vectors for all non-container types."""
 
-from typing import ClassVar
-
 import pytest
 
 from ssz import (
@@ -45,44 +43,44 @@ class ByteList512KiB(ByteList):
 class SampleBitVector8(BitVector):
     """8-bit bitvector. Fits exactly in one byte of SSZ encoding."""
 
-    LENGTH: ClassVar[int] = 8
+    LENGTH = 8
 
 
 class SampleBitVector64(BitVector):
     """64-bit bitvector. Spans multiple 32-byte Merkle chunks."""
 
-    LENGTH: ClassVar[int] = 64
+    LENGTH = 64
 
 
 class SampleBitList16(BitList):
     """BitList allowing up to 16 bits. Exercises the length-delimiting sentinel bit."""
 
-    LIMIT: ClassVar[int] = 16
+    LIMIT = 16
 
 
 class SampleUint16Vector3(Vector[Uint16]):
     """Fixed-length vector of 3 two-byte elements (6 bytes total)."""
 
-    LENGTH: ClassVar[int] = 3
+    LENGTH = 3
 
 
 class SampleUint64Vector4(Vector[Uint64]):
     """Fixed-length vector of 4 eight-byte elements (32 bytes, one full chunk)."""
 
-    LENGTH: ClassVar[int] = 4
+    LENGTH = 4
 
 
 class SampleUint32List16(List[Uint32]):
     """Variable-length list of up to 16 four-byte elements."""
 
-    LIMIT: ClassVar[int] = 16
+    LIMIT = 16
     ELEMENT_TYPE = Uint32
 
 
 class SampleBytes32List8(List[Bytes32]):
     """Variable-length list of up to 8 fixed-size 32-byte elements."""
 
-    LIMIT: ClassVar[int] = 8
+    LIMIT = 8
     ELEMENT_TYPE = Bytes32
 
 

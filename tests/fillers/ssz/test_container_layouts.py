@@ -1,7 +1,5 @@
 """SSZ conformance test vectors for the offset table a container's variable fields sit behind."""
 
-from typing import ClassVar
-
 import pytest
 
 from ssz import Container, List, Uint8, Uint16, Uint32, Uint64
@@ -13,13 +11,13 @@ pytestmark = pytest.mark.tags("offsets")
 class SampleUint64List6(List[Uint64]):
     """Bounded list of eight-byte elements, the first variable field of the pairs below."""
 
-    LIMIT: ClassVar[int] = 6
+    LIMIT = 6
 
 
 class SampleUint16List5(List[Uint16]):
     """Bounded list of two-byte elements, the second variable field of the pairs below."""
 
-    LIMIT: ClassVar[int] = 5
+    LIMIT = 5
 
 
 class SampleTwoOffsets(Container):

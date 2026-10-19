@@ -1,7 +1,5 @@
 """SSZ conformance test vectors for the byte strings the three bitfield shapes refuse."""
 
-from typing import ClassVar
-
 import pytest
 
 from ssz import BitList, BitVector, ProgressiveBitList
@@ -11,25 +9,25 @@ from ssz_testing import ExpectedRejection, SSZTestFiller, ValueFault
 class SampleBitVector4(BitVector):
     """4-bit bitvector. Half of its single byte is padding that has to stay clear."""
 
-    LENGTH: ClassVar[int] = 4
+    LENGTH = 4
 
 
 class SampleBitVector8(BitVector):
     """8-bit bitvector. Fits exactly in one byte of SSZ encoding, so it has no padding bits."""
 
-    LENGTH: ClassVar[int] = 8
+    LENGTH = 8
 
 
 class SampleBitVector12(BitVector):
     """12-bit bitvector. Spans two bytes, the upper half of the second one padding."""
 
-    LENGTH: ClassVar[int] = 12
+    LENGTH = 12
 
 
 class SampleBitList16(BitList):
     """BitList allowing up to 16 bits. Exercises the length-delimiting sentinel bit."""
 
-    LIMIT: ClassVar[int] = 16
+    LIMIT = 16
 
 
 @pytest.mark.tags("malleability")

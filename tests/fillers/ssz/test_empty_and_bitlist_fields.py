@@ -1,7 +1,5 @@
 """SSZ conformance vectors for a bitlist behind an offset, and for shapes handed no bytes."""
 
-from typing import ClassVar
-
 import pytest
 
 from ssz import BitList, Boolean, ByteVector, Container, List, Uint8, Uint64, Uint256, Vector
@@ -11,7 +9,7 @@ from ssz_testing import ExpectedRejection, SSZTestFiller, ValueFault
 class SampleBitList12(BitList):
     """Bitlist capped at twelve bits, a variable-size shape a struct reaches through an offset."""
 
-    LIMIT: ClassVar[int] = 12
+    LIMIT = 12
 
 
 class SampleBitListField(Container):
@@ -24,13 +22,13 @@ class SampleBitListField(Container):
 class EmptyBytes4(ByteVector):
     """Four-byte byte vector, the fixed byte array of the empty-input cases."""
 
-    LENGTH: ClassVar[int] = 4
+    LENGTH = 4
 
 
 class EmptyUint64Vector2(Vector[Uint64]):
     """Two eight-byte elements, the fixed vector of the empty-input cases."""
 
-    LENGTH: ClassVar[int] = 2
+    LENGTH = 2
 
 
 class EmptyFixedPair(Container):
@@ -43,7 +41,7 @@ class EmptyFixedPair(Container):
 class EmptyUint64List4(List[Uint64]):
     """Bounded list of eight-byte elements, the one shape here whose empty input is a value."""
 
-    LIMIT: ClassVar[int] = 4
+    LIMIT = 4
 
 
 FLAG_BITS = [Boolean(bit) for bit in (1, 0, 1, 1, 0, 0, 0, 1, 1, 0, 1)]

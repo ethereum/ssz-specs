@@ -1,7 +1,5 @@
 """SSZ conformance test vectors for a single Merkle branch against one generalized index."""
 
-from typing import ClassVar
-
 import pytest
 
 from ssz import (
@@ -37,7 +35,7 @@ ANY_NODE_WIDTH_IS_ADMITTED = (
 class SampleBranchBytes32(ByteVector):
     """Composite field of exactly one Merkle leaf."""
 
-    LENGTH: ClassVar[int] = 32
+    LENGTH = 32
 
 
 class SampleBranchCheckpoint(Container):
@@ -68,21 +66,21 @@ class SampleBranchState(Container):
 class SampleBranchCheckpointList4(List[SampleBranchCheckpoint]):
     """List of four composite elements, each taking a leaf of its own."""
 
-    LIMIT: ClassVar[int] = 4
+    LIMIT = 4
     ELEMENT_TYPE = SampleBranchCheckpoint
 
 
 class SampleBranchUint64List8(List[Uint64]):
     """List of eight eight-byte elements, four of them packed into each of two leaves."""
 
-    LIMIT: ClassVar[int] = 8
+    LIMIT = 8
     ELEMENT_TYPE = Uint64
 
 
 class SampleBranchBitList1024(BitList):
     """Bitlist of at most 1024 bits, packed 256 to a leaf across four of them."""
 
-    LIMIT: ClassVar[int] = 1024
+    LIMIT = 1024
 
 
 class SampleBranchProgressiveList(ProgressiveList[Uint64]):

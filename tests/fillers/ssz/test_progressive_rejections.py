@@ -1,7 +1,5 @@
 """SSZ conformance test vectors for encodings the progressive types refuse."""
 
-from typing import ClassVar
-
 from ssz import (
     List,
     ProgressiveContainer,
@@ -22,7 +20,7 @@ class SampleUint64ProgressiveList(ProgressiveList[Uint64]):
 class SampleUint16List4(List[Uint16]):
     """Bounded list of two-byte elements, used as a variable-size field."""
 
-    LIMIT: ClassVar[int] = 4
+    LIMIT = 4
     ELEMENT_TYPE = Uint16
 
 

@@ -1,7 +1,5 @@
 """SSZ: hash_tree_root vectors at bit / chunk size boundaries."""
 
-from typing import ClassVar
-
 import pytest
 
 from ssz import BitList, BitVector, Boolean, List, Uint64
@@ -13,49 +11,49 @@ pytestmark = pytest.mark.tags("boundary")
 class BoundaryBitVector1(BitVector):
     """Single-bit vector. Minimal case: one bit occupies one byte."""
 
-    LENGTH: ClassVar[int] = 1
+    LENGTH = 1
 
 
 class BoundaryBitVector7(BitVector):
     """Seven-bit vector. One byte with the high bit left as padding."""
 
-    LENGTH: ClassVar[int] = 7
+    LENGTH = 7
 
 
 class BoundaryBitVector9(BitVector):
     """Nine-bit vector. Two bytes: the second carries a single bit."""
 
-    LENGTH: ClassVar[int] = 9
+    LENGTH = 9
 
 
 class BoundaryBitVector255(BitVector):
     """Just below one Merkle chunk. Final chunk holds 31 bytes of data and 1 pad byte."""
 
-    LENGTH: ClassVar[int] = 255
+    LENGTH = 255
 
 
 class BoundaryBitVector256(BitVector):
     """Exact Merkle-chunk boundary. One chunk, no padding."""
 
-    LENGTH: ClassVar[int] = 256
+    LENGTH = 256
 
 
 class BoundaryBitVector257(BitVector):
     """Just above one Merkle chunk. Second chunk holds one bit and mix-ins padding."""
 
-    LENGTH: ClassVar[int] = 257
+    LENGTH = 257
 
 
 class BoundaryBitList256(BitList):
     """BitList whose limit is exactly one Merkle chunk, its sentinel landing in a fresh byte."""
 
-    LIMIT: ClassVar[int] = 256
+    LIMIT = 256
 
 
 class BoundaryUint64List32(List[Uint64]):
     """Uint64 list with a 32-element cap. 3 elements span 24 bytes, shy of one chunk."""
 
-    LIMIT: ClassVar[int] = 32
+    LIMIT = 32
     ELEMENT_TYPE = Uint64
 
 

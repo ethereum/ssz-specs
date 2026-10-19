@@ -1,7 +1,5 @@
 """SSZ conformance test vectors for the EIP-7688 bounded-to-progressive conversion."""
 
-from typing import ClassVar
-
 import pytest
 
 from ssz import (
@@ -82,14 +80,14 @@ def check_one_payload_one_root(first: SSZType, second: SSZType, serialized: str,
 class ConversionUint64List16(List[Uint64]):
     """Bounded list of eight-byte elements, the shape a fork converts away from."""
 
-    LIMIT: ClassVar[int] = 16
+    LIMIT = 16
     ELEMENT_TYPE = Uint64
 
 
 class ConversionUint64List8(List[Uint64]):
     """The same element type at half the capacity, so the encoding can be read against two."""
 
-    LIMIT: ClassVar[int] = 8
+    LIMIT = 8
     ELEMENT_TYPE = Uint64
 
 
@@ -102,20 +100,20 @@ class ConversionUint64ProgressiveList(ProgressiveList[Uint64]):
 class ConversionBitList2048(BitList):
     """Bounded bitfield at the committee size, the shape aggregation bits convert away from."""
 
-    LIMIT: ClassVar[int] = 2048
+    LIMIT = 2048
 
 
 class ConversionUint16List4(List[Uint16]):
     """Variable-size element, held fixed across the conversion so only the outer shape moves."""
 
-    LIMIT: ClassVar[int] = 4
+    LIMIT = 4
     ELEMENT_TYPE = Uint16
 
 
 class ConversionNestedList4(List[ConversionUint16List4]):
     """Bounded list of variable-size elements, whose encoding opens with an offset table."""
 
-    LIMIT: ClassVar[int] = 4
+    LIMIT = 4
     ELEMENT_TYPE = ConversionUint16List4
 
 

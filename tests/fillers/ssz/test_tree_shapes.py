@@ -1,7 +1,5 @@
 """SSZ: hash_tree_root vectors for the tree shapes merkleize folds, pads and shortcuts."""
 
-from typing import ClassVar
-
 import pytest
 
 from ssz import (
@@ -25,31 +23,31 @@ pytestmark = pytest.mark.tags("boundary", "multi-level")
 class TreeShapeBytes32(ByteVector):
     """One chunk wide, so a sequence of these has one leaf per element."""
 
-    LENGTH: ClassVar[int] = BYTES_PER_CHUNK
+    LENGTH = BYTES_PER_CHUNK
 
 
 class TreeShapeVector3(Vector[TreeShapeBytes32]):
     """Three leaves in a four-leaf tree: a chunk count that is not a power of two."""
 
-    LENGTH: ClassVar[int] = 3
+    LENGTH = 3
 
 
 class TreeShapeVector6(Vector[TreeShapeBytes32]):
     """Six leaves in an eight-leaf tree: an even leaf level over an odd level above it."""
 
-    LENGTH: ClassVar[int] = 6
+    LENGTH = 6
 
 
 class TreeShapeVector8(Vector[TreeShapeBytes32]):
     """Eight leaves, a perfect tree, so every level is folded whole."""
 
-    LENGTH: ClassVar[int] = 8
+    LENGTH = 8
 
 
 class TreeShapeBytes32List300(List[TreeShapeBytes32]):
     """A 300-element cap, so the tree is 512 leaves wide however few elements it holds."""
 
-    LIMIT: ClassVar[int] = 300
+    LIMIT = 300
     ELEMENT_TYPE = TreeShapeBytes32
 
 
@@ -63,7 +61,7 @@ class TreeShapePair(Container):
 class TreeShapePairList5(List[TreeShapePair]):
     """A five-element cap, a limit that is not a power of two, over composite elements."""
 
-    LIMIT: ClassVar[int] = 5
+    LIMIT = 5
     ELEMENT_TYPE = TreeShapePair
 
 

@@ -1,6 +1,6 @@
 """SSZ conformance test vectors for one union option's payload read under another's selector."""
 
-from typing import ClassVar, Final
+from typing import Final
 
 import pytest
 
@@ -14,7 +14,7 @@ pytestmark = pytest.mark.tags("union")
 class CrossBlob4(ByteList):
     """Byte string capped at four bytes, the variable-size field every option below reaches."""
 
-    LIMIT: ClassVar[int] = 4
+    LIMIT = 4
 
 
 class CrossMemo(ProgressiveContainer):

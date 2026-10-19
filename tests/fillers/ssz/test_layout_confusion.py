@@ -1,7 +1,5 @@
 """SSZ conformance test vectors for a progressive container handed another layout's payload."""
 
-from typing import ClassVar
-
 from ssz import (
     Boolean,
     List,
@@ -52,7 +50,7 @@ def assert_collision(first: SSZType, second: SSZType) -> None:
 class LayoutUint16List4(List[Uint16]):
     """Bounded list of two-byte elements, used as a variable-size field."""
 
-    LIMIT: ClassVar[int] = 4
+    LIMIT = 4
     ELEMENT_TYPE = Uint16
 
 

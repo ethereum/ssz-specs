@@ -1,7 +1,5 @@
 """SSZ conformance vectors for a sequence whose elements are themselves variable-size."""
 
-from typing import ClassVar
-
 import pytest
 
 from ssz import ByteList, Container, List, Uint32, Vector
@@ -13,34 +11,34 @@ pytestmark = pytest.mark.tags("offsets")
 class VarElemByteList8(ByteList):
     """Byte list of up to 8 bytes, the variable-size element every sequence here holds."""
 
-    LIMIT: ClassVar[int] = 8
+    LIMIT = 8
 
 
 class VarElemList5(List[VarElemByteList8]):
     """List of up to 5 variable-size elements, a capacity that is not a power of two."""
 
-    LIMIT: ClassVar[int] = 5
+    LIMIT = 5
     ELEMENT_TYPE = VarElemByteList8
 
 
 class VarElemVector3(Vector[VarElemByteList8]):
     """Vector of exactly 3 of the same variable-size element, its count declared not implied."""
 
-    LENGTH: ClassVar[int] = 3
+    LENGTH = 3
     ELEMENT_TYPE = VarElemByteList8
 
 
 class VarElemInnerList4(List[VarElemByteList8]):
     """List of up to 4 variable-size elements, held as an element so its table nests."""
 
-    LIMIT: ClassVar[int] = 4
+    LIMIT = 4
     ELEMENT_TYPE = VarElemByteList8
 
 
 class VarElemOuterList3(List[VarElemInnerList4]):
     """List of up to 3 lists, so every body it opens leads with an offset table of its own."""
 
-    LIMIT: ClassVar[int] = 3
+    LIMIT = 3
     ELEMENT_TYPE = VarElemInnerList4
 
 
@@ -54,7 +52,7 @@ class VarElemRecord(Container):
 class VarElemRecordList4(List[VarElemRecord]):
     """List of up to 4 of those structs, a capacity that is a power of two."""
 
-    LIMIT: ClassVar[int] = 4
+    LIMIT = 4
     ELEMENT_TYPE = VarElemRecord
 
 

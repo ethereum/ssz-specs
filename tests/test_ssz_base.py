@@ -1548,7 +1548,7 @@ class TestDeclaredCapacity:
         with pytest.raises(SSZTypeError) as exception_info:
 
             class Fractional(List[Uint8]):
-                LIMIT = 4.7
+                LIMIT = 4.7  # ty: ignore[invalid-assignment]
 
         assert str(exception_info.value) == ("Fractional.LIMIT must be a plain integer, got float")
 
@@ -2251,7 +2251,7 @@ class TestFinalHashTreeRoot:
             class Odd(Container):
                 """A container claiming the one field name the root method needs."""
 
-                hash_tree_root: Uint16  # ty: ignore[override-of-final-method]
+                hash_tree_root: Uint16  # ty: ignore[override-of-final-method, invalid-attribute-override]
 
         assert str(exception_info.value) == "Odd declares a hash_tree_root of its own"
 

@@ -1,7 +1,5 @@
 """SSZ conformance test vectors telling a field that is absent from one that is zero."""
 
-from typing import ClassVar
-
 import pytest
 
 from ssz import (
@@ -80,7 +78,7 @@ class AbsenceOutline(CompatibleUnion):
 class AbsenceDetailList8(List[AbsenceDetail]):
     """Eight composite elements at most, each taking a leaf of its own."""
 
-    LIMIT: ClassVar[int] = 8
+    LIMIT = 8
     ELEMENT_TYPE = AbsenceDetail
 
 

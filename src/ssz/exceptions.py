@@ -1,6 +1,6 @@
 """The two ways SSZ refuses something, and the closed catalogue of reasons for each."""
 
-from collections.abc import Iterator
+from collections.abc import Generator
 from contextlib import contextmanager
 from enum import Enum
 from typing import Any
@@ -159,7 +159,7 @@ class SSZValueError(SSZError[ValueFault], ValueError):
 
 
 @contextmanager
-def document_refusals(mode: str) -> Iterator[None]:
+def document_refusals(mode: str) -> Generator[None]:
     """
     Re-raise a type refusal as a value error for as long as a document is being read.
 

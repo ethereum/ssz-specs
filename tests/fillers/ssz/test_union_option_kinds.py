@@ -1,7 +1,5 @@
 """SSZ conformance test vectors for the option kinds an EIP-8016 compatible union admits."""
 
-from typing import ClassVar
-
 import pytest
 
 from ssz import (
@@ -26,31 +24,31 @@ pytestmark = pytest.mark.tags("union")
 class OptionBytes4(ByteVector):
     """Four-byte string, a fixed-size byte array standing as a union option."""
 
-    LENGTH: ClassVar[int] = 4
+    LENGTH = 4
 
 
 class OptionByteList8(ByteList):
     """Byte string capped at eight bytes, a variable-size byte array standing as a union option."""
 
-    LIMIT: ClassVar[int] = 8
+    LIMIT = 8
 
 
 class OptionBitVector8(BitVector):
     """Eight-bit bitvector, one packed byte, standing as a union option."""
 
-    LENGTH: ClassVar[int] = 8
+    LENGTH = 8
 
 
 class OptionBitList16(BitList):
     """Bitlist capped at sixteen bits, delimiter and all, standing as a union option."""
 
-    LIMIT: ClassVar[int] = 16
+    LIMIT = 16
 
 
 class OptionUint16Vector3(Vector[Uint16]):
     """Three two-byte elements, a fixed-size vector standing as a union option."""
 
-    LENGTH: ClassVar[int] = 3
+    LENGTH = 3
 
 
 class OptionPoint(Container):

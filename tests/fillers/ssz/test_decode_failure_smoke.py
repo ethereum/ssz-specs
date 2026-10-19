@@ -1,7 +1,5 @@
 """SSZ smoke test for the decode-failure fixture path."""
 
-from typing import ClassVar
-
 import pytest
 
 from ssz import BitList, Boolean
@@ -11,7 +9,7 @@ from ssz_testing import ExpectedRejection, SSZTestFiller, ValueFault
 class SmokeBitList8(BitList):
     """Small bitlist with an 8-bit limit, used only by the decode-failure smoke test."""
 
-    LIMIT: ClassVar[int] = 8
+    LIMIT = 8
 
 
 @pytest.mark.tags("limit")

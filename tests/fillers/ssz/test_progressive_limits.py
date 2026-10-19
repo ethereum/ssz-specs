@@ -1,6 +1,6 @@
 """SSZ conformance test vectors for the bound a progressive shape may declare."""
 
-from typing import ClassVar, Final
+from typing import Final
 
 import pytest
 
@@ -23,7 +23,7 @@ THREE_ELEMENT_ROOT: Final = "0x7e0adeccea8b17f07c3d1531a414d0b1f25543d5ddd519604
 class BoundedUint64ProgressiveList(ProgressiveList[Uint64]):
     """Progressive list of eight-byte integers bounded at three elements."""
 
-    LIMIT: ClassVar[int] = 3
+    LIMIT = 3
 
 
 class FreeUint64ProgressiveList(ProgressiveList[Uint64]):
@@ -33,25 +33,25 @@ class FreeUint64ProgressiveList(ProgressiveList[Uint64]):
 class ZeroBoundProgressiveList(ProgressiveList[Uint64]):
     """Progressive list bounded at zero, which admits the empty value and no other."""
 
-    LIMIT: ClassVar[int] = 0
+    LIMIT = 0
 
 
 class BoundedProgressiveBitList(ProgressiveBitList):
     """Progressive bitlist bounded at four bits, the delimiter counting as none of them."""
 
-    LIMIT: ClassVar[int] = 4
+    LIMIT = 4
 
 
 class SampleUint16List4(List[Uint16]):
     """Bounded list of two-byte elements, used as a variable-size element."""
 
-    LIMIT: ClassVar[int] = 4
+    LIMIT = 4
 
 
 class BoundedVariableProgressiveList(ProgressiveList[SampleUint16List4]):
     """Progressive list of variable-size elements bounded at two, counted off the offset table."""
 
-    LIMIT: ClassVar[int] = 2
+    LIMIT = 2
 
 
 def test_a_progressive_list_holds_the_count_its_bound_names(ssz_test: SSZTestFiller) -> None:

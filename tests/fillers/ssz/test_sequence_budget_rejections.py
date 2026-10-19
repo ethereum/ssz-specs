@@ -1,7 +1,5 @@
 """SSZ rejection vectors for byte budgets and element counts over fixed-size elements."""
 
-from typing import ClassVar
-
 import pytest
 
 from ssz import ByteList, Container, List, Uint16, Uint32, Uint64, Vector
@@ -13,31 +11,31 @@ pytestmark = pytest.mark.tags("boundary")
 class BudgetUint16List8(List[Uint16]):
     """List of up to eight two-byte elements, so a budget divides by two or by nothing."""
 
-    LIMIT: ClassVar[int] = 8
+    LIMIT = 8
 
 
 class BudgetUint64List4(List[Uint64]):
     """List of up to four eight-byte elements, where an even budget can still fail to divide."""
 
-    LIMIT: ClassVar[int] = 4
+    LIMIT = 4
 
 
 class BudgetUint32List3(List[Uint32]):
     """List of up to three four-byte elements, so a fourth whole element breaks the limit."""
 
-    LIMIT: ClassVar[int] = 3
+    LIMIT = 3
 
 
 class BudgetUint16Vector4(Vector[Uint16]):
     """Vector of exactly four two-byte elements, spanning eight bytes and no other count."""
 
-    LENGTH: ClassVar[int] = 4
+    LENGTH = 4
 
 
 class BudgetByteList33(ByteList):
     """Byte list capped one byte past a Merkle chunk, so the limit is not a power of two."""
 
-    LIMIT: ClassVar[int] = 33
+    LIMIT = 33
 
 
 class BudgetFixedPair(Container):

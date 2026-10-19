@@ -1,7 +1,5 @@
 """SSZ conformance test vectors for several generalized indices authenticated at once."""
 
-from typing import ClassVar
-
 import pytest
 
 from ssz import ByteVector, Container, List, Uint64, ValueFault
@@ -32,7 +30,7 @@ EMPTY_IS_UNSTATED = (
 class SampleMultiproofBytes32(ByteVector):
     """Composite field of exactly one Merkle leaf."""
 
-    LENGTH: ClassVar[int] = 32
+    LENGTH = 32
 
 
 class SampleMultiproofCheckpoint(Container):
@@ -76,7 +74,7 @@ class SampleMultiproofState(Container):
 class SampleMultiproofUint64List8(List[Uint64]):
     """List of eight eight-byte elements, four of them packed into each of two leaves."""
 
-    LIMIT: ClassVar[int] = 8
+    LIMIT = 8
     ELEMENT_TYPE = Uint64
 
 

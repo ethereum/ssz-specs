@@ -1,6 +1,6 @@
 """SSZ conformance test vectors for the collections a capacity of zero leaves legal."""
 
-from typing import ClassVar, Final
+from typing import Final
 
 import pytest
 
@@ -16,19 +16,19 @@ EMPTY_COLLECTION_ROOT: Final = "0xf5a5fd42d16a20302798ef6ed309979b43003d2320d9f0
 class ZeroCapacityUint64List(List[Uint64]):
     """List of eight-byte integers bounded at zero, holding the empty value and no other."""
 
-    LIMIT: ClassVar[int] = 0
+    LIMIT = 0
 
 
 class ZeroCapacityBitList(BitList):
     """Bitlist bounded at zero bits, whose one value still writes a delimiter byte."""
 
-    LIMIT: ClassVar[int] = 0
+    LIMIT = 0
 
 
 class ZeroCapacityByteList(ByteList):
     """Byte list bounded at zero bytes, the byte-flavoured shape the same rule leaves legal."""
 
-    LIMIT: ClassVar[int] = 0
+    LIMIT = 0
 
 
 @pytest.mark.tags("empty")
