@@ -160,6 +160,9 @@ class ProofSubject(DescribedFixture):
     verified: bool = Field(exclude=True)
     """Whether the emitted proof rebuilt that root when the vector was filled."""
 
+    rejection_reason: ValueFault | None = None
+    """The fault a verifier must refuse this proof with, and the field clients assert on."""
+
     @computed_field
     @property
     def valid(self) -> bool:

@@ -53,7 +53,7 @@ from ssz.ssz_base import (
 from ssz.uint import BaseUint, Byte, Uint32
 
 
-class _SSZSequence[T: SSZType](SSZCollection[T], ABC):
+class _SSZSequence[T: SSZType](SSZCollection[T, Sequence[T]], ABC):
     """
     Shared scaffolding for the three SSZ sequence shapes.
 

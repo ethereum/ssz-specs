@@ -452,7 +452,7 @@ class SSZModel(StrictBaseModel, SSZType, ABC):
         return f"{cls_name}({' '.join(field_strs)})"
 
 
-class SSZCollection[T](SSZModel, Sequence[T], ABC):
+class SSZCollection[T, S: Sequence[Any]](SSZModel, Sequence[T], ABC):
     """
     Pydantic-backed SSZ base for collections that wrap their contents in one data field.
 
@@ -465,8 +465,12 @@ class SSZCollection[T](SSZModel, Sequence[T], ABC):
     model_config = ConfigDict(validate_assignment=True)
 
     # A subclass narrows this field only where the declaration here carries a value.
-    data: Sequence[T] = Field()
-    """The contents, declared with its concrete type and default by each subclass."""
+    data: S = Field()
+    """
+    The contents, stored as the type each shape names and declared with its default there.
+
+    A byte list stores bytes and every other shape a sequence of its elements.
+    """
 
     @model_validator(mode="before")
     @classmethod

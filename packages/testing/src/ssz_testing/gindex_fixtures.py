@@ -87,6 +87,9 @@ class GindexFixture(DescribedFixture):
     depth: int | None = None
     """Levels that index sits below the root, which is the node count of its proof branch."""
 
+    rejection_reason: TypeFault | ValueFault | None = None
+    """The fault the path must be refused with, and the field clients assert on."""
+
     @computed_field
     @property
     def type_descriptor(self) -> TypeDescriptor:

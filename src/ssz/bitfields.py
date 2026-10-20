@@ -37,7 +37,7 @@ from ssz.exceptions import (
 from ssz.ssz_base import SSZCollection
 
 
-class BitVector(SSZCollection[Boolean]):
+class BitVector(SSZCollection[Boolean, Sequence[Boolean]]):
     """
     Fixed-length SSZ bitfield with exactly N bits.
 
@@ -246,7 +246,7 @@ class BitVector(SSZCollection[Boolean]):
         return cls(data=bits)
 
 
-class _SSZBitList(SSZCollection[Boolean]):
+class _SSZBitList(SSZCollection[Boolean, Sequence[Boolean]]):
     """
     Shared behavior for the two delimited SSZ bitfield shapes.
 

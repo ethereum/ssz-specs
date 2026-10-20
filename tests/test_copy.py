@@ -1,6 +1,7 @@
 """Tests for the copy method every SSZ type carries."""
 
 import copy as copy_module
+from collections.abc import Sequence
 
 import pytest
 from hypothesis import given, strategies as st
@@ -522,7 +523,7 @@ DEEP_COPIED_SEQUENCES = [
 
 @pytest.mark.parametrize("value, write", DEEP_COPIED_SEQUENCES)
 def test_a_deep_copy_rebuilds_the_sequence_around_the_elements_it_already_holds(
-    value: SSZCollection[SSZType], write: object
+    value: SSZCollection[SSZType, Sequence[SSZType]], write: object
 ) -> None:
     duplicate = copy_module.deepcopy(value)
     before = value.hash_tree_root()
@@ -593,7 +594,7 @@ MODEL_COPIED_SEQUENCES = [
 
 @pytest.mark.parametrize("value", MODEL_COPIED_SEQUENCES)
 def test_pydantics_deep_model_copy_answers_a_sequence_with_an_independent_one(
-    value: SSZCollection[SSZType],
+    value: SSZCollection[SSZType, Sequence[SSZType]],
 ) -> None:
     """Pydantic asks for a deep copy with no memo."""
     duplicate = value.model_copy(deep=True)

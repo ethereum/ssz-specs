@@ -5,13 +5,14 @@ import json
 import re
 from abc import abstractmethod
 from collections.abc import Mapping
+from enum import Enum
 from functools import cached_property
 from typing import Any, ClassVar, Final, Self
 
 from pydantic import BaseModel, ConfigDict, Field, computed_field, field_serializer
 from pydantic.alias_generators import to_camel
 
-from ssz.exceptions import SSZError, TypeFault, ValueFault
+from ssz.exceptions import SSZError, ValueFault
 from ssz.ssz_base import SSZType
 
 
@@ -127,7 +128,7 @@ class ExpectedRejection(CamelModel):
             )
 
 
-class BaseConsensusFixture(CamelModel):
+class BaseConsensusFixture(CamelModel, frozen=True):
     """
     Base for every emitted fixture.
 
@@ -135,16 +136,18 @@ class BaseConsensusFixture(CamelModel):
     Input specs produce one; nothing mutates it afterwards.
     """
 
-    model_config = CamelModel.model_config | {"frozen": True}
-
     format_name: ClassVar[str] = ""
     """The name of this fixture format (e.g., 'ssz_test')."""
 
     info: FixtureInfo | None = Field(default=None, exclude=True)
     """Metadata about the test (description, format, etc.)."""
 
-    rejection_reason: ValueFault | TypeFault | None = None
-    """The fault a negative vector is rejected with, and the field clients assert on."""
+    rejection_reason: Enum | None = None
+    """
+    The fault a negative vector is rejected with, and the field clients assert on.
+
+    Each format narrows this to its own catalogue, so the base admits any of them.
+    """
 
     stricter_than_spec: str | None = None
     """What the specification admits here, present only where this suite refuses it anyway."""
@@ -156,7 +159,7 @@ class BaseConsensusFixture(CamelModel):
         return self.rejection_reason is None
 
     @field_serializer("rejection_reason", when_used="json-unless-none")
-    def serialize_rejection_reason(self, fault: ValueFault | TypeFault) -> str:
+    def serialize_rejection_reason(self, fault: Enum) -> str:
         """Emit the fault's name, its stable tag, rather than the sentence it renders."""
         return fault.name
 

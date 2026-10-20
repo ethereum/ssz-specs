@@ -5,7 +5,7 @@ from typing import Any, ClassVar
 from pydantic import Field, computed_field, field_serializer
 
 from ssz.base import json_writer
-from ssz.exceptions import SSZError
+from ssz.exceptions import SSZError, ValueFault
 from ssz.roots import hash_tree_root
 from ssz.ssz_base import SSZType
 from ssz_testing.fixtures import (
@@ -33,6 +33,9 @@ class SSZFixture(DescribedFixture):
 
     root: str | None = None
     """Hex tree root, absent on a vector whose bytes decode to no value."""
+
+    rejection_reason: ValueFault | None = None
+    """The fault a decoder must refuse these bytes with, and the field clients assert on."""
 
     @field_serializer("value", when_used="json-unless-none")
     def serialize_value(self, ssz_value: SSZType) -> Any:

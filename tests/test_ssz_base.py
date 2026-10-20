@@ -2,6 +2,7 @@
 
 from collections.abc import Callable, Iterator
 from decimal import Decimal
+from types import new_class
 from typing import IO, Any, Final, cast
 
 import pytest
@@ -578,7 +579,7 @@ class TestSliceWriteCount:
         ],
     )
     def test_a_step_other_than_one_cannot_resize(
-        self, collection: SSZCollection[Any], replacement: Any, message: str
+        self, collection: SSZCollection[Any, Any], replacement: Any, message: str
     ) -> None:
         """A stepped write holds one element per position spanned, and resizes nothing."""
         contents_before = list(collection)
@@ -713,7 +714,10 @@ class TestSSZCollectionNegativeIndex:
         ],
     )
     def test_a_negative_write_replaces_only_the_final_element(
-        self, collection: SSZCollection[Any], replacement: Any, expected: SSZCollection[Any]
+        self,
+        collection: SSZCollection[Any, Any],
+        replacement: Any,
+        expected: SSZCollection[Any, Any],
     ) -> None:
         """Position -1 writes the last element held, whichever shape holds it."""
         collection[-1] = replacement
@@ -765,7 +769,7 @@ class TestSSZCollectionNegativeIndex:
         ],
     )
     def test_a_negative_write_of_a_rejected_element_leaves_the_value_alone(
-        self, collection: SSZCollection[Any], rejected: Any, message: str
+        self, collection: SSZCollection[Any, Any], rejected: Any, message: str
     ) -> None:
         """A position counted from the end is validated on exactly the same terms as any other."""
         contents_before = list(collection)
@@ -808,7 +812,7 @@ class TestSSZCollectionNegativeIndex:
         ],
     )
     def test_a_negative_slice_write_that_resizes_a_fixed_length_shape_is_rejected(
-        self, collection: SSZCollection[Any], replacement: Any, message: str
+        self, collection: SSZCollection[Any, Any], replacement: Any, message: str
     ) -> None:
         """A trailing range given fewer elements than it spans is a length error."""
         contents_before = list(collection)
@@ -867,7 +871,7 @@ class TestSSZCollectionNegativeIndex:
         ],
     )
     def test_an_out_of_range_negative_write_leaves_the_value_alone(
-        self, collection: SSZCollection[Any], index: int, replacement: Any, message: str
+        self, collection: SSZCollection[Any, Any], index: int, replacement: Any, message: str
     ) -> None:
         """A position before the first element held addresses nothing to write to."""
         contents_before = list(collection)
@@ -1194,7 +1198,7 @@ class TestSSZCollectionOf:
         ],
     )
     def test_of_with_no_elements_is_a_length_error_on_a_fixed_length_shape(
-        self, collection_type: type[SSZCollection[Any]], expected_length: int
+        self, collection_type: type[SSZCollection[Any, Any]], expected_length: int
     ) -> None:
         """No argument here means zero elements, which is a count, not a missing input."""
         # This factory always states the elements, so stating none of them is a count of zero.
@@ -1545,10 +1549,9 @@ class TestDeclaredCapacity:
 
     def test_a_fractional_capacity_is_refused(self) -> None:
         """A capacity between two whole numbers has no reading that is safe to guess."""
+        # A float capacity is not a declaration a type checker admits, so the class is built.
         with pytest.raises(SSZTypeError) as exception_info:
-
-            class Fractional(List[Uint8]):
-                LIMIT = 4.7  # ty: ignore[invalid-assignment]
+            new_class("Fractional", (List[Uint8],), exec_body=lambda body: body.update(LIMIT=4.7))
 
         assert str(exception_info.value) == ("Fractional.LIMIT must be a plain integer, got float")
 
@@ -2246,12 +2249,13 @@ class TestFinalHashTreeRoot:
         #
         # A container also hashes itself by its own root.
         # The shadowed name would break hashing rather than merely occupy it.
+        # A field over a final method is not a declaration a type checker admits either.
         with pytest.raises(SSZTypeError) as exception_info:
-
-            class Odd(Container):
-                """A container claiming the one field name the root method needs."""
-
-                hash_tree_root: Uint16  # ty: ignore[override-of-final-method, invalid-attribute-override]
+            new_class(
+                "Odd",
+                (Container,),
+                exec_body=lambda body: body.update(__annotations__={"hash_tree_root": Uint16}),
+            )
 
         assert str(exception_info.value) == "Odd declares a hash_tree_root of its own"
 

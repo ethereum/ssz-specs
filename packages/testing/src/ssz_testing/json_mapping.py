@@ -54,7 +54,7 @@ class JsonMappingFixture(BaseConsensusFixture):
     serialized: str | None = None
     """Hex encoding of the same value, absent on a document that renders no value."""
 
-    rejection_reason: JsonFault | None = None  # ty: ignore[invalid-attribute-override]
+    rejection_reason: JsonFault | None = None
     """The fault a parser must refuse this document with, and the field clients assert on."""
 
     @computed_field

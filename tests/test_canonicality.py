@@ -172,7 +172,10 @@ def _uints(uint_type: type[BaseUint]) -> st.SearchStrategy[BaseUint]:
 
 
 def _bits(
-    bitfield_type: type[SSZCollection[Boolean]], *, min_size: int = 0, max_size: int
+    bitfield_type: type[SSZCollection[Boolean, Sequence[Boolean]]],
+    *,
+    min_size: int = 0,
+    max_size: int,
 ) -> st.SearchStrategy[SSZType]:
     """Bit patterns of the widths this bitfield admits."""
     return st.lists(st.booleans(), min_size=min_size, max_size=max_size).map(
@@ -181,7 +184,7 @@ def _bits(
 
 
 def _sequences(
-    collection_type: type[SSZCollection[Any]],
+    collection_type: type[SSZCollection[Any, Any]],
     elements: st.SearchStrategy[SSZType],
     *,
     min_size: int = 0,
