@@ -71,7 +71,7 @@ theorem canonical_option : ∀ selectors options selector data value,
     (∀ option ∈ options, ∀ data value, deserialize option data = .ok value →
       serialize option value = .ok data) →
     deserializeOption selectors options selector data = .ok value →
-    ∃ option held, value = .union selector held ∧
+    ∃ option held, value = .union selector held ∧ checkSelector selector = .ok () ∧
       lookupOption selectors options selector = .ok option ∧ serialize option held = .ok data := by
   intro selectors
   -- Walk the selector table alongside the option declarations.
@@ -87,14 +87,15 @@ theorem canonical_option : ∀ selectors options selector data value,
       -- A matching selector fixes which type decodes and re-encodes the payload.
       by_cases same : chosen == selector
       · simp only [deserializeOption, same, if_true] at read
+        obtain ⟨_, ranged, read⟩ := checksPassed read
         obtain ⟨held, body, ⟨⟩⟩ := checksPassed read
-        exact ⟨option, held, rfl, by simp [lookupOption, same],
+        exact ⟨option, held, rfl, ranged, by simp [lookupOption, same],
           canonical option List.mem_cons_self data held body⟩
       -- A nonmatching entry leaves the payload unchanged while searching the remaining options.
-      · obtain ⟨heldOption, held, eq, named, encoded⟩ := ih options selector data value
+      · obtain ⟨heldOption, held, eq, ranged, named, encoded⟩ := ih options selector data value
           (fun item member => canonical item (List.mem_cons_of_mem _ member))
           (by simpa [deserializeOption, same] using read)
-        exact ⟨heldOption, held, eq, by simpa [lookupOption, same] using named, encoded⟩
+        exact ⟨heldOption, held, eq, ranged, by simpa [lookupOption, same] using named, encoded⟩
 
 /-- A nonempty byte sequence is its first byte followed by its remaining bytes. -/
 theorem firstByte_append_tail (data : Bytes) (nonempty : 0 < data.size) :
@@ -119,11 +120,11 @@ theorem canonical_union {selectors : List Nat} {options : List Desc} {data : Byt
   · simp [Bind.bind, Except.bind] at read
   · rename_i nonempty
     -- Recover the chosen option together with its canonical payload encoding.
-    obtain ⟨option, held, eq, named, encoded⟩ :=
+    obtain ⟨option, held, eq, ranged, named, encoded⟩ :=
       canonical_option selectors options _ _ value canonical read
     subst value
     -- Prepending the unchanged selector reconstructs the entire input.
-    simp [serialize, named, encoded, Bind.bind, Except.bind, pure, Except.pure,
+    simp [serialize, named, encoded, ranged, Bind.bind, Except.bind, pure, Except.pure,
       firstByte_append_tail data (by omega)]
 
 /-- A vector of canonical elements has a canonical encoding. -/

@@ -69,7 +69,9 @@ def subtreeAt (chunks : Array Bytes) (depth start : Nat) : Bytes :=
 /--
 Root of the bounded tree over a node sequence.
 
-The capacity is the declared limit where the type has one, and the node count otherwise.
+The capacity is a count of nodes, which the type fixes from its declared length or limit.
+
+With no capacity given, the tree is just wide enough for the nodes it holds.
 -/
 def merkleizeBounded (chunks : Array Bytes) (limit : Option Nat) : Except Err Bytes := do
   match limit with

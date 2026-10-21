@@ -36,7 +36,7 @@ def Desc.default : Desc → Except Err Value
   | .container _ fields => return .seq (← Desc.defaultFields fields)
   | .progressiveContainer _ _ fields => return .seq (← Desc.defaultFields fields)
   -- A union would have to pick an option, and no option is the one to pick.
-  | .compatibleUnion _ _ => .error .typeMismatch
+  | .compatibleUnion _ _ => .error .noDefault
 
 /-- The default of each field of a struct. -/
 def Desc.defaultFields : List Desc → Except Err (List Value)

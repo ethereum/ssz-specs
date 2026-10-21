@@ -103,15 +103,17 @@ theorem PathSelects.listElement {element : Desc} {limit : Nat} {values : List Va
 /-- A progressive composite list path follows the occupied element as the spine grows. -/
 theorem PathSelects.progressiveListElement {element : Desc} {limit : Option Nat}
     {values : List Value} (composite : element.isBasic = false)
+    (within : withinBound limit values.length = true)
     {ordinal : Nat} {inner : Value} {rest : List PathStep} {node : Bytes}
     (selected : values[ordinal]? = some inner) (suffix : PathSelects element inner rest node) :
     PathSelects (.progressiveList element limit) (.seq values) (.position ordinal :: rest)
       node := by
-  -- A bound never reaches the spine, while membership supplies the leaf the path must reach.
+  -- A bound shapes no spine, while membership supplies the leaf the path must reach.
   let layout := MerkleLayout.nesting (values.map fun value => some (element, value))
     none (lengthWord values.length)
   have laid : merkleLayout (.progressiveList element limit) (.seq values) = .ok layout := by
-    simp [merkleLayout, sequenceLayout, composite, layout, Pure.pure, Except.pure]
+    simp [merkleLayout, sequenceLayout, composite, layout, boundCheck_of_withinBound limit _ within,
+      Bind.bind, Except.bind, Pure.pure, Except.pure]
   apply PathSelects.nestedProgressive (ordinal := ordinal) laid rfl rfl rfl _ _ suffix
   · simp [List.getElem?_map, selected]
   · rw [resolveStep_progressiveList, Desc.itemLength_composite composite]
@@ -163,7 +165,8 @@ theorem lookupOption_position (selectors : List Nat) (options : List Desc) (sele
 /-- A compatible union path follows its active selector into exactly the value it carries. -/
 theorem PathSelects.unionOption {selectors : List Nat} {options : List Desc}
     {selector : Nat} {child : Desc} {inner : Value} {rest : List PathStep} {node : Bytes}
-    (bounded : selector < 256) (chosen : lookupOption selectors options selector = .ok child)
+    (bounded : minSelector ≤ selector ∧ selector ≤ maxSelector)
+    (chosen : lookupOption selectors options selector = .ok child)
     (suffix : PathSelects child inner rest node) :
     PathSelects (.compatibleUnion selectors options) (.union selector inner)
       (.position selector :: rest) node := by
@@ -171,7 +174,7 @@ theorem PathSelects.unionOption {selectors : List Nat} {options : List Desc}
   let layout := MerkleLayout.nesting [some (child, inner)] (some 1) (lengthWord selector)
   have laid : merkleLayout (.compatibleUnion selectors options) (.union selector inner) =
       .ok layout := by
-    simp [merkleLayout, chosen, selectorWord, show ¬selector > 255 by omega, layout,
+    simp [merkleLayout, chosen, selectorWord, checkSelector_of_range bounded, layout,
       Bind.bind, Except.bind, Pure.pure, Except.pure]
   obtain ⟨slot, named, found⟩ := lookupOption_position selectors options selector child chosen
   -- The successful lookup justifies reading the selected option at that exact ordinal.

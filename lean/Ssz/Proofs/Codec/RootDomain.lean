@@ -167,8 +167,9 @@ theorem layout_exists {shape : Desc} {value : Value}
     rintro _ ⟨⟩
     unfold chunksForBits
     exact Nat.div_le_div_right (Nat.sub_le_sub_right (Nat.add_le_add_right within _) _)
-  | progressiveBitList =>
-    refine ⟨_, rfl, ?_⟩
+  | @progressiveBitList limit data within =>
+    refine ⟨_, by simp [merkleLayout, boundCheck_of_withinBound limit _ within, Bind.bind,
+      Except.bind]; rfl, ?_⟩
     apply bits_fits
     simp
   | @vector element length elements count each =>
@@ -178,8 +179,9 @@ theorem layout_exists {shape : Desc} {value : Value}
     simpa [merkleLayout, Nat.not_lt.mpr within] using
       sequence_fits (wellFormed_list sound) each (some limit) (lengthWord elements.length)
         (by intro capacity named; cases named; exact within)
-  | progressiveList _ each =>
-    exact sequence_fits (wellFormed_progressiveList sound) each _ _ (by simp)
+  | @progressiveList element limit elements within each =>
+    simpa [merkleLayout, boundCheck_of_withinBound limit _ within, Bind.bind, Except.bind] using
+      sequence_fits (wellFormed_progressiveList sound) each none (lengthWord elements.length) (by simp)
   | @container names fields values paired each =>
     refine ⟨.nesting ((fields.zip values).map some) (some fields.length),
       by simp [merkleLayout, paired, pure, Except.pure], ?_, ?_⟩
@@ -204,7 +206,7 @@ theorem layout_exists {shape : Desc} {value : Value}
         child (List.of_mem_zip pairedMember).1⟩
   | @compatibleUnion selectors options selector option data bounded named inner =>
     refine ⟨.nesting [some (option, data)] (some 1) (lengthWord selector),
-      by simp [merkleLayout, named, selectorWord, show ¬ selector > 255 by omega,
+      by simp [merkleLayout, named, selectorWord, checkSelector_of_range bounded,
       Bind.bind, Except.bind, pure, Except.pure], ?_, ?_⟩
     · intro child value member
       obtain ⟨rfl, rfl⟩ := by simpa using member

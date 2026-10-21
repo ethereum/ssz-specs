@@ -53,7 +53,9 @@ mutual
 /--
 Whether a value fits a type.
 
-Serialization assumes this, and deserialization establishes it.
+Under a legal declaration, the codec refuses a value that does not fit.
+
+Every value it decodes fits.
 -/
 def Value.fits : Desc → Value → Bool
   | .bool, .bool _ => true

@@ -182,10 +182,12 @@ theorem merkleLayout_shapes {shape : Desc} {left right : Value} {first second : 
   -- An exact bit count fixes the progressive spine's stored node count, bound or none.
   | progressiveBitList =>
     match leftFits, rightFits, leftSized, rightSized with
-    | .progressiveBitList _, .progressiveBitList _, .progressiveBitList count,
+    | .progressiveBitList within, .progressiveBitList otherWithin, .progressiveBitList count,
         .progressiveBitList otherCount =>
-      cases laid
-      cases other
+      simp only [merkleLayout, boundCheck_of_withinBound _ _ within,
+        boundCheck_of_withinBound _ _ otherWithin, Bind.bind, Except.bind, pure, Except.pure,
+        Except.ok.injEq] at laid other
+      subst first second
       -- The count bounds exclude truncation when the equal 256-bit words are decoded.
       have sizes := lengthWord_injective count otherCount (Option.some.inj mixed)
       simp [MerkleLayout.packing, Leaves.shapes, packedBits, packBytes_size, packBits, sizes]
@@ -209,8 +211,10 @@ theorem merkleLayout_shapes {shape : Desc} {left right : Value} {first second : 
   -- The mixing word aligns progressive element lists by their actual counts.
   | progressiveList element =>
     match leftFits, rightFits, leftSized, rightSized with
-    | .progressiveList _ each, .progressiveList _ otherEach, .progressiveList count _,
+    | .progressiveList within each, .progressiveList otherWithin otherEach, .progressiveList count _,
         .progressiveList otherCount _ =>
+      simp only [merkleLayout, boundCheck_of_withinBound _ _ within,
+        boundCheck_of_withinBound _ _ otherWithin, Bind.bind, Except.bind] at laid other
       -- The sequence layout keeps the supplied length word unchanged in its metadata.
       have words : lengthWord _ = lengthWord _ := Option.some.inj
         ((sequenceLayout_mixin laid).symm.trans (mixed.trans (sequenceLayout_mixin other)))
@@ -253,9 +257,10 @@ theorem merkleLayout_shapes {shape : Desc} {left right : Value} {first second : 
     match leftFits, rightFits with
     | .compatibleUnion (selector := selector) bounded named _,
         .compatibleUnion (selector := otherSelector) otherBounded otherNamed _ =>
-      simp only [merkleLayout, bind, Except.bind, named, selectorWord, gt_iff_lt,
-        show ¬selector > 255 by omega, ↓reduceIte, pure, Except.pure, Except.ok.injEq, otherNamed,
-        show ¬otherSelector > 255 by omega] at laid other
+      simp only [merkleLayout, bind, Except.bind, named, selectorWord,
+        checkSelector_of_range bounded, pure, Except.pure, Except.ok.injEq, otherNamed,
+        checkSelector_of_range otherBounded] at laid other
+      have top : maxSelector = 127 := rfl
       subst first second
       -- A one-byte selector always fits in the 256-bit word, so equal words recover equal selectors.
       have selectorsEqual := lengthWord_injective

@@ -198,13 +198,13 @@ The leaf and the index each become a list of one, and the proof is passed as it 
 theorem verifyMerkleMultiproof_singleton {leaf root : Bytes} {proof : List Bytes} {index : Nat}
     {verdict : Bool} (single : verifyMerkleProof leaf proof index root = .ok verdict) :
     verifyMerkleMultiproof [leaf] proof [index] root = .ok verdict := by
-  -- Both verifiers run the same width checks before comparing the rebuilt root.
+  -- Both verifiers rebuild the root, then run the same width checks before comparing it.
   unfold verifyMerkleProof at single
-  cases leafWidth : checkChunk leaf <;> cases rootWidth : checkChunk root <;>
-    cases proofWidths : checkChunks proof <;> cases rebuilt : calculateMerkleRoot leaf proof index <;>
-    simp [leafWidth, rootWidth, proofWidths, rebuilt, Bind.bind, Except.bind, pure,
+  cases rebuilt : calculateMerkleRoot leaf proof index <;> cases leafWidth : checkChunk leaf <;>
+    cases proofWidths : checkChunks proof <;>
+    simp [leafWidth, proofWidths, rebuilt, Bind.bind, Except.bind, pure,
       Except.pure] at single
-  simp [verifyMerkleMultiproof, checkChunks, leafWidth, rootWidth, proofWidths,
+  simp [verifyMerkleMultiproof, checkChunks, leafWidth, proofWidths,
     calculateMultiMerkleRoot_singleton rebuilt, single, Bind.bind, Except.bind, pure, Except.pure]
 
 end Ssz

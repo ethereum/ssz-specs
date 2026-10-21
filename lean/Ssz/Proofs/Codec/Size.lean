@@ -349,12 +349,13 @@ theorem Representable.serialize {shape : Desc} {value : Value} {size : Nat}
       (fun pair member => ih pair member (admissible pair member)) bounded
     exact ⟨bytes, by simpa only [Ssz.serialize] using encoded, sized⟩
   | @compatibleUnion selectors options selector option data size named inner ih =>
-    intro (.compatibleUnion _ found admissible)
+    intro (.compatibleUnion ranged found admissible)
     -- The size witness and admissibility refer to the same uniquely selected option.
     cases Except.ok.inj (named.symm.trans found)
     obtain ⟨body, encoded, sized⟩ := ih admissible
     exact ⟨#[UInt8.ofNat selector] ++ body,
-      by simp [Ssz.serialize, named, encoded, Bind.bind, Except.bind, pure, Except.pure], by simp [sized]⟩
+      by simp [Ssz.serialize, named, encoded, checkSelector_of_range ranged, Bind.bind, Except.bind,
+        pure, Except.pure], by simp [sized]⟩
 
 /-- Every successful encoding has a structural size witness, including bounds at all nested sequences and containers. -/
 theorem representable_of_serialize (shape : Desc) (value : Value) (bytes : Bytes)
@@ -434,6 +435,7 @@ theorem representable_of_serialize (shape : Desc) (value : Value) (bytes : Bytes
     rename_i selector data
     cases named : lookupOption selectors options selector <;> simp [named, Bind.bind, Except.bind] at wrote
     rename_i option
+    cases ranged : checkSelector selector <;> simp [ranged] at wrote
     cases encoded : serialize option data <;> simp [encoded, pure, Except.pure] at wrote
     subst bytes
     -- The selected option belongs to the declaration, so the induction hypothesis applies.

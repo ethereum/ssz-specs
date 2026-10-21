@@ -41,6 +41,12 @@ inductive Desc where
   | compatibleUnion (selectors : List Nat) (options : List Desc)
   deriving Repr, Inhabited
 
+/-- Zero is reserved for possible optional values, per [EIP-8016](https://eips.ethereum.org/EIPS/eip-8016). -/
+abbrev minSelector : Nat := 1
+
+/-- The high bit is reserved for future extensions, per [EIP-8016](https://eips.ethereum.org/EIPS/eip-8016). -/
+abbrev maxSelector : Nat := 127
+
 /-- Whether a count is within a capacity its shape declares only where it has one. -/
 def withinBound : Option Nat → Nat → Bool
   | none, _ => true
@@ -112,7 +118,9 @@ end
 mutual
 
 /--
-Levels of type nesting below this one.
+Levels of type nesting, counting this one.
+
+A basic or packed type counts one level, and each enclosing type adds one more.
 
 This bounds how far a path can descend, since each step of a path enters one nested type.
 -/

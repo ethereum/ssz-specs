@@ -8,39 +8,14 @@ namespace Ssz
 theorem verifyMerkleMultiproof_eq_true_iff (leaves proof : List Bytes)
     (indices : List Nat) (root : Bytes) :
     verifyMerkleMultiproof leaves proof indices root = .ok true ↔
-      root.size = bytesPerChunk ∧
       (∀ node ∈ leaves, node.size = bytesPerChunk) ∧
       (∀ node ∈ proof, node.size = bytesPerChunk) ∧
       calculateMultiMerkleRoot leaves proof indices = .ok root := by
-  -- Check the root, claimed nodes, and helper nodes before comparing the reconstructed root.
-  by_cases width : root.size = bytesPerChunk
-  · cases leafCheck : checkChunks leaves with
-    | error fault =>
-      -- A reported width error contradicts the claim that all supplied leaves are complete.
-      have invalid : ¬∀ node ∈ leaves, node.size = bytesPerChunk := fun widths =>
-        nomatch leafCheck.symm.trans ((checkChunks_ok_iff leaves).mpr widths)
-      simp [verifyMerkleMultiproof, checkChunk, width, leafCheck, invalid,
-        Bind.bind, Except.bind]
-    | ok checked =>
-      cases checked
-      have leafWidths := (checkChunks_ok_iff leaves).mp leafCheck
-      cases proofCheck : checkChunks proof with
-      | error fault =>
-        -- The same equivalence rules out a successful answer after a malformed helper node.
-        have invalid : ¬∀ node ∈ proof, node.size = bytesPerChunk := fun widths =>
-          nomatch proofCheck.symm.trans ((checkChunks_ok_iff proof).mpr widths)
-        simp [verifyMerkleMultiproof, checkChunk, width, leafCheck, proofCheck, invalid,
-          Bind.bind, Except.bind]
-      | ok checked =>
-        cases checked
-        have proofWidths := (checkChunks_ok_iff proof).mp proofCheck
-        -- After all widths pass, acceptance is exactly equality with the computed root.
-        cases reconstructed : calculateMultiMerkleRoot leaves proof indices <;>
-          simp [verifyMerkleMultiproof, checkChunk, width, leafCheck, proofCheck,
-            reconstructed, Bind.bind, Except.bind,
-            Pure.pure, Except.pure]
-        exact ⟨fun same => ⟨leafWidths, proofWidths, same⟩, fun valid => valid.2.2⟩
-  · simp [verifyMerkleMultiproof, checkChunk, width, Bind.bind, Except.bind]
+  -- Reconstruction runs first, then the claimed and helper widths, then the comparison.
+  simp only [verifyMerkleMultiproof, ← checkChunks_ok_iff]
+  cases calculateMultiMerkleRoot leaves proof indices <;> cases checkChunks leaves <;>
+    cases checkChunks proof <;>
+    simp_all [Bind.bind, Except.bind, pure, Except.pure]
 
 /-- Successful reconstruction fixes the counts, helper indices, and exact level fold. -/
 theorem calculateMultiMerkleRoot_shape {leaves proof : List Bytes} {indices : List Nat}

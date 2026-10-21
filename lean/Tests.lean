@@ -9,6 +9,11 @@ private def expect (label : String) (holds : Bool) : IO Unit := do
   -- A failed invariant stops the executable with a useful case name.
   unless holds do throw (IO.userError label)
 
+private def refusedWith {α : Type} (label : String) (result : Except Err α) (reason : String) :
+    IO Unit :=
+  -- A refusal is checked for the name the reference tests give it, not merely for happening.
+  expect label (match result with | .error fault => fault.reason == reason | .ok _ => false)
+
 private def checkCanonical (shape : Desc) (bytes : Bytes) : IO Unit := do
   -- Every accepted encoding must be reproduced exactly, including offsets and padding.
   match deserialize shape bytes with
@@ -199,4 +204,62 @@ def main : IO Unit := do
   -- A first offset of five leaves one unused byte after a four-byte header and must be rejected.
   expect "offset gap" ((deserialize (.container ["items"] [.byteList 2])
     #[5, 0, 0, 0, 0]).isOk == false)
+  -- Only the digits the mapping writes are an integer, with no padding or separator.
+  refusedWith "integer with a separator" (valueOf .uint64 .opaque (.str "1_000")) "WRONG_TYPE"
+  refusedWith "integer with a leading zero" (valueOf .uint64 .opaque (.str "007")) "WRONG_TYPE"
+  refusedWith "integer of no digits" (valueOf .uint64 .opaque (.str "")) "WRONG_TYPE"
+  expect "integer zero" ((valueOf .uint64 .opaque (.str "0")).toOption == some (.uint 0))
+  -- A selector is an integer too, so the same digits are refused there.
+  let flag := Desc.compatibleUnion [1] [.bool]
+  refusedWith "selector with a leading zero"
+    (valueOf flag .opaque (Json.mkObj [("selector", .str "01"), ("data", .bool true)])) "WRONG_TYPE"
+  -- A union is written as two fields, so a third is refused as it is for a struct.
+  refusedWith "union naming an undeclared field"
+    (valueOf flag .opaque (Json.mkObj
+      [("selector", .str "1"), ("data", .bool true), ("junk", .bool true)])) "UNDECLARED_FIELD"
+  -- A root of the wrong width is answered false, as the specification compares it.
+  let wide := combine zeroChunk zeroChunk
+  expect "short root, single proof"
+    ((verifyMerkleProof zeroChunk [zeroChunk] 2 #[0]).toOption == some false)
+  expect "short root, multiproof"
+    ((verifyMerkleMultiproof [zeroChunk] [zeroChunk] [2] #[0]).toOption == some false)
+  expect "full root, single proof"
+    ((verifyMerkleProof zeroChunk [zeroChunk] 2 wide).toOption == some true)
+  -- The index and the counts are checked before any node width.
+  refusedWith "index before leaf width" (verifyMerkleProof #[0] [zeroChunk] 0 zeroChunk)
+    "NOT_A_GINDEX"
+  refusedWith "branch length before leaf width"
+    (verifyMerkleProof #[0] [zeroChunk, zeroChunk] 2 zeroChunk) "BRANCH_LENGTH"
+  refusedWith "proof length before leaf width"
+    (verifyMerkleMultiproof [#[0]] [zeroChunk, zeroChunk] [2] zeroChunk) "PROOF_LENGTH"
+  -- A union has no default, which is its own refusal and not a mismatch.
+  refusedWith "union default" flag.default "NO_DEFAULT"
+  -- A declared limit bounds a progressive value's root as it bounds its encoding.
+  let capped := Desc.progressiveList .uint8 (some 1)
+  refusedWith "progressive list over its limit, encoding"
+    (serialize capped (.seq [.uint 1, .uint 2])) "LIMIT"
+  refusedWith "progressive list over its limit, root"
+    (hashTreeRoot capped (.seq [.uint 1, .uint 2])) "LIMIT"
+  refusedWith "progressive bit list over its limit, root"
+    (hashTreeRoot (.progressiveBitList (some 1)) (.bits #[true, true])) "LIMIT"
+  expect "progressive list within its limit" ((hashTreeRoot capped (.seq [.uint 1])).isOk)
+  -- A value the type does not admit has no document either.
+  refusedWith "byte vector of the wrong length, document"
+    (jsonOf (.byteVector 4) .opaque (.bytes #[1, 2, 3])) "SCOPE"
+  refusedWith "byte list over its limit, document"
+    (jsonOf (.byteList 1) .opaque (.bytes #[1, 2, 3])) "LIMIT"
+  refusedWith "vector of the wrong length, document"
+    (jsonOf (.vector .bool 3) .opaque (.seq [.bool true])) "SCOPE"
+  refusedWith "list over its limit, document"
+    (jsonOf (.list .bool 0) .opaque (.seq [.bool true])) "LIMIT"
+  refusedWith "progressive list over its limit, document"
+    (jsonOf capped .opaque (.seq [.uint 1, .uint 2])) "LIMIT"
+  -- A selector outside the declared range is refused rather than cut to one byte.
+  let illegal := Desc.compatibleUnion [257] [.bool]
+  refusedWith "selector past one byte, encoding" (serialize illegal (.union 257 (.bool true)))
+    "UNION_SELECTOR_RANGE"
+  refusedWith "selector past one byte, root" (hashTreeRoot illegal (.union 257 (.bool true)))
+    "UNION_SELECTOR_RANGE"
+  refusedWith "reserved selector, decoding" (deserialize (.compatibleUnion [128] [.bool]) #[128, 1])
+    "UNION_SELECTOR_RANGE"
   IO.println "Lean regressions passed"

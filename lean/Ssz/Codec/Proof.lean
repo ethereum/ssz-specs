@@ -52,6 +52,7 @@ The index is read from the top down, one bit per level.
 The budget covers the declared type depth, which suffices for every addressable nested value.
 -/
 def nodeRootAt : Nat → Desc → Value → Nat → Except Err Bytes
+  -- A budget of the type's nesting never runs out, so this answers only a budget set too low.
   | 0, _, _, _ => .error .proofIncomplete
   | budget + 1, shape, value, index => do
     if index < 1 then throw (.notAGindex index)

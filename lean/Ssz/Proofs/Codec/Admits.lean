@@ -121,10 +121,10 @@ theorem wellFormed_progressiveContainer_layout {active : List Bool} {names : Lis
   repeat' split at sound
   all_goals cases last : active.getLast? <;> simp_all
 
-/-- A union declares every one of its selectors inside the one byte that carries it. -/
+/-- A union declares every one of its selectors inside the range the specification reserves. -/
 theorem wellFormed_union_selectors {selectors : List Nat} {options : List Desc}
     (sound : (Desc.compatibleUnion selectors options).wellFormed = .ok ()) :
-    ∀ selector ∈ selectors, selector < 256 := by
+    ∀ selector ∈ selectors, minSelector ≤ selector ∧ selector ≤ maxSelector := by
   intro selector member
   -- A selector outside the reserved range would have been found, and the search found none.
   cases searched : selectors.find? (fun candidate =>
@@ -138,8 +138,7 @@ theorem wellFormed_union_selectors {selectors : List Nat} {options : List Desc}
   | none =>
     have inside := List.find?_eq_none.mp searched selector member
     simp only [Bool.or_eq_true, decide_eq_true_eq, not_or, Nat.not_lt] at inside
-    have top : maxSelector = 127 := rfl
-    omega
+    exact inside
 
 /-- The second step of a chain that passed also passed. -/
 theorem secondCheckPassed {alpha beta gamma} {first : Except Err alpha} {second : Except Err beta}
@@ -230,7 +229,8 @@ theorem fits_of_serialize : ∀ (shape : Desc) (value : Value),
     rw [serialize] at wrote
     -- The selector names one of the declared options, and that option was written too.
     obtain ⟨option, found, chosen⟩ := checksPassed wrote
-    obtain ⟨body, inner, -⟩ := checksPassed chosen
+    obtain ⟨_, -, ranged⟩ := checksPassed chosen
+    obtain ⟨body, inner, -⟩ := checksPassed ranged
     have declared := allWellFormed_mem options (wellFormed_union sound) option
       (lookupOption_mem selectors options selector option found)
     exact .compatibleUnion

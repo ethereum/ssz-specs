@@ -111,12 +111,12 @@ theorem checkChunks_ok_iff (nodes : List Bytes) :
 /-- Acceptance requires complete nodes and reconstruction of exactly the expected root. -/
 theorem verifyMerkleProof_eq_true_iff (leaf : Bytes) (proof : List Bytes) (index : Nat) (root : Bytes) :
     verifyMerkleProof leaf proof index root = .ok true ↔
-      leaf.size = bytesPerChunk ∧ root.size = bytesPerChunk ∧
+      leaf.size = bytesPerChunk ∧
       (∀ node ∈ proof, node.size = bytesPerChunk) ∧ calculateMerkleRoot leaf proof index = .ok root := by
   -- A successful answer requires all width checks and equality with the reconstructed root.
   simp only [verifyMerkleProof, ← checkChunks_ok_iff]
   cases checkChunks proof <;> cases calculateMerkleRoot leaf proof index <;>
-    by_cases leafWidth : leaf.size = bytesPerChunk <;> by_cases rootWidth : root.size = bytesPerChunk <;>
+    by_cases leafWidth : leaf.size = bytesPerChunk <;>
     simp_all [checkChunk, Bind.bind, Except.bind, pure, Except.pure]
 
 private theorem calculateMerkleRoot_shape {leaf root : Bytes} {proof : List Bytes} {index : Nat}
@@ -146,8 +146,8 @@ theorem verifyMerkleProof_binding {left right root : Bytes} {leftProof rightProo
         a.size = 64 ∧ b.size = 64 ∧ a ≠ b ∧
         Sha256.hash (ByteArray.mk a) = Sha256.hash (ByteArray.mk b) := by
   -- Acceptance supplies the widths and common branch depth required by collision extraction.
-  obtain ⟨leftWidth, _, leftWidths, leftBuilt⟩ := (verifyMerkleProof_eq_true_iff ..).mp first
-  obtain ⟨rightWidth, _, rightWidths, rightBuilt⟩ := (verifyMerkleProof_eq_true_iff ..).mp second
+  obtain ⟨leftWidth, leftWidths, leftBuilt⟩ := (verifyMerkleProof_eq_true_iff ..).mp first
+  obtain ⟨rightWidth, rightWidths, rightBuilt⟩ := (verifyMerkleProof_eq_true_iff ..).mp second
   -- A shared generalized index gives equal branch depths even when sibling bytes differ.
   obtain ⟨leftLength, leftRoot⟩ := calculateMerkleRoot_shape leftBuilt
   obtain ⟨rightLength, rightRoot⟩ := calculateMerkleRoot_shape rightBuilt

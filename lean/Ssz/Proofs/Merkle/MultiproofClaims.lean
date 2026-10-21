@@ -81,7 +81,7 @@ theorem multiproof_claim_verifies {tree : Nat → Bytes}
   have reconstructed := branch_rebuilds_root_on_path consistent built
   refine ⟨branch, built, (verifyMerkleProof_eq_true_iff ..).mpr ?_⟩
   rw [sameRoot]
-  exact ⟨widths index, widths 1,
+  exact ⟨widths index,
     fun node member => by obtain ⟨i, _, rfl⟩ := List.mem_map.mp member; exact widths i,
     reconstructed⟩
 

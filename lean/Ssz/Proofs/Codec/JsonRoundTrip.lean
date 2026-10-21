@@ -333,7 +333,7 @@ theorem valueOf_jsonOf : ∀ (shape : Desc), shape.wellFormed = .ok () → Rewri
     intro sound spelling _ document fitted wrote
     cases fitted with
     | vector count each =>
-      rw [jsonOf] at wrote
+      rw [jsonOf, if_pos (by simp [count])] at wrote
       rw [valueOf, valueOfSequence_jsonOfSequence element _ (ih (wellFormed_vector sound)) _
         document each wrote]
       simp [count, Bind.bind, Except.bind]
@@ -342,7 +342,7 @@ theorem valueOf_jsonOf : ∀ (shape : Desc), shape.wellFormed = .ok () → Rewri
     intro sound spelling _ document fitted wrote
     cases fitted with
     | list within each =>
-      rw [jsonOf] at wrote
+      rw [jsonOf, if_pos within] at wrote
       rw [valueOf, valueOfSequence_jsonOfSequence element _ (ih (wellFormed_list sound)) _
         document each wrote]
       simp [Nat.not_lt.mpr within, Bind.bind, Except.bind]
@@ -352,6 +352,7 @@ theorem valueOf_jsonOf : ∀ (shape : Desc), shape.wellFormed = .ok () → Rewri
     cases fitted with
     | progressiveList within each =>
       rw [jsonOf] at wrote
+      simp only [boundCheck_of_withinBound limit _ within, Bind.bind, Except.bind] at wrote
       rw [valueOf, valueOfSequence_jsonOfSequence element _ (ih (wellFormed_progressiveList sound))
         _ document each wrote]
       cases limit with

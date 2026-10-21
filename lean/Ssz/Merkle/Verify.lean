@@ -22,7 +22,7 @@ A root rebuilt from one leaf and its branch.
 
 Each bit of the index, read from the leaf upward, says which side the branch node joins on.
 
-Node widths are checked by the verifier before this fold runs.
+Node widths are checked by the verifier, once this has checked the counts.
 -/
 def calculateMerkleRoot (leaf : Bytes) (proof : List Bytes) (index : Nat) :
     Except Err Bytes := do
@@ -42,14 +42,20 @@ def checkChunks : List Bytes → Except Err Unit
     checkChunk node
     checkChunks rest
 
-/-- Whether one leaf and its branch rebuild the expected root. -/
+/--
+Whether one leaf and its branch rebuild the expected root.
+
+The index and the branch length are checked first, then the width of every node hashed.
+
+The root is only compared, so a root of the wrong width is answered false rather than refused.
+-/
 def verifyMerkleProof (leaf : Bytes) (proof : List Bytes) (index : Nat) (root : Bytes) :
     Except Err Bool := do
+  let rebuilt ← calculateMerkleRoot leaf proof index
   -- A 31-byte child and a 33-byte sibling must not impersonate two 32-byte nodes.
   checkChunk leaf
-  checkChunk root
   checkChunks proof
-  return (← calculateMerkleRoot leaf proof index) == root
+  return rebuilt == root
 
 /-- The node held at an index, where one is held. -/
 def nodeAt (nodes : List (Nat × Bytes)) (index : Nat) : Option Bytes :=
@@ -106,7 +112,7 @@ A root rebuilt from several leaves and the nodes they share.
 
 Pairs combine from the deepest level upward, each parent built once.
 
-Node widths are checked by the verifier before this fold runs.
+Node widths are checked by the verifier, once this has checked the counts.
 -/
 def calculateMultiMerkleRoot (leaves proof : List Bytes) (indices : List Nat) :
     Except Err Bytes := do
@@ -118,13 +124,19 @@ def calculateMultiMerkleRoot (leaves proof : List Bytes) (indices : List Nat) :
   let deepest := (nodes.map fun (index, _) => levelOf index).foldl max 0
   foldToRoot deepest nodes
 
-/-- Whether several leaves and their nodes rebuild the expected root. -/
+/--
+Whether several leaves and their nodes rebuild the expected root.
+
+The counts and the indices are checked first, then the width of every node hashed.
+
+The root is only compared, so a root of the wrong width is answered false rather than refused.
+-/
 def verifyMerkleMultiproof (leaves proof : List Bytes) (indices : List Nat) (root : Bytes) :
     Except Err Bool := do
-  checkChunk root
+  let rebuilt ← calculateMultiMerkleRoot leaves proof indices
   checkChunks leaves
   checkChunks proof
-  return (← calculateMultiMerkleRoot leaves proof indices) == root
+  return rebuilt == root
 
 /--
 A node reading that is a Merkle tree: every node is the two below it, combined.
@@ -132,7 +144,7 @@ A node reading that is a Merkle tree: every node is the two below it, combined.
 Nothing here fixes the leaves, so this covers any tree built with the same pairing.
 -/
 def MerkleTree (node : Nat → Bytes) : Prop :=
-  -- This equation is global; the finite results below restrict it to the ancestors they need.
+  -- The equation holds at every index, though a proof about one branch uses only its ancestors.
   ∀ index, 1 ≤ index → node index = combine (node (2 * index)) (node (2 * index + 1))
 
 /-- Each parent on one branch is its child and sibling hashed in tree order. -/

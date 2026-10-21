@@ -8,12 +8,6 @@ namespace Ssz
 /-- A layout fits one 256-bit hash operand, as required by [EIP-7495](https://eips.ethereum.org/EIPS/eip-7495). -/
 abbrev maxActiveFields : Nat := 256
 
-/-- Zero is reserved for possible optional values, per [EIP-8016](https://eips.ethereum.org/EIPS/eip-8016). -/
-abbrev minSelector : Nat := 1
-
-/-- The high bit is reserved for future extensions, per [EIP-8016](https://eips.ethereum.org/EIPS/eip-8016). -/
-abbrev maxSelector : Nat := 127
-
 /-- The byte-array shape a type spells, either spelling, or none for any other shape. -/
 inductive ByteShape where
   /-- A fixed count of bytes, however it was written. -/
@@ -168,11 +162,13 @@ mutual
 /--
 Whether a declaration names a real type, and what it broke if it does not.
 
-Every rule here is one the specification lists under illegal types.
+Most rules here are ones the specification lists under illegal types.
 
-Together they are what makes an encoding injective.
+The others come from the EIPs for progressive containers and unions.
+A few more keep one field name or selector from meaning two things.
 
-A shape encoding to nothing at every value would let two values share one encoding.
+The proofs of the codec and the trees assume these rules.
+For example, a shape encoding to nothing at every value would let two values share one encoding.
 -/
 def Desc.wellFormed : Desc → Except Err Unit
   -- SSZ defines unsigned integers at six widths and no others.

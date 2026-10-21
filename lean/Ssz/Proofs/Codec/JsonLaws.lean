@@ -85,7 +85,7 @@ theorem valueOf_jsonOf_byteVector {spelling : Spelling} {length : Nat} {data : B
     {document : Json} (fitted : data.size = length)
     (written : jsonOf (.byteVector length) spelling (.bytes data) = .ok document) :
     valueOf (.byteVector length) spelling document = .ok (.bytes data) := by
-  simp only [jsonOf, Except.ok.injEq] at written
+  simp only [jsonOf, fitted, beq_self_eq_true, ↓reduceIte, Except.ok.injEq] at written
   subst written
   rw [valueOf]
   simp [collectionHex, ofHex_toHex, fitted, Bind.bind, Except.bind, pure, Except.pure]
@@ -95,7 +95,7 @@ theorem valueOf_jsonOf_byteList {spelling : Spelling} {limit : Nat} {data : Byte
     {document : Json} (fitted : data.size ≤ limit)
     (written : jsonOf (.byteList limit) spelling (.bytes data) = .ok document) :
     valueOf (.byteList limit) spelling document = .ok (.bytes data) := by
-  simp only [jsonOf, Except.ok.injEq] at written
+  simp only [jsonOf, fitted, ↓reduceIte, Except.ok.injEq] at written
   subst written
   rw [valueOf]
   simp [collectionHex, ofHex_toHex, Nat.not_lt.mpr fitted, Bind.bind, Except.bind,

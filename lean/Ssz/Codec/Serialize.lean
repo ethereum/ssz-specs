@@ -73,11 +73,60 @@ def headOf (start : Nat) : List (Bool × Bytes) → Bytes
   | (false, part) :: rest =>
       uintBytes bytesPerOffset start ++ headOf (start + part.size) rest
 
+/-- The fixed part written onto the end of bytes already laid down, in one pass. -/
+private def headOnto (laid : Bytes) (start : Nat) : List (Bool × Bytes) → Bytes
+  | [] => laid
+  | (true, part) :: rest => headOnto (laid ++ part) start rest
+  | (false, part) :: rest =>
+      headOnto (laid ++ uintBytes bytesPerOffset start) (start + part.size) rest
+
+private theorem headOnto_eq (laid : Bytes) (start : Nat) (slots : List (Bool × Bytes)) :
+    headOnto laid start slots = laid ++ headOf start slots := by
+  -- Each step moves one part from the recursive tail onto the bytes already laid down.
+  induction slots generalizing laid start with
+  | nil => simp [headOnto, headOf]
+  | cons slot rest ih =>
+    obtain ⟨isInline, part⟩ := slot
+    cases isInline <;> simp [headOnto, headOf, ih, Array.append_assoc]
+
+/-- The fixed part built in one pass, which the compiler runs in place of the definition. -/
+private def headOfFast (start : Nat) (slots : List (Bool × Bytes)) : Bytes :=
+  headOnto #[] start slots
+
+/-- Prepending each part copies everything after it, which is quadratic, so the twin runs instead. -/
+@[csimp] private theorem headOf_eq_fast : @headOf = @headOfFast := by
+  funext start slots
+  simp [headOfFast, headOnto_eq]
+
 /-- The bodies, in the order their offsets name them. -/
 def bodiesOf : List (Bool × Bytes) → Bytes
   | [] => #[]
   | (true, _) :: rest => bodiesOf rest
   | (false, part) :: rest => part ++ bodiesOf rest
+
+/-- The bodies written onto the end of bytes already laid down, in one pass. -/
+private def bodiesOnto (laid : Bytes) : List (Bool × Bytes) → Bytes
+  | [] => laid
+  | (true, _) :: rest => bodiesOnto laid rest
+  | (false, part) :: rest => bodiesOnto (laid ++ part) rest
+
+private theorem bodiesOnto_eq (laid : Bytes) (slots : List (Bool × Bytes)) :
+    bodiesOnto laid slots = laid ++ bodiesOf slots := by
+  -- Each body moves from the recursive tail onto the bytes already laid down.
+  induction slots generalizing laid with
+  | nil => simp [bodiesOnto, bodiesOf]
+  | cons slot rest ih =>
+    obtain ⟨isInline, part⟩ := slot
+    cases isInline <;> simp [bodiesOnto, bodiesOf, ih, Array.append_assoc]
+
+/-- The bodies built in one pass, which the compiler runs in place of the definition. -/
+private def bodiesOfFast (slots : List (Bool × Bytes)) : Bytes :=
+  bodiesOnto #[] slots
+
+/-- Prepending each body copies everything after it, which is quadratic, so the twin runs instead. -/
+@[csimp] private theorem bodiesOf_eq_fast : @bodiesOf = @bodiesOfFast := by
+  funext slots
+  simp [bodiesOfFast, bodiesOnto_eq]
 
 /--
 Parts laid out as a struct or a sequence encodes them.
@@ -103,6 +152,11 @@ def lookupOption : List Nat → List Desc → Nat → Except Err Desc
     if chosen == selector then .ok option else lookupOption selectors options selector
   -- Selectors and options that do not pair up name no union.
   | _, _, _ => .error .badDeclaration
+
+/-- A union selector held to the range a declaration may use. -/
+def checkSelector (selector : Nat) : Except Err Unit :=
+  if minSelector ≤ selector ∧ selector ≤ maxSelector then .ok ()
+  else .error (.unionSelectorRange selector minSelector maxSelector)
 
 /-- A count held to the capacity its shape declares, where it declares one. -/
 def boundCheck : Option Nat → Nat → Except Err Unit
@@ -145,6 +199,8 @@ def serialize : Desc → Value → Except Err Bytes
   | .progressiveContainer _ _ fields, .seq values => serializeStruct fields values
   | .compatibleUnion selectors options, .union selector data => do
     let option ← lookupOption selectors options selector
+    -- The selector is written as one byte, so one the range does not allow is refused, not cut.
+    checkSelector selector
     let body ← serialize option data
     return #[UInt8.ofNat selector] ++ body
   | _, _ => .error .typeMismatch

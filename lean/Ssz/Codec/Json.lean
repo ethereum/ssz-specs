@@ -65,6 +65,36 @@ def hexBytes : List Char → Except Err Bytes
     let byte := 16 * (← hexDigit high) + (← hexDigit low)
     return #[UInt8.ofNat byte] ++ (← hexBytes rest)
 
+/-- Digit pairs folded onto the end of bytes already read, in one pass. -/
+private def hexBytesOnto (read : Bytes) : List Char → Except Err Bytes
+  | [] => .ok read
+  | [_] => .error .hexDigits
+  | high :: low :: rest => do
+    let byte := 16 * (← hexDigit high) + (← hexDigit low)
+    hexBytesOnto (read.push (UInt8.ofNat byte)) rest
+
+private theorem hexBytesOnto_eq (read : Bytes) (characters : List Char) :
+    hexBytesOnto read characters = (hexBytes characters).map (read ++ ·) := by
+  -- Each pair moves one byte from the recursive tail onto the bytes already read.
+  induction characters using hexBytes.induct generalizing read with
+  | case1 => simp [hexBytesOnto, hexBytes, Except.map]
+  | case2 => simp [hexBytesOnto, hexBytes, Except.map]
+  | case3 high low rest ih =>
+    simp only [hexBytesOnto, hexBytes]
+    cases hexDigit high <;> cases hexDigit low <;> simp only [Bind.bind, Except.bind, Except.map]
+    rw [ih]
+    cases hexBytes rest <;> simp [Except.map, pure, Except.pure, ← Array.append_assoc]
+
+/-- The digit pairs read in one pass, which the compiler runs in place of the definition. -/
+private def hexBytesFast (characters : List Char) : Except Err Bytes :=
+  hexBytesOnto #[] characters
+
+/-- Prepending each byte copies everything after it, which is quadratic, so the twin runs instead. -/
+@[csimp] private theorem hexBytes_eq_fast : @hexBytes = @hexBytesFast := by
+  funext characters
+  simp only [hexBytesFast, hexBytesOnto_eq]
+  cases hexBytes characters <;> simp [Except.map]
+
 /--
 The bytes a hex string holds.
 
@@ -83,6 +113,37 @@ def byteRun : List Value → Except Err Bytes
     return #[UInt8.ofNat n] ++ (← byteRun rest)
   | _ => .error .typeMismatch
 
+/-- One-byte integers folded onto the end of bytes already gathered, in one pass. -/
+private def byteRunOnto (gathered : Bytes) : List Value → Except Err Bytes
+  | [] => .ok gathered
+  | .uint n :: rest => do
+    if n ≥ 256 then throw (.uintRange 256 n)
+    byteRunOnto (gathered.push (UInt8.ofNat n)) rest
+  | _ => .error .typeMismatch
+
+private theorem byteRunOnto_eq (gathered : Bytes) (values : List Value) :
+    byteRunOnto gathered values = (byteRun values).map (gathered ++ ·) := by
+  -- Each integer moves one byte from the recursive tail onto the bytes already gathered.
+  induction values using byteRun.induct generalizing gathered with
+  | case1 => simp [byteRunOnto, byteRun, Except.map]
+  | case2 n rest wide =>
+    simp [byteRunOnto, byteRun, wide, throw, throwThe, MonadExceptOf.throw, Bind.bind,
+      Except.bind, Except.map]
+  | case3 n rest narrow ih =>
+    simp only [byteRunOnto, byteRun, narrow, ↓reduceIte, Bind.bind, Except.bind, ih]
+    cases byteRun rest <;> simp [Except.map, pure, Except.pure, ← Array.append_assoc]
+  | case4 => simp_all [byteRunOnto, byteRun, Except.map]
+
+/-- The integers gathered in one pass, which the compiler runs in place of the definition. -/
+private def byteRunFast (values : List Value) : Except Err Bytes :=
+  byteRunOnto #[] values
+
+/-- Prepending each byte copies everything after it, which is quadratic, so the twin runs instead. -/
+@[csimp] private theorem byteRun_eq_fast : @byteRun = @byteRunFast := by
+  funext values
+  simp only [byteRunFast, byteRunOnto_eq]
+  cases byteRun values <;> simp [Except.map]
+
 /-- One-byte integer values for a run of bytes, which reads a byte-alias sequence back. -/
 def byteElements (data : Bytes) : List Value :=
   data.toList.map fun byte => .uint byte.toNat
@@ -95,12 +156,15 @@ The number a document holds.
 
 An integer is digits in a string, so a wide one survives a parser using doubles.
 
+Only the digits the mapping writes are read back, with no sign, padding or separator.
+Writing the number again and comparing is what checks that.
+
 A bare number is accepted as well.
 -/
 def readNat (document : Json) : Except Err Nat :=
   match document with
   | .str text => match text.toNat? with
-    | some n => .ok n
+    | some n => if toString n == text then .ok n else .error .typeMismatch
     | none => .error .typeMismatch
   | .num value =>
     if value.exponent == 0 && value.mantissa ≥ 0 then .ok value.mantissa.toNat
@@ -155,11 +219,21 @@ def jsonOf (shape : Desc) (spelling : Spelling) (value : Value) : Except Err Jso
     -- The alias is a one-byte integer, so no wider integer is written as hex.
     else if spelling.isByte && width == 1 then .ok (.str (toHex #[UInt8.ofNat n]))
     else .ok (decimal n)
-  | .byteVector _, .bytes data | .byteList _, .bytes data => .ok (.str (toHex data))
+  -- A value the type does not admit is refused with the fault its encoding draws.
+  | .byteVector length, .bytes data =>
+    if data.size == length then .ok (.str (toHex data)) else .error (.scope length data.size)
+  | .byteList limit, .bytes data =>
+    if data.size ≤ limit then .ok (.str (toHex data)) else .error (.overLimit limit data.size)
   | .bitVector _, .bits _ | .bitList _, .bits _ | .progressiveBitList _, .bits _ => do
     return .str (toHex (← serialize shape value))
-  | .vector element _, .seq elements | .list element _, .seq elements
-  | .progressiveList element _, .seq elements =>
+  | .vector element length, .seq elements =>
+    if elements.length == length then jsonOfSequence element (spelling.part 0) elements
+    else .error (.scope length elements.length)
+  | .list element limit, .seq elements =>
+    if elements.length ≤ limit then jsonOfSequence element (spelling.part 0) elements
+    else .error (.overLimit limit elements.length)
+  | .progressiveList element limit, .seq elements => do
+    boundCheck limit elements.length
     jsonOfSequence element (spelling.part 0) elements
   | .container names fields, .seq values | .progressiveContainer _ names fields, .seq values => do
     return .mkObj (names.zip (← jsonOfFields fields spelling 0 values))
@@ -252,6 +326,9 @@ def valueOf (shape : Desc) (spelling : Spelling) (document : Json) : Except Err 
     let .obj _ := document | throw .structNotAnObject
     -- An empty object asks for a default, and no option of a union stands above the others.
     if (objectNames document).isEmpty then throw .noDefault
+    -- A union is written as two fields, and any other one is refused as for a struct.
+    if let some extra := (objectNames document).find? fun name => name != "selector" && name != "data" then
+      throw (.undeclaredField extra)
     let some selectorField := (document.getObjVal? "selector").toOption
       | throw (.missingField "selector")
     let some payload := (document.getObjVal? "data").toOption | throw (.missingField "data")

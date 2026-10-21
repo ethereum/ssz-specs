@@ -173,6 +173,7 @@ private theorem deserializeOption_fits : ∀ selectors options selector data val
     (∀ option ∈ options, ∀ data value, deserialize option data = .ok value → Fits option value) →
     deserializeOption selectors options selector data = .ok value →
     ∃ option held, value = .union selector held ∧
+      (minSelector ≤ selector ∧ selector ≤ maxSelector) ∧
       lookupOption selectors options selector = .ok option ∧ Fits option held := by
   intro selectors
   -- Search selectors and option types together so the selected type remains identified.
@@ -188,14 +189,15 @@ private theorem deserializeOption_fits : ∀ selectors options selector data val
       -- A matching selector provides both a successful lookup and an admissible decoded payload.
       by_cases same : chosen == selector
       · simp only [deserializeOption, same, if_true] at read
+        obtain ⟨_, ranged, read⟩ := checksPassed read
         obtain ⟨held, body, ⟨⟩⟩ := checksPassed read
-        exact ⟨option, held, rfl, by simp [lookupOption, same],
+        exact ⟨option, held, rfl, range_of_checkSelector ranged, by simp [lookupOption, same],
           inner option List.mem_cons_self data held body⟩
       -- Otherwise continue with the remaining options without changing the payload bytes.
-      · obtain ⟨heldOption, held, eq, named, fits⟩ := ih options selector data value
+      · obtain ⟨heldOption, held, eq, ranged, named, fits⟩ := ih options selector data value
           (fun held member => inner held (List.mem_cons_of_mem _ member))
           (by simpa [deserializeOption, same] using read)
-        exact ⟨heldOption, held, eq, by simpa [lookupOption, same] using named, fits⟩
+        exact ⟨heldOption, held, eq, ranged, by simpa [lookupOption, same] using named, fits⟩
 
 /-- Every decoded value belongs to the domain described by its type. -/
 theorem fits_of_deserialize (shape : Desc) :
@@ -289,10 +291,10 @@ theorem fits_of_deserialize (shape : Desc) :
     simp only [deserialize, throw_error, Bind.bind, Except.bind] at read
     split at read
     · cases read
-    · obtain ⟨option, held, eq, named, fits⟩ :=
+    · obtain ⟨option, held, eq, ranged, named, fits⟩ :=
         deserializeOption_fits selectors options _ _ value ih read
       subst value
-      exact .compatibleUnion (UInt8.toNat_lt _) named fits
+      exact .compatibleUnion ranged named fits
   | nil => rename_i held member data value read; simp at member
   | cons field fields ihHead ihTail =>
     rename_i held member data value read

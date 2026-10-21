@@ -348,10 +348,16 @@ theorem hashTreeRoot_progressiveList_summary {element : Desc} {limit : Option Na
     hashTreeRoot (.progressiveList (.byteVector bytesPerChunk) limit) (.seq (roots.map Value.bytes))
       = hashTreeRoot (.progressiveList element limit) (.seq values) := by
   obtain ⟨same, counted⟩ := summary_slots rooted
-  exact hashTreeRoot_slots (limit := none) (mixin := some (lengthWord values.length))
-    (by simp [merkleLayout, sequenceLayout, counted, Desc.isBasic, MerkleLayout.nesting,
-      pure, Except.pure])
-    (by simp [merkleLayout, sequenceLayout, composite, MerkleLayout.nesting, pure, Except.pure])
-    same
+  cases checked : boundCheck limit values.length with
+  | ok _ =>
+    exact hashTreeRoot_slots (limit := none) (mixin := some (lengthWord values.length))
+      (by simp [merkleLayout, sequenceLayout, counted, checked, Desc.isBasic, MerkleLayout.nesting,
+        Bind.bind, Except.bind, pure, Except.pure])
+      (by simp [merkleLayout, sequenceLayout, composite, checked, MerkleLayout.nesting,
+        Bind.bind, Except.bind, pure, Except.pure])
+      same
+  | error fault =>
+    rw [hashTreeRoot_refused (fault := fault), hashTreeRoot_refused (fault := fault)]
+    all_goals simp [merkleLayout, counted, checked, Bind.bind, Except.bind]
 
 end Ssz

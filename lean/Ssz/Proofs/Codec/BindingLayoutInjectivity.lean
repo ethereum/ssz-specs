@@ -150,14 +150,16 @@ private theorem layoutDetermines_progressiveBitList (limit : Option Nat) :
   -- A bound does not remove the need for an exact 256-bit length word.
   intro left right layout sound leftFits rightFits leftSized rightSized first second
   cases leftFits with
-  | progressiveBitList _ =>
+  | progressiveBitList within =>
     cases rightFits with
-    | progressiveBitList _ =>
+    | progressiveBitList otherWithin =>
       cases leftSized with
       | progressiveBitList bound =>
         cases rightSized with
         | progressiveBitList otherBound =>
-          simp only [merkleLayout, pure, Except.pure, Except.ok.injEq] at first second
+          simp only [merkleLayout, boundCheck_of_withinBound _ _ within,
+            boundCheck_of_withinBound _ _ otherWithin, Bind.bind, Except.bind, pure, Except.pure,
+            Except.ok.injEq] at first second
           have same := first.trans second.symm
           -- Equal mixing words recover equal payload counts before the packed nodes are unpacked.
           have counts := lengthWord_injective bound otherBound
@@ -204,14 +206,15 @@ private theorem layoutDetermines_progressiveList (element : Desc) (limit : Optio
   -- The exact length word determines how many elements the progressive layout must contain.
   intro left right layout sound leftFits rightFits leftSized rightSized first second
   cases leftFits with
-  | progressiveList _ each =>
+  | progressiveList within each =>
     cases rightFits with
-    | progressiveList _ otherEach =>
+    | progressiveList otherWithin otherEach =>
       cases leftSized with
       | progressiveList bound _ =>
         cases rightSized with
         | progressiveList otherBound _ =>
-          simp only [merkleLayout] at first second
+          simp only [merkleLayout, boundCheck_of_withinBound _ _ within,
+            boundCheck_of_withinBound _ _ otherWithin, Bind.bind, Except.bind] at first second
           -- The well-formed enclosing type guarantees a well-formed element type for recovering each element.
           have childSound := wellFormed_progressiveList sound
           exact congrArg Value.seq (sequenceLayout_injective childSound
@@ -265,10 +268,10 @@ private theorem layoutDetermines_compatibleUnion (selectors : List Nat) (options
     | compatibleUnion otherBound otherNamed otherInner =>
       rename_i selector option value otherSelector otherOption otherValue
       -- Selectors occupy one byte, so both are also fully represented by their 256-bit mixing words.
-      have selectorFits : ¬ selector > 255 := by omega
-      have otherSelectorFits : ¬ otherSelector > 255 := by omega
-      simp only [merkleLayout, named, otherNamed, selectorWord, selectorFits, otherSelectorFits,
-        if_false, Bind.bind, Except.bind, pure, Except.pure, Except.ok.injEq] at first second
+      have top : maxSelector = 127 := rfl
+      simp only [merkleLayout, named, otherNamed, selectorWord, checkSelector_of_range bound,
+        checkSelector_of_range otherBound, Bind.bind, Except.bind, pure, Except.pure,
+        Except.ok.injEq] at first second
       have same := first.trans second.symm
       -- The equal mixing words recover the exact selector, without assuming a selected option in advance.
       have selectorsEqual := lengthWord_injective (by omega : selector < 2 ^ 256)

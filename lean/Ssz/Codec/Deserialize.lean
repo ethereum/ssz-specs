@@ -288,7 +288,10 @@ What is decoded then stays a part of the union's own type.
 def deserializeOption : List Nat → List Desc → Nat → Bytes → Except Err Value
   | [], [], selector, _ => .error (.unknownSelector selector)
   | chosen :: selectors, option :: options, selector, data =>
-    if chosen == selector then do return .union selector (← deserialize option data)
+    if chosen == selector then do
+      -- A legal declaration names only selectors in range, so an encoding is held to that range.
+      checkSelector selector
+      return .union selector (← deserialize option data)
     else deserializeOption selectors options selector data
   -- Selectors and options that do not pair up name no union.
   | _, _, _, _ => .error .badDeclaration

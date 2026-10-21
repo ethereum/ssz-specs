@@ -62,9 +62,6 @@ theorem merkleLayout_child_sized {shape : Desc} {value : Value} {layout : Merkle
           Except.ok.injEq] at laid
       subst layout
       cases nested
-    | simp only [pure, Except.pure, Except.ok.injEq] at laid
-      subst layout
-      cases nested
   -- A fixed-length sequence retains the count bounds carried by each element.
   case vector element length values each =>
     split at laid
@@ -76,7 +73,9 @@ theorem merkleLayout_child_sized {shape : Desc} {value : Value} {layout : Merkle
     · cases laid
     · exact sequence_child_sized each laid nested member
   -- A progressive list changes the tree shape without changing its elements' count bounds.
-  case progressiveList element values count each =>
+  case progressiveList element limit values count each =>
+    cases checked : boundCheck limit values.length <;>
+      simp only [checked, reduceCtorEq] at laid
     exact sequence_child_sized each laid nested member
   -- Each ordinary container position is one declared field paired with its value.
   case container names fields values each =>

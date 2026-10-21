@@ -72,7 +72,7 @@ def MerkleLayout.nesting (values : List (Option (Desc × Value))) (limit : Optio
 /-- The option selector a compatible union mixes in, as one little-endian node. -/
 def selectorWord (selector : Nat) : Except Err Bytes := do
   -- EIP-8016 writes one byte, and a hash operand is one node, so it is zero-extended.
-  if selector > 0xFF then throw (.unionSelectorRange selector 0 0xFF)
+  checkSelector selector
   return lengthWord selector
 
 /-- Place consecutive field values at active positions, leaving zero leaves in gaps. -/
@@ -139,7 +139,9 @@ def merkleLayout (shape : Desc) (value : Value) : Except Err MerkleLayout :=
     if data.size > limit then throw (.overLimit limit data.size)
     return .packing (packedBits data) (some (chunksForBits limit)) (lengthWord data.size)
   -- No capacity bounds a progressive shape, so its nodes go on a spine instead.
-  | .progressiveBitList _, .bits data =>
+  | .progressiveBitList limit, .bits data => do
+    -- A declared limit bounds the value as it bounds the encoding, though it shapes no tree.
+    boundCheck limit data.size
     -- The count mixed in is the bit count, not the number of packed nodes.
     return .packing (packedBits data) none (lengthWord data.size)
   | .vector element length, .seq elements => do
@@ -149,7 +151,8 @@ def merkleLayout (shape : Desc) (value : Value) : Except Err MerkleLayout :=
   | .list element limit, .seq elements => do
     if elements.length > limit then throw (.overLimit limit elements.length)
     sequenceLayout element elements (some limit) (lengthWord elements.length)
-  | .progressiveList element _, .seq elements =>
+  | .progressiveList element limit, .seq elements => do
+    boundCheck limit elements.length
     -- The count mixed in is the element count, never the number of nodes they packed into.
     sequenceLayout element elements none (lengthWord elements.length)
   | .container _ fields, .seq values => do

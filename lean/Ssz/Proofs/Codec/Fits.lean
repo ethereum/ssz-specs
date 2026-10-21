@@ -63,10 +63,24 @@ inductive Fits : Desc → Value → Prop
   /-- The value of an option the union declares, under the selector that names it. -/
   | compatibleUnion {selectors : List Nat} {options : List Desc} {selector : Nat}
       {option : Desc} {data : Value}
-      (bounded : selector < 256)
+      (bounded : minSelector ≤ selector ∧ selector ≤ maxSelector)
       (named : lookupOption selectors options selector = .ok option)
       (inner : Fits option data) :
       Fits (.compatibleUnion selectors options) (.union selector data)
+
+/-- A selector in the reserved range passes the selector check. -/
+theorem checkSelector_of_range {selector : Nat}
+    (ranged : minSelector ≤ selector ∧ selector ≤ maxSelector) :
+    checkSelector selector = .ok () := by
+  simp [checkSelector, ranged]
+
+/-- A selector that passed the selector check is in the reserved range. -/
+theorem range_of_checkSelector {selector : Nat} (passed : checkSelector selector = .ok ()) :
+    minSelector ≤ selector ∧ selector ≤ maxSelector := by
+  unfold checkSelector at passed
+  split at passed
+  · assumption
+  · cases passed
 
 /-- A capacity check a successful encoding got past is one the count was within. -/
 theorem withinBound_of_boundCheck : ∀ (limit : Option Nat) (count : Nat),

@@ -25,7 +25,7 @@ private theorem reconstruction_of_accepted {leaves proof : List Bytes} {indices 
     {root : Bytes} (accepted : verifyMerkleMultiproof leaves proof indices root = .ok true) :
     ∃ helpers, Reconstruction leaves proof indices helpers root := by
   -- Validation supplies the widths, while reconstruction supplies the canonical helper layout.
-  obtain ⟨_, leafWidths, proofWidths, built⟩ := (verifyMerkleMultiproof_eq_true_iff ..).mp accepted
+  obtain ⟨leafWidths, proofWidths, built⟩ := (verifyMerkleMultiproof_eq_true_iff ..).mp accepted
   obtain ⟨helpers, helperIndices, leafCount, proofCount, folded⟩ := calculateMultiMerkleRoot_shape built
   exact ⟨helpers, ⟨helperIndices, leafCount, proofCount, leafWidths, proofWidths, folded⟩⟩
 

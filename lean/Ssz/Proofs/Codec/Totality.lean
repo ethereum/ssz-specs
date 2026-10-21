@@ -116,8 +116,8 @@ private theorem overflow_of_fits {shape : Desc} {value : Value} (fits : Fits sha
       using overflow_sequence ih
   | container paired _ ih => simpa only [serialize] using overflow_struct paired ih
   | progressiveContainer paired _ ih => simpa only [serialize] using overflow_struct paired ih
-  | compatibleUnion _ named _ ih =>
-    simp only [serialize, named, Bind.bind, Except.bind]
+  | compatibleUnion ranged named _ ih =>
+    simp only [serialize, named, checkSelector_of_range ranged, Bind.bind, Except.bind]
     -- A union propagates its selected payload failure.
     apply overflow_bind ih
     -- Adding the selector byte to a successful payload creates no offset table.

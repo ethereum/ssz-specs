@@ -70,8 +70,10 @@ theorem merkleLayout_width (shape : Desc) (value : Value) (layout : MerkleLayout
         MonadExceptOf.throw] at success
     subst layout
     exact packing_width _ _ none (by simp)
-  case progressiveBitList.bits data =>
-    simp only [pure, Except.pure, Except.ok.injEq] at success
+  case progressiveBitList.bits limit data =>
+    cases checked : boundCheck limit data.size <;>
+      simp only [checked, Bind.bind, Except.bind, pure, Except.pure, Except.ok.injEq,
+        reduceCtorEq] at success
     subst layout
     exact packing_width _ _ (some (lengthWord data.size)) (by intro word same; have eq := Option.some.inj same; rw [← eq]; simp)
   case vector.seq element length elements =>
@@ -80,6 +82,11 @@ theorem merkleLayout_width (shape : Desc) (value : Value) (layout : MerkleLayout
   case list.seq element limit elements =>
     split at success <;> try simp [Bind.bind, Except.bind, throw, throwThe, MonadExceptOf.throw] at success
     exact sequenceLayout_width element elements (some limit) (some (lengthWord elements.length)) layout
+      (by intro word same; have eq := Option.some.inj same; rw [← eq]; simp) success
+  case progressiveList.seq element limit elements =>
+    cases checked : boundCheck limit elements.length <;>
+      simp only [checked, Bind.bind, Except.bind, reduceCtorEq] at success
+    exact sequenceLayout_width element elements none (some (lengthWord elements.length)) layout
       (by intro word same; have eq := Option.some.inj same; rw [← eq]; simp) success
   case container.seq names fields elements =>
     split at success <;>
@@ -103,8 +110,8 @@ theorem merkleLayout_width (shape : Desc) (value : Value) (layout : MerkleLayout
     refine nesting_width _ _ _ fun actual same => ?_
     cases Option.some.inj same
     unfold selectorWord at hw
-    split at hw <;> simp [Bind.bind, Except.bind, Pure.pure, Except.pure,
-      throw, throwThe, MonadExceptOf.throw] at hw
+    cases checked : checkSelector selector <;>
+      simp [checked, Bind.bind, Except.bind, Pure.pure, Except.pure] at hw
     subst hw
     exact lengthWord_size selector
 

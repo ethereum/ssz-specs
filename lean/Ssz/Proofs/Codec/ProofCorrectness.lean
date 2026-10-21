@@ -50,7 +50,7 @@ theorem buildProof_verifies (shape : Desc) (value : Value) (root : Bytes)
   obtain ⟨branch, built, rebuilt⟩ :=
     buildProof_rebuilds_value_root shape value root rooted index leaf readLeaf indices indexed
   refine ⟨branch, built, (verifyMerkleProof_eq_true_iff leaf branch index root).mpr
-    ⟨widths index leaf readLeaf, widths 1 root (by simpa only [nodeRoot_root] using rooted), ?_, rebuilt⟩⟩
+    ⟨widths index leaf readLeaf, ?_, rebuilt⟩⟩
   -- Every generated sibling inherits its width from a successful node read.
   apply mapM_node_width (nodeRoot shape value) widths indices branch
   simpa only [buildProof, indexed, Bind.bind, Except.bind] using built

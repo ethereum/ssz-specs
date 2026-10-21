@@ -16,6 +16,7 @@ Rooting evaluates that layout without restating any type-specific tree rule.
 The budget bounds how far the rooting may descend into nested values.
 -/
 def hashTreeRootAt : Nat → Desc → Value → Except Err Bytes
+  -- A budget of the type's nesting never runs out, so this answers only a budget set too low.
   | 0, _, _ => .error .proofIncomplete
   | budget + 1, shape, value => do
     let layout ← merkleLayout shape value

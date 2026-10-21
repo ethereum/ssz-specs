@@ -236,8 +236,7 @@ theorem buildMultiproof_verifies (shape : Desc) (value : Value) (root : Bytes)
   have leafWidths := (checkChunks_ok_iff leaves).mpr (value_reads_width shape value indices leaves leafReads)
   have proofWidths := (checkChunks_ok_iff proof).mpr (value_reads_width shape value helpers proof helperReads)
   refine ⟨proof, built, ?_⟩
-  simp [verifyMerkleMultiproof, checkChunk, hashTreeRoot_size shape value root rooted,
-    leafWidths, proofWidths, rebuilt, Bind.bind, Except.bind, Pure.pure, Except.pure]
+  simp [verifyMerkleMultiproof, leafWidths, proofWidths, rebuilt, Bind.bind, Except.bind, Pure.pure, Except.pure]
 
 /-- An admissible value has a root and an accepted multiproof for every valid readable request. -/
 theorem buildMultiproof_fits_verifies (shape : Desc) (value : Value)

@@ -75,7 +75,7 @@ inductive Err where
   | leafCount (expected actual : Nat)
   /-- A proof carrying a different number of nodes than the request needs. -/
   | proofLength (expected actual : Nat)
-  /-- A proof from which no root could be rebuilt. -/
+  /-- A proof from which no root could be rebuilt, or a walk whose depth budget ran out. -/
   | proofIncomplete
   /-- A path descending into a mixed-in word, which has no parts. -/
   | pathIntoMixin

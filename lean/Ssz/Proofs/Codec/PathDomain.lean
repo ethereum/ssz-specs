@@ -102,13 +102,14 @@ theorem PathSelects.bitList (limit : Nat) (data : Array Bool)
 
 /-- A progressive bit-list position selects the occupied chunk containing that bit. -/
 theorem PathSelects.progressiveBitList {limit : Option Nat} (data : Array Bool)
-    (ordinal : Nat) (inside : ordinal < data.size) :
+    (within : withinBound limit data.size = true) (ordinal : Nat) (inside : ordinal < data.size) :
     PathSelects (.progressiveBitList limit) (.bits data) [.position ordinal]
       (padded zeroChunk (packedBits data) (ordinal / (8 * bytesPerChunk))) := by
   -- An actual bit lies in an occupied chunk, which determines a finite level on the progressive spine.
   refine PathSelects.packedProgressive
     (layout := .packing (packedBits data) none (lengthWord data.size))
-    rfl (packing_materialized _ _ _ _) rfl rfl rfl ?_ (resolveStep_progressiveBitList ordinal)
+    (by simp [merkleLayout, boundCheck_of_withinBound limit _ within, Bind.bind, Except.bind]; rfl)
+    (packing_materialized _ _ _ _) rfl rfl rfl ?_ (resolveStep_progressiveBitList ordinal)
   exact packedBits_size data ▸ bit_position_inside data.size ordinal inside
 
 private theorem basic_width_positive (element : Desc) (basic : element.isBasic = true)
@@ -185,7 +186,7 @@ theorem PathSelects.progressiveList_basic (element : Desc) {limit : Option Nat}
         (padded zeroChunk (packElements parts) (ordinal * element.itemLength / bytesPerChunk)) := by
   -- Present elements lie in occupied chunks, whose spine positions remain stable as the list grows.
   cases fitted with
-  | progressiveList _ each =>
+  | progressiveList within each =>
     -- Basic elements always serialize successfully to a fixed-width stream without offset tables.
     obtain ⟨parts, wrote, size⟩ := serializeEach_basic_size basic values each
     have width := basic_width_positive element basic (wellFormed_progressiveList sound)
@@ -195,7 +196,8 @@ theorem PathSelects.progressiveList_basic (element : Desc) {limit : Option Nat}
     refine ⟨parts, wrote, PathSelects.packedProgressive (child := element)
       (layout := .packing (packElements parts) none (lengthWord values.length))
       ?_ (packing_materialized _ _ _ _) rfl rfl rfl ?_ (resolveStep_progressiveList element ordinal)⟩
-    · simp [merkleLayout, sequenceLayout, basic, wrote, Bind.bind, Except.bind, Pure.pure, Except.pure]
+    · simp [merkleLayout, sequenceLayout, basic, wrote, boundCheck_of_withinBound limit _ within,
+        Bind.bind, Except.bind, Pure.pure, Except.pure]
     · simpa [packElements, packBytes_size, size, chunksForBytes] using chunkInside
 
 end Ssz

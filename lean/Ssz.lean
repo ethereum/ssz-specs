@@ -27,7 +27,7 @@ The executable specification: everything an implementer reads.
     Ssz/Merkle  bounded and progressive trees, indices, and verification
     Ssz/Hash    pure SHA-256
 
-Nothing here is a proof.
+The only theorems here let the compiler run a faster twin of a definition.
 
 The properties proved of these definitions sit under `Ssz/Proofs`, mirroring this layout.
 -/

@@ -230,10 +230,9 @@ theorem verifyMerkleMultiproof_agrees {tree : Nat → Bytes}
     root = tree 1 := by
   -- Width checks can reject a proof, but only reconstruction can accept its root.
   unfold verifyMerkleMultiproof at accepted
-  cases rootWidth : checkChunk root <;> cases leafWidths : checkChunks leaves <;>
-    cases proofWidths : checkChunks proof <;>
-    cases reconstructed : calculateMultiMerkleRoot leaves proof indices <;>
-    simp [rootWidth, leafWidths, proofWidths, reconstructed, Bind.bind, Except.bind, Pure.pure,
+  cases reconstructed : calculateMultiMerkleRoot leaves proof indices <;>
+    cases leafWidths : checkChunks leaves <;> cases proofWidths : checkChunks proof <;>
+    simp [leafWidths, proofWidths, reconstructed, Bind.bind, Except.bind, Pure.pure,
       Except.pure] at accepted
   subst root
   exact calculateMultiMerkleRoot_agrees helperIndices leafValues proofValues parents reconstructed
@@ -487,13 +486,12 @@ theorem multiproof_verifies {tree : Nat → Bytes} {indices helpers : List Nat}
     (parents : ParentsAgree tree
       ((((indices.zip (indices.map tree)) ++ helpers.zip (helpers.map tree)).map
         fun pair => levelOf pair.1).foldl max 0))
-    (rootWidth : (tree 1).size = bytesPerChunk)
     (widths : ∀ index ∈ indices ++ helpers, (tree index).size = bytesPerChunk) :
     verifyMerkleMultiproof (indices.map tree) (helpers.map tree) indices (tree 1) = .ok true := by
   -- Width checks admit the nodes, and full reconstruction produces the expected root.
   have leafWidths := checkChunks_map (fun i member => widths i (List.mem_append.mpr (Or.inl member)))
   have proofWidths := checkChunks_map (fun i member => widths i (List.mem_append.mpr (Or.inr member)))
-  simp [verifyMerkleMultiproof, checkChunk, rootWidth, leafWidths, proofWidths,
+  simp [verifyMerkleMultiproof, leafWidths, proofWidths,
     multiproof_rebuilds_root built parents, Bind.bind, Except.bind, Pure.pure, Except.pure]
 
 /-- Two sibling claims immediately below the root require no auxiliary nodes. -/

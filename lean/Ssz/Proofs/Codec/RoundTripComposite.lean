@@ -12,6 +12,7 @@ Both walks read the selectors in the same order, so the option found is the opti
 theorem deserializeOption_of_lookup :
     ∀ (selectors : List Nat) (options : List Desc) (selector : Nat) (option : Desc)
       (body : Bytes) (value : Value),
+      minSelector ≤ selector ∧ selector ≤ maxSelector →
       lookupOption selectors options selector = .ok option →
       deserialize option body = .ok value →
       deserializeOption selectors options selector body = .ok (.union selector value) := by
@@ -19,21 +20,21 @@ theorem deserializeOption_of_lookup :
   induction selectors with
   | nil =>
     -- No selectors name no option, so the lookup could not have answered.
-    intro options _ _ _ _ found _
+    intro options _ _ _ _ _ found _
     cases options <;> simp [lookupOption] at found
   | cons chosen rest ih =>
-    intro options selector option body value found decoded
+    intro options selector option body value ranged found decoded
     cases options with
     | nil => simp [lookupOption] at found
     | cons candidate others =>
       -- Either this selector is the one named, or the walk moves along.
       simp only [lookupOption, deserializeOption] at found ⊢
-      split at found <;> simp_all [Bind.bind, Except.bind, Pure.pure, Except.pure]
+      split at found <;> simp_all [checkSelector, Bind.bind, Except.bind, Pure.pure, Except.pure]
 
 /-- A union reads back whatever it wrote, once its option does. -/
 theorem roundTrip_compatibleUnion {selectors : List Nat} {options : List Desc}
     {selector : Nat} {option : Desc} {data : Value}
-    (bounded : selector < 256)
+    (bounded : minSelector ≤ selector ∧ selector ≤ maxSelector)
     (named : lookupOption selectors options selector = .ok option)
     (inner : ∀ body, serialize option data = .ok body → deserialize option body = .ok data) :
     ∀ bytes, serialize (.compatibleUnion selectors options) (.union selector data) = .ok bytes →
@@ -43,19 +44,19 @@ theorem roundTrip_compatibleUnion {selectors : List Nat} {options : List Desc}
   cases inside : serialize option data with
   | error _ =>
     -- The option refused, so the union refused, and nothing was written to read back.
-    simp [serialize, named, inside, Bind.bind, Except.bind] at wrote
+    simp [serialize, named, inside, checkSelector_of_range bounded, Bind.bind, Except.bind] at wrote
   | ok body =>
     -- The selector is one byte in front of the option's own encoding.
-    simp only [serialize, named, inside, Bind.bind, Except.bind, Pure.pure, Except.pure,
+    simp only [serialize, named, inside, checkSelector_of_range bounded, Bind.bind, Except.bind, Pure.pure, Except.pure,
       Except.ok.injEq] at wrote
     subst wrote
     -- The selector byte is there to be read, and it reads back as the selector.
     have firstIs : (#[UInt8.ofNat selector] ++ body)[0]!.toNat = selector := by
       rw [getElem!_pos _ 0 (by simp; omega), Array.getElem_append_left (by simp)]
-      simp [Nat.mod_eq_of_lt bounded]
+      simp [Nat.mod_eq_of_lt (show selector < 256 by have top : maxSelector = 127 := rfl; omega)]
     simp [deserialize]
     rw [firstIs]
-    exact deserializeOption_of_lookup selectors options selector option body data named
+    exact deserializeOption_of_lookup selectors options selector option body data bounded named
       (inner body inside)
 
 /-- Encoding a struct's fields gives one part per field. -/
