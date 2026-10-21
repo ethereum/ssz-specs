@@ -192,12 +192,19 @@ def merkle_layout(value: object) -> MerkleLayout:
 
 @merkle_layout.register(BaseUint)
 @merkle_layout.register(Boolean)
-@merkle_layout.register(ByteVector)
-def _layout_packed_leaf(value: BaseUint | Boolean | ByteVector) -> MerkleLayout:
+def _layout_packed_leaf(value: BaseUint | Boolean) -> MerkleLayout:
     # Each of these encodes to a fixed-width byte string with no length prefix.
     # The width is fixed.
     # The chunks it packs into are therefore the whole capacity.
     chunks = _pack_bytes(value.encode_bytes())
+    return MerkleLayout.packing(chunks, limit=len(chunks))
+
+
+@merkle_layout.register
+def _layout_bytevector(value: ByteVector) -> MerkleLayout:
+    # The bytes pack as they are, so a root never meets the bound on encoding size.
+    # The width is fixed, so the chunks they pack into are the whole capacity.
+    chunks = _pack_bytes(bytes(value))
     return MerkleLayout.packing(chunks, limit=len(chunks))
 
 
@@ -211,13 +218,13 @@ def _layout_bytes(value: bytes) -> MerkleLayout:
 
 @merkle_layout.register
 def _layout_bytelist(value: ByteList) -> MerkleLayout:
-    serialized_bytes = value.encode_bytes()
+    # The bytes pack as they are, so a root never meets the bound on encoding size.
     # The count mixed in is the byte count.
     # That is also the element count here.
     return MerkleLayout.packing(
-        _pack_bytes(serialized_bytes),
+        _pack_bytes(value.data),
         limit=(type(value).declared_limit() + BYTES_PER_CHUNK - 1) // BYTES_PER_CHUNK,
-        mixin=length_word(len(serialized_bytes)),
+        mixin=length_word(len(value.data)),
     )
 
 

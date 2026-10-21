@@ -149,8 +149,10 @@ theorem merkleLayout_shapes {shape : Desc} {left right : Value} {first second : 
   | byteVector length =>
     match leftFits, rightFits with
     | .byteVector count, .byteVector otherCount =>
-      exact fixedLeaf_shapes (by simp [serialize, count]) (by simp [serialize, otherCount])
-        (count.trans otherCount.symm) laid other
+      simp only [merkleLayout, count, otherCount, bne_self_eq_false, Bool.false_eq_true,
+        if_false, Bind.bind, Except.bind, pure, Except.pure, Except.ok.injEq] at laid other
+      subst first second
+      simp [MerkleLayout.packing, Leaves.shapes, packBytes_size, count, otherCount]
   -- Exact 256-bit length words recover the byte counts needed to align packed nodes.
   | byteList limit =>
     match leftFits, rightFits, leftSized, rightSized with

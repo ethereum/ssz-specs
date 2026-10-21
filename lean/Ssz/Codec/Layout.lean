@@ -126,7 +126,11 @@ def sequenceLayout (element : Desc) (elements : List Value) (positions : Option 
 /-- How one value merkleizes: its leaves, their tree shape, and the word mixed in. -/
 def merkleLayout (shape : Desc) (value : Value) : Except Err MerkleLayout :=
   match shape, value with
-  | .bool, _ | .uint _, _ | .byteVector _, _ => fixedLeaf shape value
+  | .bool, _ | .uint _, _ => fixedLeaf shape value
+  -- The bytes pack as they are, since a root does not depend on what an offset can name.
+  | .byteVector length, .bytes data => do
+    if data.size != length then throw (.scope length data.size)
+    return .packing (packBytes data) (some (packBytes data).size)
   | .byteList limit, .bytes data => do
     if data.size > limit then throw (.overLimit limit data.size)
     -- The count mixed in is the byte count, which is also the element count here.

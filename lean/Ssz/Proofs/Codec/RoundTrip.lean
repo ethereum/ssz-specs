@@ -33,12 +33,14 @@ theorem recovered {shape : Desc} (covered : Recovers shape) :
     intro _ admits
     cases admits with
     | byteVector exact =>
-      exact ⟨reads_back (roundTrip_byteVector exact), fun _ _ fixed wrote => by
-        simp_all [Desc.fixedSize, serialize]⟩
+      exact ⟨roundTrip_byteVector exact, fun _ _ fixed wrote => by
+        simp [Desc.fixedSize, serialize, exact, throw, throwThe, MonadExceptOf.throw,
+          Bind.bind, Except.bind, Pure.pure, Except.pure] at fixed wrote
+        split at wrote <;> simp_all⟩
   | byteList =>
     intro _ admits
     cases admits with
-    | byteList within => exact ⟨reads_back (roundTrip_byteList within), by simp [Desc.fixedSize]⟩
+    | byteList within => exact ⟨roundTrip_byteList within, by simp [Desc.fixedSize]⟩
   | bitVector =>
     intro _ admits
     cases admits with

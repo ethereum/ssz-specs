@@ -48,23 +48,24 @@ theorem canonical_uint {width : Nat} {data : Bytes} {value : Value}
 theorem canonical_byteVector {length : Nat} {data : Bytes} {value : Value}
     (read : deserialize (.byteVector length) data = .ok value) :
     serialize (.byteVector length) value = .ok data := by
-  -- Acceptance establishes the exact declared byte count.
-  simp only [deserialize] at read
+  -- Acceptance establishes the size bound and the exact declared byte count.
   -- The accepted value is the recovered payload, whose encoding preserves the original bytes.
-  split at read <;> simp [Bind.bind, Except.bind, pure, Except.pure] at read
-  subst value
-  simp_all [serialize]
+  simp only [deserialize, throw_error, Bind.bind, Except.bind] at read
+  repeat' split at read
+  all_goals cases read
+  simp_all [serialize, Bind.bind, Except.bind, pure, Except.pure]
 
 /-- A bounded byte string is already its canonical representation. -/
 theorem canonical_byteList {limit : Nat} {data : Bytes} {value : Value}
     (read : deserialize (.byteList limit) data = .ok value) :
     serialize (.byteList limit) value = .ok data := by
-  -- Acceptance establishes the byte capacity bound without changing the payload.
-  simp only [deserialize] at read
+  -- Acceptance establishes the size bound and the byte capacity without changing the payload.
   -- The accepted value is the recovered payload, whose encoding preserves the original bytes.
-  split at read <;> simp [Bind.bind, Except.bind, pure, Except.pure] at read
-  subst value
-  simp_all [serialize]
+  simp only [deserialize, throw_error, Bind.bind, Except.bind] at read
+  repeat' split at read
+  all_goals cases read
+  simp only [serialize, Bind.bind, Except.bind, pure, Except.pure]
+  rw [if_neg (by omega), if_neg (by omega)]
 
 set_option maxRecDepth 4096 in
 private theorem byte_bit (byte : UInt8) (offset : Fin 8) :

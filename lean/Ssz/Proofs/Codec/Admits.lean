@@ -181,15 +181,17 @@ theorem fits_of_serialize : ∀ (shape : Desc) (value : Value),
       (∃ parts, serializeEach element elements = .ok parts) →
         ∀ held ∈ elements, Fits element held) with
   -- Each accepted scalar check supplies exactly the admissibility condition.
-  | case1 | case2 | case4 | case6 | case8 | case10 =>
+  | case1 | case2 | case5 | case7 | case8 | case10 =>
     intro _ _
     constructor <;> simp_all
   -- A failed range, count, or capacity check cannot have produced bytes.
-  | case3 _ _ bad | case5 _ _ bad | case7 _ _ bad | case9 _ _ bad | case11 _ _ bad
-    | case14 _ _ _ bad | case16 _ _ _ bad =>
+  | case3 _ _ bad | case9 _ _ bad | case11 _ _ bad | case14 _ _ _ bad | case16 _ _ _ bad =>
     intro _ ⟨_, wrote⟩
     rw [serialize, if_neg bad] at wrote
     simp at wrote
+  | case4 _ _ bad | case6 _ _ bad =>
+    intro _ ⟨_, wrote⟩
+    simp [serialize, bad, throw, throwThe, MonadExceptOf.throw, Bind.bind, Except.bind] at wrote
   | case12 limit data =>
     intro _ ⟨_, wrote⟩
     rw [serialize] at wrote

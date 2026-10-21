@@ -5,10 +5,11 @@ import io
 import pytest
 
 from ssz.byte_arrays import ByteList, ByteVector
-from ssz.collections import List, ProgressiveList, Vector
+from ssz.collections import List, ProgressiveByteList, ProgressiveList, Vector
 from ssz.container import Container, ProgressiveContainer
 from ssz.exceptions import SSZValueError, ValueFault
 from ssz.offsets import check_composite_size
+from ssz.roots import hash_tree_root
 from ssz.ssz_base import SSZType
 from ssz.uint import Uint8
 from ssz.union import CompatibleUnion
@@ -24,6 +25,24 @@ class Bytes12(ByteList):
     """A variable payload filling the budget together with its four-byte offset."""
 
     LIMIT = 12
+
+
+class Bytes16List(ByteList):
+    """A variable payload filling the budget on its own."""
+
+    LIMIT = 16
+
+
+class Uint8Vector(Vector[Uint8]):
+    """The sequence a sixteen-byte vector stands for."""
+
+    LENGTH = 16
+
+
+class Uint8List(List[Uint8]):
+    """The sequence a sixteen-byte list stands for."""
+
+    LIMIT = 16
 
 
 class FixedVector(Vector[Bytes16]):
@@ -103,6 +122,9 @@ def test_composite_size_at_or_above_limit(size: int) -> None:
 @pytest.mark.parametrize(
     "value",
     [
+        Bytes16(),
+        Bytes16List(data=bytes(16)),
+        ProgressiveByteList(data="00" * 16),
         FixedVector(data=[Bytes16()]),
         VariableVector(data=[Bytes12(data=bytes(12))]),
         FixedList(data=[Bytes16()]),
@@ -157,12 +179,23 @@ def test_offset_table_alone_reaches_limit(monkeypatch: pytest.MonkeyPatch) -> No
     assert output.tell() == 0
 
 
-def test_primitive_bytes_have_no_composite_limit(monkeypatch: pytest.MonkeyPatch) -> None:
-    # Raw byte arrays have no offset table and retain their own declared size rules.
-    monkeypatch.setattr("ssz.offsets._COMPOSITE_SIZE_LIMIT", 12)
-    for value in (Bytes16(), Bytes12(data=bytes(12))):
-        encoded = value.encode_bytes()
-        assert type(value).decode_bytes(encoded) == value
+@pytest.mark.parametrize(
+    ("byte_array", "sequence"),
+    [(Bytes16, Uint8Vector), (Bytes16List, Uint8List)],
+    ids=lambda shape: shape.__name__,
+)
+def test_byte_arrays_refuse_like_byte_sequences(
+    byte_array: type[SSZType], sequence: type[SSZType], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # A byte array is an alias of a sequence of bytes, so both refuse the same input alike.
+    # The payload is one byte short, so a width or capacity check would refuse it differently.
+    payload = bytes(15)
+    monkeypatch.setattr("ssz.offsets._COMPOSITE_SIZE_LIMIT", 15)
+    for shape in (byte_array, sequence):
+        with pytest.raises(SSZValueError) as decoded:
+            shape.decode_bytes(payload)
+        assert decoded.value.fault is ValueFault.OFFSET_OVERFLOW
+        assert decoded.value.fields == {"size": 15}
 
 
 def test_union_selector_does_not_add_a_composite_limit(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -177,3 +210,19 @@ def test_union_selector_does_not_add_a_composite_limit(monkeypatch: pytest.Monke
     encoded = value.encode_bytes()
     assert len(encoded) == 17
     assert FixedUnion.decode_bytes(encoded) == value
+
+
+@pytest.mark.parametrize(
+    ("value", "sequence"),
+    [
+        (Bytes16(), Uint8Vector(data=[Uint8(0)] * 16)),
+        (Bytes16List(data=bytes(16)), Uint8List(data=[Uint8(0)] * 16)),
+    ],
+    ids=lambda shape: type(shape).__name__,
+)
+def test_byte_array_roots_ignore_composite_limit(
+    value: SSZType, sequence: SSZType, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # A root packs the bytes themselves and never asks what an offset could name.
+    monkeypatch.setattr("ssz.offsets._COMPOSITE_SIZE_LIMIT", 15)
+    assert hash_tree_root(value) == hash_tree_root(sequence)

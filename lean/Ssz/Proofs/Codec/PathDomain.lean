@@ -40,8 +40,7 @@ theorem PathSelects.byteVector (count : Nat) (data : Bytes)
     refine PathSelects.packed (layout := .packing (packBytes data) (some (chunksForBytes count)))
       ?_ (packing_materialized _ _ _ _) rfl rfl rfl ?_
       (byte_position_inside count ordinal inside) (resolveStep_byteVector count ordinal inside)
-    · simp [merkleLayout, fixedLeaf, serialize, exact, packBytes_size, chunksForBytes,
-        Bind.bind, Except.bind, Pure.pure, Except.pure]
+    · simp [merkleLayout, exact, packBytes_size, chunksForBytes, Pure.pure, Except.pure]
     · simp [packBytes_size, exact, chunksForBytes]
 
 /-- A byte-list position selects its containing chunk beneath the length word. -/

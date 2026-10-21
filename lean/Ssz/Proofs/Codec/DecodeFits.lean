@@ -222,18 +222,16 @@ theorem fits_of_deserialize (shape : Desc) :
   | byteVector length =>
     intro data value read
     simp only [deserialize, throw_error, Bind.bind, Except.bind] at read
-    split at read
-    · cases read
-    · cases read
-      exact .byteVector (by simp_all)
+    repeat' split at read
+    all_goals cases read
+    exact .byteVector (by simp_all)
   -- The decoder capacity comparison supplies the variable-size requirement.
   | byteList limit =>
     intro data value read
     simp only [deserialize, throw_error, Bind.bind, Except.bind] at read
-    split at read
-    · cases read
-    · cases read
-      exact .byteList (by omega)
+    repeat' split at read
+    all_goals cases read
+    exact .byteList (by omega)
   -- Unpacking the declared count creates exactly that many bits.
   | bitVector length =>
     intro data value read

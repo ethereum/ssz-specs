@@ -98,8 +98,16 @@ private theorem overflow_of_fits {shape : Desc} {value : Value} (fits : Fits sha
   induction fits with
   | bool => intro fault failed; simp [serialize] at failed
   | uint bound => intro fault failed; simp [serialize, bound] at failed
-  | byteVector sized => intro fault failed; simp [serialize, sized] at failed
-  | byteList within => intro fault failed; simp [serialize, within] at failed
+  -- A byte array can fail only the size bound it shares with every sequence.
+  | byteVector sized | byteList sized =>
+    intro fault failed
+    simp only [serialize, sized, bne_self_eq_false, Bool.false_eq_true, if_false] at failed
+    repeat' split at failed
+    -- The count checks pass on an admissible value, leaving the size bound or success.
+    all_goals first
+      | omega
+      | exact ⟨_, (Except.error.inj failed).symm, by omega⟩
+      | cases failed
   | bitVector sized => intro fault failed; simp [serialize, sized] at failed
   | bitList within => intro fault failed; simp [serialize, within] at failed
   | @progressiveBitList limit _ within =>

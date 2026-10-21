@@ -63,8 +63,8 @@ theorem merkleLayout_width (shape : Desc) (value : Value) (layout : MerkleLayout
   all_goals try solve
     | refine sequenceLayout_width _ _ _ _ _ ?_ success
       intro word same; simp at same; subst word; simp
-  -- A fixed bit count determines byte packing, whose final partial node is zero-padded.
-  case bitVector.bits length data =>
+  -- A fixed count determines byte packing, whose final partial node is zero-padded.
+  case bitVector.bits length data | byteVector.bytes length data =>
     split at success <;>
       simp [Bind.bind, Except.bind, Pure.pure, Except.pure, throw, throwThe,
         MonadExceptOf.throw] at success

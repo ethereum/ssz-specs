@@ -27,8 +27,8 @@ private theorem packBytes_chunk {data : Bytes} (width : data.size = bytesPerChun
 theorem hashTreeRoot_chunk {data : Bytes} (width : data.size = bytesPerChunk) :
     hashTreeRoot (.byteVector bytesPerChunk) (.bytes data) = .ok data := by
   have flat : depthFor 1 = 0 := depthFor_pow 0
-  simp only [hashTreeRoot, Desc.nesting, hashTreeRootAt, merkleLayout, fixedLeaf, serialize,
-    width, beq_self_eq_true, if_true, Bind.bind, Except.bind, pure, Except.pure,
+  simp only [hashTreeRoot, Desc.nesting, hashTreeRootAt, merkleLayout, width, bne_self_eq_false,
+    Bool.false_eq_true, if_false, Bind.bind, Except.bind, pure, Except.pure,
     MerkleLayout.packing, packBytes_chunk width, layoutChunksAt, Leaves.count]
   simp only [merkleizeBounded, flat, subtreeAt, padded, Array.size_singleton,
     Bind.bind, Except.bind, pure, Except.pure]

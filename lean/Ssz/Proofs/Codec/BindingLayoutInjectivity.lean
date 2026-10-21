@@ -110,6 +110,20 @@ private theorem layoutDetermines_byteList (capacity : Nat) : LayoutDeterminesVal
           exact congrArg Value.bytes (packBytes_injective counts
             (Leaves.packed.inj (congrArg MerkleLayout.leaves same)))
 
+/-- A byte vector's declared count fixes how many packed bytes are payload. -/
+private theorem layoutDetermines_byteVector (count : Nat) :
+    LayoutDeterminesValue (.byteVector count) := by
+  -- Both values have the declared byte count, so the final node padding is known.
+  intro left right layout sound leftFits rightFits leftSized rightSized first second
+  cases leftFits with
+  | byteVector length =>
+    cases rightFits with
+    | byteVector otherLength =>
+      simp only [merkleLayout, length, otherLength, bne_self_eq_false, Bool.false_eq_true,
+        if_false, pure, Except.pure, Except.ok.injEq] at first second
+      exact congrArg Value.bytes (packBytes_injective (length.trans otherLength.symm)
+        (Leaves.packed.inj (congrArg MerkleLayout.leaves (first.trans second.symm))))
+
 /-- A bitvector’s declared count disambiguates its final padded byte. -/
 private theorem layoutDetermines_bitVector (count : Nat) : LayoutDeterminesValue (.bitVector count) := by
   -- Both values have the declared bit count, including any zero bits at the end.
@@ -293,9 +307,10 @@ theorem merkleLayout_injective {shape : Desc} {left right : Value} {layout : Mer
   suffices determines : LayoutDeterminesValue shape from
     determines sound leftFits rightFits leftSized rightSized first second
   cases shape
-  case bool | uint | byteVector =>
+  case bool | uint =>
     exact fun sound leftFits rightFits _ _ first second =>
       fixedLeaf_injective sound leftFits rightFits rfl first second
+  case byteVector => exact layoutDetermines_byteVector _
   case byteList => exact layoutDetermines_byteList _
   case bitVector => exact layoutDetermines_bitVector _
   case bitList => exact layoutDetermines_bitList _

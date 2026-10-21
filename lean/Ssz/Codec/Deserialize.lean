@@ -224,10 +224,13 @@ def deserialize : Desc → Bytes → Except Err Value
   | .uint width, data => do
     if data.size != width then throw (.scope width data.size)
     return .uint (readUint data 0 width)
+  -- A byte array is read as a sequence of bytes would be, the size bound first.
   | .byteVector length, data => do
+    if data.size ≥ 2 ^ (8 * bytesPerOffset) then throw (.offsetOverflow data.size)
     if data.size != length then throw (.scope length data.size)
     return .bytes data
   | .byteList limit, data => do
+    if data.size ≥ 2 ^ (8 * bytesPerOffset) then throw (.offsetOverflow data.size)
     if data.size > limit then throw (.overLimit limit data.size)
     return .bytes data
   | .bitVector length, data => do

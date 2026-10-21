@@ -121,7 +121,7 @@ and exhaustive canonical re-encoding checks for one- and two-byte inputs across 
   Compatibility is deliberately not transitive, as a checked counterexample demonstrates.
   [Shared addresses](Ssz/Proofs/Type/CompatibilityIndices.lean): compatible progressive containers place a field of one name at one generalized index, so appending fields leaves earlier fields where a proof can still read them.
   Every option a union declares is compatible with every other, and each hangs at the same node whichever option the value carries.
-- [Byte aliases](Ssz/Proofs/Codec/Aliases.lean): byte arrays and sequences of eight-bit integers have equal encodings within the composite offset range, and equal roots.
+- [Byte aliases](Ssz/Proofs/Codec/Aliases.lean): byte arrays and sequences of eight-bit integers encode, decode, and root alike, refusals included.
 - [Tree construction](Ssz/Proofs/Merkle/Tree.lean): executable bounded and progressive trees agree with their mathematical definitions.
   Padding, subtree extraction, and upward construction preserve roots at arbitrary depths.
   [Merkleization cost](Ssz/Proofs/Merkle/MerkleizeCost.lean): merkleizing a nonempty `k` chunks under a width of `w` costs fewer than `2 * k + log2 w` hashes, so a capacity far above the data adds only its logarithm.
@@ -165,7 +165,8 @@ and exhaustive canonical re-encoding checks for one- and two-byte inputs across 
 ### Domains and limits
 
 Composite serialization and deserialization both require fewer than 2^32 bytes at each composite level.
-Primitive byte arrays have no offset table and therefore no such limit of their own.
+Byte arrays are sequences of bytes, so they meet the same limit, though they write no offset table.
+Roots meet no such limit.
 A union adds its selector byte to the chosen option's encoding.
 These distinctions are part of the mathematical size relation, rather than implicit machine-size assumptions.
 

@@ -116,10 +116,15 @@ def serialize : Desc → Value → Except Err Bytes
   | .bool, .bool b => .ok #[if b then 1 else 0]
   | .uint width, .uint n =>
     if n < 2 ^ (8 * width) then .ok (uintBytes width n) else .error .typeMismatch
-  | .byteVector length, .bytes data =>
-    if data.size == length then .ok data else .error (.scope length data.size)
-  | .byteList limit, .bytes data =>
-    if data.size ≤ limit then .ok data else .error (.overLimit limit data.size)
+  -- A byte array is a sequence of bytes, so it meets the size bound every sequence meets.
+  | .byteVector length, .bytes data => do
+    if data.size != length then throw (.scope length data.size)
+    if data.size ≥ 2 ^ (8 * bytesPerOffset) then throw (.offsetOverflow data.size)
+    return data
+  | .byteList limit, .bytes data => do
+    if data.size > limit then throw (.overLimit limit data.size)
+    if data.size ≥ 2 ^ (8 * bytesPerOffset) then throw (.offsetOverflow data.size)
+    return data
   -- A fixed bit count needs no closing bit, since the width already gives it.
   | .bitVector length, .bits data =>
     if data.size == length then .ok (packBits data ((length + 7) / 8))

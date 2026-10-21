@@ -146,7 +146,12 @@ theorem layout_exists {shape : Desc} {value : Value}
   cases fitted with
   | bool b => exact fixed_fits (bytes := #[if b then 1 else 0]) (by simp [serialize])
   | @uint width n bound => exact fixed_fits (bytes := uintBytes width n) (by simp [serialize, bound])
-  | @byteVector length data exact => exact fixed_fits (bytes := data) (by simp [serialize, exact])
+  | @byteVector length data exact =>
+    refine ⟨.packing (packBytes data) (some (packBytes data).size),
+      by simp [merkleLayout, exact, pure, Except.pure], ?_⟩
+    apply packed_fits
+    rintro _ ⟨⟩
+    simp [chunksForBytes]
   | @byteList limit data within =>
     refine ⟨.packing (packBytes data) (some (chunksForBytes limit)) (lengthWord data.size),
       by simp [merkleLayout, Nat.not_lt.mpr within, pure, Except.pure], ?_⟩

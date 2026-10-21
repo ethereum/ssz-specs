@@ -14,17 +14,19 @@ def fieldSize (shape : Desc) (size : Nat) : Nat :=
 A structural witness of encoded byte size, with every assembled sequence or container inside the offset range.
 
 Child sizes are mathematical counts, independent of byte construction or encoder success.
-Primitive byte arrays have no offset ceiling of their own.
+Byte arrays are sequences of bytes, so they meet the same offset ceiling.
 -/
 inductive Representable : Desc → Value → Nat → Prop where
   /-- A boolean occupies one byte. -/
   | bool (value : Bool) : Representable .bool (.bool value) 1
   /-- An integer occupies its declared byte width. -/
   | uint (width value : Nat) : Representable (.uint width) (.uint value) width
-  /-- Fixed byte arrays contribute their payload unchanged. -/
-  | byteVector (length : Nat) (data : Bytes) : Representable (.byteVector length) (.bytes data) data.size
-  /-- Bounded byte arrays contribute their payload unchanged. -/
-  | byteList (limit : Nat) (data : Bytes) : Representable (.byteList limit) (.bytes data) data.size
+  /-- Fixed byte arrays contribute their payload unchanged, within the offset range. -/
+  | byteVector (length : Nat) (data : Bytes) (bounded : data.size < 2 ^ 32) :
+      Representable (.byteVector length) (.bytes data) data.size
+  /-- Bounded byte arrays contribute their payload unchanged, within the offset range. -/
+  | byteList (limit : Nat) (data : Bytes) (bounded : data.size < 2 ^ 32) :
+      Representable (.byteList limit) (.bytes data) data.size
   /-- Fixed bitfields round their bit count up to whole bytes. -/
   | bitVector (length : Nat) (data : Array Bool) :
       Representable (.bitVector length) (.bits data) ((data.size + 7) / 8)
@@ -300,12 +302,16 @@ theorem Representable.serialize {shape : Desc} {value : Value} {size : Nat}
   | uint width value =>
     intro (.uint bound)
     exact ⟨uintBytes width value, by simp [Ssz.serialize, bound], uintBytes_size _ _⟩
-  | byteVector length data =>
+  | byteVector length data bounded =>
     intro (.byteVector sized)
-    exact ⟨data, by simp [Ssz.serialize, sized], rfl⟩
-  | byteList limit data =>
+    exact ⟨data, by
+      simp [Ssz.serialize, sized, bytesPerOffset, Bind.bind, Except.bind, pure, Except.pure]
+      omega, rfl⟩
+  | byteList limit data bounded =>
     intro (.byteList within)
-    exact ⟨data, by simp [Ssz.serialize, within], rfl⟩
+    exact ⟨data, by
+      simp [Ssz.serialize, Nat.not_lt.mpr within, Nat.not_le.mpr bounded, bytesPerOffset, pure,
+        Except.pure], rfl⟩
   | bitVector length data =>
     intro (.bitVector sized)
     exact ⟨packBits data ((length + 7) / 8), by simp [Ssz.serialize, sized], by simp [packBits, sized]⟩
@@ -372,14 +378,13 @@ theorem representable_of_serialize (shape : Desc) (value : Value) (bytes : Bytes
     cases value <;> simp [Ssz.serialize] at wrote
     split at wrote <;> cases wrote
     simpa only [uintBytes_size] using Representable.uint width _
-  | byteVector length =>
-    cases value <;> simp [Ssz.serialize] at wrote
-    split at wrote <;> cases wrote
-    exact .byteVector _ _
-  | byteList limit =>
-    cases value <;> simp [Ssz.serialize] at wrote
-    split at wrote <;> cases wrote
-    exact .byteList _ _
+  -- A byte array that encodes passed the size bound on its way out.
+  | byteVector length | byteList limit =>
+    cases value <;> simp [Ssz.serialize, throw, throwThe, MonadExceptOf.throw, Bind.bind,
+      Except.bind, pure, Except.pure] at wrote
+    repeat' split at wrote
+    all_goals cases wrote
+    all_goals constructor; simp only [bytesPerOffset] at *; omega
   | bitVector length =>
     cases value <;> simp [Ssz.serialize] at wrote
     split at wrote <;> cases wrote

@@ -98,14 +98,22 @@ theorem roundTrip_uint {width value : Nat} (bound : value < 2 ^ (8 * width)) :
   -- The decoder's width check passes because the encoding is exactly that wide.
   simp [deserialize, uintBytes_size, readUint_uintBytes width value bound, Pure.pure, Except.pure]
 
-/-- A fixed-width byte string survives being written and read back. -/
+/--
+A fixed-width byte string survives being written and read back.
+
+The encoder may refuse one too long for an offset to name, leaving nothing to read.
+-/
 theorem roundTrip_byteVector {length : Nat} {data : Bytes} (fits : data.size = length) :
-    serialize (.byteVector length) (.bytes data) >>= deserialize (.byteVector length)
-      = .ok (.bytes data) := by
-  -- A byte string is its own encoding, so both sides check the same one count.
-  simp only [serialize, fits, beq_self_eq_true, if_pos]
-  show deserialize (.byteVector length) data = _
-  simp [deserialize, fits, Pure.pure, Except.pure]
+    ∀ bytes, serialize (.byteVector length) (.bytes data) = .ok bytes →
+      deserialize (.byteVector length) bytes = .ok (.bytes data) := by
+  intro bytes wrote
+  subst fits
+  -- A byte string is its own encoding, so both sides check the same count and size.
+  by_cases large : data.size ≥ 2 ^ (8 * bytesPerOffset) <;>
+    simp [serialize, large, throw, throwThe, MonadExceptOf.throw, Bind.bind, Except.bind,
+      Pure.pure, Except.pure] at wrote
+  subst wrote
+  simp [deserialize, large, Pure.pure, Except.pure]
 
 /--
 The highest set bit is the one nothing above it disturbs.
@@ -260,13 +268,20 @@ theorem roundTrip_progressiveBitList {limit : Option Nat} {data : Array Bool}
       simpa [withinBound] using within)]
   rfl
 
-/-- A bounded byte string survives being written and read back. -/
+/--
+A bounded byte string survives being written and read back.
+
+The encoder may refuse one too long for an offset to name, leaving nothing to read.
+-/
 theorem roundTrip_byteList {limit : Nat} {data : Bytes} (fits : data.size ≤ limit) :
-    serialize (.byteList limit) (.bytes data) >>= deserialize (.byteList limit)
-      = .ok (.bytes data) := by
-  -- The count is under the capacity, so neither side refuses it.
-  simp only [serialize, if_pos fits]
-  show deserialize (.byteList limit) data = _
-  simp [deserialize, Nat.not_lt.mpr fits, Pure.pure, Except.pure]
+    ∀ bytes, serialize (.byteList limit) (.bytes data) = .ok bytes →
+      deserialize (.byteList limit) bytes = .ok (.bytes data) := by
+  intro bytes wrote
+  -- The count is under the capacity, so only the size bound could refuse it.
+  by_cases large : data.size ≥ 2 ^ (8 * bytesPerOffset) <;>
+    simp [serialize, Nat.not_lt.mpr fits, large, throw, throwThe, MonadExceptOf.throw,
+      Bind.bind, Except.bind, Pure.pure, Except.pure] at wrote
+  subst wrote
+  simp [deserialize, Nat.not_lt.mpr fits, large, Pure.pure, Except.pure]
 
 end Ssz

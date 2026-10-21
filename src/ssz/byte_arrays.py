@@ -27,6 +27,7 @@ from ssz.exceptions import (
     ValueFault,
     document_refusals,
 )
+from ssz.offsets import check_composite_size
 from ssz.ssz_base import SSZCollection, SSZType
 
 
@@ -181,7 +182,14 @@ class ByteVector(bytes, SSZType):
 
     @override
     def serialize(self, stream: IO[bytes]) -> int:
-        """Write the raw bytes to a binary stream and return the number of bytes written."""
+        """
+        Write the raw bytes to a binary stream and return the number of bytes written.
+
+        Raises:
+            SSZValueError: When the bytes do not fit four-byte offsets.
+        """
+        # A byte array is a sequence of bytes, so the sequence size rule applies to it.
+        check_composite_size(len(self))
         stream.write(self)
         return len(self)
 
@@ -201,9 +209,11 @@ class ByteVector(bytes, SSZType):
 
         Raises:
             SSZValueError:
+                - When scope does not fit four-byte offsets.
                 - When scope does not equal the declared width.
                 - When the stream ends before delivering scope bytes.
         """
+        check_composite_size(scope)
         length = cls.declared_length()
         if scope != length:
             raise SSZValueError(ValueFault.SCOPE, type=cls.__name__, expected=length, actual=scope)
@@ -220,7 +230,13 @@ class ByteVector(bytes, SSZType):
 
     @override
     def encode_bytes(self) -> bytes:
-        """Return the SSZ-encoded bytes as a plain bytes object."""
+        """
+        Return the SSZ-encoded bytes as a plain bytes object.
+
+        Raises:
+            SSZValueError: When the bytes do not fit four-byte offsets.
+        """
+        check_composite_size(len(self))
         return bytes(self)
 
     @classmethod
@@ -231,10 +247,13 @@ class ByteVector(bytes, SSZType):
 
         Raises:
             SSZTypeError: When the input is not one the shape reads as bytes.
-            SSZValueError: When the byte count is not the declared width.
+            SSZValueError: When the byte count does not fit four-byte offsets, or is not the
+                declared width.
         """
         length = cls.declared_length()
         payload = coerced_bytes(cls.__name__, data)
+        # The stream path asks this first, so both refuse an oversized payload alike.
+        check_composite_size(len(payload))
         if len(payload) != length:
             raise SSZValueError(
                 ValueFault.SCOPE, type=cls.__name__, expected=length, actual=len(payload)
@@ -413,7 +432,14 @@ class ByteList(SSZCollection[int, bytes]):
 
     @override
     def serialize(self, stream: IO[bytes]) -> int:
-        """Write the raw bytes to a binary stream and return the number of bytes written."""
+        """
+        Write the raw bytes to a binary stream and return the number of bytes written.
+
+        Raises:
+            SSZValueError: When the bytes do not fit four-byte offsets.
+        """
+        # A byte list is a list of bytes, so the list size rule applies to it.
+        check_composite_size(len(self.data))
         stream.write(self.data)
         return len(self.data)
 
@@ -434,10 +460,12 @@ class ByteList(SSZCollection[int, bytes]):
 
         Raises:
             SSZValueError:
+                - When scope does not fit four-byte offsets.
                 - When scope is negative.
                 - When scope exceeds the declared limit.
                 - When the stream ends before delivering scope bytes.
         """
+        check_composite_size(scope)
         if scope < 0:
             raise SSZValueError(ValueFault.SCOPE_NEGATIVE, scope=scope)
         limit = cls.declared_limit()
@@ -457,7 +485,13 @@ class ByteList(SSZCollection[int, bytes]):
 
     @override
     def encode_bytes(self) -> bytes:
-        """Return the SSZ-encoded bytes — the raw payload, with no length prefix."""
+        """
+        Return the SSZ-encoded bytes — the raw payload, with no length prefix.
+
+        Raises:
+            SSZValueError: When the bytes do not fit four-byte offsets.
+        """
+        check_composite_size(len(self.data))
         return self.data
 
     @classmethod
@@ -467,8 +501,11 @@ class ByteList(SSZCollection[int, bytes]):
         Parse SSZ bytes into an instance — the payload is the value, byte for byte.
 
         Raises:
-            SSZValueError: When the payload holds more bytes than the declared limit.
+            SSZValueError: When the payload does not fit four-byte offsets, or holds more bytes
+                than the declared limit.
         """
+        # The stream path asks this first, so both refuse an oversized payload alike.
+        check_composite_size(len(data))
         # Bounded here rather than left to the field validator, whose refusal pydantic collects.
         # The stream path bounds its scope the same way, so both refuse a long payload alike.
         cls._validate_length(len(data))
