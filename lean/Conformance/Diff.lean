@@ -22,7 +22,11 @@ def diffPath (shape : Desc) (value : Value) (root : Bytes) (claim : Json) :
       -- A type-level address may exist while the selected value has no readable node.
       match nodeRoot shape value index, buildProof shape value index with
       | .ok _, .ok _ => .error "walked a path the specification refuses"
-      | _, _ => return ()
+      | node, branch =>
+        -- The native path refuses the same walk, for the same reason.
+        let encoded ← encodingOf shape value
+        sameOutcome "native node" ((Native.nodeRoot shape encoded index).map (·.data)) node
+        sameOutcome "native branch" (nodesOf (Native.buildProof shape encoded index)) branch
   | some written =>
     let index ← orFail "index" resolved
     let node ← orFail "node" (nodeRoot shape value index)
@@ -30,6 +34,11 @@ def diffPath (shape : Desc) (value : Value) (root : Bytes) (claim : Json) :
     sameNumber "index" index (← number written)
     sameBytes "node" node (← bytes (← field claim "node"))
     sameNodes "branch" branch (← hexList claim "proof")
+    let encoded ← encodingOf shape value
+    sameOutcome "native node" ((Native.nodeRoot shape encoded index).map (·.data)) (.ok node)
+    sameOutcome "native branch" (nodesOf (Native.buildProof shape encoded index)) (.ok branch)
+    sameOutcome "native verification" (Native.verifyMerkleProof ⟨node⟩ (branch.map (⟨·⟩)) index ⟨root⟩)
+      (verifyMerkleProof node branch index root)
     unless (← orFail "verification" (verifyMerkleProof node branch index root)) do
       .error s!"the branch for {index} does not rebuild the root"
 
@@ -40,6 +49,9 @@ def diffMultiproof (shape : Desc) (value : Value) (root : Bytes) (claim : Json) 
   let supplied ← orFail "multiproof" (buildMultiproof shape value indices)
   let leaves ← indices.mapM fun index => orFail "leaf" (nodeRoot shape value index)
   sameNodes "multiproof" supplied (← hexList claim "proof")
+  sameOutcome "native multiproof" (nodesOf (Native.buildMultiproof shape (← encodingOf shape value) indices)) (.ok supplied)
+  sameOutcome "native verification" (Native.verifyMerkleMultiproof (leaves.map (⟨·⟩)) (supplied.map (⟨·⟩)) indices ⟨root⟩)
+    (verifyMerkleMultiproof leaves supplied indices root)
   unless (← orFail "verification" (verifyMerkleMultiproof leaves supplied indices root)) do
     .error "the multiproof does not rebuild the root"
 
@@ -60,7 +72,11 @@ def diffCase (entry : Json) : Except String Unit := do
   sameBytes "encoded" (← orFail "encoding" (serialize shape value))
     (← bytes (← field entry "serialized"))
   sameBytes "rooted" (← orFail "rooting" (hashTreeRoot shape value)) root
-  let decoded ← orFail "decoding" (deserialize shape (← bytes (← field entry "serialized")))
+  let serialized ← bytes (← field entry "serialized")
+  -- The native path roots the encoding directly, and is defined for well-formed types only.
+  if wellFormed then
+    sameBytes "native rooted" (← orFail "native rooting" (Native.hashTreeRoot shape ⟨serialized⟩)).data root
+  let decoded ← orFail "decoding" (deserialize shape serialized)
   if decoded != value then .error "decoded a different value than the one encoded"
   if let some written := field? entry "default" then
     let expected ← orFail "default" (valueOf shape spelling written)

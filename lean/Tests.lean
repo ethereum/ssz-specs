@@ -1,5 +1,6 @@
 import Ssz
 import Tests.Hash.Sha256
+import Tests.Native
 
 /-! Regression checks independent of the Python SSZ implementation. -/
 
@@ -47,6 +48,8 @@ example (left right : Bytes) :
 def main : IO Unit := do
   -- Published vectors validate SHA-256 before it is used in the SSZ regressions.
   Tests.Sha256.run
+  -- The native kernels agree with their references and with the machine model.
+  Tests.Native.run
 
   -- A splice cannot turn a nonexistent outer node into a valid index.
   expect "zero outer index" ((gindexConcat 0 3).isOk == false)

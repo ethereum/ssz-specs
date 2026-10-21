@@ -201,3 +201,13 @@ lean-test: lean
 [group('lean')]
 lean-parity *args: lean
     uv run --locked --group test pytest tests/parity --no-cov "$@"
+
+# Print the native kernels from their Lean programs, into the committed assembler file
+[group('lean')]
+lean-kernels:
+    cd lean && lake build SszNative.Kernel.Assembly && lake env lean --run scripts/kernels.lean
+
+# Time the native Lean implementation on beacon-chain workloads
+[group('lean')]
+lean-bench:
+    cd lean && lake build bench && ./.lake/build/bin/bench

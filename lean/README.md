@@ -1,7 +1,8 @@
 # Lean
 
-A pure Lean 4 implementation of SSZ, with machine-checked codec and Merkle-tree proofs.
+A Lean 4 implementation of SSZ, with machine-checked codec and Merkle-tree proofs.
 Types are represented as data, so one encoder, decoder, and merkleizer cover the implemented universe.
+A native implementation, built on native x86-64 kernels, is proved to compute the same roots, verdicts, and proofs.
 The package has no third-party dependencies.
 
 ## Reading this package
@@ -25,6 +26,42 @@ Ssz/Hash      pure SHA-256
 Conformance   readers for the released vectors and for the differential corpus
 Tests         independent regression checks
 ```
+
+## The native implementation
+
+`SszNative/` reads roots, decoding verdicts, nodes, and branches straight from encodings.
+It never builds the value an encoding holds.
+
+```text
+SszNative/Asm        x86-64 instructions as data, their model, and their printer
+SszNative/Kernel     the kernels as programs, and the assembler file they print to
+SszNative            hashing, trees, decoding checks, roots, and branches over byte buffers
+SszNative/Proofs     the proofs that all of it computes the specification
+native/              the printed kernels, and the C bindings that call them
+```
+
+Each kernel is a Lean list of x86-64 instructions.
+The proofs run that list on a model of the processor.
+The emitter prints the same list as assembly.
+
+Three kernels hash pairs of nodes.
+One hashes sixteen pairs at once with AVX-512.
+The two others use the SHA instructions, on one pair or on two pairs with their rounds interleaved.
+
+Two more kernels gather fields out of records into zero-padded nodes.
+
+Every operation a kernel stands in for has a Lean body, which is its meaning in the logic.
+Compiled code calls the kernel where the processor has its instructions, and the Lean body elsewhere.
+
+A declaration can be compiled once into a schema, so that each value read against it skips walking the declaration.
+A struct of fixed-size fields, such as a block header, then costs a few copies and one hashing call per tree level.
+
+A long sequence of fixed-size records is rooted as columns: one column per field, hashed across all records at once.
+Wide trees and long sequences are split into tasks.
+Tasks are pure, so the parallel result is the sequential one by definition.
+
+`native/kernels_x86.S` is committed, so building needs no extra step.
+`just lean-kernels` prints it again, and the regressions fail when it is stale.
 
 ## Scope
 
@@ -83,6 +120,8 @@ just lean-spec     # build the executable specification alone, without its proof
 just lean          # build the package and check its proofs
 just lean-test     # run the released vectors and the independent Lean regressions
 just lean-parity   # compare generated cases with the Python implementation
+just lean-kernels  # print the native kernels from their Lean programs
+just lean-bench    # time the native implementation on beacon-chain workloads
 ```
 
 The toolchain is pinned in `lean-toolchain`.
@@ -156,6 +195,20 @@ and exhaustive canonical re-encoding checks for one- and two-byte inputs across 
   The theorem covers byte messages shorter than 2^61 bytes, as required by the 64-bit bit-length field.
   [Published constants](Ssz/Proofs/Hash/Sha256Constants.lean): the eight chaining words and sixty-four round constants are checked against the square and cube roots of the first primes, rather than trusted as literals.
 
+### The native implementation
+
+- [Kernels](SszNative/Proofs/Kernel/Avx512/Main.lean): run on the model of the processor from their first instruction, the sixteen-lane kernel returns and writes each pair's SHA-256 digest where the caller asked.
+  It changes no other memory and no register the calling convention keeps.
+  The [SHA instruction kernel](SszNative/Proofs/Kernel/ShaNi/Main.lean) is proved the same way.
+  The gathering kernels, [general](SszNative/Proofs/Kernel/Gather.lean) and [by width](SszNative/Proofs/Kernel/GatherNode.lean), copy each field into its slot and zero the rest.
+- [References](SszNative/Proofs/Reference.lean): what each kernel writes is what the Lean body it stands in for computes, byte by byte.
+- [Decoding checks](SszNative/Proofs/Validate/Main.lean): the check refuses exactly what deserialization refuses, with the same error, for every declaration.
+- [Roots](SszNative/Proofs/Root/Main.lean): the root read from an encoding is the root of the value it decodes to, for every well-formed declaration.
+  The buffer must be addressable: 64 times its size fits a machine word, which every array on a 64-bit machine satisfies.
+- [Branches](SszNative/Proofs/Branch/Main.lean): nodes, branches, and multiproofs read from an encoding are the specification's, refusals included.
+- [Compiled declarations](SszNative/Proofs/Schema/Main.lean): a declaration compiled once checks and roots values exactly as the declaration itself does.
+- [Verification](SszNative/Proofs/Verify.lean): the native verifiers answer exactly what the specification's verifiers answer.
+
 ### Domains and limits
 
 Composite serialization and deserialization both require fewer than 2^32 bytes at each composite level.
@@ -175,6 +228,14 @@ The proofs establish the stated properties of the formal definitions.
 Agreement between those definitions and the English SSZ specification remains a review obligation.
 The SHA-256 tables are derived: each constant is checked against the prime root FIPS 180-4 takes it from, so the model and the implementation cannot share a typo.
 No theorem assumes SHA-256 is injective or collision-free.
+
+The native implementation adds four trusted pieces.
+The machine model in `SszNative/Asm/Semantics.lean` must describe what the processor does.
+The regressions run every kernel, in every layout, on both the model and the processor, and compare.
+The model leaves out faults and the direction flag, which the callers rule out, as its header says.
+The printer and the assembler must turn each instruction list into the machine code the model reads.
+The C bindings in `native/` must pick a kernel, split a count between the two hashing kernels, and check bounds, as their comments say.
+The Lean compiler must run the tasks a wide tree is split into.
 
 Kernel checking trusts Lean's kernel and standard logical foundations.
 The axiom audit runs after the complete specification has been imported, so newly imported proof modules are included automatically.
