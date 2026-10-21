@@ -25,7 +25,8 @@ def proofTreeNode (source : List (Nat × Bytes)) (height index : Nat) : Bytes :=
   -- The global height minus the index depth is exactly the subtree height still to reconstruct.
   (proofTree source (height - levelOf index) index).root
 
-private theorem proofTree_supplied (source : List (Nat × Bytes)) (height index : Nat)
+/-- A supplied node is a leaf of the rebuilt tree, however much height is left below it. -/
+theorem proofTree_supplied (source : List (Nat × Bytes)) (height index : Nat)
     {value : Bytes} (found : nodeAt source index = some value) :
     proofTree source height index = .leaf value := by
   -- A supplied node ends reconstruction immediately at every remaining height.

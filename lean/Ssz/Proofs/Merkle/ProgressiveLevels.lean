@@ -1,4 +1,4 @@
-import Ssz.Proofs.Merkle.Gindex
+import Ssz.Merkle.Gindex
 
 /-! Where each level of a progressive spine begins, and how deep its chunks sit. -/
 

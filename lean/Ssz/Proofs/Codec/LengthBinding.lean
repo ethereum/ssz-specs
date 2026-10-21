@@ -33,4 +33,38 @@ theorem activeFieldsWord_injective {left right : List Bool}
   rw [activeFieldsWord_bit left position (by omega), activeFieldsWord_bit right position (by omega)] at bit
   simpa [insideLeft, insideRight] using bit
 
+/-- Equal layout words carry the same flag at every position of the word, set or clear. -/
+theorem activeFieldsWord_flags {left right : List Bool}
+    (same : activeFieldsWord left = activeFieldsWord right) {position : Nat}
+    (inside : position < bitsPerChunk) :
+    left[position]?.getD false = right[position]?.getD false := by
+  -- A position past the end of a layout reads as clear, like a gap inside it.
+  have bit := congrArg
+    (fun bytes : Bytes => (bytes[position / 8]! >>> UInt8.ofNat (position % 8)) &&& 1 == 1) same
+  simpa only [activeFieldsWord_bit _ position inside] using bit
+
+/--
+Equal layout words come from the same legal layout, whatever the two lengths.
+A legal layout ends on a set position, which marks where it stops.
+Without that rule, a layout and its copy with clear positions appended would share a word.
+-/
+theorem activeFieldsWord_injective_of_legal {left right : List Bool}
+    (leftEnds : left.getLast? = some true) (rightEnds : right.getLast? = some true)
+    (leftBounded : left.length ≤ bitsPerChunk) (rightBounded : right.length ≤ bitsPerChunk)
+    (same : activeFieldsWord left = activeFieldsWord right) : left = right := by
+  rw [List.getLast?_eq_getElem?] at leftEnds rightEnds
+  have ⟨leftInside, _⟩ := List.getElem?_eq_some_iff.mp leftEnds
+  have ⟨rightInside, _⟩ := List.getElem?_eq_some_iff.mp rightEnds
+  -- Each last position is set in its own layout, so it must be set in the other too.
+  have atLeft := activeFieldsWord_flags same (position := left.length - 1) (by omega)
+  have atRight := activeFieldsWord_flags same (position := right.length - 1) (by omega)
+  rw [leftEnds] at atLeft
+  rw [rightEnds] at atRight
+  apply activeFieldsWord_injective _ leftBounded same
+  -- The shorter layout reads clear at the longer one's last position, which is set.
+  rcases Nat.lt_trichotomy left.length right.length with shorter | equal | longer
+  · rw [List.getElem?_eq_none (by omega)] at atRight; simp at atRight
+  · exact equal
+  · rw [List.getElem?_eq_none (by omega)] at atLeft; simp at atLeft
+
 end Ssz

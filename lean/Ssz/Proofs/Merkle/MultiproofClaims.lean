@@ -24,7 +24,7 @@ theorem ParentsAgree.branchConsistent {tree : Nat → Bytes} {height index : Nat
     rw [if_neg (by omega), adjacent]
     exact parents _ low bound even
   · rw [if_pos odd]
-    obtain ⟨self, sibling⟩ := gindexSibling_odd odd
+    obtain ⟨-, sibling⟩ := gindexSibling_odd odd
     have side : 2 ≤ gindexSibling (index >>> step) := by omega
     have level : levelOf (gindexSibling (index >>> step)) ≤ height :=
       by rw [levelOf_sibling low]; exact bound

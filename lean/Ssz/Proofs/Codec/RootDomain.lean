@@ -1,6 +1,4 @@
 import Ssz.Proofs.Codec.RootLaws
-import Ssz.Proofs.Codec.Admits
-import Ssz.Proofs.Codec.Table
 import Ssz.Proofs.Merkle.Widths
 import Ssz.Proofs.Type.Equality
 
@@ -18,18 +16,11 @@ def LayoutFits (layout : MerkleLayout) : Prop :=
         Fits shape value ∧ shape.wellFormed = .ok ()) ∧
   ∀ capacity, layout.limit = some capacity → layout.leaves.count ≤ capacity
 
-private theorem packed_width (data : Bytes) :
-    ∀ chunk ∈ packBytes data, chunk.size = bytesPerChunk := by
-  -- Packing fills each final partial node with zeros.
-  intro chunk member
-  obtain ⟨i, within, rfl⟩ := Array.mem_iff_getElem.mp member
-  exact packBytes_chunk_size data i within
-
 private theorem packed_fits (data : Bytes) (limit : Option Nat) (mixin : Option Bytes)
     (bounded : ∀ capacity, limit = some capacity → chunksForBytes data.size ≤ capacity) :
     LayoutFits (.packing (packBytes data) limit mixin) := by
   -- The byte count rounds up to whole nodes, which must fit the declared capacity.
-  exact ⟨packed_width data, by simpa [MerkleLayout.packing, Leaves.count, chunksForBytes] using bounded⟩
+  exact ⟨packBytes_mem_size data, by simpa [MerkleLayout.packing, Leaves.count, chunksForBytes] using bounded⟩
 
 private theorem basic_encoding {shape : Desc} {value : Value}
     (basic : shape.isBasic = true) (fitted : Fits shape value) :
@@ -312,11 +303,13 @@ theorem hashTreeRootAt_total (budget : Nat) (shape : Desc) (value : Value)
       | none =>
         simp only [limit, Except.ok.injEq] at rooted
         subst contents
-        simp [hashTreeRootAt, laid, materialized, limit, Bind.bind, Except.bind, pure, Except.pure]
+        simp only [hashTreeRootAt, bind, Except.bind, laid, materialized, limit, pure, Except.pure,
+          Except.ok.injEq]
         cases layout.mixin <;> rfl
       | some capacity =>
         simp only [limit] at rooted
-        simp [hashTreeRootAt, laid, materialized, limit, rooted, Bind.bind, Except.bind, pure, Except.pure]
+        simp only [hashTreeRootAt, bind, Except.bind, laid, materialized, limit, rooted, pure, Except.pure,
+          Except.ok.injEq]
         cases layout.mixin <;> rfl
     · cases layout.mixin <;> simp [sized]
 

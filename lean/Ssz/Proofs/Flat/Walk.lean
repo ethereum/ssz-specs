@@ -62,17 +62,6 @@ theorem foldUpTo_headD (combine : α → α → α) (zero : α) :
     -- Folding the level and folding the leaves it stands for agree.
     rw [paddedList_pairLevel, ← subtreeRoot_succ]
 
-/-- A walk that starts with something on the level ends with something on it. -/
-theorem foldUpTo_ne_nil (combine : α → α → α) (zero : α) :
-    ∀ (remaining folded : Nat) {level : List α}, level ≠ [] →
-      foldUpTo combine zero remaining folded level ≠ [] := by
-  intro remaining
-  induction remaining with
-  | zero => intro _ _ nonempty; exact nonempty
-  | succ remaining ih =>
-    -- One level folded away still has something on it, and the rest is the same claim.
-    exact fun folded _ nonempty => ih (folded + 1) (pairLevel_ne_nil combine _ nonempty)
-
 /-- The walk computes the tree the specification defines, over the leaves it was given. -/
 theorem merkleizeFlat_eq (combine : α → α → α) (zero : α) (depth : Nat) (level : List α) :
     merkleizeFlat combine zero depth level

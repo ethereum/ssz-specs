@@ -43,15 +43,6 @@ theorem gindexConcat_root_right {outer : Nat} (named : 1 ≤ outer) :
   -- The index one has no path turns to append.
   simp [gindexConcat_eq named (Nat.le_refl 1), show Nat.log2 1 = 0 from rfl]
 
-/-- Splicing at the root preserves the inner node. -/
-theorem gindexConcat_root_left {inner : Nat} (named : 1 ≤ inner) :
-    gindexConcat 1 inner = .ok inner := by
-  -- The inner leading bit replaces the outer root bit without changing any path turn.
-  rw [gindexConcat_eq (Nat.le_refl 1) named]
-  -- The leading power of two is no larger than a valid generalized index.
-  have bound := (gindexDepth_bounds named).1
-  simp [Nat.add_sub_cancel' bound]
-
 /-- A successful splice has two valid operands and the prescribed leading-bit arithmetic. -/
 theorem gindexConcat_facts {outer inner result : Nat}
     (joined : gindexConcat outer inner = .ok result) :
@@ -59,7 +50,8 @@ theorem gindexConcat_facts {outer inner result : Nat}
   -- Neither operand may be zero, because zero has no root bit to preserve.
   simp only [gindexConcat, gindexDepth] at joined
   split at joined <;> split at joined <;>
-    simp_all [Bind.bind, Except.bind, pure, Except.pure] <;> omega
+    simp_all [Bind.bind, Except.bind, pure, Except.pure]
+  omega
 
 /-- Successful splicing always names a real node. -/
 theorem gindexConcat_positive {outer inner result : Nat}
@@ -94,22 +86,6 @@ theorem gindexConcat_depth {outer inner result : Nat}
         Nat.mul_le_mul_right _ (by omega)
       _ = 2 ^ (Nat.log2 outer + Nat.log2 inner + 1) := by
         simp [Nat.pow_add, Nat.pow_succ, Nat.mul_right_comm]
-
-/-- Grouping adjacent subtree paths does not change the node they select. -/
-theorem gindexConcat_assoc {first second third left right : Nat}
-    (front : gindexConcat first second = .ok left)
-    (suffix : gindexConcat second third = .ok right) :
-    gindexConcat left third = gindexConcat first right := by
-  -- Both groupings retain the same low turns below the same outer leading bit.
-  obtain ⟨firstNamed, secondNamed, leftValue⟩ := gindexConcat_facts front
-  obtain ⟨_, thirdNamed, rightValue⟩ := gindexConcat_facts suffix
-  rw [gindexConcat_eq (gindexConcat_positive front) thirdNamed,
-    gindexConcat_eq firstNamed (gindexConcat_positive suffix), gindexConcat_depth suffix,
-    Nat.pow_add, leftValue, rightValue]
-  have below := Nat.mul_le_mul_right (2 ^ Nat.log2 third) (gindexDepth_bounds secondNamed).1
-  simp only [Nat.add_mul, Nat.mul_assoc, Nat.sub_mul]
-  congr 1
-  omega
 
 /-- A terminal path step always names the right-hand mixing word. -/
 theorem resolveStep_terminal_index {shape : Desc} {step : PathStep} {index : Nat}
@@ -164,36 +140,5 @@ inductive PathThrough : Desc → List PathStep → Desc → Nat → Prop where
       (through : PathThrough child rest target tail)
       (joined : gindexConcat head tail = .ok whole) :
       PathThrough shape (step :: rest) target whole
-
-/-- A prefix's composed index is the result of the executable path resolver. -/
-theorem PathThrough.resolves {shape child : Desc} {path : List PathStep} {index : Nat}
-    (through : PathThrough shape path child index) : getGeneralizedIndex shape path = .ok index := by
-  -- Each declared prefix step supplies exactly the evidence the executable resolver needs.
-  induction through with
-  | nil => rfl
-  | cons resolved _ joined ih => exact getGeneralizedIndex_step resolved ih joined
-
-/-- Resolving a suffix inside the reached type gives the same result as resolving the full path. -/
-theorem PathThrough.append {shape child : Desc} {path : List PathStep} {index : Nat}
-    (through : PathThrough shape path child index) (rest : List PathStep) (inner whole : Nat)
-    (suffix : getGeneralizedIndex child rest = .ok inner)
-    (joined : gindexConcat index inner = .ok whole) :
-    getGeneralizedIndex shape (path ++ rest) = .ok whole := by
-  -- Associativity makes the grouping of subtree paths irrelevant.
-  induction through generalizing whole with
-  | nil =>
-    rw [gindexConcat_root_left (getGeneralizedIndex_positive _ _ _ suffix)] at joined
-    cases joined
-    exact suffix
-  | @cons shape child target step path head tail index resolved through front ih =>
-    -- First join the remaining prefix to the suffix, then reattach the outermost step.
-    let combined := tail * 2 ^ Nat.log2 inner + (inner - 2 ^ Nat.log2 inner)
-    have tailJoined : gindexConcat tail inner = .ok combined :=
-      gindexConcat_eq (getGeneralizedIndex_positive _ _ _ through.resolves)
-        (getGeneralizedIndex_positive _ _ _ suffix)
-    have result := ih combined suffix tailJoined
-    apply getGeneralizedIndex_step resolved result
-    rw [← gindexConcat_assoc front tailJoined]
-    exact joined
 
 end Ssz

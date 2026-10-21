@@ -1,4 +1,5 @@
-import Ssz.Proofs.Codec.Proof
+import Ssz.Codec.Proof
+import Ssz.Proofs.Merkle.Gindex
 
 /-! Progressive chunk indices select their own leaf through the widening Merkle spine. -/
 
@@ -100,20 +101,5 @@ theorem progressiveChunkGindex_selection (chunk count : Nat) (inside : chunk < c
     omega
   · rw [turnsDepth, gindexBit_parity, ancestor]; rfl
   · simpa only [turnsDepth, Nat.pow_zero] using walked
-
-/-- Reading a progressive chunk continues into the bounded level that contains precisely that chunk. -/
-theorem progressiveNode_chunk (budget : Nat) (layout : MerkleLayout) (chunk : Nat)
-    (inside : chunk < layout.leaves.count) :
-    let index := progressiveChunkGindex chunk
-    ∃ stop : SpineStop,
-      progressiveNode budget layout index (Nat.log2 index - 1) 0 1 =
-        boundedNode budget layout index stop.depth stop.leavesFrom stop.capacity ∧
-      stop.capacity = 2 ^ stop.depth ∧
-      stop.leavesFrom + gindexBelow index stop.depth = chunk ∧ stop.leavesFrom < layout.leaves.count := by
-  -- The selected left turn hands the remaining bits to the bounded subtree's leaf reader.
-  obtain ⟨stop, _, _, walked, left, capacity, selected, reached⟩ :=
-    progressiveChunkGindex_selection chunk layout.leaves.count inside
-  refine ⟨stop, ?_, capacity, selected, reached⟩
-  simp [progressiveNode, walked, left, Bind.bind, Except.bind]
 
 end Ssz

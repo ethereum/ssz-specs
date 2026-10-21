@@ -30,7 +30,7 @@ theorem collectPathIndices_info {indices paths : List Nat}
     cases measured : gindexLength index with
     | error error => simp [getPathIndices, measured, Bind.bind, Except.bind] at collected
     | ok depth =>
-      obtain ⟨same, positive, nonzero⟩ := gindexLength_ok measured
+      obtain ⟨same, -, nonzero⟩ := gindexLength_ok measured
       subst depth
       cases rec : collectPathIndices rest with
       | error error => simp [getPathIndices, measured, rec, Bind.bind, Except.bind, Pure.pure, Except.pure] at collected
@@ -66,7 +66,8 @@ theorem getHelperIndices_frontier {indices helpers : List Nat}
     | error error => simp [accepted, collected, Bind.bind, Except.bind] at built
     | ok paths =>
       obtain ⟨shape, valid⟩ := collectPathIndices_info collected
-      simp [accepted, collected, Bind.bind, Except.bind, Pure.pure, Except.pure] at built
+      simp only [bind, Except.bind, accepted, collected, pure, Except.pure, List.contains_eq_mem,
+        Except.ok.injEq] at built
       subst helpers
       refine ⟨rejectRelated_nonempty accepted, valid, ?_⟩
       intro index

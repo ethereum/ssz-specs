@@ -87,7 +87,7 @@ theorem spineWalk_append_left (count outer combined extra : Nat)
         simp [turn, Pure.pure, Except.pure] at walked
         simp [← walked, Pure.pure, Except.pure]
       | true =>
-        simp [turn] at walked ⊢
+        simp only [turn, Bool.not_true, Bool.false_eq_true, ↓reduceIte] at walked ⊢
         exact ih _ _ _ walked left
 
 /-- A suffix appended beneath a progressive composite leaf reads that nested value directly. -/
@@ -130,8 +130,8 @@ theorem nodeRoot_left_contents (shape : Desc) (value : Value) (layout : MerkleLa
   | zero => omega
   | succ budget =>
     simp only [Nat.add_sub_cancel]
-    simp [nodeRootAt, laid, show ¬index < 1 by omega, show index ≠ 1 by omega,
-      gindexLength, gindexDepth, depthPositive, Bind.bind, Except.bind]
+    simp only [nodeRootAt, show ¬index < 1 by omega, ↓reduceIte, beq_iff_eq, show index ≠ 1 by omega, bind,
+      Except.bind, laid, gindexLength, gindexDepth, depthPositive, bne_iff_ne, ne_eq, ite_not]
     cases mixed : layout.mixin with
     | none => simp; cases layout.limit <;> rfl
     | some word => simp [left word mixed]; cases layout.limit <;> rfl

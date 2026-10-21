@@ -8,7 +8,8 @@ namespace Ssz
 theorem gindexParent_child (index : Nat) (rightSide : Bool) :
     gindexParent (gindexChild index rightSide) = index := by
   -- A child is the parent doubled, with one added on the right, and halving drops that.
-  cases rightSide <;> simp [gindexParent, gindexChild] <;> omega
+  cases rightSide <;> simp [gindexParent, gindexChild]
+  omega
 
 /-- Siblings come in pairs, so naming one twice names the first again. -/
 theorem gindexSibling_sibling (index : Nat) : gindexSibling (gindexSibling index) = index := by

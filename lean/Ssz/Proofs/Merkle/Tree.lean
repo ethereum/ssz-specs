@@ -74,6 +74,14 @@ theorem packBytes_chunk_size (data : Bytes) (i : Nat) (within : i < (packBytes d
     Array.size_extract]
   omega
 
+/-- Packing pads even the final partial node to one complete hash operand. -/
+theorem packBytes_mem_size (data : Bytes) :
+    ∀ chunk ∈ packBytes data, chunk.size = bytesPerChunk := by
+  -- A member of the array sits at some position, and every position is one node wide.
+  intro chunk member
+  obtain ⟨i, within, rfl⟩ := Array.mem_iff_getElem.mp member
+  exact packBytes_chunk_size data i within
+
 /-- Bytes inside the payload retain their positions when divided into nodes. -/
 theorem packBytes_get (data : Bytes) (i j : Nat) (node : i < (packBytes data).size)
     (position : j < bytesPerChunk) (payload : i * bytesPerChunk + j < data.size) :

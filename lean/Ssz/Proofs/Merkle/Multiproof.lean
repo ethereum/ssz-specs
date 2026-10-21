@@ -182,49 +182,6 @@ theorem foldLevel_complete {depth : Nat} {nodes : List (Nat × Bytes)}
   exact ⟨parents ++ kept,
     by simp [foldLevel, built, Bind.bind, Except.bind, Pure.pure, Except.pure]⟩
 
-/-- A successful level fold has checked the sibling of every node it consumes. -/
-theorem foldLevelNodes_siblings {depth : Nat} {nodes pending : List (Nat × Bytes)}
-    {parents kept : List (Nat × Bytes)}
-    (built : foldLevelNodes depth nodes pending = .ok (parents, kept)) :
-    SiblingsPresent depth nodes pending := by
-  -- Both the even and odd cases inspect the original node set before proceeding.
-  induction pending generalizing parents kept with
-  | nil => simp [SiblingsPresent]
-  | cons pair rest ih =>
-    rcases pair with ⟨index, value⟩
-    by_cases atDepth : levelOf index = depth
-    · rcases Nat.mod_two_eq_zero_or_one index with even | odd
-      · cases sibling : nodeAt nodes (index + 1) <;> cases rec : foldLevelNodes depth nodes rest <;>
-          simp [foldLevelNodes, atDepth, even, sibling, rec, throw, Bind.bind, Except.bind] at built
-        have side : gindexSibling index = index + 1 := by have := gindexSibling_even even; omega
-        have tail := ih rec
-        have present := nodeAt_member sibling
-        simp only [SiblingsPresent, List.mem_cons] at tail ⊢
-        grind
-      · cases sibling : nodeAt nodes (index - 1) <;>
-          simp [foldLevelNodes, atDepth, odd, sibling, throw] at built
-        have tail := ih built
-        have side : gindexSibling index = index - 1 := by have := gindexSibling_odd odd; omega
-        have present := nodeAt_member sibling
-        simp only [SiblingsPresent, List.mem_cons] at tail ⊢
-        grind
-    · cases rec : foldLevelNodes depth nodes rest <;>
-        simp [foldLevelNodes, atDepth, rec, Bind.bind, Except.bind] at built
-      have tail := ih rec
-      simp only [SiblingsPresent, List.mem_cons] at tail ⊢
-      grind
-
-/-- A level fold succeeds exactly when all of its consumed nodes have siblings. -/
-theorem foldLevel_success_iff {depth : Nat} {nodes : List (Nat × Bytes)} :
-    (∃ result, foldLevel depth nodes = .ok result) ↔ SiblingsPresent depth nodes nodes := by
-  -- The worker checks precisely these positions, and concatenation cannot fail.
-  constructor
-  · rintro ⟨result, built⟩
-    unfold foldLevel at built
-    cases rec : foldLevelNodes depth nodes nodes <;> simp [rec, Bind.bind, Except.bind] at built
-    exact foldLevelNodes_siblings rec
-  · exact foldLevel_complete
-
 /-- Reading any index sequence from a tree yields a node set agreeing with that tree. -/
 theorem nodesAgree_zip_map (tree : Nat → Bytes) (indices : List Nat) :
     NodesAgree tree (indices.zip (indices.map tree)) := by
@@ -367,7 +324,7 @@ theorem FrontierAt.fold {indices helpers : List Nat}
     (folded : foldLevel (depth + 1) nodes = .ok result) :
     FrontierAt indices helpers depth result := by
   -- Nodes below the frontier are replaced by their parents, while shallower claims remain.
-  obtain ⟨nonempty, valid, _⟩ := getHelperIndices_frontier built
+  obtain ⟨-, valid, _⟩ := getHelperIndices_frontier built
   -- The output-index characterization distinguishes retained shallow nodes from newly created parents.
   have positions := foldLevel_indices folded
   refine ⟨?_, ?_, ?_⟩

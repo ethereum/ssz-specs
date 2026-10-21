@@ -1,4 +1,4 @@
-import Ssz.Proofs.Merkle.MultiproofClaims
+import Ssz.Proofs.Merkle.MultiproofAcceptance
 import Ssz.Proofs.Merkle.HelperAntichain
 
 /-! Conflicting multiproof claims expose collisions in the hashes actually used to verify them. -/

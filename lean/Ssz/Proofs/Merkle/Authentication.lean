@@ -131,7 +131,7 @@ private theorem calculateMerkleRoot_shape {leaf root : Bytes} {proof : List Byte
     simp only [measured, Bind.bind, Except.bind] at built
     split at built
     · simp at built
-    · simp [pure, Except.pure] at built
+    · simp only [pure, Except.pure, Except.ok.injEq] at built
       exact ⟨by simp_all, built⟩
 
 /--

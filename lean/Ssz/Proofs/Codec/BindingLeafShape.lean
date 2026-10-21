@@ -1,4 +1,4 @@
-import Ssz.Proofs.Codec.Layout
+import Ssz.Codec.Layout
 
 /-! Leaf shapes record the positions and types needed to align commitments. -/
 

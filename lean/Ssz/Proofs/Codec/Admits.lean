@@ -6,23 +6,15 @@ import Ssz.Type.Valid
 namespace Ssz
 
 /-- Throwing a codec error returns that error without a successful result. -/
-private theorem throw_error {α : Type} (fault : Err) :
+theorem throw_error {α : Type} (fault : Err) :
     (throw fault : Except Err α) = .error fault := rfl
 
-/-- A chain of checks that all passed had to pass its first one. -/
-theorem firstCheckPassed {alpha beta} {step : Except Err alpha}
+/-- A chain of checks that passed passed its first check, and then the rest of the chain. -/
+theorem checksPassed {alpha beta} {step : Except Err alpha}
     {rest : alpha → Except Err beta} {answer : beta} (chain : step >>= rest = .ok answer) :
-    ∃ carried, step = .ok carried := by
+    ∃ carried, step = .ok carried ∧ rest carried = .ok answer := by
   -- A refusal at the first check is carried out of the chain, so the chain refuses too.
   cases step <;> simp_all [Bind.bind, Except.bind]
-
-/-- What a passed first check leaves is the rest of the chain, which passed as well. -/
-theorem laterChecksPassed {alpha beta} {step : Except Err alpha} {carried : alpha}
-    {rest : alpha → Except Err beta} {answer : beta} (first : step = .ok carried)
-    (chain : step >>= rest = .ok answer) : rest carried = .ok answer := by
-  -- With the first check known to have passed, the chain is the rest of itself.
-  subst first
-  exact chain
 
 /-- The option a selector names is one of the options the union declared. -/
 theorem lookupOption_mem :
@@ -118,6 +110,16 @@ theorem wellFormed_progressiveContainer_names {active : List Bool} {names : List
   simp only [Bind.bind, Except.bind, throw_error] at sound
   repeat' split at sound
   all_goals simp_all
+
+/-- A legal layout ends on a set position and holds at most 256 positions. -/
+theorem wellFormed_progressiveContainer_layout {active : List Bool} {names : List String}
+    {fields : List Desc}
+    (sound : (Desc.progressiveContainer active names fields).wellFormed = .ok ()) :
+    active.getLast? = some true ∧ active.length ≤ maxActiveFields := by
+  rw [Desc.wellFormed] at sound
+  simp only [Bind.bind, Except.bind, throw_error] at sound
+  repeat' split at sound
+  all_goals cases last : active.getLast? <;> simp_all
 
 /-- A union declares every one of its selectors inside the one byte that carries it. -/
 theorem wellFormed_union_selectors {selectors : List Nat} {options : List Desc}
@@ -227,9 +229,8 @@ theorem fits_of_serialize : ∀ (shape : Desc) (value : Value),
     intro sound ⟨_, wrote⟩
     rw [serialize] at wrote
     -- The selector names one of the declared options, and that option was written too.
-    obtain ⟨option, found⟩ := firstCheckPassed wrote
-    have chosen := laterChecksPassed found wrote
-    obtain ⟨body, inner⟩ := firstCheckPassed chosen
+    obtain ⟨option, found, chosen⟩ := checksPassed wrote
+    obtain ⟨body, inner, -⟩ := checksPassed chosen
     have declared := allWellFormed_mem options (wellFormed_union sound) option
       (lookupOption_mem selectors options selector option found)
     exact .compatibleUnion
@@ -246,7 +247,7 @@ theorem fits_of_serialize : ∀ (shape : Desc) (value : Value),
     obtain ⟨_, wrote⟩ := made
     -- A struct writes its fields before it lays them out, so the fields were written.
     rw [serializeStruct] at wrote
-    obtain ⟨parts, made⟩ := firstCheckPassed wrote
+    obtain ⟨parts, made, -⟩ := checksPassed wrote
     exact ih sound ⟨parts, made⟩
   | case23 => exact ⟨rfl, by simp⟩
   -- Successful field collection proves both the first field and the remaining paired fields.
@@ -254,7 +255,7 @@ theorem fits_of_serialize : ∀ (shape : Desc) (value : Value),
     rename_i sound made
     obtain ⟨_, wrote⟩ := made
     rw [serializeFields] at wrote
-    obtain ⟨head, wroteHead⟩ := firstCheckPassed wrote
+    obtain ⟨head, wroteHead, -⟩ := checksPassed wrote
     obtain ⟨tail, wroteTail⟩ := secondCheckPassed wrote
     obtain ⟨paired, each⟩ := ihTail (allWellFormed_tail sound) ⟨tail, wroteTail⟩
     refine ⟨by simp [paired], ?_⟩
@@ -276,7 +277,7 @@ theorem fits_of_serialize : ∀ (shape : Desc) (value : Value),
     obtain ⟨_, wrote⟩ := made
     -- A sequence writes its elements before it lays them out, so the elements were written.
     rw [serializeSequence] at wrote
-    obtain ⟨parts, encoded⟩ := firstCheckPassed wrote
+    obtain ⟨parts, encoded, -⟩ := checksPassed wrote
     exact ih sound ⟨parts, encoded⟩ held member
   | case27 => simp_all
   -- Every collected sequence value is either the first element or belongs to the successfully encoded suffix.
@@ -284,7 +285,7 @@ theorem fits_of_serialize : ∀ (shape : Desc) (value : Value),
     rename_i sound made held member
     obtain ⟨_, wrote⟩ := made
     rw [serializeEach] at wrote
-    obtain ⟨head, wroteHead⟩ := firstCheckPassed wrote
+    obtain ⟨head, wroteHead, -⟩ := checksPassed wrote
     obtain ⟨tail, wroteTail⟩ := secondCheckPassed wrote
     rcases List.mem_cons.mp member with here | later
     · exact here ▸ ihHead sound ⟨head, wroteHead⟩

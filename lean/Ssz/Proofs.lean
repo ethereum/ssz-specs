@@ -38,6 +38,7 @@ import Ssz.Proofs.Codec.JsonRoundTrip
 import Ssz.Proofs.Codec.LayoutLaws
 import Ssz.Proofs.Codec.LayoutMixin
 import Ssz.Proofs.Codec.LayoutProofTree
+import Ssz.Proofs.Codec.LayoutSeparation
 import Ssz.Proofs.Codec.LengthBinding
 import Ssz.Proofs.Codec.MultiproofConstruction
 import Ssz.Proofs.Codec.NestedProof
@@ -83,6 +84,7 @@ import Ssz.Proofs.Merkle.MultiproofSize
 import Ssz.Proofs.Merkle.MultiproofTrace
 import Ssz.Proofs.Merkle.MultiproofTree
 import Ssz.Proofs.Merkle.ProgressiveLevels
+import Ssz.Proofs.Merkle.Singleton
 import Ssz.Proofs.Merkle.Tree
 import Ssz.Proofs.Merkle.Verify
 import Ssz.Proofs.Merkle.Widths

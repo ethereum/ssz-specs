@@ -5,9 +5,6 @@ import Ssz.Proofs.Codec.RoundTrip
 
 namespace Ssz
 
-private theorem throw_error {α : Type} (fault : Err) :
-    (throw fault : Except Err α) = .error fault := rfl
-
 /-- Reading every byte as an integer and writing it at the same width preserves the bytes. -/
 theorem uintBytes_readUint (data : Bytes) :
     uintBytes data.size (readUint data 0 data.size) = data := by
@@ -119,7 +116,6 @@ theorem packBits_unpackBits {data : Bytes} {count : Nat}
       rw [Array.getElem?_eq_none (by simpa using Nat.le_of_not_lt held)]
       simpa [getElem!_pos, inside] using (padding index inside offset small (by omega)).symm
 
-set_option maxRecDepth 4096 in
 private theorem byte_padding (byte : UInt8) (start offset : Fin 8)
     (clear : byte >>> UInt8.ofNat start.val = 0) (above : start.val ≤ offset.val) :
     ((byte >>> UInt8.ofNat offset.val) &&& 1 == 1) = false := by
@@ -129,7 +125,7 @@ private theorem byte_padding (byte : UInt8) (start offset : Fin 8)
     cases byte with
     | ofFin byte =>
       revert byte start offset
-      decide
+      decide +kernel
 
 /-- Fixed bitfields accept only the packed representation with zero high padding. -/
 theorem canonical_bitVector {length : Nat} {data : Bytes} {value : Value}

@@ -64,12 +64,6 @@ theorem readUint_uintBytes (width value : Nat) (bound : value < 2 ^ (8 * width))
   -- This is the round trip with nothing following the integer.
   simpa using readUint_uintBytes_prefix #[] width value bound
 
-/-- A run of bytes read back out of the middle of what it was placed in. -/
-theorem extract_middle (front part tail : Bytes) :
-    (front ++ (part ++ tail)).extract front.size (front.size + part.size) = part := by
-  -- The requested interval skips the prefix and ends before the suffix.
-  simp
-
 /-- The slots a struct's fields and parts stand for. -/
 def slotsOf (fields : List Desc) (parts : List Bytes) : List (Bool × Bytes) :=
   (fields.map Desc.isFixed).zip parts
@@ -319,7 +313,7 @@ theorem leadingWidth_headWidth :
       have rest := ih parts (by simpa using paired)
         (fun pair member w fixed => widths pair (by simp [member]) w fixed)
       cases fixed : field.fixedSize <;>
-        simp_all [slotsOf_cons, headWidth, Desc.isFixed, Desc.leadingWidth] <;> omega
+        simp_all [slotsOf_cons, headWidth, Desc.isFixed, Desc.leadingWidth]
 
 /-- The budget an encoder wrote is one the decoder settles before it reads a field. -/
 theorem structBudget_of_written :
@@ -451,12 +445,6 @@ theorem headOf_inline : ∀ (parts : List Bytes) (start : Nat),
   -- Every payload is included in the header in its original order.
   intro parts
   induction parts <;> simp_all [inlineSlots, headOf, concatParts]
-
-/-- No body follows them, so the fixed part is the whole encoding. -/
-theorem bodyWidth_inline : ∀ (parts : List Bytes), bodyWidth (inlineSlots parts) = 0 := by
-  -- No inline payload contributes to the separate body region.
-  intro parts
-  induction parts <;> simp_all [inlineSlots, bodyWidth]
 
 /-- The bodies of such a sequence are empty. -/
 theorem bodiesOf_inline : ∀ (parts : List Bytes), bodiesOf (inlineSlots parts) = #[] := by
@@ -649,6 +637,7 @@ theorem fieldsFixedSize_pos : ∀ (fields : List Desc) (width : Nat),
   | cons field rest =>
     -- The first field alone already takes a byte, whatever the rest take.
     simp only [Desc.fieldsFixedSize] at fixed
-    split at fixed <;> simp_all <;> omega
+    split at fixed <;> simp_all
+    omega
 
 end Ssz

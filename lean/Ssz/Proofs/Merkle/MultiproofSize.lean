@@ -1,20 +1,8 @@
-import Ssz.Proofs.Merkle.HelperAntichain
+import Ssz.Proofs.Merkle.HelperUniqueness
 
 /-! How many helper nodes a multiproof of several claims at one depth has to carry. -/
 
 namespace Ssz
-
-private theorem dedup_info (indices : List Nat) :
-    List.Sublist indices.eraseDups indices ∧ indices.eraseDups.Nodup := by
-  cases indices with
-  | nil => simp
-  | cons head rest =>
-    rw [List.eraseDups_cons]
-    have filtered := dedup_info (rest.filter fun item => !item == head)
-    exact ⟨.cons_cons _ (filtered.1.trans List.filter_sublist),
-      List.nodup_cons.mpr ⟨by simp, filtered.2⟩⟩
-termination_by indices.length
-decreasing_by have := List.length_filter_le (fun item => !item == head) rest; simp_all; omega
 
 /-- The paths of a request hold one node per level below the root for each claim. -/
 theorem claimPaths_length (indices : List Nat) :
@@ -34,7 +22,7 @@ theorem getHelperIndices_length_le_claimPaths {indices helpers : List Nat}
   obtain ⟨shape, _⟩ := collectPathIndices_info collected
   rw [← shape, List.length_mergeSort]
   refine Nat.le_trans (List.length_filter_le _ _) ?_
-  refine Nat.le_trans (dedup_info _).1.length_le ?_
+  refine Nat.le_trans (eraseDups_sublist_nodup _).1.length_le ?_
   simp
 
 private theorem sum_map_levelOf {indices : List Nat} {depth : Nat}
@@ -120,7 +108,7 @@ theorem mem_sharedPaths {indices : List Nat} {node : Nat} :
 
 /-- The shared ancestor list names each node it holds once. -/
 theorem sharedPaths_nodup (indices : List Nat) : (sharedPaths indices).Nodup :=
-  (dedup_info _).2
+  (eraseDups_sublist_nodup _).2
 
 private theorem length_filter_split (l : List Nat) (bound : Nat) :
     (l.filter fun node => node < bound).length + (l.filter fun node => bound ≤ node).length

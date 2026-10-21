@@ -172,4 +172,65 @@ theorem valueOf_not_canonical :
   refine ⟨.byteVector 1, .opaque, .str "0x0a", .str "0x0A", .bytes #[10], by simp, ?_, ?_⟩ <;>
     simp [valueOf, collectionHex, lower, upper, Bind.bind, Except.bind, pure, Except.pure]
 
+
+/--
+A struct read stops at the first declared field its object leaves out.
+Fields are read in declaration order, and an earlier refusal also counts.
+-/
+theorem valueOfFields_missing {name : String} {document : Json}
+    (absent : (document.getObjVal? name).toOption = none) :
+    ∀ (fields : List Desc) (names : List String) (spelling : Spelling) (start ordinal : Nat),
+      names.getD ordinal "" = name → start ≤ ordinal → ordinal < start + fields.length →
+      ∃ fault, valueOfFields fields names spelling start document = .error fault := by
+  intro fields
+  induction fields with
+  | nil => intro _ _ _ _ _ _ inside; simp at inside; omega
+  | cons field rest ih =>
+    intro names spelling start ordinal named after inside
+    rw [valueOfFields]
+    cases lookup : (document.getObjVal? (names.getD start "")).toOption with
+    | none => exact ⟨_, rfl⟩
+    | some part =>
+      -- The field found here is not the missing one, so the missing one comes later.
+      have later : ordinal ≠ start := by
+        intro here
+        subst here named
+        rw [absent] at lookup
+        contradiction
+      obtain ⟨fault, failed⟩ := ih names spelling (start + 1) ordinal named (by omega)
+        (by simp at inside; omega)
+      cases read : valueOf field (spelling.part start) part <;>
+        simp [read, failed, Bind.bind, Except.bind]
+
+/--
+A container document missing a declared field is refused.
+The mapping asks every field of the schema to be present with a value.
+-/
+theorem valueOf_container_missing_field {names : List String} {fields : List Desc}
+    {spelling : Spelling} {document : Json} {ordinal : Nat} {name : String}
+    (named : names[ordinal]? = some name) (declared : ordinal < fields.length)
+    (absent : (document.getObjVal? name).toOption = none) :
+    ∃ fault, valueOf (.container names fields) spelling document = .error fault := by
+  obtain ⟨fault, failed⟩ := valueOfFields_missing absent fields names spelling 0 ordinal
+    (by simp [List.getD_eq_getElem?_getD, named]) (Nat.zero_le _) (by omega)
+  -- A document that is not an object, or names an undeclared field, is refused before the fields.
+  cases document <;> simp only [valueOf] <;> try exact ⟨_, rfl⟩
+  split
+  · exact ⟨_, rfl⟩
+  · simp [failed, Bind.bind, Except.bind]
+
+@[inherit_doc valueOf_container_missing_field]
+theorem valueOf_progressiveContainer_missing_field {active : List Bool} {names : List String}
+    {fields : List Desc} {spelling : Spelling} {document : Json} {ordinal : Nat}
+    {name : String}
+    (named : names[ordinal]? = some name) (declared : ordinal < fields.length)
+    (absent : (document.getObjVal? name).toOption = none) :
+    ∃ fault, valueOf (.progressiveContainer active names fields) spelling document = .error fault := by
+  obtain ⟨fault, failed⟩ := valueOfFields_missing absent fields names spelling 0 ordinal
+    (by simp [List.getD_eq_getElem?_getD, named]) (Nat.zero_le _) (by omega)
+  cases document <;> simp only [valueOf] <;> try exact ⟨_, rfl⟩
+  split
+  · exact ⟨_, rfl⟩
+  · simp [failed, Bind.bind, Except.bind]
+
 end Ssz

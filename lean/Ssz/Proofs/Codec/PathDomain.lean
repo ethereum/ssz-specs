@@ -29,14 +29,6 @@ private theorem packing_materialized (budget : Nat) (chunks : Array Bytes)
   -- Packed data already consists of leaves, so materialization only preserves their order.
   simp [layoutChunksAt, MerkleLayout.packing, Leaves.count, Pure.pure, Except.pure]
 
-private theorem mixed_leaf_concat (capacity ordinal : Nat) (inside : ordinal < capacity) :
-    gindexConcat 2 (nextPow2 capacity + ordinal) = .ok (2 * nextPow2 capacity + ordinal) := by
-  -- Prefixing the contents' left turn doubles the leading tree width without moving the leaf.
-  have positive : 1 ≤ nextPow2 capacity + ordinal := by
-    have := Nat.two_pow_pos (depthFor capacity); unfold nextPow2; omega
-  rw [gindexConcat_eq (by decide) positive, bounded_leaf_depth inside]
-  simp only [nextPow2, Nat.add_sub_cancel_left]
-
 /-- A byte-vector position selects its containing packed chunk. -/
 theorem PathSelects.byteVector (count : Nat) (data : Bytes)
     (fitted : Fits (.byteVector count) (.bytes data)) (ordinal : Nat) (inside : ordinal < count) :
@@ -68,7 +60,7 @@ theorem PathSelects.byteList (limit : Nat) (data : Bytes)
     · simp [merkleLayout, Nat.not_lt.mpr within, Pure.pure, Except.pure]
     · simp only [packBytes_size, chunksForBytes, bytesPerChunk]; omega
     -- The list’s length word adds one left turn before the packed chunk’s own path.
-    · have joined := mixed_leaf_concat _ _ chunkInside
+    · have joined := gindexConcat_mixed_leaf chunkInside
       simp only [chunksForBytes] at joined ⊢
       rw [resolveStep_byteList limit ordinal inside, joined]
       rfl
@@ -103,7 +95,7 @@ theorem PathSelects.bitList (limit : Nat) (data : Array Bool)
     · simp [merkleLayout, Nat.not_lt.mpr within, Pure.pure, Except.pure]
     · simp only [packedBits_size, chunksForBits, bytesPerChunk]; omega
     -- The list’s length word adds one left turn before the packed chunk’s own path.
-    · have joined := mixed_leaf_concat _ _ chunkInside
+    · have joined := gindexConcat_mixed_leaf chunkInside
       simp only [chunksForBits] at joined ⊢
       rw [resolveStep_bitList limit ordinal inside, joined]
       rfl
@@ -124,7 +116,7 @@ private theorem basic_width_positive (element : Desc) (basic : element.isBasic =
   -- Booleans occupy one byte, and the permitted unsigned widths are all positive.
   cases element <;> simp only [Desc.isBasic, Bool.false_eq_true] at basic
   case bool => decide
-  case uint width => cases width <;> simp_all [Desc.wellFormed, Desc.itemLength]
+  case uint width => rw [Desc.wellFormed] at sound; cases width <;> simp_all [Desc.itemLength]
 
 /-- A basic vector element selects the chunk containing its serialized bytes. -/
 theorem PathSelects.vector_basic (element : Desc) (count : Nat) (values : List Value)
@@ -177,7 +169,7 @@ theorem PathSelects.list_basic (element : Desc) (limit : Nat) (values : List Val
       simp only [packElements, packBytes_size, size, chunksForBytes, bytesPerChunk]
       omega
     -- The list’s length word adds one left turn before the packed chunk’s own path.
-    · have joined := mixed_leaf_concat _ _ chunkInside
+    · have joined := gindexConcat_mixed_leaf chunkInside
       simp only [chunksForBytes] at joined ⊢
       rw [resolveStep_list element limit ordinal inside, joined]
       rfl

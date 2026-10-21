@@ -1,6 +1,5 @@
 import Ssz.Proofs.Merkle.Tree
 import Ssz.Codec.Root
-import Ssz.Proofs.Type.Compatibility
 
 /-! A byte array and its sequence of one-byte integer values have the same SSZ meaning. -/
 

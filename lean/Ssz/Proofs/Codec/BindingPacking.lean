@@ -31,21 +31,6 @@ theorem packBytes_injective {left right : Bytes} (lengths : left.size = right.si
   congr 1
   simpa only [getElem!_pos, inLeft, inRight] using congrArg (fun chunks : Array Bytes => chunks[i / bytesPerChunk]!) packed
 
-/-- Agreement of padded node supplies recovers equal-length byte payloads. -/
-theorem packBytes_injective_of_padded {left right : Bytes} {capacity : Nat}
-    (lengths : left.size = right.size) (room : (packBytes left).size ≤ capacity)
-    (agree : ∀ index < capacity,
-      padded zeroChunk (packBytes left) index = padded zeroChunk (packBytes right) index) :
-    left = right := by
-  -- Equal byte counts imply equal numbers of packed nodes.
-  apply packBytes_injective lengths
-  have counts : (packBytes left).size = (packBytes right).size := by simp [lengths]
-  apply Array.ext counts
-  intro index hi hj
-  -- Each actual node lies below the declared capacity, so padded agreement applies to it.
-  simpa only [padded, Array.getElem?_eq_getElem hi, Array.getElem?_eq_getElem hj,
-    Option.getD_some] using agree index (by omega)
-
 /-- A sufficient byte buffer preserves every bit of a known-length bit string. -/
 theorem packBits_injective {left right : Array Bool} {byteCount : Nat}
     (lengths : left.size = right.size) (room : left.size ≤ byteCount * 8)

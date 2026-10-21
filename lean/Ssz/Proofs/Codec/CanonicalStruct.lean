@@ -4,9 +4,6 @@ import Ssz.Proofs.Codec.CanonicalTable
 
 namespace Ssz
 
-private theorem throw_error {α : Type} (fault : Err) :
-    (throw fault : Except Err α) = .error fault := rfl
-
 /-- Whether each slot holds its field in place or points to a body. -/
 private def slotFlags : List Slot → List Bool
   | [] => []
@@ -121,7 +118,7 @@ private theorem takeSlots_reassembles (data : Bytes) (scope : Nat) (bounded : sc
       cases tail : takeSlots data slots widths <;>
         simp [takeSlots, tail, Bind.bind, Except.bind, pure, Except.pure] at taken
       subst parts
-      obtain ⟨within, header, bodies⟩ := ih widths _ tailRead tail
+      obtain ⟨-, header, bodies⟩ := ih widths _ tailRead tail
       have sliced : (data.extract start (start + width)).size = width := by
         simp only [Array.size_extract]
         omega

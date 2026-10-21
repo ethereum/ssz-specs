@@ -5,6 +5,7 @@ import Ssz.Proofs.Codec.Admits
 
 namespace Ssz
 
+/-- A type in a list is nested no deeper than the deepest type in that list. -/
 theorem nesting_le_deepest (shape : Desc) (fields : List Desc)
     (member : shape ∈ fields) : shape.nesting ≤ Desc.deepestNesting fields := by
   -- The maximum over fields bounds each individual field depth.

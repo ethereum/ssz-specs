@@ -1,4 +1,3 @@
-import Ssz.Proofs.Codec.Totality
 import Ssz.Proofs.Codec.Admits
 import Ssz.Proofs.Codec.Table
 

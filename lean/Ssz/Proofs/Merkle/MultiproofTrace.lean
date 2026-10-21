@@ -52,7 +52,7 @@ private theorem foldLevelNodes_covered {trees : Nat → CommitmentTree} {depth :
   -- Each parent adds its own hash to the previously covered hashes of both children.
   induction pending generalizing outParents outKept with
   | nil =>
-    simp [foldLevelNodes] at folded
+    simp only [foldLevelNodes, Except.ok.injEq, Prod.mk.injEq, List.nil_eq] at folded
     rcases folded with ⟨rfl, rfl⟩
     simp [MessagesCovered]
   | cons pair rest ih =>

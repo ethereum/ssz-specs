@@ -241,8 +241,9 @@ theorem merkleLayout_shapes {shape : Desc} {left right : Value} {first second : 
         (by simp [progressive_count sound, otherPaired])
       simp [merkleLayout, layoutSlots, paired, progressive_count sound, placed,
         Bind.bind, Except.bind, pure, Except.pure] at laid
-      simp [merkleLayout, layoutSlots, otherPaired, progressive_count sound, otherPlaced,
-        Bind.bind, Except.bind, pure, Except.pure] at other
+      simp only [merkleLayout, bind, Except.bind, layoutSlots, otherPaired, bne_self_eq_false,
+        Bool.false_eq_true, ↓reduceIte, progressive_count sound, otherPlaced, pure, Except.pure,
+        Except.ok.injEq] at other
       subst first second
       -- The common mask and common field-type sequence determine identical nested leaf shapes.
       exact ⟨rfl, congrArg Sum.inr (placeSlots_shapes (zip_shapes paired otherPaired)
@@ -252,8 +253,9 @@ theorem merkleLayout_shapes {shape : Desc} {left right : Value} {first second : 
     match leftFits, rightFits with
     | .compatibleUnion (selector := selector) bounded named _,
         .compatibleUnion (selector := otherSelector) otherBounded otherNamed _ =>
-      simp [merkleLayout, named, otherNamed, selectorWord, show ¬ selector > 255 by omega,
-        show ¬ otherSelector > 255 by omega, Bind.bind, Except.bind, pure, Except.pure] at laid other
+      simp only [merkleLayout, bind, Except.bind, named, selectorWord, gt_iff_lt,
+        show ¬selector > 255 by omega, ↓reduceIte, pure, Except.pure, Except.ok.injEq, otherNamed,
+        show ¬otherSelector > 255 by omega] at laid other
       subst first second
       -- A one-byte selector always fits in the 256-bit word, so equal words recover equal selectors.
       have selectorsEqual := lengthWord_injective

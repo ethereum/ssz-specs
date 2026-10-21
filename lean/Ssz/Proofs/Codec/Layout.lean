@@ -39,11 +39,4 @@ theorem placeSlots_fields {active : List Bool} {fields : List (Desc × Value)}
   -- Field preservation follows independently of the number of gaps.
   (placeSlots_preserves placed).1
 
-/-- A successful layout has exactly one slot for every declared position. -/
-theorem placeSlots_length {active : List Bool} {fields : List (Desc × Value)}
-    {slots : List (Option (Desc × Value))} (placed : placeSlots active fields = .ok slots) :
-    slots.length = active.length :=
-  -- Gaps occupy positions just as present fields do.
-  (placeSlots_preserves placed).2
-
 end Ssz

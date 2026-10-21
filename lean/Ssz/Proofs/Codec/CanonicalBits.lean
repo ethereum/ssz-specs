@@ -4,10 +4,6 @@ import Ssz.Proofs.Codec.Canonical
 
 namespace Ssz
 
-private theorem throw_error {α : Type} (fault : Err) :
-    (throw fault : Except Err α) = .error fault := rfl
-
-set_option maxRecDepth 4096 in
 private theorem highestBit_spec (byte : UInt8) (nonzero : byte ≠ 0) :
     highestBit byte < 8 ∧
     ((byte >>> UInt8.ofNat (highestBit byte)) &&& 1 == 1) = true ∧
@@ -19,7 +15,7 @@ private theorem highestBit_spec (byte : UInt8) (nonzero : byte ≠ 0) :
     cases byte with
     | ofFin byte =>
       revert byte
-      decide
+      decide +kernel
 
 private theorem unpackBits_push {data : Bytes} {count : Nat}
     (closing : ((data[count / 8]! >>> UInt8.ofNat (count % 8)) &&& 1 == 1) = true) :

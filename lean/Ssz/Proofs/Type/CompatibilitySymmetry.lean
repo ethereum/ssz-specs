@@ -1,4 +1,4 @@
-import Ssz.Proofs.Type.Compatibility
+import Ssz.Proofs.Type.Equality
 
 /-! Tree-shape compatibility is symmetric at every comparison depth. -/
 
@@ -46,10 +46,11 @@ private theorem layoutPairAgree_symm {budget : Nat}
   -- At a shared position, both field lookups must succeed and their types must agree symmetrically.
   · subst otherPosition
     cases leftFields[ordinal]? <;> cases rightFields[otherOrdinal]? <;>
-      apply Bool.eq_iff_iff.mpr <;> simp [inner] <;> simp only [eq_comm, implies_true]
+      apply Bool.eq_iff_iff.mpr <;> simp [inner]
+    simp only [eq_comm, implies_true]
   -- At distinct positions, rejecting a repeated field name is symmetric.
   · apply Bool.eq_iff_iff.mpr
-    simp [same, Ne.symm same]
+    simp only [beq_iff_eq, same, ↓reduceIte, bne_iff_ne, ne_eq, Ne.symm same]
     exact not_congr eq_comm
 
 private theorem layoutsAgree_symm {budget : Nat}

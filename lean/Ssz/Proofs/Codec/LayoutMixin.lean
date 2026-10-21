@@ -1,4 +1,4 @@
-import Ssz.Proofs.Codec.Layout
+import Ssz.Codec.Layout
 
 /-! Sequence layouts preserve the caller’s mixing word. -/
 

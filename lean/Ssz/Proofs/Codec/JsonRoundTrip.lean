@@ -1,5 +1,4 @@
 import Ssz.Proofs.Codec.JsonLaws
-import Ssz.Proofs.Codec.Admits
 
 /-! A JSON document written for a value reads back as that value, at every shape. -/
 

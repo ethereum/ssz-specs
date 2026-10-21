@@ -10,7 +10,7 @@ The executable specification and the proofs about it live in two separate trees,
 
 ```text
 Ssz/            the executable specification, about 3,000 lines
-Ssz/Proofs/     the machine-checked properties of it, about 17,000 lines
+Ssz/Proofs/     the machine-checked properties of it, about 16,500 lines
 ```
 
 `Ssz/Proofs` mirrors the layout of `Ssz`: what is proved about `Ssz.Codec.Serialize` sits in `Ssz.Proofs.Codec.Serialize`.
@@ -32,11 +32,11 @@ The type universe covers unsigned integers, booleans, byte sequences, bitfields,
 vectors, lists, containers, progressive collections, and compatible unions.
 Legacy positional unions, including their nullable first option, are not implemented.
 
-The reference is the [SSZ specification at consensus-specs v1.6.1](https://github.com/ethereum/consensus-specs/blob/v1.6.1/ssz/simple-serialize.md),
+The reference is the Python implementation in this repository, which serves as the official specification,
 together with [EIP-7495](https://eips.ethereum.org/EIPS/eip-7495),
 [EIP-7916](https://eips.ethereum.org/EIPS/eip-7916), and
 [EIP-8016](https://eips.ethereum.org/EIPS/eip-8016).
-The current upstream implementation lives in [ethereum/ssz-specs](https://github.com/ethereum/ssz-specs).
+The prose it replaced is the [last SSZ text in consensus-specs](https://github.com/ethereum/consensus-specs/blob/802485ec74a6986542bd53bf153189623aab440c/ssz/simple-serialize.md).
 
 Declarations and values are separate data.
 Call `Desc.wellFormed` before using an externally supplied declaration.
@@ -135,7 +135,8 @@ and exhaustive canonical re-encoding checks for one- and two-byte inputs across 
   No parent equations are required below leaves.
   [Multiproof size](Ssz/Proofs/Merkle/MultiproofSize.lean): the helper count and twice the claim count together come to the number of distinct claim ancestors plus two, which fixes the count exactly for any claim set at one depth.
   Claiming a whole level therefore needs no helpers, and claiming any `k` nodes of a level of depth `d` needs at most `k * (d - log2 k)`.
-  A run of consecutive claims needs at least `d - log2 k`, so the shape of that bound cannot be improved.
+  A run of `k` consecutive claims still needs at least `d - log2 k`.
+  [Single claims](Ssz/Proofs/Merkle/Singleton.lean): the helpers of one claim are its branch in the same order, and a single-item proof gets the same verdict from the multi-item verifier.
 - [Type paths](Ssz/Proofs/Codec/PathSelection.lean): recursive selections through present fields and elements agree with the value walker across every supported type family.
   Packed elements select their containing chunk, reserved steps select mixing words, and union descent follows the active option.
   A type-only index can name an absent position without asserting that a value is present; every readable padding node remains covered by the general branch theorem.
@@ -144,7 +145,11 @@ and exhaustive canonical re-encoding checks for one- and two-byte inputs across 
 - [Whole-value binding](Ssz/Proofs/Codec/Binding.lean): admissible values of the same well-formed type with equal roots are equal, or their Merkle computations contain distinct 64-byte inputs with equal SHA-256 hashes.
   [CommitmentSized](Ssz/Proofs/Codec/BindingDomain.lean) requires every nested variable collection count to fit its 256-bit mixing word.
   The proof recovers lengths, selectors, packed data, and nested values; callers supply no tree-alignment assumption.
-- [Summaries](Ssz/Proofs/Codec/Summary.lean): replacing a field by a 32-byte array holding that field's own root leaves the struct root unchanged.
+  [Layout separation](Ssz/Proofs/Codec/LayoutSeparation.lean): two legal progressive containers with different layouts and one root expose a SHA-256 collision between 64-byte inputs.
+  [Layout words](Ssz/Proofs/Codec/LengthBinding.lean): legal layouts of any lengths with equal mixed-in words are equal, so an absent field never shares a root with a zero value.
+- [Summaries](Ssz/Proofs/Codec/Summary.lean): replacing a value nested in a struct, a progressive struct, or a union by any value with the same root leaves the outer root unchanged.
+  A vector, list, or progressive list of composite elements has the same root as the same collection holding each element's root as a 32-byte array.
+  Replacing a struct field by a 32-byte array holding its root is the special case, and deeper summaries follow by repeating the replacement.
   A party holding only the summary computes the root a party holding the value computes, so a proof about anything inside the replaced value verifies against both.
 - [The JSON mapping](Ssz/Proofs/Codec/JsonRoundTrip.lean): a document written for an admissible value of any well-formed type reads back as that value, at every shape of the universe.
   [Basic shapes](Ssz/Proofs/Codec/JsonLaws.lean) cover booleans, all six integer widths, the byte alias, both byte arrays, and all three bitfields.
@@ -152,6 +157,7 @@ and exhaustive canonical re-encoding checks for one- and two-byte inputs across 
   [Hex](Ssz/Proofs/Codec/JsonHex.lean): a hex string the mapping wrote reads back as the bytes it came from.
   Objects: a name written into one is read back from it, and every name an object carries is one it was written from, so a written struct never trips the undeclared-field refusal.
   The mapping is deliberately not canonical, and a checked counterexample gives two documents for one value.
+  [Missing fields](Ssz/Proofs/Codec/JsonLaws.lean): a container or progressive container document that leaves out a declared field is refused.
 - [SHA-256](Ssz/Proofs/Hash/Sha256Spec.lean): the executable hash agrees with a separate mathematical model using 32-bit bitvectors, recursive message expansion, and the FIPS compression equations.
   The theorem covers byte messages shorter than 2^61 bytes, as required by the 64-bit bit-length field.
   [Published constants](Ssz/Proofs/Hash/Sha256Constants.lean): the eight chaining words and sixty-four round constants are checked against the square and cube roots of the first primes, rather than trusted as literals.

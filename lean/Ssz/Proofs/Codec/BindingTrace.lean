@@ -1,5 +1,5 @@
 import Ssz.Proofs.Merkle.CommitmentTree
-import Ssz.Codec.Root
+import Ssz.Codec.Layout
 
 /-! The expanded finite hash computation of an SSZ value, including its nested values. -/
 
@@ -30,7 +30,7 @@ def paddedTrees (trees : Array CommitmentTree) (i : Nat) : CommitmentTree :=
 @[simp] theorem paddedTrees_root (trees : Array CommitmentTree) (i : Nat) :
     (paddedTrees trees i).root = padded zeroChunk (trees.map root) i := by
   -- Present positions keep their child roots, while absent positions read as 32 zero bytes.
-  simp [paddedTrees, padded, Array.getElem?_map]
+  simp only [paddedTrees, padded, Array.getElem?_map]
   cases trees[i]? <;> rfl
 
 /-- The perfect tree with its implicit zero padding expanded. -/

@@ -25,15 +25,6 @@ theorem Desc.itemLength_composite {element : Desc} (composite : element.isBasic 
   -- Only booleans and unsigned integers can share a chunk with neighbouring elements.
   cases element <;> simp_all [Desc.isBasic, Desc.itemLength]
 
-/-- One mixed contents turn prefixes a bounded leaf without changing its ordinal. -/
-theorem gindexConcat_mixed_leaf {capacity ordinal : Nat} (inside : ordinal < capacity) :
-    gindexConcat 2 (nextPow2 capacity + ordinal) = .ok (2 * nextPow2 capacity + ordinal) := by
-  -- The leaf's leading width bit is replaced by the mixed root's left-child prefix.
-  have positive : 1 ≤ nextPow2 capacity + ordinal := by
-    have := Nat.two_pow_pos (depthFor capacity); unfold nextPow2; omega
-  rw [gindexConcat_eq (by decide) positive, bounded_leaf_depth inside]
-  simp [nextPow2]
-
 /-- A container path continues through the actual value paired with its declared field. -/
 theorem PathSelects.containerField {names : List String} {fields : List Desc} {values : List Value}
     (sound : (Desc.container names fields).wellFormed = .ok ())
@@ -165,7 +156,7 @@ theorem lookupOption_position (selectors : List Nat) (options : List Desc) (sele
       by_cases matched : first == selector
       · obtain rfl : option = child := by simpa [lookupOption, matched] using chosen
         exact ⟨0, by simp [List.idxOf?_cons, matched], rfl⟩
-      · simp [lookupOption, matched] at chosen
+      · simp only [lookupOption, matched, Bool.false_eq_true, ↓reduceIte] at chosen
         obtain ⟨slot, named, found⟩ := ih options chosen
         exact ⟨slot + 1, by simp [List.idxOf?_cons, matched, named], by simpa using found⟩
 

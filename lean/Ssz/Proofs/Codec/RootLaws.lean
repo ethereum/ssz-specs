@@ -21,68 +21,6 @@ private theorem mapM_window {α β ε : Type} (f : α → Except ε β)
     have := ih 0 count
     simp_all
 
-private theorem mapM_success_mono {α β ε : Type} (f g : α → Except ε β)
-    (preserves : ∀ x y, f x = .ok y → g x = .ok y)
-    {xs : List α} {ys : List β} (success : xs.mapM f = .ok ys) :
-    xs.mapM g = .ok ys := by
-  -- Each successful element survives replacement, preserving the entire ordered traversal.
-  induction xs generalizing ys with
-  | nil => simpa using success
-  | cons x xs ih =>
-    cases hx : f x <;> cases ht : xs.mapM f <;>
-      simp_all [List.mapM_cons, Bind.bind, Except.bind, Pure.pure, Except.pure]
-
-private theorem layoutChunksAt_preserves (budget larger : Nat)
-    (preserves : ∀ shape value root, hashTreeRootAt budget shape value = .ok root →
-      hashTreeRootAt larger shape value = .ok root)
-    (layout : MerkleLayout) (chunks : Array Bytes)
-    (success : layoutChunksAt budget layout = .ok chunks) :
-    layoutChunksAt larger layout = .ok chunks := by
-  -- Packed leaves spend no budget, and each nested leaf uses the preservation premise.
-  rcases layout with ⟨leaves, limit, mixin⟩
-  cases leaves with
-  | packed data => simpa [layoutChunksAt] using success
-  | nested values =>
-    simp only [layoutChunksAt, Leaves.count, Option.getD_none, List.drop_zero,
-      Nat.sub_zero, List.take_length] at success ⊢
-    let f (b : Nat) (slot : Option (Desc × Value)) : Except Err Bytes :=
-      match slot with
-      | none => .ok zeroChunk
-      | some (shape, value) => hashTreeRootAt b shape value
-    change (do let ys ← values.mapM (f budget); pure ys.toArray) = .ok chunks at success
-    change (do let ys ← values.mapM (f larger); pure ys.toArray) = .ok chunks
-    cases h : values.mapM (f budget) with
-    | error e => simp [h, Bind.bind, Except.bind] at success
-    | ok ys =>
-      -- Replacing each successful child root preserves the ordered array and all inactive zero slots.
-      have lifted := mapM_success_mono (f budget) (f larger) (by
-        intro slot root hslot
-        cases slot with
-        | none => exact hslot
-        | some pair => exact preserves pair.1 pair.2 root hslot) h
-      simpa [h, lifted, Bind.bind, Except.bind] using success
-
-/-- Once rooting succeeds, additional recursion budget cannot change its result. -/
-theorem hashTreeRootAt_success_mono (budget larger : Nat) (enough : budget ≤ larger)
-    (shape : Desc) (value : Value) (root : Bytes)
-    (success : hashTreeRootAt budget shape value = .ok root) :
-    hashTreeRootAt larger shape value = .ok root := by
-  -- Induction follows nested roots, whose budgets each decrease by one.
-  induction budget generalizing larger shape value root with
-  | zero => simp [hashTreeRootAt] at success
-  | succ budget ih =>
-    rcases larger with _ | larger; · omega
-    -- Layout selection itself is independent of recursion budget.
-    cases hl : merkleLayout shape value with
-    | error e => simp [hashTreeRootAt, hl, Bind.bind, Except.bind] at success
-    | ok layout =>
-      cases hc : layoutChunksAt budget layout with
-      | error e => simp [hashTreeRootAt, hl, hc, Bind.bind, Except.bind] at success
-      | ok chunks =>
-        have lifted := layoutChunksAt_preserves budget larger
-          (fun s v r h => ih larger (by omega) s v r h) layout chunks hc
-        simpa [hashTreeRootAt, hl, hc, lifted, Bind.bind, Except.bind] using success
-
 private theorem mapM_congr_on {α β ε : Type} (f g : α → Except ε β)
     (xs : List α) (same : ∀ x ∈ xs, f x = g x) : xs.mapM f = xs.mapM g := by
   -- Equal roots at every occupied position give equal traversals, including errors.
@@ -199,15 +137,6 @@ theorem layoutChunksAt_budget_eq (layout : MerkleLayout) (left right : Nat)
         (List.mem_of_mem_drop (List.mem_of_mem_take member))
       exact hashTreeRootAt_budget_eq pair.1 pair.2 left right bounds.1 bounds.2
 
-/-- Additional recursion budget preserves a successful materialization of all leaves. -/
-theorem layoutChunksAt_success_mono (budget larger : Nat) (enough : budget ≤ larger)
-    (layout : MerkleLayout) (chunks : Array Bytes)
-    (success : layoutChunksAt budget layout = .ok chunks) :
-    layoutChunksAt larger layout = .ok chunks := by
-  -- Every nested root is unchanged once its original budget was sufficient.
-  exact layoutChunksAt_preserves budget larger
-    (hashTreeRootAt_success_mono budget larger enough) layout chunks success
-
 private theorem mapM_length {α β ε : Type} (f : α → Except ε β)
     {xs : List α} {ys : List β} (success : xs.mapM f = .ok ys) :
     ys.length = xs.length := by
@@ -226,7 +155,8 @@ theorem layoutChunksAt_size (budget : Nat) (layout : MerkleLayout)
   rcases layout with ⟨leaves, limit, mixin⟩
   cases leaves with
   | packed data =>
-    simp [layoutChunksAt, Leaves.count, Pure.pure, Except.pure] at success
+    simp only [layoutChunksAt, pure, Except.pure, Leaves.count, Option.getD_none, Array.extract_size,
+      Except.ok.injEq] at success
     subst chunks
     rfl
   | nested values =>
@@ -240,7 +170,7 @@ theorem layoutChunksAt_size (budget : Nat) (layout : MerkleLayout)
     cases h : values.mapM f with
     | error e => simp [h, Bind.bind, Except.bind] at success
     | ok ys =>
-      simp [h, Bind.bind, Except.bind, Pure.pure, Except.pure] at success
+      simp only [bind, Except.bind, h, pure, Except.pure, Except.ok.injEq] at success
       subst chunks
       exact mapM_length f h
 
@@ -282,7 +212,8 @@ theorem layoutChunksAt_window (budget : Nat) (layout : MerkleLayout)
   rcases layout with ⟨leaves, limit, mixin⟩
   cases leaves with
   | packed data =>
-    simp [layoutChunksAt, Leaves.count, Pure.pure, Except.pure] at success ⊢
+    simp only [layoutChunksAt, pure, Except.pure, Leaves.count, Option.getD_none, Array.extract_size,
+      Except.ok.injEq, Option.getD_some] at success ⊢
     subst chunks
     rfl
   | nested values =>
@@ -296,7 +227,7 @@ theorem layoutChunksAt_window (budget : Nat) (layout : MerkleLayout)
     cases h : values.mapM root with
     | error e => simp [h, Bind.bind, Except.bind] at success
     | ok ys =>
-      simp [h, Bind.bind, Except.bind, Pure.pure, Except.pure] at success
+      simp only [bind, Except.bind, h, pure, Except.pure, Except.ok.injEq] at success
       subst chunks
       -- List slicing and array slicing use the same half-open interval.
       -- Rooting and slicing commute because each retained position has an independent successful root.

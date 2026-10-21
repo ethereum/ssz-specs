@@ -1,6 +1,5 @@
 import Ssz.Proofs.Codec.WalkerLaws
 import Ssz.Proofs.Codec.BranchConstruction
-import Ssz.Proofs.Merkle.Authentication
 import Ssz.Proofs.Codec.NodeWidths
 import Ssz.Proofs.Codec.RootDomain
 

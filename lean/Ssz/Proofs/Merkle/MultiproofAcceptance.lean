@@ -1,4 +1,3 @@
-import Ssz.Proofs.Merkle.Authentication
 import Ssz.Proofs.Merkle.MultiproofTrace
 
 /-! Accepted multiproofs have complete nodes and precisely the canonical reconstruction shape. -/

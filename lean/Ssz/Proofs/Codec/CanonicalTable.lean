@@ -4,9 +4,6 @@ import Ssz.Proofs.Codec.CanonicalBits
 
 namespace Ssz
 
-private theorem throw_error {α : Type} (fault : Err) :
-    (throw fault : Except Err α) = .error fault := rfl
-
 /-- Adjacent, ordered byte ranges concatenate without gaps or overlap. -/
 theorem extract_join (data : Bytes) {start middle stop : Nat}
     (ordered : start ≤ middle) (onward : middle ≤ stop) :

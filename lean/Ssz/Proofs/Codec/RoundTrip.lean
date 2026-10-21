@@ -17,7 +17,7 @@ theorem recovered {shape : Desc} (covered : Recovers shape) :
     cases admits with
     | bool b =>
       refine ⟨reads_back (roundTrip_bool b), fun _ _ fixed wrote => ?_⟩
-      simp [Desc.fixedSize, serialize] at fixed wrote
+      simp only [Desc.fixedSize, Option.some.injEq, serialize, Except.ok.injEq] at fixed wrote
       subst fixed wrote
       simp
   | uint =>
@@ -25,7 +25,8 @@ theorem recovered {shape : Desc} (covered : Recovers shape) :
     cases admits with
     | uint bound =>
       refine ⟨reads_back (roundTrip_uint bound), fun _ _ fixed wrote => ?_⟩
-      simp [Desc.fixedSize, serialize, bound] at fixed wrote
+      simp only [Desc.fixedSize, Option.some.injEq, serialize, bound, ↓reduceIte,
+        Except.ok.injEq] at fixed wrote
       subst fixed wrote
       exact uintBytes_size _ _
   | byteVector =>
@@ -43,7 +44,8 @@ theorem recovered {shape : Desc} (covered : Recovers shape) :
     cases admits with
     | bitVector exact =>
       refine ⟨reads_back (roundTrip_bitVector exact), fun _ _ fixed wrote => ?_⟩
-      simp [Desc.fixedSize, serialize, exact, packBits] at fixed wrote
+      simp only [Desc.fixedSize, Option.some.injEq, serialize, exact, BEq.rfl, ↓reduceIte, packBits,
+        Except.ok.injEq] at fixed wrote
       subst fixed wrote
       simp
   | bitList =>
@@ -267,15 +269,15 @@ theorem recovers_of_wellFormed : ∀ (shape : Desc), shape.wellFormed = .ok () �
   | uint width =>
     -- Each of the six permitted integer widths is positive.
     exact fun sound => ⟨.uint width, fun _ fixed => by
-      simp_all [Desc.fixedSize, Desc.wellFormed]; omega⟩
+      rw [Desc.wellFormed] at sound; simp_all [Desc.fixedSize]; omega⟩
   | byteVector length =>
     -- A legal fixed byte string has at least one byte.
     exact fun sound => ⟨.byteVector length, fun _ fixed => by
-      simp_all [Desc.fixedSize, Desc.wellFormed]; omega⟩
+      rw [Desc.wellFormed] at sound; simp_all [Desc.fixedSize]; omega⟩
   | bitVector length =>
     -- A positive bit count occupies at least one byte after rounding up.
     exact fun sound => ⟨.bitVector length, fun _ fixed => by
-      simp_all [Desc.fixedSize, Desc.wellFormed]; omega⟩
+      rw [Desc.wellFormed] at sound; simp_all [Desc.fixedSize]; omega⟩
   | byteList limit =>
     -- Variable-size byte strings have no fixed width to prove positive.
     exact fun _ => ⟨.byteList limit, by simp [Desc.fixedSize]⟩

@@ -1,4 +1,4 @@
-import Ssz.Proofs.Codec.BindingCongruence
+import Ssz.Proofs.Codec.BindingTrace
 
 /-! Successful value computations expose their layouts without assuming layout injectivity. -/
 
@@ -27,17 +27,5 @@ theorem valueTreeAt_view {budget : Nat} {shape : Desc} {value : Value} {tree : C
           content, throw, throwThe, MonadExceptOf.throw] at success ⊢
       · exact success.symm
       · split at success <;> simp_all
-
-/-- An established layout gives the exact successful finite computation. -/
-theorem valueTreeAt_of_layout {budget : Nat} {shape : Desc} {value : Value}
-    {layout : MerkleLayout} {trees : Array CommitmentTree}
-    (laid : merkleLayout shape value = .ok layout)
-    (materialized : layoutTreesAt budget layout = .ok trees)
-    (room : ∀ capacity, layout.limit = some capacity → trees.size ≤ capacity) :
-    valueTreeAt (budget + 1) shape value =
-      .ok ((content trees layout.limit).withMixin layout.mixin) := by
-  -- The supplied capacity bound excludes the only remaining tree-construction error.
-  cases limit : layout.limit <;> simp_all [valueTreeAt, Bind.bind, Except.bind, pure, Except.pure,
-    content, Nat.not_lt.mpr]
 
 end Ssz

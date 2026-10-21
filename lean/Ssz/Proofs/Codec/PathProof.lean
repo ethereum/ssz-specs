@@ -23,25 +23,6 @@ theorem reserved_path_reads {shape : Desc} {value : Value} {layout : MerkleLayou
   -- The path names position three, and the executable walker returns exactly the layout's word.
   exact ⟨getGeneralizedIndex_mixin shape step supported, nodeRoot_mixin laid mixed⟩
 
-/-- Rebasing a generalized index at the root leaves the index unchanged. -/
-theorem gindexConcat_one {index : Nat} (named : 1 ≤ index) :
-    gindexConcat 1 index = .ok index := by
-  -- Removing and restoring the leading bit preserves all branch turns.
-  have lower := (gindexDepth_bounds named).1
-  simp [gindexConcat, gindexDepth, Nat.not_lt.mpr named, Bind.bind, Except.bind,
-    Pure.pure, Except.pure, Nat.add_sub_cancel' lower]
-
-/-- A one-step container path names the leaf at its field's declared ordinal. -/
-theorem getGeneralizedIndex_container_field (names : List String) (fields : List Desc)
-    (ordinal : Nat) (child : Desc) (selected : fields[ordinal]? = some child) :
-    getGeneralizedIndex (.container names fields) [.position ordinal] =
-      .ok (nextPow2 fields.length + ordinal) := by
-  -- Containers allocate one Merkle leaf per field in declaration order.
-  have positive : 1 ≤ nextPow2 fields.length + ordinal := Nat.le_add_right_of_le (Nat.two_pow_pos _)
-  simp [getGeneralizedIndex, Desc.resolveStep, Desc.chunkPosition, Desc.elementType, selected, Desc.chunkCount,
-    Bind.bind, Except.bind, Pure.pure, Except.pure,
-    gindexConcat_root_right positive]
-
 /-- A field's generalized index has the bounded tree's leaf depth. -/
 theorem bounded_leaf_depth {capacity ordinal : Nat} (selected : ordinal < capacity) :
     Nat.log2 (nextPow2 capacity + ordinal) = depthFor capacity := by
@@ -52,6 +33,15 @@ theorem bounded_leaf_depth {capacity ordinal : Nat} (selected : ordinal < capaci
   simp only [nextPow2, Nat.pow_succ]
   constructor <;> omega
 
+/-- One mixed contents turn prefixes a bounded leaf without changing its ordinal. -/
+theorem gindexConcat_mixed_leaf {capacity ordinal : Nat} (inside : ordinal < capacity) :
+    gindexConcat 2 (nextPow2 capacity + ordinal) = .ok (2 * nextPow2 capacity + ordinal) := by
+  -- The leaf's leading width bit is replaced by the mixed root's left-child prefix.
+  have positive : 1 ≤ nextPow2 capacity + ordinal := by
+    have := Nat.two_pow_pos (depthFor capacity); unfold nextPow2; omega
+  rw [gindexConcat_eq (by decide) positive, bounded_leaf_depth inside]
+  simp [nextPow2]
+
 /-- The low turns of a field's index recover its ordinal. -/
 theorem bounded_leaf_position {capacity ordinal : Nat} (selected : ordinal < capacity) :
     gindexBelow (nextPow2 capacity + ordinal) (depthFor capacity) = ordinal := by
@@ -59,48 +49,6 @@ theorem bounded_leaf_position {capacity ordinal : Nat} (selected : ordinal < cap
   have room := le_two_pow_depthFor capacity
   simp only [gindexBelow, nextPow2, Nat.add_mod, Nat.mod_self, Nat.zero_add]
   rw [Nat.mod_mod, Nat.mod_eq_of_lt (by omega : ordinal < 2 ^ depthFor capacity)]
-
-/-- A container field path reads the root of exactly the corresponding field value. -/
-theorem container_field_path_reads (names : List String) (fields : List Desc) (values : List Value)
-    (count : fields.length = values.length) (chunks : Array Bytes)
-    (materialized : layoutChunksAt ((Desc.container names fields).nesting - 1)
-      (.nesting ((fields.zip values).map some) (some fields.length)) = .ok chunks)
-    (ordinal : Nat) (child : Desc) (inner : Value)
-    (selectedType : fields[ordinal]? = some child) (selectedValue : values[ordinal]? = some inner) :
-    getGeneralizedIndex (.container names fields) [.position ordinal] =
-      .ok (nextPow2 fields.length + ordinal) ∧
-    nodeRoot (.container names fields) (.seq values) (nextPow2 fields.length + ordinal) =
-      hashTreeRoot child inner := by
-  -- The type path and layout use the same ordinal in the same paired field/value lists.
-  let layout := MerkleLayout.nesting ((fields.zip values).map some) (some fields.length)
-  have laid : merkleLayout (.container names fields) (.seq values) = .ok layout := by
-    simp [merkleLayout, count, layout, Pure.pure, Except.pure]
-  have inside : ordinal < fields.length := (List.getElem?_eq_some_iff.mp selectedType).1
-  have depth := bounded_leaf_depth inside
-  have position := bounded_leaf_position inside
-  have indexPositive : 1 ≤ nextPow2 fields.length + ordinal := Nat.le_add_right_of_le (Nat.two_pow_pos _)
-  -- The type lookup and value lookup share an ordinal, so their zipped entry is the selected child.
-  have slots : ((fields.zip values).map some)[ordinal]? = some (some (child, inner)) := by
-    have zipped : (fields.zip values)[ordinal]? = some (child, inner) :=
-      List.getElem?_zip_eq_some.mpr ⟨selectedType, selectedValue⟩
-    simp [List.getElem?_map, zipped]
-  -- The enclosing declaration reserves a full recursion budget for every selected field type.
-  have enough : child.nesting ≤ (Desc.container names fields).nesting - 1 := by
-    have smaller := merkleLayout_child_nesting _ _ layout laid _ rfl child inner (List.mem_of_getElem? slots)
-    omega
-  have size := layoutChunksAt_size _ layout chunks materialized
-  have fits : chunks.size ≤ fields.length := by
-    simpa [layout, MerkleLayout.nesting, Leaves.count, List.length_zip, count] using Nat.le_of_eq size
-  constructor
-  · exact getGeneralizedIndex_container_field names fields ordinal child selectedType
-  · have outer := nodeRoot_bounded_layout laid materialized rfl rfl fits
-      (nextPow2 fields.length + ordinal) indexPositive (by omega)
-    have interval := boundedNode_window (layoutChunksAt_window _ layout chunks materialized)
-      (nextPow2 fields.length + ordinal) (depthFor fields.length) 0 fields.length (Nat.le_refl _)
-    have nested := boundedNode_nested_leaf layout _ _ rfl child inner enough
-      (nextPow2 fields.length + ordinal) 0 fields.length (by simpa [position] using slots)
-    rw [outer, ← nested, interval]
-    simp only [boundedReading, depth]
 
 /-- A bounded leaf reads the corresponding materialized chunk, including zero padding. -/
 theorem nodeRoot_bounded_leaf {shape : Desc} {value : Value} {layout : MerkleLayout}
@@ -188,10 +136,10 @@ theorem nodeRoot_progressive_leaf {shape : Desc} {value : Value} {layout : Merkl
   | zero => omega
   | succ budget =>
     simp only [depth, Nat.add_sub_cancel] at materialized
-    simp [nodeRootAt, show ¬progressiveChunkGindex ordinal < 1 by omega,
-      show progressiveChunkGindex ordinal ≠ 1 by omega, laid, mixed, progressive,
-      gindexLength, gindexDepth, depthPositive, turn, progressiveNode, walked, left,
-      Bind.bind, Except.bind]
+    simp only [nodeRootAt, show ¬progressiveChunkGindex ordinal < 1 by omega, ↓reduceIte, beq_iff_eq,
+      show progressiveChunkGindex ordinal ≠ 1 by omega, bind, Except.bind, laid, gindexLength, gindexDepth,
+      depthPositive, mixed, Option.isSome_some, turn, Bool.false_eq_true, progressive, progressiveNode,
+      walked, left]
     rw [boundedNode_window (layoutChunksAt_window budget layout chunks materialized)
       _ stop.depth stop.leavesFrom stop.capacity (by omega)]
     simp [boundedTreeNode, height, position, subtreeAt_eq_subtreeRoot, subtreeRoot]

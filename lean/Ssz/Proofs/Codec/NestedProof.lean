@@ -18,23 +18,6 @@ theorem boundedNode_nested (layout : MerkleLayout) (budget : Nat)
   simp only [boundedNode, nextPow2, Nat.log2_two_pow, if_neg (Nat.not_le.mpr deeper), nested, selected]
   exact nodeRootAt_eq_nodeRoot child inner _ budget enough
 
-/-- An enclosing type's sufficient budget also covers every child reached through its layout. -/
-theorem boundedNode_nested_of_layout (shape : Desc) (value : Value) (layout : MerkleLayout)
-    (laidOut : merkleLayout shape value = .ok layout) (budget : Nat)
-    (enough : shape.nesting ≤ budget + 1)
-    (slots : List (Option (Desc × Value))) (nested : layout.leaves = .nested slots)
-    (child : Desc) (inner : Value) (index depth start capacity : Nat)
-    (deeper : depthFor capacity < depth)
-    (selected : slots[start + gindexBelow (index >>> (depth - depthFor capacity))
-      (depthFor capacity)]? = some (some (child, inner))) :
-    boundedNode budget layout index depth start capacity =
-      nodeRoot child inner (gindexRebase index (depth - depthFor capacity)) := by
-  -- A filled slot names a strictly shallower type, so entering it spends at most one level.
-  have smaller := merkleLayout_child_nesting shape value layout laidOut slots nested
-    child inner (List.mem_of_getElem? selected)
-  exact boundedNode_nested layout budget slots nested child inner (by omega)
-    index depth start capacity deeper selected
-
 /-- At a filled composite leaf, the outer tree commits to exactly the child's own root. -/
 theorem boundedNode_nested_leaf (layout : MerkleLayout) (budget : Nat)
     (slots : List (Option (Desc × Value))) (nested : layout.leaves = .nested slots)
@@ -83,50 +66,6 @@ theorem boundedNode_nested_at (layout : MerkleLayout) (budget : Nat)
         (by simpa using selected)
   · exact boundedNode_nested layout budget slots nested child inner enough index depth start
       capacity (by omega) selected
-
-private theorem shift_children (index depth : Nat) :
-    (2 * index) >>> (depth + 1) = index >>> depth ∧
-    (2 * index + 1) >>> (depth + 1) = index >>> depth := by
-  -- Dropping the new final turn first recovers the same original path.
-  rw [Nat.add_comm depth 1, Nat.shiftRight_add, Nat.shiftRight_add]
-  exact ⟨congrArg (· >>> depth) (by simp [Nat.shiftRight_eq_div_pow]),
-    congrArg (· >>> depth) (by simp only [Nat.shiftRight_eq_div_pow]; omega)⟩
-
-/-- Parent equations inside a nested value remain parent equations after an outer path prefix. -/
-theorem boundedNode_nested_split (layout : MerkleLayout) (budget : Nat)
-    (slots : List (Option (Desc × Value))) (nested : layout.leaves = .nested slots)
-    (child : Desc) (inner : Value) (enough : child.nesting ≤ budget)
-    (index depth start capacity : Nat) (reached : depthFor capacity ≤ depth)
-    (selected : slots[start + gindexBelow (index >>> (depth - depthFor capacity))
-      (depthFor capacity)]? = some (some (child, inner)))
-    (parent : nodeRoot child inner (gindexRebase index (depth - depthFor capacity)) = (do
-      let left ← nodeRoot child inner (2 * gindexRebase index (depth - depthFor capacity))
-      let right ← nodeRoot child inner (2 * gindexRebase index (depth - depthFor capacity) + 1)
-      pure (combine left right))) :
-    boundedNode budget layout index depth start capacity = (do
-      let left ← boundedNode budget layout (2 * index) (depth + 1) start capacity
-      let right ← boundedNode budget layout (2 * index + 1) (depth + 1) start capacity
-      pure (combine left right)) := by
-  -- Both child turns stay in the same outer leaf and become the corresponding nested turns.
-  have remaining : depth + 1 - depthFor capacity = (depth - depthFor capacity) + 1 := by omega
-  obtain ⟨leftShift, rightShift⟩ := shift_children index (depth - depthFor capacity)
-  -- Appending a child turn changes the nested address without selecting a different outer leaf.
-  have leftSelected : slots[start + gindexBelow
-      ((2 * index) >>> (depth + 1 - depthFor capacity)) (depthFor capacity)]? =
-      some (some (child, inner)) := by simpa [remaining, leftShift] using selected
-  -- The right child reaches that same outer leaf before taking its final nested turn.
-  have rightSelected : slots[start + gindexBelow
-      ((2 * index + 1) >>> (depth + 1 - depthFor capacity)) (depthFor capacity)]? =
-      some (some (child, inner)) := by simpa [remaining, rightShift] using selected
-  rw [boundedNode_nested_at layout budget slots nested child inner enough
-      index depth start capacity reached selected,
-    boundedNode_nested_at layout budget slots nested child inner enough
-      (2 * index) (depth + 1) start capacity (by omega) leftSelected,
-    boundedNode_nested_at layout budget slots nested child inner enough
-      (2 * index + 1) (depth + 1) start capacity (by omega) rightSelected]
-  -- Restoring a leading bit to the suffix preserves the order of its two nested children.
-  obtain ⟨leftTurn, rightTurn⟩ := gindexRebase_children index (depth - depthFor capacity)
-  simpa only [remaining, leftTurn, rightTurn] using parent
 
 /-- Rebasing commutes with moving one level upward while a nested branch still has turns. -/
 theorem gindexRebase_parent (index depth : Nat) :

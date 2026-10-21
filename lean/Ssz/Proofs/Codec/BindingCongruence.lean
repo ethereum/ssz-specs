@@ -59,26 +59,6 @@ theorem perfectTrees_included (depth : Nat) (leaves : Nat → CommitmentTree)
       simp only [Nat.sub_add_cancel (Nat.le_of_not_gt before)] at shifted
       exact shifted.trans (Included.fork_right _ _)
 
-/-- A perfect tree is complete exactly when all positions below its width are complete. -/
-theorem perfectTrees_complete_iff (depth : Nat) (leaves : Nat → CommitmentTree) :
-    (perfectTrees depth leaves).Complete ↔ ∀ i, i < 2 ^ depth → (leaves i).Complete := by
-  -- At each fork, completeness is exactly the completeness of its two child computations.
-  induction depth generalizing leaves with
-  | zero => simp [perfectTrees, Nat.lt_one_iff]
-  | succ depth ih =>
-    simp only [perfectTrees, Complete, ih]
-    constructor
-    -- An in-range position belongs to exactly one half, whose leaf-width guarantee applies.
-    · rintro ⟨left, right⟩ i bound
-      by_cases before : i < 2 ^ depth
-      · exact left i before
-      · have shifted := right (i - 2 ^ depth) (by rw [Nat.pow_succ] at bound; omega)
-        simpa only [Nat.sub_add_cancel (Nat.le_of_not_gt before)] using shifted
-    -- Conversely, complete positions in the full width supply both half-width trees.
-    · intro each
-      exact ⟨fun i h => each i (by rw [Nat.pow_succ]; omega),
-        fun i h => each (i + 2 ^ depth) (by rw [Nat.pow_succ]; omega)⟩
-
 /-- Equal perfect-tree roots preserve each bottom root unless one of their hashes collides. -/
 theorem perfectTrees_roots (depth : Nat) (left right : Nat → CommitmentTree)
     (first : (perfectTrees depth left).Complete)

@@ -312,8 +312,7 @@ theorem serializeSequence_size_lt {element : Desc} {elements : List Value} {byte
     bytes.size < 2 ^ (8 * bytesPerOffset) := by
   -- Sequence assembly checks the combined size after encoding its elements.
   unfold serializeSequence at wrote
-  obtain ⟨parts, encoded⟩ := firstCheckPassed wrote
-  have assembled := laterChecksPassed encoded wrote
+  obtain ⟨parts, -, assembled⟩ := checksPassed wrote
   rw [assemble_size _ _ _ assembled]
   exact assemble_nameable _ _ _ assembled
 

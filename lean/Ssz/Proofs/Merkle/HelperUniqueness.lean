@@ -4,7 +4,8 @@ import Ssz.Proofs.Merkle.HelperFrontier
 
 namespace Ssz
 
-private theorem dedup_info (indices : List Nat) :
+/-- Removing duplicates keeps a sublist with no repeated entry. -/
+theorem eraseDups_sublist_nodup (indices : List Nat) :
     List.Sublist indices.eraseDups indices ∧ indices.eraseDups.Nodup := by
   -- Keep the first occurrence and remove all equal later entries before recursing.
   cases indices with
@@ -12,7 +13,7 @@ private theorem dedup_info (indices : List Nat) :
   | cons head rest =>
     rw [List.eraseDups_cons]
     -- Removing later copies makes the retained head distinct from every recursively retained element.
-    have filtered := dedup_info (rest.filter fun item => !item == head)
+    have filtered := eraseDups_sublist_nodup (rest.filter fun item => !item == head)
     exact ⟨.cons_cons _ (filtered.1.trans List.filter_sublist),
       List.nodup_cons.mpr ⟨by simp, filtered.2⟩⟩
 termination_by indices.length
@@ -23,7 +24,7 @@ theorem rejectRelated_nodup {indices : List Nat}
     (accepted : rejectRelated indices = .ok ()) : indices.Nodup := by
   -- An unchanged length after deduplication means no claim was repeated.
   by_cases same : indices.eraseDups.length = indices.length
-  · exact (dedup_info indices).1.eq_of_length same ▸ (dedup_info indices).2
+  · exact (eraseDups_sublist_nodup indices).1.eq_of_length same ▸ (eraseDups_sublist_nodup indices).2
   · cases indices with
     | nil => simp at same
     | cons head rest =>
@@ -38,7 +39,7 @@ theorem getHelperIndices_nodup {indices helpers : List Nat}
   cases accepted : rejectRelated indices <;> cases collected : collectPathIndices indices <;>
     simp [accepted, collected, Bind.bind, Except.bind, pure, Except.pure] at built
   subst helpers
-  exact (List.mergeSort_perm _ _).symm.nodup ((dedup_info _).2.filter _)
+  exact (List.mergeSort_perm _ _).symm.nodup ((eraseDups_sublist_nodup _).2.filter _)
 
 /-- Claimed nodes and required helpers never assign two values to the same index. -/
 theorem getHelperIndices_all_nodup {indices helpers : List Nat}

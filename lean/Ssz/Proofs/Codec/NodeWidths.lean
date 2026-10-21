@@ -10,18 +10,11 @@ def LayoutWidth (layout : MerkleLayout) : Prop :=
   (∀ chunks, layout.leaves = .packed chunks → ∀ chunk ∈ chunks, chunk.size = bytesPerChunk) ∧
   ∀ word, layout.mixin = some word → word.size = bytesPerChunk
 
-private theorem packed_nodes_width (data : Bytes) :
-    ∀ chunk ∈ packBytes data, chunk.size = bytesPerChunk := by
-  -- Packing pads even the final partial chunk to one complete hash operand.
-  intro chunk member
-  obtain ⟨index, inside, rfl⟩ := Array.mem_iff_getElem.mp member
-  exact packBytes_chunk_size data index inside
-
 private theorem packing_width (data : Bytes) (limit : Option Nat) (mixin : Option Bytes)
     (mixed : ∀ word, mixin = some word → word.size = bytesPerChunk) :
     LayoutWidth (.packing (packBytes data) limit mixin) := by
   -- Packed leaves and the optional word are separate complete nodes.
-  exact ⟨fun chunks same => by cases same; exact packed_nodes_width data, mixed⟩
+  exact ⟨fun chunks same => by cases same; exact packBytes_mem_size data, mixed⟩
 
 private theorem nesting_width (values : List (Option (Desc × Value)))
     (limit : Option Nat) (mixin : Option Bytes)
@@ -49,7 +42,7 @@ private theorem sequenceLayout_width (element : Desc) (values : List Value)
       simp [h, Bind.bind, Except.bind, Pure.pure, Except.pure] at success
     subst layout
     exact packing_width _ _ _ mixed
-  · simp [Pure.pure, Except.pure] at success
+  · simp only [pure, Except.pure, Except.ok.injEq] at success
     subst layout
     exact nesting_width _ _ _ mixed
 
@@ -62,10 +55,6 @@ theorem merkleLayout_width (shape : Desc) (value : Value) (layout : MerkleLayout
   -- Fixed scalar encodings are padded into complete nodes before any tree reads occur.
   all_goals try solve | exact fixedLeaf_width _ _ _ success
   all_goals try solve
-    | simp only [Bind.bind, Except.bind, Pure.pure, Except.pure] at success
-      subst layout
-      exact packing_width _ _ _ (by intro word same; simp at same; subst word; simp)
-  all_goals try solve
     | split at success <;>
         simp [Bind.bind, Except.bind, Pure.pure, Except.pure, throw, throwThe,
           MonadExceptOf.throw] at success
@@ -73,11 +62,6 @@ theorem merkleLayout_width (shape : Desc) (value : Value) (layout : MerkleLayout
       exact packing_width _ _ _ (by intro word same; simp at same; subst word; simp)
   all_goals try solve
     | refine sequenceLayout_width _ _ _ _ _ ?_ success
-      intro word same; simp at same; subst word; simp
-    | split at success <;>
-        simp [Bind.bind, Except.bind, Pure.pure, Except.pure, throw, throwThe,
-          MonadExceptOf.throw] at success
-      refine sequenceLayout_width _ _ _ _ _ ?_ success
       intro word same; simp at same; subst word; simp
   -- A fixed bit count determines byte packing, whose final partial node is zero-padded.
   case bitVector.bits length data =>
@@ -87,7 +71,7 @@ theorem merkleLayout_width (shape : Desc) (value : Value) (layout : MerkleLayout
     subst layout
     exact packing_width _ _ none (by simp)
   case progressiveBitList.bits data =>
-    simp [Pure.pure, Except.pure] at success
+    simp only [pure, Except.pure, Except.ok.injEq] at success
     subst layout
     exact packing_width _ _ (some (lengthWord data.size)) (by intro word same; have eq := Option.some.inj same; rw [← eq]; simp)
   case vector.seq element length elements =>
@@ -108,7 +92,7 @@ theorem merkleLayout_width (shape : Desc) (value : Value) (layout : MerkleLayout
     cases hs : layoutSlots active fields elements with
     | error e => simp [hs, Bind.bind, Except.bind] at success
     | ok slots =>
-      simp [hs, Bind.bind, Except.bind, Pure.pure, Except.pure] at success
+      simp only [bind, Except.bind, hs, pure, Except.pure, Except.ok.injEq] at success
       subst layout
       exact nesting_width _ _ (some (activeFieldsWord active)) (by intro word same; have eq := Option.some.inj same; rw [← eq]; simp)
   -- A permitted selector is extended from its one-byte encoding to a complete 32-byte word.
@@ -147,7 +131,7 @@ private theorem layoutChunksAt_width (budget : Nat) (layout : MerkleLayout)
   -- Extracting packed leaves preserves width, and nested leaves use their successful root widths.
   cases leaves : layout.leaves with
   | packed data =>
-    simp [layoutChunksAt, leaves, Pure.pure, Except.pure] at success
+    simp only [layoutChunksAt, leaves, pure, Except.pure, Except.ok.injEq] at success
     subst chunks
     intro chunk member
     obtain ⟨i, inside, same⟩ := Array.mem_extract_iff_getElem.mp member
@@ -163,7 +147,7 @@ private theorem layoutChunksAt_width (budget : Nat) (layout : MerkleLayout)
     cases h : ((slots.drop start).take ((stop.getD slots.length) - start)).mapM f with
     | error e => simp [h, Bind.bind, Except.bind] at success
     | ok nodes =>
-      simp [h, Bind.bind, Except.bind, Pure.pure, Except.pure] at success
+      simp only [bind, Except.bind, h, pure, Except.pure, Except.ok.injEq] at success
       subst chunks
       -- Every occupied slot contributes a complete child root, and every inactive slot contributes a complete zero node.
       have each := mapM_width f (by
@@ -258,7 +242,7 @@ theorem nodeRootAt_size (budget : Nat) (shape : Desc) (value : Value) (index : N
     · simp [nodeRootAt, invalid, throw, throwThe, MonadExceptOf.throw, Bind.bind, Except.bind] at read
     -- The root path delegates to whole-value rooting before any interior position is considered.
     by_cases root : index = 1
-    · simp [nodeRootAt, root] at read
+    · simp only [root, nodeRootAt, Nat.lt_irrefl, ↓reduceIte, BEq.rfl] at read
       exact hashTreeRoot_size shape value node read
     cases laid : merkleLayout shape value with
     | error e => simp [nodeRootAt, invalid, root, laid, Bind.bind, Except.bind] at read

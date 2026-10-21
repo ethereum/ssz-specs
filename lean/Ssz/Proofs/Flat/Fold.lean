@@ -1,4 +1,4 @@
-import Ssz.Proofs.Merkle.Merkleize
+import Ssz.Merkle.Merkleize
 
 /-! Building a tree from its leaves upward, which is the order an implementation works in. -/
 
@@ -107,21 +107,5 @@ theorem pairLevel_append_fill (combine : α → α → α) (fill : α) (level : 
   | case3 _ _ rest ih =>
     simp only [List.length_cons] at odd
     simp only [List.cons_append, pairLevel, ih (by omega)]
-
-/-- A level with something on it folds to a level with something on it. -/
-theorem pairLevel_ne_nil (combine : α → α → α) (fill : α) {level : List α}
-    (nonempty : level ≠ []) : pairLevel combine fill level ≠ [] := by
-  -- Every nonempty input has either a complete first pair or a left node that can pair with fill.
-  match level with
-  | [] => exact absurd rfl nonempty
-  | [_] | _ :: _ :: _ => simp [pairLevel]
-
-/-- Two lists of the same length agree once every position reads the same. -/
-theorem list_eq_of_getD {fill : α} {left right : List α} (sameLength : left.length = right.length)
-    (agree : ∀ position : Nat, left[position]?.getD fill = right[position]?.getD fill) :
-    left = right := by
-  -- Inside both lists a lookup answers, so dropping the default keeps the equality.
-  refine List.ext_getElem sameLength fun position inLeft inRight => ?_
-  simpa [List.getElem?_eq_getElem inLeft, List.getElem?_eq_getElem inRight] using agree position
 
 end Ssz

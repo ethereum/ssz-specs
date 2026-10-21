@@ -1,19 +1,9 @@
 import Ssz.Proofs.Type.CompatibilitySymmetry
-import Ssz.Proofs.Type.PathLaws
 import Ssz.Proofs.Type.PathSteps
 
 /-! What the compatibility checks buy: the tree positions two compatible types agree on. -/
 
 namespace Ssz
-
-/-- A declaration is compatible with itself, whatever it declares. -/
-theorem isCompatible_refl (shape : Desc) : isCompatible shape shape = true := by
-  -- Every declaration nests at least one level, so the walk has a step to spend.
-  have positive := Desc.nesting_pos shape
-  obtain ⟨spare, budget⟩ : ∃ spare, shape.nesting + shape.nesting = spare + 1 :=
-    ⟨shape.nesting + shape.nesting - 1, by omega⟩
-  rw [isCompatible, budget]
-  exact compatibleAt_self spare shape
 
 /--
 Every option a union declares is compatible with every option it declares.
@@ -42,7 +32,7 @@ theorem optionsCompatible_pairwise : ∀ (selectors : List Nat) (options : List 
     -- The four ways two options can be drawn from this list.
     rcases List.mem_cons.mp leftIn with rfl | leftLater <;>
       rcases List.mem_cons.mp rightIn with rfl | rightLater
-    · exact isCompatible_refl _
+    · exact isCompatible_self _
     · exact later right rightLater
     · exact (isCompatible_symm _ _).trans (later left leftLater)
     · exact ih (selectors.drop 1) checked left leftLater right rightLater

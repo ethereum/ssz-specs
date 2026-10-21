@@ -1,4 +1,4 @@
-import Ssz.Proofs.Codec.Fits
+import Ssz.Codec.Serialize
 
 /-! Length words must represent the exact counts they commit to. -/
 

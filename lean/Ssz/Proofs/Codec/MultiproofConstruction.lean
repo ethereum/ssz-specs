@@ -121,7 +121,8 @@ theorem closed_multiproof_rebuilds_root {read : Nat → Except Err Bytes} (close
     (List.mem_append.mp member).elim (leavesRead i node) (proofRead i node)
   refine ⟨root, reconstructed, ?_⟩
   have folded := reconstructed
-  simp [calculateMultiMerkleRoot, indexed, leafCount, proofCount, Bind.bind, Except.bind] at folded
+  simp only [calculateMultiMerkleRoot, leafCount, bne_self_eq_false, Bool.false_eq_true, ↓reduceIte, bind,
+    Except.bind, indexed, proofCount, List.map_append, List.foldl_append] at folded
   exact foldToRoot_reads closed _ _ reads _ folded
 
 /-- A multiproof built from any readable value nodes reconstructs the actual value root. -/
