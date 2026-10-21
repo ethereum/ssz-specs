@@ -66,31 +66,19 @@ theorem progressiveChunkGindex_closed :
   | level + 1, position, depth, spine, inside => by
     -- The first level the walk sees is one width wide, and the rest is the same problem.
     have width : (1:Nat) ≤ 2 ^ depth := Nat.one_le_two_pow
+    have one : (1:Nat) ≤ 2 ^ level := Nat.one_le_two_pow
+    have grow : (2:Nat) ^ (depth + 2) = 4 * 2 ^ depth := by
+      rw [Nat.pow_add]
+      omega
     have front : 2 ^ depth ≤ levelStart (level + 1) * 2 ^ depth + position := by
       rw [levelStart_peel]
-      have : 1 * 2 ^ depth ≤ (1 + 4 * levelStart level) * 2 ^ depth :=
-        Nat.mul_le_mul_right _ (by omega)
-      omega
-    rw [progressiveChunkGindex_peel _ _ _ front]
+      grind
     have shifted : levelStart (level + 1) * 2 ^ depth + position - 2 ^ depth
         = levelStart level * 2 ^ (depth + 2) + position := by
-      rw [levelStart_peel]
-      have grow : (2:Nat) ^ (depth + 2) = 4 * 2 ^ depth := by
-        simp [Nat.pow_add]
-        omega
-      rw [grow]
+      rw [levelStart_peel, grow]
       grind
-    rw [shifted, progressiveChunkGindex_closed level position (depth + 2) (spine * 2 + 1) (by
-      have grow : (2:Nat) ^ (depth + 2) = 4 * 2 ^ depth := by
-        simp [Nat.pow_add]
-        omega
-      rw [grow]
-      grind)]
-    have grow : (2:Nat) ^ (depth + 2) = 4 * 2 ^ depth := by
-      simp [Nat.pow_add]
-      omega
-    have one : (1:Nat) ≤ 2 ^ level := Nat.one_le_two_pow
-    rw [grow]
+    rw [progressiveChunkGindex_peel _ _ _ front, shifted, progressiveChunkGindex_closed level
+      position (depth + 2) (spine * 2 + 1) (by rw [grow]; grind), grow]
     grind
 
 /--
@@ -120,9 +108,8 @@ logarithm of the chunk number, at three hashes per factor of four.
 theorem progressiveChunkGindex_depth (level position : Nat) (inside : position < 4 ^ level) :
     Nat.log2 (progressiveChunkGindex (levelStart level + position)) = 3 * level + 2 := by
   -- Everything below is polynomial in one quantity: two to the level.
-  have triple : 3 * level = level + level + level := by omega
   have cube : (2:Nat) ^ (3 * level) = 2 ^ level * 2 ^ level * 2 ^ level := by
-    rw [triple, Nat.pow_add, Nat.pow_add]
+    rw [show 3 * level = level + level + level by omega, Nat.pow_add, Nat.pow_add]
   have square : (4:Nat) ^ level = 2 ^ level * 2 ^ level := by
     rw [show (4:Nat) = 2 * 2 from rfl, Nat.mul_pow]
   have floor : (2:Nat) ^ (3 * level + 2) = 4 * (2 ^ level * 2 ^ level * 2 ^ level) := by

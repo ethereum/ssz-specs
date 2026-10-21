@@ -57,8 +57,7 @@ theorem isCompatible_not_transitive :
     simp only [beq_iff_eq, Desc.progressiveContainer.injEq, List.cons.injEq,
       Bool.true_eq_false, Bool.false_eq_true, false_and, ↓reduceIte, Desc.byteSequence]
     rw [layoutsAgree.eq_def]
-    simp only [first, second]
-    simp [layoutPairAgree.eq_def]
+    simp [first, second, layoutPairAgree.eq_def]
   rw [compatibleAt.eq_def]
   simp [Desc.byteSequence]
 

@@ -53,11 +53,8 @@ theorem boundedNode_nested_leaf (layout : MerkleLayout) (budget : Nat)
     Nat.shiftRight_eq_div_pow, Nat.div_self (Nat.two_pow_pos _), Nat.mul_one]
   rw [one, hashTreeRootAt_eq_hashTreeRoot child inner budget enough]
   -- The enclosing leaf preserves both the child’s successful root and any child-rooting error.
-  cases root : hashTreeRoot child inner with
-  | error e => rfl
-  | ok bytes =>
-    simp [merkleizeBounded, subtreeAt, depthFor, padded, Bind.bind, Except.bind,
-      Pure.pure, Except.pure]
+  cases hashTreeRoot child inner <;>
+    simp [merkleizeBounded, subtreeAt, depthFor, padded, Bind.bind, Except.bind, Pure.pure, Except.pure]
 
 /-- Removing an outer path prefix preserves each left or right child turn. -/
 theorem gindexRebase_children (index depth : Nat) :
@@ -92,11 +89,8 @@ private theorem shift_children (index depth : Nat) :
     (2 * index + 1) >>> (depth + 1) = index >>> depth := by
   -- Dropping the new final turn first recovers the same original path.
   rw [Nat.add_comm depth 1, Nat.shiftRight_add, Nat.shiftRight_add]
-  have left : (2 * index) >>> 1 = index := by simp [Nat.shiftRight_eq_div_pow]
-  have right : (2 * index + 1) >>> 1 = index := by
-    simp only [Nat.shiftRight_eq_div_pow]
-    omega
-  simp [left, right]
+  exact ⟨congrArg (· >>> depth) (by simp [Nat.shiftRight_eq_div_pow]),
+    congrArg (· >>> depth) (by simp only [Nat.shiftRight_eq_div_pow]; omega)⟩
 
 /-- Parent equations inside a nested value remain parent equations after an outer path prefix. -/
 theorem boundedNode_nested_split (layout : MerkleLayout) (budget : Nat)
@@ -125,11 +119,11 @@ theorem boundedNode_nested_split (layout : MerkleLayout) (budget : Nat)
       ((2 * index + 1) >>> (depth + 1 - depthFor capacity)) (depthFor capacity)]? =
       some (some (child, inner)) := by simpa [remaining, rightShift] using selected
   rw [boundedNode_nested_at layout budget slots nested child inner enough
-    index depth start capacity reached selected]
-  rw [boundedNode_nested_at layout budget slots nested child inner enough
-    (2 * index) (depth + 1) start capacity (by omega) leftSelected]
-  rw [boundedNode_nested_at layout budget slots nested child inner enough
-    (2 * index + 1) (depth + 1) start capacity (by omega) rightSelected]
+      index depth start capacity reached selected,
+    boundedNode_nested_at layout budget slots nested child inner enough
+      (2 * index) (depth + 1) start capacity (by omega) leftSelected,
+    boundedNode_nested_at layout budget slots nested child inner enough
+      (2 * index + 1) (depth + 1) start capacity (by omega) rightSelected]
   -- Restoring a leading bit to the suffix preserves the order of its two nested children.
   obtain ⟨leftTurn, rightTurn⟩ := gindexRebase_children index (depth - depthFor capacity)
   simpa only [remaining, leftTurn, rightTurn] using parent
@@ -141,16 +135,10 @@ theorem gindexRebase_parent (index depth : Nat) :
   obtain ⟨left, right⟩ := gindexRebase_children (index / 2) depth
   -- The lowest retained turn identifies which of the common parent’s children is being rebased.
   rcases Nat.mod_two_eq_zero_or_one index with even | odd
-  · have child : index = 2 * (index / 2) := by omega
-    calc
-      gindexRebase index (depth + 1) / 2 = (2 * gindexRebase (index / 2) depth) / 2 :=
-        congrArg (· / 2) ((congrArg (gindexRebase · (depth + 1)) child).trans left)
-      _ = _ := by omega
-  · have child : index = 2 * (index / 2) + 1 := by omega
-    calc
-      gindexRebase index (depth + 1) / 2 = (2 * gindexRebase (index / 2) depth + 1) / 2 :=
-        congrArg (· / 2) ((congrArg (gindexRebase · (depth + 1)) child).trans right)
-      _ = _ := by omega
+  · rw [(congrArg (gindexRebase · (depth + 1)) (show index = 2 * (index / 2) by omega)).trans left]
+    omega
+  · rw [(congrArg (gindexRebase · (depth + 1)) (show index = 2 * (index / 2) + 1 by omega)).trans right]
+    omega
 
 /-- Rebasing preserves sibling positions until the outer leaf boundary is reached. -/
 theorem gindexRebase_sibling (index depth : Nat) :

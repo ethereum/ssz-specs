@@ -28,14 +28,7 @@ theorem deserializeOption_of_lookup :
     | cons candidate others =>
       -- Either this selector is the one named, or the walk moves along.
       simp only [lookupOption, deserializeOption] at found ⊢
-      split at found
-      · rename_i named
-        -- The option the lookup answered with is the one this step decodes against.
-        rw [if_pos named, Except.ok.inj found, decoded]
-        rfl
-      · rename_i other
-        rw [if_neg other]
-        exact ih others selector option body value found decoded
+      split at found <;> simp_all [Bind.bind, Except.bind, Pure.pure, Except.pure]
 
 /-- A union reads back whatever it wrote, once its option does. -/
 theorem roundTrip_compatibleUnion {selectors : List Nat} {options : List Desc}
@@ -50,24 +43,18 @@ theorem roundTrip_compatibleUnion {selectors : List Nat} {options : List Desc}
   cases inside : serialize option data with
   | error _ =>
     -- The option refused, so the union refused, and nothing was written to read back.
-    simp only [serialize, named, inside, Bind.bind, Except.bind] at wrote
-    simp at wrote
+    simp [serialize, named, inside, Bind.bind, Except.bind] at wrote
   | ok body =>
     -- The selector is one byte in front of the option's own encoding.
-    have bytesIs : bytes = #[UInt8.ofNat selector] ++ body := by
-      simp only [serialize, named, inside, Bind.bind, Except.bind, Pure.pure,
-        Except.pure] at wrote
-      exact (Except.ok.inj wrote).symm
-    subst bytesIs
+    simp only [serialize, named, inside, Bind.bind, Except.bind, Pure.pure, Except.pure,
+      Except.ok.injEq] at wrote
+    subst wrote
     -- The selector byte is there to be read, and it reads back as the selector.
-    have widthIs : (#[UInt8.ofNat selector] ++ body).size = 1 + body.size := by simp
     have firstIs : (#[UInt8.ofNat selector] ++ body)[0]!.toNat = selector := by
       rw [getElem!_pos _ 0 (by simp; omega), Array.getElem_append_left (by simp)]
       simp [Nat.mod_eq_of_lt bounded]
-    have restIs : (#[UInt8.ofNat selector] ++ body).extract 1 (1 + body.size) = body := by
-      simp
-    simp only [deserialize, widthIs, firstIs, restIs,
-      show ¬ 1 + body.size < 1 by omega, if_neg, not_false_eq_true]
+    simp [deserialize]
+    rw [firstIs]
     exact deserializeOption_of_lookup selectors options selector option body data named
       (inner body inside)
 
@@ -84,17 +71,11 @@ theorem serializeFields_length :
     cases values with
     | nil => simp [serializeFields] at wrote
     | cons value values =>
-      cases head : serialize field value with
-      | error _ => simp [serializeFields, head, Bind.bind, Except.bind] at wrote
-      | ok part =>
-        cases tail : serializeFields fields values with
-        | error _ => simp [serializeFields, head, tail, Bind.bind, Except.bind] at wrote
-        | ok rest =>
-          simp only [serializeFields, head, tail, Bind.bind, Except.bind, Pure.pure,
-            Except.pure] at wrote
-          -- The returned list contains the current part followed by the inductively counted remainder.
-          rw [← Except.ok.inj wrote]
-          simp [ih values rest tail]
+      cases head : serialize field value <;> cases tail : serializeFields fields values <;>
+        simp [serializeFields, head, tail, Bind.bind, Except.bind, Pure.pure, Except.pure] at wrote
+      -- The returned list contains the current part followed by the inductively counted remainder.
+      subst wrote
+      simp [ih values _ tail]
 
 /-- Every part is as wide as the field it was written for declares. -/
 theorem serializeFields_widths :
@@ -113,22 +94,13 @@ theorem serializeFields_widths :
     cases values with
     | nil => simp [serializeFields] at wrote
     | cons value values =>
-      cases head : serialize field value with
-      | error _ => simp [serializeFields, head, Bind.bind, Except.bind] at wrote
-      | ok part =>
-        cases tail : serializeFields fields values with
-        | error _ => simp [serializeFields, head, tail, Bind.bind, Except.bind] at wrote
-        | ok rest =>
-          simp only [serializeFields, head, tail, Bind.bind, Except.bind, Pure.pure,
-            Except.pure] at wrote
-          rw [← Except.ok.inj wrote] at member
-          -- Either this is the field just written, or one of those behind it.
-          rcases List.mem_cons.mp member with here | later
-          · subst here
-            intro width fixed
-            exact widths (field, value) (by simp) width part fixed head
-          · exact ih values rest tail
-              (fun p m => widths p (List.mem_cons_of_mem _ m)) pair later
+      cases head : serialize field value <;> cases tail : serializeFields fields values <;>
+        simp [serializeFields, head, tail, Bind.bind, Except.bind, Pure.pure, Except.pure] at wrote
+      subst wrote
+      -- Either this is the field just written, or one of those behind it.
+      rcases List.mem_cons.mp member with rfl | later
+      · exact fun width fixed => widths (field, value) (by simp) width _ fixed head
+      · exact ih values _ tail (fun p m => widths p (List.mem_cons_of_mem _ m)) pair later
 
 /-- Decoding a struct's parts gives back the values, once every field reads back. -/
 theorem deserializeFields_reads_back :
@@ -148,21 +120,13 @@ theorem deserializeFields_reads_back :
     cases values with
     | nil => simp [serializeFields] at wrote
     | cons value values =>
-      cases head : serialize field value with
-      | error _ => simp [serializeFields, head, Bind.bind, Except.bind] at wrote
-      | ok part =>
-        cases tail : serializeFields fields values with
-        | error _ => simp [serializeFields, head, tail, Bind.bind, Except.bind] at wrote
-        | ok rest =>
-          simp only [serializeFields, head, tail, Bind.bind, Except.bind, Pure.pure,
-            Except.pure] at wrote
-          rw [← Except.ok.inj wrote]
-          -- The first field decodes to its original value and the suffix follows by induction.
-          simp only [deserializeFields,
-            reads (field, value) (by simp) part head,
-            ih values rest tail (fun p m => reads p (List.mem_cons_of_mem _ m)),
-            Bind.bind, Except.bind]
-          rfl
+      cases head : serialize field value <;> cases tail : serializeFields fields values <;>
+        simp [serializeFields, head, tail, Bind.bind, Except.bind, Pure.pure, Except.pure] at wrote
+      subst wrote
+      -- The first field decodes to its original value and the suffix follows by induction.
+      simp only [deserializeFields, reads (field, value) (by simp) _ head,
+        ih values _ tail (fun p m => reads p (List.mem_cons_of_mem _ m)), Bind.bind, Except.bind]
+      rfl
 
 /--
 Structural premises for proving value round trips.
@@ -237,8 +201,7 @@ theorem reads_back {shape : Desc} {value : Value}
     ∀ bytes, serialize shape value = .ok bytes → deserialize shape bytes = .ok value := by
   -- Specialize the composed round trip to the particular successful encoder result.
   intro bytes wrote
-  rw [wrote] at whole
-  exact whole
+  rwa [wrote] at whole
 
 /-- Encoding a sequence gives one part per element. -/
 theorem serializeEach_length :
@@ -250,16 +213,10 @@ theorem serializeEach_length :
   | nil => intro parts wrote; simp_all [serializeEach]
   | cons value values ih =>
     intro parts wrote
-    cases head : serialize element value with
-    | error _ => simp [serializeEach, head, Bind.bind, Except.bind] at wrote
-    | ok part =>
-      cases tail : serializeEach element values with
-      | error _ => simp [serializeEach, head, tail, Bind.bind, Except.bind] at wrote
-      | ok rest =>
-        simp only [serializeEach, head, tail, Bind.bind, Except.bind, Pure.pure,
-          Except.pure] at wrote
-        rw [← Except.ok.inj wrote]
-        simp [ih rest tail]
+    cases head : serialize element value <;> cases tail : serializeEach element values <;>
+      simp [serializeEach, head, tail, Bind.bind, Except.bind, Pure.pure, Except.pure] at wrote
+    subst wrote
+    simp [ih _ tail]
 
 /-- Every part is as wide as the element type declares. -/
 theorem serializeEach_widths :
@@ -274,21 +231,13 @@ theorem serializeEach_widths :
   | nil => intro parts _ _ wrote _ part member; simp_all [serializeEach]
   | cons value values ih =>
     intro parts width fixed wrote widths part member
-    cases head : serialize element value with
-    | error _ => simp [serializeEach, head, Bind.bind, Except.bind] at wrote
-    | ok first =>
-      cases tail : serializeEach element values with
-      | error _ => simp [serializeEach, head, tail, Bind.bind, Except.bind] at wrote
-      | ok rest =>
-        simp only [serializeEach, head, tail, Bind.bind, Except.bind, Pure.pure,
-          Except.pure] at wrote
-        rw [← Except.ok.inj wrote] at member
-        -- The selected part is either the first successful encoding or belongs to the remaining parts.
-        rcases List.mem_cons.mp member with here | later
-        · subst here
-          exact widths value (by simp) part head
-        · exact ih rest width fixed tail
-            (fun v m => widths v (List.mem_cons_of_mem _ m)) part later
+    cases head : serialize element value <;> cases tail : serializeEach element values <;>
+      simp [serializeEach, head, tail, Bind.bind, Except.bind, Pure.pure, Except.pure] at wrote
+    subst wrote
+    -- The selected part is either the first successful encoding or belongs to the remaining parts.
+    rcases List.mem_cons.mp member with rfl | later
+    · exact widths value (by simp) part head
+    · exact ih _ width fixed tail (fun v m => widths v (List.mem_cons_of_mem _ m)) part later
 
 /-- Decoding a sequence's parts gives back the elements, once every one reads back. -/
 theorem deserializeEach_reads_back :
@@ -303,20 +252,13 @@ theorem deserializeEach_reads_back :
   | nil => intro parts wrote _; simp_all [serializeEach, deserializeEach]
   | cons value values ih =>
     intro parts wrote reads
-    cases head : serialize element value with
-    | error _ => simp [serializeEach, head, Bind.bind, Except.bind] at wrote
-    | ok first =>
-      cases tail : serializeEach element values with
-      | error _ => simp [serializeEach, head, tail, Bind.bind, Except.bind] at wrote
-      | ok rest =>
-        simp only [serializeEach, head, tail, Bind.bind, Except.bind, Pure.pure,
-          Except.pure] at wrote
-        rw [← Except.ok.inj wrote]
-        -- Combine the first recovered value with the recursively recovered sequence.
-        simp only [deserializeEach, reads value (by simp) first head,
-          ih rest tail (fun v m => reads v (List.mem_cons_of_mem _ m)),
-          Bind.bind, Except.bind]
-        rfl
+    cases head : serialize element value <;> cases tail : serializeEach element values <;>
+      simp [serializeEach, head, tail, Bind.bind, Except.bind, Pure.pure, Except.pure] at wrote
+    subst wrote
+    -- Combine the first recovered value with the recursively recovered sequence.
+    simp only [deserializeEach, reads value (by simp) _ head,
+      ih _ tail (fun v m => reads v (List.mem_cons_of_mem _ m)), Bind.bind, Except.bind]
+    rfl
 
 /--
 A struct reads back whatever it wrote, and is as wide as its fields declare.
@@ -337,13 +279,9 @@ theorem recovered_struct (fields : List Desc) (values : List Value)
         ∧ assemble (fields.map Desc.isFixed) parts = .ok bytes := by
     intro bytes wrote
     simp only [serializeStruct] at wrote
-    cases encoded : serializeFields fields values with
-    | error _ =>
-      rw [encoded] at wrote
-      simp [Bind.bind, Except.bind] at wrote
-    | ok parts =>
-      rw [encoded] at wrote
-      exact ⟨parts, rfl, wrote⟩
+    cases encoded : serializeFields fields values <;> rw [encoded] at wrote
+    · simp [Bind.bind, Except.bind] at wrote
+    · exact ⟨_, rfl, wrote⟩
   refine ⟨?_, ?_⟩
   · intro bytes wrote
     obtain ⟨parts, encoded, assembled⟩ := parts_of bytes wrote
@@ -394,14 +332,10 @@ theorem recovered_sequence (element : Desc) (elements : List Value) (width : Nat
   simp only [serializeSequence] at wrote
   -- A successful sequence result includes successful encodings of every element.
   cases encoded : serializeEach element elements with
-  | error _ =>
-    rw [encoded] at wrote
-    simp [Bind.bind, Except.bind] at wrote
+  | error _ => simp [encoded, Bind.bind, Except.bind] at wrote
   | ok parts =>
-    rw [encoded] at wrote
     -- The element has a width, so every part is written in place.
-    have isFixed : element.isFixed = true := by simp [Desc.isFixed, fixed]
-    simp only [isFixed] at wrote
+    simp only [encoded, show element.isFixed = true by simp [Desc.isFixed, fixed]] at wrote
     exact ⟨parts, serializeEach_length element elements parts encoded,
       serializeEach_widths element elements parts width fixed encoded
         (fun value member bytes wrote => (facts value member).2 width bytes fixed wrote),
@@ -427,14 +361,10 @@ theorem recovered_sequence_offset (element : Desc) (elements : List Value)
   simp only [serializeSequence] at wrote
   -- Recover the element parts before interpreting their outer offset table.
   cases encoded : serializeEach element elements with
-  | error _ =>
-    rw [encoded] at wrote
-    simp [Bind.bind, Except.bind] at wrote
+  | error _ => simp [encoded, Bind.bind, Except.bind] at wrote
   | ok parts =>
-    rw [encoded] at wrote
     -- The element has no width, so every one is reached through an offset.
-    have notFixed : element.isFixed = false := by simp [Desc.isFixed, varying]
-    simp only [notFixed] at wrote
+    simp only [encoded, show element.isFixed = false by simp [Desc.isFixed, varying]] at wrote
     -- The successful assembly bound covers the table and all payloads together.
     have nameable := assemble_nameable (parts.map fun _ => false) parts bytes wrote
     rw [show (parts.map fun _ => false).zip parts = offsetSlots parts from rfl,

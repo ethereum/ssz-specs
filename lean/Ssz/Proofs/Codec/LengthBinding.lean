@@ -26,14 +26,11 @@ theorem activeFieldsWord_injective {left right : List Bool}
   -- Equal words give equal bits, including clear positions between occupied fields.
   apply List.ext_getElem sameLength
   intro position insideLeft insideRight
-  -- The common mask length places every requested position within the 256 available bits.
-  have inside : position < bitsPerChunk := by omega
   -- Select the containing byte, shift the requested bit to the low position, and mask away the other bits.
   have bit := congrArg
     (fun bytes : Bytes => (bytes[position / 8]! >>> UInt8.ofNat (position % 8)) &&& 1 == 1) same
   -- The packed bit at that position is exactly the corresponding active-field flag.
-  rw [activeFieldsWord_bit left position inside, activeFieldsWord_bit right position inside] at bit
-  simpa only [List.getElem?_eq_getElem insideLeft, List.getElem?_eq_getElem insideRight,
-    Option.getD_some] using bit
+  rw [activeFieldsWord_bit left position (by omega), activeFieldsWord_bit right position (by omega)] at bit
+  simpa [insideLeft, insideRight] using bit
 
 end Ssz

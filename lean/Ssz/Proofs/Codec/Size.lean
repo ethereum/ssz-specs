@@ -93,13 +93,8 @@ private theorem sequence_width (element : Desc) (parts : List Bytes) :
     headWidth ((parts.map fun _ => element.isFixed).zip parts) +
       bodyWidth ((parts.map fun _ => element.isFixed).zip parts) =
       (parts.map fun part => fieldSize element part.size).sum := by
-  -- Sum the same per-element contributions that header and body construction consume.
-  induction parts with
-  | nil => simp [headWidth, bodyWidth]
-  | cons part parts ih =>
-    -- A fixed element contributes its payload once, and a variable element also contributes an offset.
-    cases fixed : element.isFixed <;>
-      simp [headWidth, bodyWidth, fieldSize, fixed] at ih ⊢ <;> omega
+  -- Each element adds its payload, plus an offset when its width varies.
+  induction parts <;> cases fixed : element.isFixed <;> simp_all [headWidth, bodyWidth, fieldSize] <;> omega
 
 /-- Measuring struct slots is the sum of each paired field's bytes and possible offset. -/
 private theorem fields_width (fields : List Desc) (parts : List Bytes) :
@@ -112,10 +107,8 @@ private theorem fields_width (fields : List Desc) (parts : List Bytes) :
     cases parts with
     | nil => simp [headWidth, bodyWidth]
     | cons part parts =>
-      -- The remaining paired fields already satisfy the additive size identity.
       have tail := ih parts
-      cases fixed : field.isFixed <;>
-        simp [headWidth, bodyWidth, fieldSize, fixed] at tail ⊢ <;> omega
+      cases fixed : field.isFixed <;> simp [headWidth, bodyWidth, fieldSize, fixed] at tail ⊢ <;> omega
 
 /-- Successful child encodings retain their mathematical size contributions when collected. -/
 private theorem collect_each (element : Desc) (sizes : Value → Nat) :
@@ -124,21 +117,15 @@ private theorem collect_each (element : Desc) (sizes : Value → Nat) :
       ∃ parts, serializeEach element values = .ok parts ∧
         (parts.map fun part => fieldSize element part.size).sum =
           (values.map fun value => fieldSize element (sizes value)).sum := by
-  intro values
+  intro values each
   -- Collect successful child encodings while retaining the sum of their mathematical sizes.
   induction values with
-  | nil => intro _; exact ⟨[], by simp [serializeEach], rfl⟩
+  | nil => exact ⟨[], by simp [serializeEach], rfl⟩
   | cons value values ih =>
-    intro each
-    -- Choose the current child encoding together with its exact width.
     obtain ⟨head, encoded, headSize⟩ := each value List.mem_cons_self
-    -- The remaining encodings preserve the remaining size sum by induction.
-    obtain ⟨tail, collected, tailSize⟩ := ih
-      (fun held member => each held (List.mem_cons_of_mem _ member))
-    -- Concatenating the successful results adds their size contributions in the same order.
-    refine ⟨head :: tail, ?_, ?_⟩
-    · simp [serializeEach, encoded, collected, Bind.bind, Except.bind, pure, Except.pure]
-    · simp only [List.map_cons, List.sum_cons, headSize, tailSize]
+    obtain ⟨tail, collected, tailSize⟩ := ih fun held member => each held (List.mem_cons_of_mem _ member)
+    exact ⟨head :: tail, by simp [serializeEach, encoded, collected, Bind.bind, Except.bind, pure, Except.pure],
+      by simp [headSize, tailSize]⟩
 
 /-- An admissible sequence of sized child encodings assembles within its structural bound. -/
 private theorem sequence_complete (element : Desc) (values : List Value) (sizes : Value → Nat)
@@ -164,12 +151,7 @@ private theorem collect_fields (sizes : Desc → Value → Nat) :
   intro fields
   -- Equal declaration and value counts let the proof advance through both lists together.
   induction fields with
-  | nil =>
-    intro values paired _
-    -- When no fields remain, matching counts rule out leftover values.
-    have empty : values = [] := List.eq_nil_of_length_eq_zero paired.symm
-    subst values
-    exact ⟨[], by simp [serializeFields], rfl⟩
+  | nil => intro values paired _; cases values <;> simp_all [serializeFields]
   | cons field fields ih =>
     intro values paired each
     cases values with
@@ -177,12 +159,10 @@ private theorem collect_fields (sizes : Desc → Value → Nat) :
     | cons value values =>
       -- The current field contributes its encoded width and any required offset.
       obtain ⟨head, encoded, headSize⟩ := each (field, value) List.mem_cons_self
-      -- Collect the remaining paired fields while preserving their total contribution.
       obtain ⟨tail, collected, tailSize⟩ := ih values (by simpa using paired)
         (fun pair member => each pair (List.mem_cons_of_mem _ member))
-      refine ⟨head :: tail, ?_, ?_⟩
-      · simp [serializeFields, encoded, collected, Bind.bind, Except.bind, pure, Except.pure]
-      · simp only [List.zip_cons_cons, List.map_cons, List.sum_cons, headSize, tailSize]
+      exact ⟨head :: tail, by simp [serializeFields, encoded, collected, Bind.bind, Except.bind, pure, Except.pure],
+        by simp [headSize, tailSize]⟩
 
 /-- An admissible struct assembles when its child encodings and its total layout fit their bounds. -/
 private theorem struct_complete (fields : List Desc) (values : List Value)
@@ -212,32 +192,17 @@ private theorem each_representable (element : Desc) (sizes : Value → Nat)
   intro values
   -- Reflect successful element encodings back into structural size witnesses.
   induction values with
-  | nil =>
-    intro parts wrote
-    simp [serializeEach] at wrote
-    subst parts
-    simp
+  | nil => intro parts wrote; simp_all [serializeEach]
   | cons value values ih =>
     intro parts wrote
     -- Composite success rules out a failed element encoding.
-    cases head : serialize element value with
-    | error fault => simp [serializeEach, head, Bind.bind, Except.bind] at wrote
-    | ok first =>
-      cases tail : serializeEach element values with
-      | error fault => simp [serializeEach, head, tail, Bind.bind, Except.bind] at wrote
-      | ok rest =>
-        simp [serializeEach, head, tail, Bind.bind, Except.bind, pure, Except.pure] at wrote
-        subst parts
-        -- The suffix supplies its child witnesses and its exact summed contribution.
-        obtain ⟨children, counted⟩ := ih rest tail
-        refine ⟨?_, ?_⟩
-        · intro held member
-          -- A requested witness belongs either to the current element or to the already proven suffix.
-          rcases List.mem_cons.mp member with here | later
-          · subst held
-            exact measure value first head ▸ reflect value first head
-          · exact children held later
-        · simp only [List.map_cons, List.sum_cons, measure value first head, counted]
+    cases head : serialize element value <;> cases tail : serializeEach element values <;>
+      simp [serializeEach, head, tail, Bind.bind, Except.bind, pure, Except.pure] at wrote
+    subst parts
+    -- The suffix supplies its child witnesses, and the current element adds its own.
+    obtain ⟨children, counted⟩ := ih _ tail
+    exact ⟨List.forall_mem_cons.mpr ⟨measure value _ head ▸ reflect value _ head, children⟩,
+      by simp [measure value _ head, counted]⟩
 
 /-- A successful sequence encoding supplies bounded mathematical child sizes. -/
 private theorem sequence_representable (element : Desc) (values : List Value) (bytes : Bytes)
@@ -280,35 +245,22 @@ private theorem fields_representable (sizes : Desc → Value → Nat)
   intro fields
   -- Recover child size witnesses while following each field-value pair.
   induction fields with
-  | nil =>
-    intro values parts reflect wrote
-    cases values <;> simp [serializeFields] at wrote
-    subst parts
-    simp
+  | nil => intro values parts _ wrote; cases values <;> simp_all [serializeFields]
   | cons field fields ih =>
     intro values parts reflect wrote
     cases values with
     | nil => simp [serializeFields] at wrote
     | cons value values =>
       -- Any failed field encoding would contradict the assumed successful collection.
-      cases head : serialize field value with
-      | error fault => simp [serializeFields, head, Bind.bind, Except.bind] at wrote
-      | ok first =>
-        cases tail : serializeFields fields values with
-        | error fault => simp [serializeFields, head, tail, Bind.bind, Except.bind] at wrote
-        | ok rest =>
-          simp [serializeFields, head, tail, Bind.bind, Except.bind, pure, Except.pure] at wrote
-          subst parts
-          -- The remaining paired fields already have witnesses and an exact contribution sum.
-          obtain ⟨children, counted⟩ := ih values rest
-            (fun pair member => reflect pair (List.mem_cons_of_mem _ member)) tail
-          refine ⟨?_, ?_⟩
-          · intro pair member
-            -- Split membership between the current pair and the remaining field pairs.
-            rcases List.mem_cons.mp member with rfl | later
-            · exact measure field value first head ▸ reflect (field, value) List.mem_cons_self first head
-            · exact children pair later
-          · simp only [List.zip_cons_cons, List.map_cons, List.sum_cons, measure field value first head, counted]
+      cases head : serialize field value <;> cases tail : serializeFields fields values <;>
+        simp [serializeFields, head, tail, Bind.bind, Except.bind, pure, Except.pure] at wrote
+      subst parts
+      -- The remaining pairs supply their witnesses, and the current pair adds its own.
+      obtain ⟨children, counted⟩ := ih values _
+        (fun pair member => reflect pair (List.mem_cons_of_mem _ member)) tail
+      exact ⟨List.forall_mem_cons.mpr
+          ⟨measure field value _ head ▸ reflect (field, value) List.mem_cons_self _ head, children⟩,
+        by simp [measure field value _ head, counted]⟩
 
 /-- A successful struct encoding supplies bounded mathematical sizes for all its fields. -/
 private theorem struct_representable (fields : List Desc) (values : List Value) (bytes : Bytes)
@@ -345,91 +297,65 @@ theorem Representable.serialize {shape : Desc} {value : Value} {size : Nat}
     Fits shape value → ∃ bytes, serialize shape value = .ok bytes ∧ bytes.size = size := by
   -- Structural induction constructs each child encoding before its enclosing composite.
   induction represented with
-  | bool value =>
-    intro _
-    exact ⟨#[if value then 1 else 0], by simp [Ssz.serialize], rfl⟩
+  | bool value => exact fun _ => ⟨#[if value then 1 else 0], by simp [Ssz.serialize], rfl⟩
   | uint width value =>
-    intro fitted
-    cases fitted with
-    | uint bound => exact ⟨uintBytes width value, by simp [Ssz.serialize, bound], uintBytes_size _ _⟩
+    intro (.uint bound)
+    exact ⟨uintBytes width value, by simp [Ssz.serialize, bound], uintBytes_size _ _⟩
   | byteVector length data =>
-    intro fitted
-    cases fitted with
-    | byteVector sized => exact ⟨data, by simp [Ssz.serialize, sized], rfl⟩
+    intro (.byteVector sized)
+    exact ⟨data, by simp [Ssz.serialize, sized], rfl⟩
   | byteList limit data =>
-    intro fitted
-    cases fitted with
-    | byteList within => exact ⟨data, by simp [Ssz.serialize, within], rfl⟩
+    intro (.byteList within)
+    exact ⟨data, by simp [Ssz.serialize, within], rfl⟩
   | bitVector length data =>
-    intro fitted
-    cases fitted with
-    | bitVector sized =>
-      refine ⟨packBits data ((length + 7) / 8), by simp [Ssz.serialize, sized], ?_⟩
-      simp [packBits, sized]
+    intro (.bitVector sized)
+    exact ⟨packBits data ((length + 7) / 8), by simp [Ssz.serialize, sized], by simp [packBits, sized]⟩
   | bitList limit data =>
-    intro fitted
-    cases fitted with
-    | bitList within =>
-      exact ⟨packBitsDelimited data, by simp [Ssz.serialize, within], by simp [packBitsDelimited, packBits]⟩
+    intro (.bitList within)
+    exact ⟨packBitsDelimited data, by simp [Ssz.serialize, within], by simp [packBitsDelimited, packBits]⟩
   | progressiveBitList limit data =>
-    intro fitted
-    cases fitted with
-    | progressiveBitList within =>
-      exact ⟨packBitsDelimited data,
-        by simp [Ssz.serialize, boundCheck_of_withinBound limit _ within, Bind.bind, Except.bind,
-          Pure.pure, Except.pure],
-        by simp [packBitsDelimited, packBits]⟩
+    intro (.progressiveBitList within)
+    exact ⟨packBitsDelimited data,
+      by simp [Ssz.serialize, boundCheck_of_withinBound limit _ within, Bind.bind, Except.bind,
+        Pure.pure, Except.pure],
+      by simp [packBitsDelimited, packBits]⟩
   -- For sequences, construct each admissible child before applying the witnessed total size bound.
   | vector each bounded ih =>
-    intro fitted
-    cases fitted with
-    | vector counted admissible =>
-      obtain ⟨bytes, encoded, sized⟩ := sequence_complete _ _ _
-        (fun held member => ih held member (admissible held member)) bounded
-      exact ⟨bytes, by simp [Ssz.serialize, counted, encoded], sized⟩
+    intro (.vector counted admissible)
+    obtain ⟨bytes, encoded, sized⟩ := sequence_complete _ _ _
+      (fun held member => ih held member (admissible held member)) bounded
+    exact ⟨bytes, by simp [Ssz.serialize, counted, encoded], sized⟩
   | list each bounded ih =>
-    intro fitted
-    cases fitted with
-    | list within admissible =>
-      obtain ⟨bytes, encoded, sized⟩ := sequence_complete _ _ _
-        (fun held member => ih held member (admissible held member)) bounded
-      exact ⟨bytes, by simp [Ssz.serialize, within, encoded], sized⟩
+    intro (.list within admissible)
+    obtain ⟨bytes, encoded, sized⟩ := sequence_complete _ _ _
+      (fun held member => ih held member (admissible held member)) bounded
+    exact ⟨bytes, by simp [Ssz.serialize, within, encoded], sized⟩
   | @progressiveList _ limit _ _ each bounded ih =>
-    intro fitted
-    cases fitted with
-    | progressiveList within admissible =>
-      obtain ⟨bytes, encoded, sized⟩ := sequence_complete _ _ _
-        (fun held member => ih held member (admissible held member)) bounded
-      exact ⟨bytes, by
-        simpa only [Ssz.serialize, boundCheck_of_withinBound limit _ within, Bind.bind,
-          Except.bind] using encoded, sized⟩
+    intro (.progressiveList within admissible)
+    obtain ⟨bytes, encoded, sized⟩ := sequence_complete _ _ _
+      (fun held member => ih held member (admissible held member)) bounded
+    exact ⟨bytes, by
+      simpa only [Ssz.serialize, boundCheck_of_withinBound limit _ within, Bind.bind,
+        Except.bind] using encoded, sized⟩
   -- For containers, matched field-value counts ensure that every declared field is encoded.
   | container each bounded ih =>
-    intro fitted
-    cases fitted with
-    | container paired admissible =>
-      obtain ⟨bytes, encoded, sized⟩ := struct_complete _ _ _ paired
-        (fun pair member => ih pair member (admissible pair member)) bounded
-      exact ⟨bytes, by simpa only [Ssz.serialize] using encoded, sized⟩
+    intro (.container paired admissible)
+    obtain ⟨bytes, encoded, sized⟩ := struct_complete _ _ _ paired
+      (fun pair member => ih pair member (admissible pair member)) bounded
+    exact ⟨bytes, by simpa only [Ssz.serialize] using encoded, sized⟩
   -- Inactive Merkle positions add no bytes to the serialized container.
   | progressiveContainer each bounded ih =>
-    intro fitted
-    cases fitted with
-    | progressiveContainer paired admissible =>
-      obtain ⟨bytes, encoded, sized⟩ := struct_complete _ _ _ paired
-        (fun pair member => ih pair member (admissible pair member)) bounded
-      exact ⟨bytes, by simpa only [Ssz.serialize] using encoded, sized⟩
+    intro (.progressiveContainer paired admissible)
+    obtain ⟨bytes, encoded, sized⟩ := struct_complete _ _ _ paired
+      (fun pair member => ih pair member (admissible pair member)) bounded
+    exact ⟨bytes, by simpa only [Ssz.serialize] using encoded, sized⟩
   | @compatibleUnion selectors options selector option data size named inner ih =>
-    intro fitted
-    cases fitted with
-    | compatibleUnion bound found admissible =>
-      -- The size witness and admissibility refer to the same uniquely selected option.
-      have same := Except.ok.inj (named.symm.trans found)
-      cases same
-      obtain ⟨body, encoded, sized⟩ := ih admissible
-      refine ⟨#[UInt8.ofNat selector] ++ body, ?_, ?_⟩
-      · simp [Ssz.serialize, named, encoded, Bind.bind, Except.bind, pure, Except.pure]
-      · simp [sized]
+    intro (.compatibleUnion _ found admissible)
+    -- The size witness and admissibility refer to the same uniquely selected option.
+    cases Except.ok.inj (named.symm.trans found)
+    obtain ⟨body, encoded, sized⟩ := ih admissible
+    exact ⟨#[UInt8.ofNat selector] ++ body,
+      by simp [Ssz.serialize, named, encoded, Bind.bind, Except.bind, pure, Except.pure], by simp [sized]⟩
 
 /-- Every successful encoding has a structural size witness, including bounds at all nested sequences and containers. -/
 theorem representable_of_serialize (shape : Desc) (value : Value) (bytes : Bytes)
@@ -445,69 +371,49 @@ theorem representable_of_serialize (shape : Desc) (value : Value) (bytes : Bytes
     exact .bool _
   | uint width =>
     cases value <;> simp [Ssz.serialize] at wrote
-    split at wrote
-    · simp at wrote
-      subst bytes
-      simpa only [uintBytes_size] using Representable.uint width _
-    · cases wrote
+    split at wrote <;> cases wrote
+    simpa only [uintBytes_size] using Representable.uint width _
   | byteVector length =>
     cases value <;> simp [Ssz.serialize] at wrote
-    split at wrote
-    · simp at wrote
-      subst bytes
-      exact .byteVector _ _
-    · cases wrote
+    split at wrote <;> cases wrote
+    exact .byteVector _ _
   | byteList limit =>
     cases value <;> simp [Ssz.serialize] at wrote
-    split at wrote
-    · simp at wrote
-      subst bytes
-      exact .byteList _ _
-    · cases wrote
+    split at wrote <;> cases wrote
+    exact .byteList _ _
   | bitVector length =>
     cases value <;> simp [Ssz.serialize] at wrote
-    split at wrote
-    · simp at wrote
-      subst bytes
-      rename_i data sized
-      simpa [packBits, show data.size = length by simpa using sized] using Representable.bitVector length data
-    · cases wrote
+    split at wrote <;> cases wrote
+    rename_i data sized
+    simpa [packBits, show data.size = length by simpa using sized] using Representable.bitVector length data
   | bitList limit =>
     cases value <;> simp [Ssz.serialize] at wrote
-    split at wrote
-    · simp at wrote
-      subst bytes
-      simpa [packBitsDelimited, packBits] using Representable.bitList limit _
-    · cases wrote
+    split at wrote <;> cases wrote
+    simpa [packBitsDelimited, packBits] using Representable.bitList limit _
   | progressiveBitList limit =>
     cases value <;>
       simp [Ssz.serialize, Bind.bind, Except.bind, Pure.pure, Except.pure] at wrote
-    split at wrote
-    · cases wrote
-    · rw [← Except.ok.inj wrote]
-      simpa [packBitsDelimited, packBits] using Representable.progressiveBitList limit _
+    split at wrote <;> cases wrote
+    simpa [packBitsDelimited, packBits] using Representable.progressiveBitList limit _
   -- For composite sequences, recover child witnesses and the enclosing assembly bound.
   | vector element length ih =>
     cases value <;> simp [Ssz.serialize] at wrote
-    split at wrote
-    · obtain ⟨sizes, children, measured, bounded⟩ := sequence_representable element _ bytes ih wrote
-      rw [measured]
-      exact .vector children bounded
-    · cases wrote
+    split at wrote <;> try cases wrote
+    obtain ⟨sizes, children, measured, bounded⟩ := sequence_representable element _ bytes ih wrote
+    rw [measured]
+    exact .vector children bounded
   | list element limit ih =>
     cases value <;> simp [Ssz.serialize] at wrote
-    split at wrote
-    · obtain ⟨sizes, children, measured, bounded⟩ := sequence_representable element _ bytes ih wrote
-      rw [measured]
-      exact .list children bounded
-    · cases wrote
+    split at wrote <;> try cases wrote
+    obtain ⟨sizes, children, measured, bounded⟩ := sequence_representable element _ bytes ih wrote
+    rw [measured]
+    exact .list children bounded
   | progressiveList element limit ih =>
     cases value <;> simp [Ssz.serialize, Bind.bind, Except.bind] at wrote
-    split at wrote
-    · cases wrote
-    · obtain ⟨sizes, children, measured, bounded⟩ := sequence_representable element _ bytes ih wrote
-      rw [measured]
-      exact .progressiveList children bounded
+    split at wrote <;> try cases wrote
+    obtain ⟨sizes, children, measured, bounded⟩ := sequence_representable element _ bytes ih wrote
+    rw [measured]
+    exact .progressiveList children bounded
   -- Each successful field encoding supplies a witness under its own declared type.
   | container names fields ih =>
     cases value <;> simp [Ssz.serialize] at wrote
@@ -527,35 +433,23 @@ theorem representable_of_serialize (shape : Desc) (value : Value) (bytes : Bytes
     cases value <;> simp only [Ssz.serialize] at wrote
     all_goals try contradiction
     rename_i selector data
-    cases named : lookupOption selectors options selector with
-    | error fault => simp [named, Bind.bind, Except.bind] at wrote
-    | ok option =>
-      cases encoded : serialize option data with
-      | error fault => simp [named, encoded, Bind.bind, Except.bind] at wrote
-      | ok body =>
-        simp [named, encoded, Bind.bind, Except.bind, pure, Except.pure] at wrote
-        subst bytes
-        -- The selected option belongs to the declaration, so the induction hypothesis applies.
-        have member := lookupOption_mem selectors options selector option named
-        simpa using Representable.compatibleUnion named (ih option member data body encoded)
+    cases named : lookupOption selectors options selector <;> simp [named, Bind.bind, Except.bind] at wrote
+    rename_i option
+    cases encoded : serialize option data <;> simp [encoded, pure, Except.pure] at wrote
+    subst bytes
+    -- The selected option belongs to the declaration, so the induction hypothesis applies.
+    have member := lookupOption_mem selectors options selector option named
+    simpa using Representable.compatibleUnion named (ih option member data _ encoded)
   | nil => intros; contradiction
   | cons field fields ihHead ihTail =>
     rename_i held member value bytes wrote
-    rcases List.mem_cons.mp member with here | later
-    · subst held; exact ihHead value bytes wrote
-    · exact ihTail held later value bytes wrote
+    exact List.forall_mem_cons.mpr ⟨ihHead, ihTail⟩ held member value bytes wrote
 
 /-- For admissible values, the structural size condition exactly characterizes successful encoding. -/
 theorem representable_iff_serializes {shape : Desc} {value : Value} (fitted : Fits shape value) :
     (∃ size, Representable shape value size) ↔ ∃ bytes, serialize shape value = .ok bytes := by
-  -- The two directions connect mathematical byte-size bounds with successful execution.
-  constructor
-  · rintro ⟨size, represented⟩
-    -- Admissibility plus a structural witness constructs an encoding of the predicted size.
-    obtain ⟨bytes, wrote, _⟩ := represented.serialize fitted
-    exact ⟨bytes, wrote⟩
-  · rintro ⟨bytes, wrote⟩
-    -- Conversely, the actual encoded width supplies a witness with every nested sequence and container bound.
-    exact ⟨bytes.size, representable_of_serialize shape value bytes wrote⟩
+  -- A structural witness builds an encoding, and an actual encoding's width is a witness.
+  exact ⟨fun ⟨_, represented⟩ => (represented.serialize fitted).imp fun _ => And.left,
+    fun ⟨bytes, wrote⟩ => ⟨bytes.size, representable_of_serialize shape value bytes wrote⟩⟩
 
 end Ssz

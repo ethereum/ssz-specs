@@ -19,8 +19,7 @@ theorem packBytes_injective {left right : Bytes} (lengths : left.size = right.si
   have inLeft : i / bytesPerChunk < (packBytes left).size := by
     simp only [packBytes_size, bytesPerChunk] at *
     omega
-  have inRight : i / bytesPerChunk < (packBytes right).size := by
-    simpa only [← packed] using inLeft
+  have inRight : i / bytesPerChunk < (packBytes right).size := packed ▸ inLeft
   -- Reading a packed byte inside the payload returns the corresponding original byte.
   have a := packBytes_get left (i / bytesPerChunk) (i % bytesPerChunk) inLeft position
     (by omega)
@@ -44,9 +43,8 @@ theorem packBytes_injective_of_padded {left right : Bytes} {capacity : Nat}
   apply Array.ext counts
   intro index hi hj
   -- Each actual node lies below the declared capacity, so padded agreement applies to it.
-  have equal := agree index (by omega)
   simpa only [padded, Array.getElem?_eq_getElem hi, Array.getElem?_eq_getElem hj,
-    Option.getD_some] using equal
+    Option.getD_some] using agree index (by omega)
 
 /-- A sufficient byte buffer preserves every bit of a known-length bit string. -/
 theorem packBits_injective {left right : Array Bool} {byteCount : Nat}
@@ -130,16 +128,14 @@ theorem packElements_injective {shape : Desc} {width : Nat}
   have rightWidths := serializeEach_widths shape right rightParts width fixed rightWrote
     (fun value member _ wrote => serialize_size_of_wellFormed sound (rightFits value member)
       fixed wrote)
-  -- Successful element encoding preserves the number of elements.
-  have partsCount : leftParts.length = rightParts.length := by
-    rw [serializeEach_length shape left leftParts leftWrote,
-      serializeEach_length shape right rightParts rightWrote, counts]
   -- It suffices to recover the unpadded encoded stream before decoding its parts.
   apply serializeEach_concat_injective sound fixed counts leftFits rightFits leftWrote rightWrote
   -- Equal part counts and widths determine the byte length needed to remove node padding.
+  -- Successful element encoding preserves the number of elements.
   apply packBytes_injective
-  · rw [concatParts_size width leftParts leftWidths,
-      concatParts_size width rightParts rightWidths, partsCount]
+  · rw [concatParts_size width leftParts leftWidths, concatParts_size width rightParts rightWidths,
+      serializeEach_length shape left leftParts leftWrote,
+      serializeEach_length shape right rightParts rightWrote, counts]
   · simpa [packElements, fold_parts_eq_concat] using packed
 
 end Ssz

@@ -8,6 +8,10 @@ namespace Ssz
 private theorem throw_error {α : Type} (fault : Err) :
     (throw fault : Except Err α) = .error fault := rfl
 
+private theorem bind_ok {α β : Type} {x : Except Err α} {f : α → Except Err β} {b : β}
+    (h : (x >>= f) = .ok b) : ∃ a, x = .ok a ∧ f a = .ok b := by
+  cases x <;> simp_all [Bind.bind, Except.bind]
+
 /-- Reading a fixed number of bytes always yields an integer within that width. -/
 theorem readUint_lt (data : Bytes) (start width : Nat) :
     readUint data start width < 2 ^ (8 * width) := by
@@ -35,19 +39,16 @@ theorem offsetSpans_length {offsets spans : List Nat} {scope : Nat}
   | case1 => cases read; rfl
   | case2 start scope bad => simp [offsetSpans, bad] at read
   | case3 start scope good =>
-    simp [offsetSpans, good] at read
-    subst spans
+    simp only [offsetSpans, good, if_false] at read
+    cases read
     rfl
   | case4 start next rest scope bad => simp [offsetSpans, bad] at read
   | case5 start next rest scope good ih =>
     -- A rejected suffix cannot occur inside a successfully decoded table.
-    cases tail : offsetSpans (next :: rest) scope with
-    | error fault => simp [offsetSpans, good, tail, Bind.bind, Except.bind] at read
-    | ok more =>
-      simp [offsetSpans, good, tail, Bind.bind, Except.bind, pure, Except.pure] at read
-      subst spans
-      -- Prepending the current span increases both counts by one.
-      simp [ih tail]
+    simp only [offsetSpans, good, if_false] at read
+    obtain ⟨more, tail, ⟨⟩⟩ := bind_ok read
+    -- Prepending the current span increases both counts by one.
+    simp [ih tail]
 
 /-- Cutting a vector produces one slice per declared element. -/
 theorem vectorSlices_length {element : Desc} {count : Nat} {data : Bytes}
@@ -64,8 +65,7 @@ theorem vectorSlices_length {element : Desc} {count : Nat} {data : Bytes}
       simp only [fixed] at read
       split at read
       · simp [Bind.bind, Except.bind] at read
-      · simp [pure, Except.pure] at read
-        subst slices
+      · cases read
         simp
     -- Variable-size slicing pairs each of the declared offsets with exactly one body span.
     | none =>
@@ -79,15 +79,11 @@ theorem vectorSlices_length {element : Desc} {count : Nat} {data : Bytes}
           simp_all
         · split at read
           · simp [Bind.bind, Except.bind] at read
-          · cases spans : offsetSpans (readOffsets data count) data.size with
-            | error fault => simp [spans, Bind.bind, Except.bind] at read
-            | ok widths =>
-              simp [spans, Bind.bind, Except.bind, pure, Except.pure] at read
-              subst slices
-              -- Span validation preserves the number of offset entries.
-              have sized := offsetSpans_length spans
-              simp [readOffsets] at sized ⊢
-              omega
+          · obtain ⟨widths, spans, ⟨⟩⟩ := bind_ok read
+            -- Span validation preserves the number of offset entries.
+            have sized := offsetSpans_length spans
+            simp [readOffsets] at sized ⊢
+            omega
 
 /-- A delimited bit sequence respects the capacity checked by its decoder. -/
 theorem unpackDelimited_bound {limit : Nat} {data : Bytes} {bits : Array Bool}
@@ -136,23 +132,16 @@ private theorem deserializeEach_fits {element : Desc}
   induction slices with
   | nil =>
     intro values read
-    simp [deserializeEach] at read
-    subst values
-    simp
+    simp_all [deserializeEach]
   | cons slice slices ih =>
     intro values read
-    cases head : deserialize element slice with
-    | error fault => simp [deserializeEach, head, Bind.bind, Except.bind] at read
-    | ok value =>
-      -- The remaining slices must decode successfully because errors propagate.
-      cases tail : deserializeEach element slices with
-      | error fault => simp [deserializeEach, head, tail, Bind.bind, Except.bind] at read
-      | ok rest =>
-        simp [deserializeEach, head, tail, Bind.bind, Except.bind, pure, Except.pure] at read
-        subst values
-        -- Combine admissibility of the first value with the inductive result for the suffix.
-        obtain ⟨sized, each⟩ := ih rest tail
-        exact ⟨by simp [sized], by simpa using And.intro (inner slice value head) each⟩
+    rw [deserializeEach] at read
+    -- The remaining slices must decode successfully because errors propagate.
+    obtain ⟨value, head, read⟩ := bind_ok read
+    obtain ⟨rest, tail, ⟨⟩⟩ := bind_ok read
+    -- Combine admissibility of the first value with the inductive result for the suffix.
+    obtain ⟨sized, each⟩ := ih rest tail
+    exact ⟨by simp [sized], by simpa using And.intro (inner slice value head) each⟩
 
 /-- Decoding fields establishes both one-to-one pairing and each field's domain. -/
 private theorem deserializeFields_fits : ∀ fields slices values,
@@ -173,23 +162,18 @@ private theorem deserializeFields_fits : ∀ fields slices values,
     | nil => simp [deserializeFields] at read
     | cons slice slices =>
       -- The current field uses its own type-specific decoder.
-      cases head : deserialize field slice with
-      | error fault => simp [deserializeFields, head, Bind.bind, Except.bind] at read
-      | ok value =>
-        cases tail : deserializeFields fields slices with
-        | error fault => simp [deserializeFields, head, tail, Bind.bind, Except.bind] at read
-        | ok rest =>
-          simp [deserializeFields, head, tail, Bind.bind, Except.bind, pure, Except.pure] at read
-          subst values
-          -- The remaining fields provide their pairing and admissibility guarantees recursively.
-          obtain ⟨sized, each⟩ := ih slices rest
-            (fun held member => inner held (List.mem_cons_of_mem _ member)) tail
-          refine ⟨by simp [sized], ?_⟩
-          intro pair member
-          -- Every field-value pair belongs either to the current position or to the proven suffix.
-          rcases List.mem_cons.mp member with first | later
-          · exact first ▸ inner field List.mem_cons_self slice value head
-          · exact each pair later
+      rw [deserializeFields] at read
+      obtain ⟨value, head, read⟩ := bind_ok read
+      obtain ⟨rest, tail, ⟨⟩⟩ := bind_ok read
+      -- The remaining fields provide their pairing and admissibility guarantees recursively.
+      obtain ⟨sized, each⟩ := ih slices rest
+        (fun held member => inner held (List.mem_cons_of_mem _ member)) tail
+      refine ⟨by simp [sized], ?_⟩
+      intro pair member
+      -- Every field-value pair belongs either to the current position or to the proven suffix.
+      rcases List.mem_cons.mp member with first | later
+      · exact first ▸ inner field List.mem_cons_self slice value head
+      · exact each pair later
 
 /-- A decoded union names an actual option and a value admissible for that option. -/
 private theorem deserializeOption_fits : ∀ selectors options selector data value,
@@ -210,13 +194,10 @@ private theorem deserializeOption_fits : ∀ selectors options selector data val
     | cons option options =>
       -- A matching selector provides both a successful lookup and an admissible decoded payload.
       by_cases same : chosen == selector
-      · cases body : deserialize option data with
-        | error fault => simp [deserializeOption, same, body, Bind.bind, Except.bind] at read
-        | ok held =>
-          simp [deserializeOption, same, body, Bind.bind, Except.bind, pure, Except.pure] at read
-          subst value
-          exact ⟨option, held, rfl, by simp [lookupOption, same],
-            inner option List.mem_cons_self data held body⟩
+      · simp only [deserializeOption, same, if_true] at read
+        obtain ⟨held, body, ⟨⟩⟩ := bind_ok read
+        exact ⟨option, held, rfl, by simp [lookupOption, same],
+          inner option List.mem_cons_self data held body⟩
       -- Otherwise continue with the remaining options without changing the payload bytes.
       · obtain ⟨heldOption, held, eq, named, fits⟩ := ih options selector data value
           (fun held member => inner held (List.mem_cons_of_mem _ member))
@@ -242,8 +223,7 @@ theorem fits_of_deserialize (shape : Desc) :
     simp only [deserialize, throw_error, Bind.bind, Except.bind] at read
     split at read
     · cases read
-    · simp [pure, Except.pure] at read
-      subst value
+    · cases read
       exact .uint (readUint_lt data 0 width)
   -- The accepted byte count supplies the fixed-size requirement.
   | byteVector length =>
@@ -251,8 +231,7 @@ theorem fits_of_deserialize (shape : Desc) :
     simp only [deserialize, throw_error, Bind.bind, Except.bind] at read
     split at read
     · cases read
-    · simp [pure, Except.pure] at read
-      subst value
+    · cases read
       exact .byteVector (by simp_all)
   -- The decoder capacity comparison supplies the variable-size requirement.
   | byteList limit =>
@@ -260,8 +239,7 @@ theorem fits_of_deserialize (shape : Desc) :
     simp only [deserialize, throw_error, Bind.bind, Except.bind] at read
     split at read
     · cases read
-    · simp [pure, Except.pure] at read
-      subst value
+    · cases read
       exact .byteList (by omega)
   -- Unpacking the declared count creates exactly that many bits.
   | bitVector length =>
@@ -273,71 +251,45 @@ theorem fits_of_deserialize (shape : Desc) :
   -- The delimiter determines the bit count, which must fit the declared capacity.
   | bitList limit =>
     intro data value read
-    cases bits : unpackDelimited (some limit) data with
-    | error fault => simp [deserialize, bits, Bind.bind, Except.bind] at read
-    | ok held =>
-      simp [deserialize, bits, Bind.bind, Except.bind, pure, Except.pure] at read
-      subst value
-      exact .bitList (unpackDelimited_bound bits)
+    rw [deserialize] at read
+    obtain ⟨held, bits, ⟨⟩⟩ := bind_ok read
+    exact .bitList (unpackDelimited_bound bits)
   | progressiveBitList limit =>
     intro data value read
-    cases bits : unpackDelimited limit data with
-    | error fault => simp [deserialize, bits, Bind.bind, Except.bind] at read
-    | ok held =>
-      simp [deserialize, bits, Bind.bind, Except.bind, pure, Except.pure] at read
-      subst value
-      exact .progressiveBitList (unpackDelimited_within bits)
+    rw [deserialize] at read
+    obtain ⟨held, bits, ⟨⟩⟩ := bind_ok read
+    exact .progressiveBitList (unpackDelimited_within bits)
   -- Slice count and element admissibility together establish the fixed sequence shape.
   | vector element count ih =>
     intro data value read
-    cases parts : vectorSlices element count data with
-    | error fault => simp [deserialize, parts, Bind.bind, Except.bind] at read
-    | ok slices =>
-      cases decoded : deserializeEach element slices with
-      | error fault => simp [deserialize, parts, decoded, Bind.bind, Except.bind] at read
-      | ok values =>
-        simp [deserialize, parts, decoded, Bind.bind, Except.bind, pure, Except.pure] at read
-        subst value
-        obtain ⟨sized, each⟩ := deserializeEach_fits ih slices values decoded
-        exact .vector (sized.trans (vectorSlices_length parts)) each
+    rw [deserialize] at read
+    obtain ⟨slices, parts, read⟩ := bind_ok read
+    obtain ⟨values, decoded, ⟨⟩⟩ := bind_ok read
+    obtain ⟨sized, each⟩ := deserializeEach_fits ih slices values decoded
+    exact .vector (sized.trans (vectorSlices_length parts)) each
   -- The accepted slice count is bounded, and every recovered element fits its own type.
   | list element limit ih =>
     intro data value read
-    cases parts : listSlices element (some limit) data with
-    | error fault => simp [deserialize, parts, Bind.bind, Except.bind] at read
-    | ok slices =>
-      cases decoded : deserializeEach element slices with
-      | error fault => simp [deserialize, parts, decoded, Bind.bind, Except.bind] at read
-      | ok values =>
-        simp [deserialize, parts, decoded, Bind.bind, Except.bind, pure, Except.pure] at read
-        subst value
-        obtain ⟨sized, each⟩ := deserializeEach_fits ih slices values decoded
-        exact .list (sized ▸ listSlices_bound parts) each
+    rw [deserialize] at read
+    obtain ⟨slices, parts, read⟩ := bind_ok read
+    obtain ⟨values, decoded, ⟨⟩⟩ := bind_ok read
+    obtain ⟨sized, each⟩ := deserializeEach_fits ih slices values decoded
+    exact .list (sized ▸ listSlices_bound parts) each
   | progressiveList element limit ih =>
     intro data value read
-    cases parts : listSlices element limit data with
-    | error fault => simp [deserialize, parts, Bind.bind, Except.bind] at read
-    | ok slices =>
-      cases decoded : deserializeEach element slices with
-      | error fault => simp [deserialize, parts, decoded, Bind.bind, Except.bind] at read
-      | ok values =>
-        simp [deserialize, parts, decoded, Bind.bind, Except.bind, pure, Except.pure] at read
-        subst value
-        obtain ⟨sized, each⟩ := deserializeEach_fits ih slices values decoded
-        exact .progressiveList (sized ▸ listSlices_within parts) each
+    rw [deserialize] at read
+    obtain ⟨slices, parts, read⟩ := bind_ok read
+    obtain ⟨values, decoded, ⟨⟩⟩ := bind_ok read
+    obtain ⟨sized, each⟩ := deserializeEach_fits ih slices values decoded
+    exact .progressiveList (sized ▸ listSlices_within parts) each
   -- Both container families decode one admissible value per declared field.
   | container names fields ih | progressiveContainer active names fields ih =>
     intro data value read
-    cases parts : structSlices fields data with
-    | error fault => simp [deserialize, parts, Bind.bind, Except.bind] at read
-    | ok slices =>
-      cases decoded : deserializeFields fields slices with
-      | error fault => simp [deserialize, parts, decoded, Bind.bind, Except.bind] at read
-      | ok values =>
-        simp [deserialize, parts, decoded, Bind.bind, Except.bind, pure, Except.pure] at read
-        subst value
-        obtain ⟨sized, each⟩ := deserializeFields_fits fields slices values ih decoded
-        first | exact .container sized each | exact .progressiveContainer sized each
+    rw [deserialize] at read
+    obtain ⟨slices, parts, read⟩ := bind_ok read
+    obtain ⟨values, decoded, ⟨⟩⟩ := bind_ok read
+    obtain ⟨sized, each⟩ := deserializeFields_fits fields slices values ih decoded
+    first | exact .container sized each | exact .progressiveContainer sized each
   -- The first byte supplies a bounded selector, and the matching option supplies payload admissibility.
   | compatibleUnion selectors options ih =>
     intro data value read

@@ -16,8 +16,7 @@ private theorem progressiveReading_parent_eq (chunks : Array Bytes) (index depth
         (progressiveReading chunks index depth start level) := by
   -- The current node and its sibling are the two ordered children of their shared parent.
   have equation := progressiveReading_split chunks (index / 2) (depth - 1) start level interior
-  have next : depth - 1 + 1 = depth := by omega
-  rw [next] at equation
+  rw [show depth - 1 + 1 = depth by omega] at equation
   rcases Nat.mod_two_eq_zero_or_one index with even | odd
   · obtain ⟨child, sibling⟩ := gindexSibling_even even
     rw [← sibling, ← child] at equation
@@ -43,34 +42,23 @@ theorem progressiveNode_closed (layout : MerkleLayout) (budget : Nat) (chunks : 
   | succ depth ih =>
     have count := layoutChunksAt_size budget layout chunks materialized
     -- A successful nonterminal spine read implies the current segment actually exists.
-    have occupied : start < layout.leaves.count := by
-      by_cases past : start ≥ layout.leaves.count
-      · rw [progressiveNode_step, if_pos past] at read
-        cases read
-      · omega
+    have occupied : start < layout.leaves.count := Nat.lt_of_not_ge fun past => by
+      rw [progressiveNode_step, if_pos past] at read
+      cases read
     cases depth with
     | zero =>
       -- Immediately below a spine node, both sides are present even when the suffix is empty.
-      have currentPosition : ProgressivePosition chunks.size index 1 start level := by
-        refine ⟨by omega, ?_⟩
-        split
-        · omega
-        · trivial
-      have siblingPosition : ProgressivePosition chunks.size (gindexSibling index) 1 start level := by
-        refine ⟨by omega, ?_⟩
-        split
-        · omega
-        · trivial
-      have current := progressiveNode_read materialized index 1 start level currentPosition
-      rw [current] at read
-      cases read
-      refine ⟨progressiveReading chunks (index / 2) 0 start level,
+      have currentPosition : ProgressivePosition chunks.size index 1 start level :=
+        ⟨by omega, by split <;> first | omega | trivial⟩
+      have siblingPosition : ProgressivePosition chunks.size (gindexSibling index) 1 start level :=
+        ⟨by omega, by split <;> first | omega | trivial⟩
+      cases (progressiveNode_read materialized index 1 start level currentPosition).symm.trans read
+      exact ⟨progressiveReading chunks (index / 2) 0 start level,
         progressiveReading chunks (gindexSibling index) 1 start level,
         progressiveNode_read materialized _ 0 start level trivial,
-        progressiveNode_read materialized _ 1 start level siblingPosition, ?_⟩
-      exact progressiveReading_parent_eq chunks index 1 start level (by omega) (by
-        change start < chunks.size
-        omega)
+        progressiveNode_read materialized _ 1 start level siblingPosition,
+        progressiveReading_parent_eq chunks index 1 start level (by omega)
+          (show start < chunks.size by omega)⟩
     | succ depth =>
       -- Parent and sibling addresses preserve the current spine decision above their final turn.
       have parentTurn : gindexBit (index / 2) depth = gindexBit index (depth + 1) := by

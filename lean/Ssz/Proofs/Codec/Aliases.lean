@@ -15,32 +15,23 @@ theorem serializeEach_bytes (data : List UInt8) :
     serializeEach (.uint 1) (data.map fun byte => .uint byte.toNat) =
       .ok (data.map fun byte => #[byte]) := by
   -- Encoding proceeds one byte at a time and preserves both its value and its position.
-  induction data with
-  | nil => simp [serializeEach]
-  | cons byte rest ih =>
-    have bound : byte.toNat < 256 := byte.toNat_lt
-    simp [serializeEach, serialize, uintBytes, bound, Nat.mod_eq_of_lt bound, ih,
-      Bind.bind, Except.bind, pure, Except.pure]
+  have bound (byte : UInt8) : byte.toNat < 256 := byte.toNat_lt
+  induction data <;> simp_all [serializeEach, serialize, uintBytes, Nat.mod_eq_of_lt,
+    Bind.bind, Except.bind, pure, Except.pure]
 
 /-- Singleton fixed slots contribute one byte each, all in the fixed part. -/
 private theorem byteSlots_width (data : List UInt8) :
     headWidth (data.map fun byte => (true, #[byte])) = data.length ∧
       bodyWidth (data.map fun byte => (true, #[byte])) = 0 := by
   -- There are no offsets or trailing bodies for fixed-width elements.
-  induction data with
-  | nil => simp [headWidth, bodyWidth]
-  | cons byte rest ih => simp [headWidth, bodyWidth, ih, Nat.add_comm]
+  induction data <;> simp_all [headWidth, bodyWidth, Nat.add_comm]
 
 /-- Singleton fixed slots concatenate to the original byte sequence. -/
 private theorem byteSlots_content (data : List UInt8) (start : Nat) :
     headOf start (data.map fun byte => (true, #[byte])) = data.toArray ∧
       bodiesOf (data.map fun byte => (true, #[byte])) = #[] := by
   -- Each slot appends one original byte without changing it.
-  induction data with
-  | nil => simp [headOf, bodiesOf]
-  | cons byte rest ih =>
-    rw [List.toArray_cons]
-    simp only [List.map_cons, headOf, bodiesOf, ih.1, ih.2, and_self]
+  induction data <;> simp_all [headOf, bodiesOf]
 
 /-- Byte sequences use no offsets and preserve their input below the encoder's size ceiling. -/
 theorem serializeSequence_bytes (data : Bytes) (nameable : data.size < 2 ^ 32) :
@@ -52,9 +43,7 @@ theorem serializeSequence_bytes (data : Bytes) (nameable : data.size < 2 ^ 32) :
   -- The sequence contains exactly one inline slot for each byte.
   have slots : ((data.toList.map fun byte => #[byte]).map fun _ => true).zip
       (data.toList.map fun byte => #[byte]) = data.toList.map fun byte => (true, #[byte]) := by
-    induction data.toList with
-    | nil => rfl
-    | cons byte rest ih => simp only [List.map_cons, List.zip_cons_cons, ih]
+    induction data.toList <;> simp_all
   simp only [assemble, slots]
   rw [(byteSlots_width _).1, (byteSlots_width _).2]
   simp only [Array.length_toList, Nat.add_zero]
@@ -88,11 +77,7 @@ private theorem fold_byteParts (data : List UInt8) (front : Bytes) :
     (data.map fun byte => #[byte]).foldl (fun total part => total ++ part) front =
       front ++ data.toArray := by
   -- Generalizing the prefix lets each induction step append the next original byte.
-  induction data generalizing front with
-  | nil => simp
-  | cons byte rest ih =>
-    simp only [List.map_cons, List.foldl_cons, ih]
-    rw [List.toArray_cons byte rest, Array.append_assoc]
+  induction data generalizing front <;> simp_all
 
 /-- Packing one-byte integer encodings gives the same nodes as packing the byte array. -/
 theorem packElements_bytes (data : Bytes) :
@@ -132,13 +117,10 @@ theorem hashTreeRoot_byteList_alias (data : Bytes) (limit : Nat) :
     hashTreeRoot (.byteList limit) (.bytes data) =
       hashTreeRoot (.list (.uint 1) limit) (.seq (byteValues data)) := by
   -- Both paths pack the same bytes and mix in the same element count.
-  by_cases fits : data.size ≤ limit
-  · simp [hashTreeRoot, Desc.nesting, hashTreeRootAt, merkleLayout, show ¬ limit < data.size from Nat.not_lt.mpr fits,
-      sequenceLayout, Desc.isBasic, Desc.itemLength, byteValues, serializeEach_bytes,
-      packElements_bytes, layoutChunksAt, MerkleLayout.packing, Leaves.count,
-      Bind.bind, Except.bind, pure, Except.pure]
-  · simp [hashTreeRoot, Desc.nesting, hashTreeRootAt, merkleLayout,
-      show limit < data.size by omega, byteValues, Bind.bind, Except.bind]
-    rfl
+  by_cases over : limit < data.size <;>
+    simp [hashTreeRoot, Desc.nesting, hashTreeRootAt, merkleLayout, over, sequenceLayout,
+      Desc.isBasic, Desc.itemLength, byteValues, serializeEach_bytes, packElements_bytes,
+      layoutChunksAt, MerkleLayout.packing, Leaves.count, Bind.bind, Except.bind, pure, Except.pure,
+      throw, throwThe, MonadExceptOf.throw]
 
 end Ssz

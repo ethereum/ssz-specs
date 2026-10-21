@@ -14,9 +14,7 @@ theorem firstCheckPassed {alpha beta} {step : Except Err alpha}
     {rest : alpha → Except Err beta} {answer : beta} (chain : step >>= rest = .ok answer) :
     ∃ carried, step = .ok carried := by
   -- A refusal at the first check is carried out of the chain, so the chain refuses too.
-  cases step with
-  | error _ => simp [Bind.bind, Except.bind] at chain
-  | ok carried => exact ⟨carried, rfl⟩
+  cases step <;> simp_all [Bind.bind, Except.bind]
 
 /-- What a passed first check leaves is the rest of the chain, which passed as well. -/
 theorem laterChecksPassed {alpha beta} {step : Except Err alpha} {carried : alpha}
@@ -30,98 +28,56 @@ theorem laterChecksPassed {alpha beta} {step : Except Err alpha} {carried : alph
 theorem lookupOption_mem :
     ∀ (selectors : List Nat) (options : List Desc) (selector : Nat) (option : Desc),
       lookupOption selectors options selector = .ok option → option ∈ options := by
-  intro selectors
-  induction selectors with
-  | nil => intro options _ _ found; cases options <;> simp [lookupOption] at found
-  | cons _ rest ih =>
-    intro options selector option found
-    cases options with
-    | nil => simp [lookupOption] at found
-    | cons candidate others =>
-      simp only [lookupOption] at found
-      -- Either this step answered, or the walk moved along and the rest answered.
-      split at found
-      · exact Except.ok.inj found ▸ List.mem_cons_self
-      · exact List.mem_cons_of_mem _ (ih others selector option found)
+  -- Either this step answered, or the walk moved along and the rest answered.
+  intro selectors options selector option found
+  fun_induction lookupOption selectors options selector <;> grind
 
 /-- A selector that names an option is one of the selectors the union declared. -/
 theorem lookupOption_selector :
     ∀ (selectors : List Nat) (options : List Desc) (selector : Nat) (option : Desc),
       lookupOption selectors options selector = .ok option → selector ∈ selectors := by
-  intro selectors
-  induction selectors with
-  | nil => intro options _ _ found; cases options <;> simp [lookupOption] at found
-  | cons candidate rest ih =>
-    intro options selector option found
-    cases options with
-    | nil => simp [lookupOption] at found
-    | cons _ others =>
-      simp only [lookupOption] at found
-      -- Either this step answered, in which case its own selector is the one asked for.
-      split at found
-      · rename_i matched
-        simp only [beq_iff_eq] at matched
-        exact matched ▸ List.mem_cons_self
-      · exact List.mem_cons_of_mem _ (ih others selector option found)
+  -- Either this step answered, in which case its own selector is the one asked for.
+  intro selectors options selector option found
+  fun_induction lookupOption selectors options selector <;> grind
 
 /-- Every type in a list that names real types names a real type itself. -/
 theorem allWellFormed_mem : ∀ (fields : List Desc), Desc.allWellFormed fields = .ok () →
     ∀ shape ∈ fields, shape.wellFormed = .ok () := by
-  intro fields
+  intro fields sound shape member
   induction fields with
-  | nil =>
-    intro _ shape member
-    simp at member
+  | nil => simp at member
   | cons field rest ih =>
-    intro sound shape member
-    simp only [Desc.allWellFormed] at sound
     -- The head names a real type, and what that leaves is the same claim about the rest.
-    cases head : field.wellFormed with
-    | error _ =>
-      rw [head] at sound
-      simp [Bind.bind, Except.bind] at sound
-    | ok _ =>
-      rw [head] at sound
-      simp only [Bind.bind, Except.bind] at sound
-      rcases List.mem_cons.mp member with here | later
-      · exact here ▸ head
-      · exact ih sound shape later
+    cases head : field.wellFormed <;> simp_all [Desc.allWellFormed, Bind.bind, Except.bind]
+    grind
 
 /-- A vector of a real element type declares a real type below it. -/
 theorem wellFormed_vector {element : Desc} {length : Nat}
     (sound : (Desc.vector element length).wellFormed = .ok ()) : element.wellFormed = .ok () := by
   -- A vector holds at least one element, and past that check only the element is left.
   rw [Desc.wellFormed] at sound
-  split at sound
-  · simp [Bind.bind, Except.bind] at sound
-  · exact sound
+  split at sound <;> simp_all [Bind.bind, Except.bind]
 
 /-- A list declares the type of the elements it holds, and nothing else. -/
 theorem wellFormed_list {element : Desc} {limit : Nat}
     (sound : (Desc.list element limit).wellFormed = .ok ()) : element.wellFormed = .ok () := by
-  rw [Desc.wellFormed] at sound
-  exact sound
+  simpa [Desc.wellFormed] using sound
 
 /-- A progressive list declares the type of the elements it holds, and nothing else. -/
 theorem wellFormed_progressiveList {element : Desc} {limit : Option Nat}
     (sound : (Desc.progressiveList element limit).wellFormed = .ok ()) :
     element.wellFormed = .ok () := by
-  rw [Desc.wellFormed] at sound
-  exact sound
+  simpa [Desc.wellFormed] using sound
 
 /-- A struct of real types declares real types for its fields. -/
 theorem wellFormed_container {names : List String} {fields : List Desc}
     (sound : (Desc.container names fields).wellFormed = .ok ()) :
     Desc.allWellFormed fields = .ok () := by
   -- Declaration checks precede the field checks, so an invalid field cannot be hidden.
-  cases inner : Desc.allWellFormed fields with
-  | ok _ => rfl
-  | error _ =>
-    exfalso
-    rw [Desc.wellFormed] at sound
-    simp only [inner, throw_error, Bind.bind, Except.bind] at sound
-    repeat' split at sound
-    all_goals simp at sound
+  rw [Desc.wellFormed] at sound
+  simp only [throw_error, Bind.bind, Except.bind] at sound
+  repeat' split at sound
+  all_goals simp_all
 
 /-- A progressive struct of real types declares real types for its fields. -/
 theorem wellFormed_progressiveContainer {active : List Bool} {names : List String}
@@ -129,28 +85,20 @@ theorem wellFormed_progressiveContainer {active : List Bool} {names : List Strin
     (sound : (Desc.progressiveContainer active names fields).wellFormed = .ok ()) :
     Desc.allWellFormed fields = .ok () := by
   -- Whichever checks the declaration passed, the fields are the last thing it reads.
-  cases inner : Desc.allWellFormed fields with
-  | ok _ => rfl
-  | error _ =>
-    exfalso
-    rw [Desc.wellFormed] at sound
-    simp only [inner, throw_error, Bind.bind, Except.bind] at sound
-    repeat' split at sound
-    all_goals simp at sound
+  rw [Desc.wellFormed] at sound
+  simp only [throw_error, Bind.bind, Except.bind] at sound
+  repeat' split at sound
+  all_goals simp_all
 
 /-- A union of real types declares real types for its options. -/
 theorem wellFormed_union {selectors : List Nat} {options : List Desc}
     (sound : (Desc.compatibleUnion selectors options).wellFormed = .ok ()) :
     Desc.allWellFormed options = .ok () := by
   -- Whichever checks the declaration passed, the options are read before the pairing is.
-  cases inner : Desc.allWellFormed options with
-  | ok _ => rfl
-  | error _ =>
-    exfalso
-    rw [Desc.wellFormed] at sound
-    simp only [inner, throw_error, Bind.bind, Except.bind] at sound
-    repeat' split at sound
-    all_goals simp at sound
+  rw [Desc.wellFormed] at sound
+  simp only [throw_error, Bind.bind, Except.bind] at sound
+  repeat' split at sound
+  all_goals simp_all
 
 /-- A struct names every field exactly once. -/
 theorem wellFormed_container_names {names : List String} {fields : List Desc}
@@ -197,27 +145,14 @@ theorem secondCheckPassed {alpha beta gamma} {first : Except Err alpha} {second 
     (chain : (do let carried ← first; let held ← second; rest carried held) = .ok answer) :
     ∃ held, second = .ok held := by
   -- A refusal at either step is carried out of the chain, so the chain refuses too.
-  cases first with
-  | error _ => simp [Bind.bind, Except.bind] at chain
-  | ok _ =>
-    simp only [Bind.bind, Except.bind] at chain
-    cases second with
-    | error _ => simp at chain
-    | ok held => exact ⟨held, rfl⟩
+  cases first <;> cases second <;> simp_all [Bind.bind, Except.bind]
 
 /-- The rest of a list that names real types names real types itself. -/
 theorem allWellFormed_tail {field : Desc} {fields : List Desc}
     (sound : Desc.allWellFormed (field :: fields) = .ok ()) :
     Desc.allWellFormed fields = .ok () := by
   -- The head is read first, and what it leaves is the same claim about the rest.
-  simp only [Desc.allWellFormed] at sound
-  cases head : field.wellFormed with
-  | error _ =>
-    rw [head] at sound
-    simp [Bind.bind, Except.bind] at sound
-  | ok _ =>
-    rw [head] at sound
-    simpa [Bind.bind, Except.bind] using sound
+  cases head : field.wellFormed <;> simp_all [Desc.allWellFormed, Bind.bind, Except.bind]
 
 /--
 A value the encoder wrote is a value its type admits.
@@ -243,91 +178,39 @@ theorem fits_of_serialize : ∀ (shape : Desc) (value : Value),
     (motive5 := fun element elements => element.wellFormed = .ok () →
       (∃ parts, serializeEach element elements = .ok parts) →
         ∀ held ∈ elements, Fits element held) with
-  -- Either boolean value is admissible.
-  | case1 b =>
+  -- Each accepted scalar check supplies exactly the admissibility condition.
+  | case1 | case2 | case4 | case6 | case8 | case10 =>
     intro _ _
-    exact .bool b
-  -- The accepted integer branch supplies its exact representable range.
-  | case2 _ _ bound =>
-    intro _ _
-    exact .uint bound
-  -- An out-of-range integer branch cannot have produced bytes.
-  | case3 _ _ bad =>
-    intro _ ⟨_, wrote⟩
-    rw [serialize, if_neg bad] at wrote
-    simp at wrote
-  -- The fixed byte-array branch supplies equality with the declared length.
-  | case4 _ _ exact_ =>
-    intro _ _
-    exact .byteVector (by simpa using exact_)
-  -- A wrong byte count cannot have produced a successful fixed-array encoding.
-  | case5 _ _ bad =>
-    intro _ ⟨_, wrote⟩
-    rw [serialize, if_neg bad] at wrote
-    simp at wrote
-  -- The bounded byte-array branch supplies its capacity inequality.
-  | case6 _ _ within =>
-    intro _ _
-    exact .byteList within
-  -- An exceeded byte capacity contradicts successful encoding.
-  | case7 _ _ bad =>
-    intro _ ⟨_, wrote⟩
-    rw [serialize, if_neg bad] at wrote
-    simp at wrote
-  -- A fixed bitfield supplies the exact declared bit count.
-  | case8 _ _ exact_ =>
-    intro _ _
-    exact .bitVector (by simpa using exact_)
-  -- A wrong bit count contradicts successful fixed-bitfield encoding.
-  | case9 _ _ bad =>
-    intro _ ⟨_, wrote⟩
-    rw [serialize, if_neg bad] at wrote
-    simp at wrote
-  -- An accepted bit list supplies its capacity inequality.
-  | case10 _ _ within =>
-    intro _ _
-    exact .bitList within
-  -- An exceeded bit capacity contradicts successful encoding.
-  | case11 _ _ bad =>
+    constructor <;> simp_all
+  -- A failed range, count, or capacity check cannot have produced bytes.
+  | case3 _ _ bad | case5 _ _ bad | case7 _ _ bad | case9 _ _ bad | case11 _ _ bad
+    | case14 _ _ _ bad | case16 _ _ _ bad =>
     intro _ ⟨_, wrote⟩
     rw [serialize, if_neg bad] at wrote
     simp at wrote
   | case12 limit data =>
     intro _ ⟨_, wrote⟩
     rw [serialize] at wrote
-    cases passed : boundCheck limit data.size with
-    | error _ => simp [passed, Bind.bind, Except.bind] at wrote
-    | ok _ => exact .progressiveBitList (withinBound_of_boundCheck limit data.size passed)
+    cases passed : boundCheck limit data.size <;> simp [passed, Bind.bind, Except.bind] at wrote
+    exact .progressiveBitList (withinBound_of_boundCheck limit data.size passed)
   -- A vector needs both the exact element count and admissibility of every element.
   | case13 _ _ _ count ih =>
     intro sound ⟨bytes, wrote⟩
     rw [serialize, if_pos count] at wrote
     exact .vector (by simpa using count) (ih (wellFormed_vector sound) ⟨bytes, wrote⟩)
-  -- The vector encoder cannot succeed with a mismatched element count.
-  | case14 _ _ _ bad =>
-    intro _ ⟨_, wrote⟩
-    rw [serialize, if_neg bad] at wrote
-    simp at wrote
   -- A bounded list combines its accepted count with the element induction.
   | case15 _ _ _ within ih =>
     intro sound ⟨bytes, wrote⟩
     rw [serialize, if_pos within] at wrote
     exact .list within (ih (wellFormed_list sound) ⟨bytes, wrote⟩)
-  -- The list encoder cannot succeed after exceeding its capacity.
-  | case16 _ _ _ bad =>
-    intro _ ⟨_, wrote⟩
-    rw [serialize, if_neg bad] at wrote
-    simp at wrote
   -- A progressive list inherits admissibility from all of its elements.
   | case17 _ limit elements ih =>
     intro sound ⟨bytes, wrote⟩
     rw [serialize] at wrote
-    cases passed : boundCheck limit elements.length with
-    | error _ => simp [passed, Bind.bind, Except.bind] at wrote
-    | ok _ =>
-      simp only [passed, Bind.bind, Except.bind] at wrote
-      exact .progressiveList (withinBound_of_boundCheck limit elements.length passed)
-        (ih (wellFormed_progressiveList sound) ⟨bytes, wrote⟩)
+    cases passed : boundCheck limit elements.length <;>
+      simp only [passed, Bind.bind, Except.bind, reduceCtorEq] at wrote
+    exact .progressiveList (withinBound_of_boundCheck limit elements.length passed)
+      (ih (wellFormed_progressiveList sound) ⟨bytes, wrote⟩)
   -- Ordinary containers require one admissible value per field.
   | case18 _ _ _ ih =>
     intro sound ⟨bytes, wrote⟩
@@ -359,19 +242,15 @@ theorem fits_of_serialize : ∀ (shape : Desc) (value : Value),
     -- Each pairing the reduction leaves standing is excluded by a hypothesis of its own.
     all_goals (rename_i notMatch; exact absurd rfl (notMatch _ _ _ _ rfl rfl rfl))
   | case22 _ _ ih =>
-    intros
     rename_i sound made
     obtain ⟨_, wrote⟩ := made
     -- A struct writes its fields before it lays them out, so the fields were written.
     rw [serializeStruct] at wrote
     obtain ⟨parts, made⟩ := firstCheckPassed wrote
     exact ih sound ⟨parts, made⟩
-  | case23 =>
-    intros
-    exact ⟨rfl, by simp⟩
+  | case23 => exact ⟨rfl, by simp⟩
   -- Successful field collection proves both the first field and the remaining paired fields.
   | case24 field fields value values ihHead ihTail =>
-    intros
     rename_i sound made
     obtain ⟨_, wrote⟩ := made
     rw [serializeFields] at wrote
@@ -387,27 +266,21 @@ theorem fits_of_serialize : ∀ (shape : Desc) (value : Value),
         ⟨head, wroteHead⟩
     · exact each pair later
   | case25 fields values _ _ =>
-    intros
     rename_i made
     obtain ⟨_, wrote⟩ := made
     cases fields <;> cases values <;> simp_all [serializeFields]
     -- A field list and a value list of different lengths pair with nothing.
     all_goals (rename_i notMatch; exact absurd rfl (notMatch _ _ _ _ rfl rfl rfl))
   | case26 _ _ ih =>
-    intros
     rename_i sound made held member
     obtain ⟨_, wrote⟩ := made
     -- A sequence writes its elements before it lays them out, so the elements were written.
     rw [serializeSequence] at wrote
     obtain ⟨parts, encoded⟩ := firstCheckPassed wrote
     exact ih sound ⟨parts, encoded⟩ held member
-  | case27 _ =>
-    intros
-    rename_i member
-    simp at member
+  | case27 => simp_all
   -- Every collected sequence value is either the first element or belongs to the successfully encoded suffix.
   | case28 _ _ _ ihHead ihTail =>
-    intros
     rename_i sound made held member
     obtain ⟨_, wrote⟩ := made
     rw [serializeEach] at wrote

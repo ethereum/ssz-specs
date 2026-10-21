@@ -20,9 +20,7 @@ theorem getObjVal?_mkObj {pairs : List (String × Json)} {name : String} {value 
     (Json.mkObj pairs).getObjVal? name = .ok value := by
   -- Distinct names stay distinct under the order an object is built with.
   have keys : pairs.Pairwise (fun a b => ¬ compare a.1 b.1 = .eq) := by
-    refine distinct.imp ?_
-    intro a b different equal
-    exact different (compare_eq_iff_eq.mp equal)
+    exact distinct.imp fun different equal => different (compare_eq_iff_eq.mp equal)
   have read := Std.TreeMap.Raw.getElem?_ofList_of_mem (cmp := compare) compare_self keys member
   simp only [Json.mkObj, Json.getObjVal?, Std.TreeMap.Raw.get?_eq_getElem?, read]
   rfl
@@ -50,8 +48,7 @@ theorem objectNames_mkObj {pairs : List (String × Json)} {name : String}
 theorem valueOf_jsonOf_bool {spelling : Spelling} {b : Bool} {document : Json}
     (written : jsonOf .bool spelling (.bool b) = .ok document) :
     valueOf .bool spelling document = .ok (.bool b) := by
-  rw [jsonOf] at written
-  simp only [Except.ok.injEq] at written
+  simp only [jsonOf, Except.ok.injEq] at written
   subst written
   rw [valueOf]
 
@@ -88,8 +85,7 @@ theorem valueOf_jsonOf_byteVector {spelling : Spelling} {length : Nat} {data : B
     {document : Json} (fitted : data.size = length)
     (written : jsonOf (.byteVector length) spelling (.bytes data) = .ok document) :
     valueOf (.byteVector length) spelling document = .ok (.bytes data) := by
-  rw [jsonOf] at written
-  simp only [Except.ok.injEq] at written
+  simp only [jsonOf, Except.ok.injEq] at written
   subst written
   rw [valueOf]
   simp [collectionHex, ofHex_toHex, fitted, Bind.bind, Except.bind, pure, Except.pure]
@@ -99,8 +95,7 @@ theorem valueOf_jsonOf_byteList {spelling : Spelling} {limit : Nat} {data : Byte
     {document : Json} (fitted : data.size ≤ limit)
     (written : jsonOf (.byteList limit) spelling (.bytes data) = .ok document) :
     valueOf (.byteList limit) spelling document = .ok (.bytes data) := by
-  rw [jsonOf] at written
-  simp only [Except.ok.injEq] at written
+  simp only [jsonOf, Except.ok.injEq] at written
   subst written
   rw [valueOf]
   simp [collectionHex, ofHex_toHex, Nat.not_lt.mpr fitted, Bind.bind, Except.bind,
@@ -119,8 +114,7 @@ theorem valueOf_jsonOf_bitVector {spelling : Spelling} {data : Array Bool} {docu
   have wrote : serialize (.bitVector data.size) (.bits data)
       = .ok (packBits data ((data.size + 7) / 8)) := by simp [serialize]
   have back := roundTrip_of_wellFormed legal fitted wrote
-  rw [jsonOf, wrote] at written
-  simp only [Bind.bind, Except.bind, pure, Except.pure, Except.ok.injEq] at written
+  simp only [jsonOf, wrote, Bind.bind, Except.bind, pure, Except.pure, Except.ok.injEq] at written
   subst written
   rw [valueOf]
   simp [readBitfield, collectionHex, ofHex_toHex, back, Bind.bind, Except.bind,
@@ -136,8 +130,7 @@ theorem valueOf_jsonOf_bitList {spelling : Spelling} {limit : Nat} {data : Array
   have wrote : serialize (.bitList limit) (.bits data) = .ok (packBitsDelimited data) := by
     simp [serialize, within]
   have back := roundTrip_of_wellFormed legal fitted wrote
-  rw [jsonOf, wrote] at written
-  simp only [Bind.bind, Except.bind, pure, Except.pure, Except.ok.injEq] at written
+  simp only [jsonOf, wrote, Bind.bind, Except.bind, pure, Except.pure, Except.ok.injEq] at written
   subst written
   rw [valueOf]
   simp [readBitfield, collectionHex, ofHex_toHex, back, Bind.bind, Except.bind,
@@ -156,8 +149,7 @@ theorem valueOf_jsonOf_progressiveBitList {spelling : Spelling} {limit : Option 
     simp [serialize, boundCheck_of_withinBound limit _ within, Bind.bind, Except.bind,
       Pure.pure, Except.pure]
   have back := roundTrip_of_wellFormed legal fitted wrote
-  rw [jsonOf, wrote] at written
-  simp only [Bind.bind, Except.bind, pure, Except.pure, Except.ok.injEq] at written
+  simp only [jsonOf, wrote, Bind.bind, Except.bind, pure, Except.pure, Except.ok.injEq] at written
   subst written
   rw [valueOf]
   simp [readBitfield, collectionHex, ofHex_toHex, back, Bind.bind, Except.bind,

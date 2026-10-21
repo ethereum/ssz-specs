@@ -11,15 +11,8 @@ private theorem rejectAncestors_excludes {indices ancestors : List Nat} {claim :
   induction ancestors with
   | nil => simp
   | cons head rest ih =>
-    by_cases present : head ∈ indices
-    · simp [rejectAncestors, present, Bind.bind, Except.bind, throw, throwThe,
-        MonadExceptOf.throw] at accepted
-    · have tail : rejectAncestors indices claim rest = .ok () := by
-        simpa [rejectAncestors, present, Bind.bind, Except.bind] using accepted
-      intro ancestor member
-      rcases List.mem_cons.mp member with same | member
-      · simpa [same] using present
-      · exact ih tail ancestor member
+    by_cases present : head ∈ indices <;>
+      simp_all [rejectAncestors, Bind.bind, Except.bind, throw, throwThe, MonadExceptOf.throw]
 
 private theorem rejectClaimPaths_excludes {indices pending : List Nat}
     (accepted : rejectClaimPaths indices pending = .ok ()) :
@@ -29,30 +22,22 @@ private theorem rejectClaimPaths_excludes {indices pending : List Nat}
   induction pending with
   | nil => simp
   | cons head rest ih =>
-    cases pathEq : getPathIndices head with
-    | error fault => simp [rejectClaimPaths, pathEq, Bind.bind, Except.bind] at accepted
-    | ok path =>
-      cases checked : rejectAncestors indices head path.tail with
-      | error fault => simp [rejectClaimPaths, pathEq, checked, Bind.bind, Except.bind] at accepted
-      | ok checkedUnit =>
-        cases checkedUnit
-        have tail : rejectClaimPaths indices rest = .ok () := by
-          simpa [rejectClaimPaths, pathEq, checked, Bind.bind, Except.bind] using accepted
-        intro claim member
-        rcases List.mem_cons.mp member with same | member
-        · subst claim
-          exact ⟨path, pathEq, rejectAncestors_excludes (by simpa using checked)⟩
-        · exact ih tail claim member
+    cases pathEq : getPathIndices head <;>
+      simp [rejectClaimPaths, pathEq, Bind.bind, Except.bind] at accepted
+    rename_i path
+    cases checked : rejectAncestors indices head path.tail <;> simp [checked] at accepted
+    intro claim member
+    rcases List.mem_cons.mp member with rfl | member
+    · exact ⟨path, pathEq, rejectAncestors_excludes (by simpa using checked)⟩
+    · exact ih accepted claim member
 
 private theorem rejectRelated_paths {indices : List Nat}
     (accepted : rejectRelated indices = .ok ()) :
     rejectClaimPaths indices indices = .ok () := by
   -- An accepted request has already passed emptiness and duplicate checks before its paths are inspected.
   have nonempty := rejectRelated_nonempty accepted
-  by_cases same : indices.eraseDups.length = indices.length
-  · simpa [rejectRelated, nonempty, same, Bind.bind, Except.bind] using accepted
-  · simp [rejectRelated, nonempty, same, Bind.bind, Except.bind, throw, throwThe,
-      MonadExceptOf.throw] at accepted
+  by_cases same : indices.eraseDups.length = indices.length <;>
+    simp_all [rejectRelated, Bind.bind, Except.bind, throw, throwThe, MonadExceptOf.throw]
 
 /-- A successful request excludes every strict ancestor of each claimed node. -/
 theorem rejectRelated_strict_shift {indices : List Nat}
@@ -62,20 +47,15 @@ theorem rejectRelated_strict_shift {indices : List Nat}
   -- A positive shift below the branch depth names one of the excluded strict ancestors.
   obtain ⟨path, pathEq, excludes⟩ := rejectClaimPaths_excludes
     (rejectRelated_paths accepted) claim claimed
-  cases measured : gindexLength claim with
-  | error fault => simp [getPathIndices, measured, Bind.bind, Except.bind] at pathEq
-  | ok depth =>
-    obtain ⟨same, _, _⟩ := gindexLength_ok measured
-    subst depth
+  cases measured : gindexLength claim <;>
     simp [getPathIndices, measured, Bind.bind, Except.bind, Pure.pure, Except.pure] at pathEq
-    subst path
-    apply excludes
-    rw [← List.map_drop]
-    apply List.mem_map.mpr
-    refine ⟨step, List.mem_drop_iff_getElem.mpr ?_, rfl⟩
-    refine ⟨step - 1, by simp; omega, ?_⟩
-    simp only [List.getElem_range]
-    omega
+  obtain ⟨rfl, _, _⟩ := gindexLength_ok measured
+  subst path
+  apply excludes
+  rw [← List.map_drop]
+  refine List.mem_map.mpr ⟨step, List.mem_drop_iff_getElem.mpr ⟨step - 1, by simp; omega, ?_⟩, rfl⟩
+  simp only [List.getElem_range]
+  omega
 
 /-- A shifted node below the root was reached before exhausting its branch. -/
 theorem shift_below_depth {claim step : Nat} (named : 1 ≤ claim)
@@ -83,13 +63,10 @@ theorem shift_below_depth {claim step : Nat} (named : 1 ≤ claim)
   -- After the leading bit reaches the root, further shifts can never reach a node below it.
   by_cases inside : step < Nat.log2 claim
   · exact inside
-  have distance : Nat.log2 claim + (step - Nat.log2 claim) = step := by omega
-  have small := shiftRight_le 1 (step - Nat.log2 claim)
-  have reaches := shiftRight_depth named
   have upper : (claim >>> Nat.log2 claim) >>> (step - Nat.log2 claim) ≤ 1 := by
-    rw [reaches]
-    exact small
-  rw [← Nat.shiftRight_add, distance] at upper
+    rw [shiftRight_depth named]
+    exact shiftRight_le 1 _
+  rw [← Nat.shiftRight_add, show Nat.log2 claim + (step - Nat.log2 claim) = step by omega] at upper
   omega
 
 private theorem sibling_strict_shift (index step : Nat) (positive : 0 < step) :
@@ -109,9 +86,7 @@ theorem getHelperIndices_antichain {indices helpers : List Nat}
   obtain ⟨_, valid, frontier⟩ := getHelperIndices_frontier built
   have accepted : rejectRelated indices = .ok () := by
     unfold getHelperIndices at built
-    cases checked : rejectRelated indices with
-    | error fault => simp [checked, Bind.bind, Except.bind] at built
-    | ok checkedUnit => cases checkedUnit; rfl
+    cases checked : rejectRelated indices <;> simp [checked, Bind.bind, Except.bind] at built ⊢
   intro i supplied j target step shifted
   -- Zero upward steps preserve the supplied position itself.
   -- Every positive step must be excluded.

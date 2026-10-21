@@ -9,28 +9,19 @@ private theorem fieldsCompatible_symm {budget : Nat}
     ∀ left right, fieldsCompatible budget left right = fieldsCompatible budget right left := by
   -- Reversing a field comparison preserves each aligned pair and simultaneous list termination.
   intro left
-  -- Each option on the left must agree with every option on the right.
-  induction left with
-  | nil => intro right; cases right <;> simp [fieldsCompatible]
-  | cons field fields ih =>
-    intro right
-    cases right <;> simp [fieldsCompatible, ih, inner]
+  induction left <;> intro right <;> cases right <;> simp [fieldsCompatible, *]
 
 private theorem optionAgainstAll_iff (budget : Nat) (option : Desc) (options : List Desc) :
     optionAgainstAll budget option options = true ↔
       ∀ other ∈ options, compatibleAt budget option other = true := by
   -- Checking one option against a list means checking every member of that list.
-  induction options with
-  | nil => simp [optionAgainstAll]
-  | cons other rest ih => simp [optionAgainstAll, ih]
+  induction options <;> simp [optionAgainstAll, *]
 
 private theorem unionOptionsAgree_iff (budget : Nat) (left right : List Desc) :
     unionOptionsAgree budget left right = true ↔
       ∀ one ∈ left, ∀ other ∈ right, compatibleAt budget one other = true := by
   -- Each option on the left must agree with every option on the right.
-  induction left with
-  | nil => simp [unionOptionsAgree]
-  | cons one rest ih => simp [unionOptionsAgree, optionAgainstAll_iff, ih]
+  induction left <;> simp [unionOptionsAgree, optionAgainstAll_iff, *]
 
 private theorem unionOptionsAgree_symm {budget : Nat}
     (inner : ∀ left right, compatibleAt budget left right = compatibleAt budget right left)
@@ -39,13 +30,7 @@ private theorem unionOptionsAgree_symm {budget : Nat}
   -- Swapping the two finite quantifiers preserves the set of option pairs being checked.
   apply Bool.eq_iff_iff.mpr
   simp only [unionOptionsAgree_iff]
-  constructor
-  · intro all other otherIn one oneIn
-    rw [inner]
-    exact all one oneIn other otherIn
-  · intro all one oneIn other otherIn
-    rw [inner]
-    exact all other otherIn one oneIn
+  constructor <;> intro all one oneIn other otherIn <;> rw [inner] <;> exact all other otherIn one oneIn
 
 private theorem layoutPairAgree_symm {budget : Nat}
     (inner : ∀ left right, compatibleAt budget left right = compatibleAt budget right left)
@@ -76,12 +61,7 @@ private theorem layoutsAgree_symm {budget : Nat}
   -- Every cross-layout field pair is checked in both orders.
   apply Bool.eq_iff_iff.mpr
   simp only [layoutsAgree, List.all_eq_true]
-  constructor
-  · intro all right rightIn left leftIn
-    rw [layoutPairAgree_symm inner]
-    exact all left leftIn right rightIn
-  · intro all left leftIn right rightIn
-    rw [layoutPairAgree_symm inner]
+  constructor <;> intro all left leftIn right rightIn <;> rw [layoutPairAgree_symm inner] <;>
     exact all right rightIn left leftIn
 
 /-- Swapping the two declarations preserves compatibility, including at a finite comparison budget. -/
@@ -131,9 +111,7 @@ theorem layoutsAgree_name_position {budget : Nat} {leftActive rightActive : List
   -- The selected pair inherits the condition imposed on every cross-layout field pair.
   have pair := List.all_eq_true.mp (List.all_eq_true.mp agree left leftIn) right rightIn
   -- A repeated field name at different positions would violate compatibility.
-  by_cases same : left.1 = right.1
-  · exact same
-  · simp [layoutPairAgree, same, named] at pair
+  exact Classical.byContradiction fun same => by simp [layoutPairAgree, same, named] at pair
 
 /-- A shared tree position carries one field name and compatible field types. -/
 theorem layoutsAgree_shared_position {budget : Nat} {leftActive rightActive : List Bool}

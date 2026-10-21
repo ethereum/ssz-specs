@@ -10,7 +10,7 @@ The executable specification and the proofs about it live in two separate trees,
 
 ```text
 Ssz/            the executable specification, about 3,000 lines
-Ssz/Proofs/     the machine-checked properties of it, about 18,000 lines
+Ssz/Proofs/     the machine-checked properties of it, about 17,000 lines
 ```
 
 `Ssz/Proofs` mirrors the layout of `Ssz`: what is proved about `Ssz.Codec.Serialize` sits in `Ssz.Proofs.Codec.Serialize`.

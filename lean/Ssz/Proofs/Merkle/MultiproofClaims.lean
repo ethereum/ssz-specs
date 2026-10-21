@@ -18,11 +18,10 @@ theorem ParentsAgree.branchConsistent {tree : Nat → Bytes} {height index : Nat
   simp only [decide_eq_true_eq]
   -- Parity decides whether this path node is the left or right child of its parent.
   rcases Nat.mod_two_eq_zero_or_one (index >>> step) with even | odd
-  · rw [if_neg (by omega)]
-    have sibling := (gindexSibling_even even).2
-    have self := (gindexSibling_even even).1
-    have adjacent : gindexSibling (index >>> step) = (index >>> step) + 1 := by omega
-    rw [adjacent]
+  · have adjacent : gindexSibling (index >>> step) = (index >>> step) + 1 := by
+      have := gindexSibling_even even
+      omega
+    rw [if_neg (by omega), adjacent]
     exact parents _ low bound even
   · rw [if_pos odd]
     obtain ⟨self, sibling⟩ := gindexSibling_odd odd
@@ -51,11 +50,9 @@ theorem multiproof_claim_verifies {tree : Nat → Bytes}
   -- The accepted multiproof fixes the root, while the selected path supplies its single-branch opening.
   have valid := (getHelperIndices_frontier helperIndices).2.1 index claimed
   have depth : Nat.log2 index ≠ 0 := by
-    have := Nat.log2_self_le (by omega : index ≠ 0)
-    have := Nat.lt_log2_self (n := index)
     intro zero
-    rw [zero] at this
-    simp only [Nat.zero_add, Nat.pow_one] at this
+    have := Nat.lt_log2_self (n := index)
+    simp only [zero, Nat.zero_add, Nat.pow_one] at this
     omega
   -- Take one sibling at each depth, ordered from the claimed node toward the root.
   let branch := (List.range (Nat.log2 index)).map fun step => gindexSibling (index >>> step)
@@ -70,8 +67,7 @@ theorem multiproof_claim_verifies {tree : Nat → Bytes}
     unfold calculateMultiMerkleRoot at checks
     split at checks
     · simp [throw, Bind.bind, Except.bind] at checks
-    · rename_i count
-      simpa using count
+    · next count => simpa using count
   -- The claim is retained in the initial node set because its value count was validated.
   have zipped : index ∈ (indices.zip leaves).map Prod.fst := by
     simpa [List.map_fst_zip, count] using claimed

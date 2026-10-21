@@ -14,24 +14,19 @@ theorem fixedLeaf_injective {shape : Desc} {left right : Value} {layout : Merkle
     (first : fixedLeaf shape left = .ok layout) (second : fixedLeaf shape right = .ok layout) :
     left = right := by
   -- A successful fixed leaf must contain a successful encoding of its value.
-  cases a : serialize shape left with
-  | error err => simp [fixedLeaf, a, Bind.bind, Except.bind] at first
-  | ok bytes =>
-    cases b : serialize shape right with
-    | error err => simp [fixedLeaf, b, Bind.bind, Except.bind] at second
-    | ok other =>
-      simp only [fixedLeaf, a, b, Bind.bind, Except.bind, pure, Except.pure,
-        Except.ok.injEq] at first second
-      -- Equal layouts contain equal arrays of packed encoding nodes.
-      have nodes : packBytes bytes = packBytes other := by
-        have leaves := congrArg MerkleLayout.leaves (first.trans second.symm)
-        exact Leaves.packed.inj leaves
-      -- The fixed type determines the byte count, allowing final node padding to be removed unambiguously.
-      have encoded := packBytes_injective
-        ((serialize_size_of_wellFormed sound leftFits fixed a).trans
-          (serialize_size_of_wellFormed sound rightFits fixed b).symm) nodes
-      -- Canonical encoding recovers the same admissible value from the common byte string.
-      exact serialize_injective_of_wellFormed sound leftFits rightFits a (encoded ▸ b)
+  cases a : serialize shape left <;> cases b : serialize shape right <;>
+    simp only [fixedLeaf, a, b, Bind.bind, Except.bind, pure, Except.pure, Except.ok.injEq,
+      reduceCtorEq] at first second
+  rename_i bytes other
+  -- Equal layouts contain equal arrays of packed encoding nodes.
+  have nodes : packBytes bytes = packBytes other :=
+    Leaves.packed.inj (congrArg MerkleLayout.leaves (first.trans second.symm))
+  -- The fixed type determines the byte count, allowing final node padding to be removed unambiguously.
+  have encoded := packBytes_injective
+    ((serialize_size_of_wellFormed sound leftFits fixed a).trans
+      (serialize_size_of_wellFormed sound rightFits fixed b).symm) nodes
+  -- Canonical encoding recovers the same admissible value from the common byte string.
+  exact serialize_injective_of_wellFormed sound leftFits rightFits a (encoded ▸ b)
 
 /-- Equal sequence layouts preserve their elements when the element counts agree. -/
 theorem sequenceLayout_injective {element : Desc} {left right : List Value}
@@ -43,22 +38,18 @@ theorem sequenceLayout_injective {element : Desc} {left right : List Value}
     (second : sequenceLayout element right positions rightWord = .ok layout) : left = right := by
   -- Basic elements share packed nodes, while composite elements remain explicit values in the unhashed layout.
   by_cases basic : element.isBasic = true
-  · cases a : serializeEach element left with
-    | error err => simp [sequenceLayout, basic, a, Bind.bind, Except.bind] at first
-    | ok parts =>
-      cases b : serializeEach element right with
-      | error err => simp [sequenceLayout, basic, b, Bind.bind, Except.bind] at second
-      | ok other =>
-        simp only [sequenceLayout, basic, if_true, a, b, Bind.bind, Except.bind,
-          pure, Except.pure, Except.ok.injEq] at first second
-        -- Equality of the layouts preserves the packed encoded streams.
-        have packed : packElements parts = packElements other :=
-          Leaves.packed.inj (congrArg MerkleLayout.leaves (first.trans second.symm))
-        -- Every basic element has a fixed byte width determined by its type.
-        have fixed : element.fixedSize = some element.itemLength := by
-          cases element <;> simp_all [Desc.isBasic, Desc.fixedSize, Desc.itemLength]
-        -- The common element count and width recover the same ordered sequence from the packed stream.
-        exact packElements_injective sound fixed counts leftFits rightFits a b packed
+  · cases a : serializeEach element left <;> cases b : serializeEach element right <;>
+      simp only [sequenceLayout, basic, if_true, a, b, Bind.bind, Except.bind,
+        pure, Except.pure, Except.ok.injEq, reduceCtorEq] at first second
+    rename_i parts other
+    -- Equality of the layouts preserves the packed encoded streams.
+    have packed : packElements parts = packElements other :=
+      Leaves.packed.inj (congrArg MerkleLayout.leaves (first.trans second.symm))
+    -- Every basic element has a fixed byte width determined by its type.
+    have fixed : element.fixedSize = some element.itemLength := by
+      cases element <;> simp_all [Desc.isBasic, Desc.fixedSize, Desc.itemLength]
+    -- The common element count and width recover the same ordered sequence from the packed stream.
+    exact packElements_injective sound fixed counts leftFits rightFits a b packed
   · have noBasic : element.isBasic = false := Bool.eq_false_iff.mpr basic
     simp only [sequenceLayout, noBasic, Bool.false_eq_true, if_false, pure, Except.pure,
       Except.ok.injEq] at first second
@@ -67,9 +58,7 @@ theorem sequenceLayout_injective {element : Desc} {left right : List Value}
     -- Projecting away the shared element type recovers the original optional values in order.
     have recovered := congrArg (List.map fun entry => entry.map Prod.snd) entries
     -- Marking a value as present does not identify two different values.
-    have injective : Function.Injective (fun value : Value => some value) :=
-      fun _ _ equal => Option.some.inj equal
-    apply (List.map_inj_right injective).mp
+    apply (List.map_inj_right fun _ _ equal => Option.some.inj equal).mp
     simpa only [List.map_map, Function.comp_def, Option.map_some] using recovered
 
 /-- Equal length words recover their counts throughout the admitted commitment domain. -/
@@ -252,26 +241,19 @@ private theorem layoutDetermines_progressiveContainer (active : List Bool) (name
   | @progressiveContainer active names fields values count each =>
     cases rightFits with
     | @progressiveContainer _ _ _ other otherCount otherEach =>
-      cases a : layoutSlots active fields values with
-      | error err => simp [merkleLayout, a, Bind.bind, Except.bind] at first
-      | ok slots =>
-        cases b : layoutSlots active fields other with
-        | error err => simp [merkleLayout, b, Bind.bind, Except.bind] at second
-        | ok others =>
-          simp only [merkleLayout, a, b, Bind.bind, Except.bind, pure, Except.pure,
-            Except.ok.injEq] at first second
-          -- Equal nested leaves retain identical placed fields, including identical gaps.
-          have same := Leaves.nested.inj (congrArg MerkleLayout.leaves (first.trans second.symm))
-          simp only [layoutSlots, ← count, ← otherCount, bne_self_eq_false, Bool.false_eq_true,
-            if_false] at a b
-          split at a
-          · contradiction
-          · split at b
-            · contradiction
-            -- Removing inactive positions restores all original field-value pairs in declaration order.
-            · have pairs := (placeSlots_fields a).symm.trans
-                ((congrArg (List.filterMap id) same).trans (placeSlots_fields b))
-              exact congrArg Value.seq (zip_values_injective count otherCount pairs)
+      cases a : layoutSlots active fields values <;> cases b : layoutSlots active fields other <;>
+        simp only [merkleLayout, a, b, Bind.bind, Except.bind, pure, Except.pure,
+          Except.ok.injEq, reduceCtorEq] at first second
+      -- Equal nested leaves retain identical placed fields, including identical gaps.
+      have same := Leaves.nested.inj (congrArg MerkleLayout.leaves (first.trans second.symm))
+      simp only [layoutSlots, ← count, ← otherCount, bne_self_eq_false, Bool.false_eq_true,
+        if_false] at a b
+      split at a <;> try contradiction
+      split at b <;> try contradiction
+      -- Removing inactive positions restores all original field-value pairs in declaration order.
+      have pairs := (placeSlots_fields a).symm.trans
+        ((congrArg (List.filterMap id) same).trans (placeSlots_fields b))
+      exact congrArg Value.seq (zip_values_injective count otherCount pairs)
 
 /-- A union layout retains both the exact selector and the selected value. -/
 private theorem layoutDetermines_compatibleUnion (selectors : List Nat) (options : List Desc) : LayoutDeterminesValue (.compatibleUnion selectors options) := by
@@ -294,9 +276,8 @@ private theorem layoutDetermines_compatibleUnion (selectors : List Nat) (options
         (Option.some.inj (congrArg MerkleLayout.mixin same))
       -- The single occupied position retains the option value itself in the unhashed layout.
       have entries := Leaves.nested.inj (congrArg MerkleLayout.leaves same)
-      have valuesEqual := (Prod.mk.inj (Option.some.inj (List.cons.inj entries).1)).2
       cases selectorsEqual
-      cases valuesEqual
+      cases (Prod.mk.inj (Option.some.inj (List.cons.inj entries).1)).2
       rfl
 
 /--
@@ -309,37 +290,21 @@ theorem merkleLayout_injective {shape : Desc} {left right : Value} {layout : Mer
     (first : merkleLayout shape left = .ok layout)
     (second : merkleLayout shape right = .ok layout) : left = right := by
   -- Fixed encodings, exact length words, and explicit nested values supply the appropriate recovery rule for each type.
-  cases shape with
-  | bool =>
-    cases leftFits with
-    | bool b => exact fixedLeaf_injective sound (.bool b) rightFits rfl first second
-  | uint width =>
-    cases leftFits with
-    | uint bound => exact fixedLeaf_injective sound (.uint bound) rightFits rfl first second
-  | byteVector length =>
-    cases leftFits with
-    | byteVector count => exact fixedLeaf_injective sound (.byteVector count) rightFits rfl first second
-  | byteList capacity =>
-    exact layoutDetermines_byteList capacity sound leftFits rightFits leftSized rightSized first second
-  | bitVector count =>
-    exact layoutDetermines_bitVector count sound leftFits rightFits leftSized rightSized first second
-  | bitList capacity =>
-    exact layoutDetermines_bitList capacity sound leftFits rightFits leftSized rightSized first second
-  | progressiveBitList limit =>
-    exact layoutDetermines_progressiveBitList limit sound leftFits rightFits leftSized rightSized
-      first second
-  | vector element count =>
-    exact layoutDetermines_vector element count sound leftFits rightFits leftSized rightSized first second
-  | list element capacity =>
-    exact layoutDetermines_list element capacity sound leftFits rightFits leftSized rightSized first second
-  | progressiveList element limit =>
-    exact layoutDetermines_progressiveList element limit sound leftFits rightFits leftSized
-      rightSized first second
-  | container names fields =>
-    exact layoutDetermines_container names fields sound leftFits rightFits leftSized rightSized first second
-  | progressiveContainer active names fields =>
-    exact layoutDetermines_progressiveContainer active names fields sound leftFits rightFits leftSized rightSized first second
-  | compatibleUnion selectors options =>
-    exact layoutDetermines_compatibleUnion selectors options sound leftFits rightFits leftSized rightSized first second
+  suffices determines : LayoutDeterminesValue shape from
+    determines sound leftFits rightFits leftSized rightSized first second
+  cases shape
+  case bool | uint | byteVector =>
+    exact fun sound leftFits rightFits _ _ first second =>
+      fixedLeaf_injective sound leftFits rightFits rfl first second
+  case byteList => exact layoutDetermines_byteList _
+  case bitVector => exact layoutDetermines_bitVector _
+  case bitList => exact layoutDetermines_bitList _
+  case progressiveBitList => exact layoutDetermines_progressiveBitList _
+  case vector => exact layoutDetermines_vector _ _
+  case list => exact layoutDetermines_list _ _
+  case progressiveList => exact layoutDetermines_progressiveList _ _
+  case container => exact layoutDetermines_container _ _
+  case progressiveContainer => exact layoutDetermines_progressiveContainer _ _ _
+  case compatibleUnion => exact layoutDetermines_compatibleUnion _ _
 
 end Ssz

@@ -54,15 +54,11 @@ theorem packByte_high_clear (bits : Array Bool) (byteIndex offset : Nat)
   rw [Nat.testBit_shiftRight, Nat.zero_testBit]
   by_cases within : offset + position < 8
   · -- Within the byte, every remaining position lies beyond the supplied bits.
-    rw [← byte_testBit _ _ within, packByte_bit _ _ _ within]
-    rw [Array.getElem?_eq_none (by omega)]
+    rw [← byte_testBit _ _ within, packByte_bit _ _ _ within, Array.getElem?_eq_none (by omega)]
     rfl
   · -- Above bit seven, any eight-bit value is already zero.
-    apply Nat.testBit_lt_two_pow
-    have width := (packByte bits byteIndex).toNat_lt
-    have power : 2 ^ 8 ≤ 2 ^ (offset + position) := Nat.pow_le_pow_right (by decide) (by omega)
-    change (packByte bits byteIndex).toNat < 256 at width
-    exact Nat.lt_of_lt_of_le width power
+    exact Nat.testBit_lt_two_pow (Nat.lt_of_lt_of_le (packByte bits byteIndex).toNat_lt
+      (Nat.pow_le_pow_right (by decide) (by omega)))
 
 /--
 Bits packed into enough bytes are the bits that come back out.
@@ -90,13 +86,7 @@ theorem unpackBits_packBits (bits : Array Bool) (byteCount : Nat)
 theorem roundTrip_bool (b : Bool) :
     serialize .bool (.bool b) >>= deserialize .bool = .ok (.bool b) := by
   -- Two values, two encodings, and each is checked by computing the decode of one byte.
-  cases b
-  · simp only [serialize]
-    show deserialize .bool #[0] = _
-    simp [deserialize, Pure.pure, Except.pure]
-  · simp only [serialize]
-    show deserialize .bool #[1] = _
-    simp [deserialize, Pure.pure, Except.pure]
+  cases b <;> simp [serialize, deserialize, Bind.bind, Except.bind, Pure.pure, Except.pure]
 
 /-- An integer of a width its value fits survives being written and read back. -/
 theorem roundTrip_uint {width value : Nat} (bound : value < 2 ^ (8 * width)) :
@@ -128,62 +118,8 @@ theorem highestBit_eq (byte : UInt8) (offset : Nat) (small : offset < 8)
     highestBit byte = offset := by
   -- The answer is one of eight, and each is settled by what lies above it.
   match offset, small with
-  | 0, _ =>
-    simp only [highestBit, beq_iff_eq]
-    rw [
-      if_neg (above 7 (by omega) (by omega)),
-      if_neg (above 6 (by omega) (by omega)),
-      if_neg (above 5 (by omega) (by omega)),
-      if_neg (above 4 (by omega) (by omega)),
-      if_neg (above 3 (by omega) (by omega)),
-      if_neg (above 2 (by omega) (by omega)),
-      if_neg (above 1 (by omega) (by omega))]
-  | 1, _ =>
-    simp only [highestBit, beq_iff_eq]
-    rw [
-      if_neg (above 7 (by omega) (by omega)),
-      if_neg (above 6 (by omega) (by omega)),
-      if_neg (above 5 (by omega) (by omega)),
-      if_neg (above 4 (by omega) (by omega)),
-      if_neg (above 3 (by omega) (by omega)),
-      if_neg (above 2 (by omega) (by omega)),
-      if_pos isSet]
-  | 2, _ =>
-    simp only [highestBit, beq_iff_eq]
-    rw [
-      if_neg (above 7 (by omega) (by omega)),
-      if_neg (above 6 (by omega) (by omega)),
-      if_neg (above 5 (by omega) (by omega)),
-      if_neg (above 4 (by omega) (by omega)),
-      if_neg (above 3 (by omega) (by omega)),
-      if_pos isSet]
-  | 3, _ =>
-    simp only [highestBit, beq_iff_eq]
-    rw [
-      if_neg (above 7 (by omega) (by omega)),
-      if_neg (above 6 (by omega) (by omega)),
-      if_neg (above 5 (by omega) (by omega)),
-      if_neg (above 4 (by omega) (by omega)),
-      if_pos isSet]
-  | 4, _ =>
-    simp only [highestBit, beq_iff_eq]
-    rw [
-      if_neg (above 7 (by omega) (by omega)),
-      if_neg (above 6 (by omega) (by omega)),
-      if_neg (above 5 (by omega) (by omega)),
-      if_pos isSet]
-  | 5, _ =>
-    simp only [highestBit, beq_iff_eq]
-    rw [
-      if_neg (above 7 (by omega) (by omega)),
-      if_neg (above 6 (by omega) (by omega)),
-      if_pos isSet]
-  | 6, _ =>
-    simp only [highestBit, beq_iff_eq]
-    rw [if_neg (above 7 (by omega) (by omega)), if_pos isSet]
-  | 7, _ =>
-    simp only [highestBit, beq_iff_eq]
-    rw [if_pos isSet]
+  | 0, _ | 1, _ | 2, _ | 3, _ | 4, _ | 5, _ | 6, _ | 7, _ =>
+    simp (disch := omega) only [highestBit, beq_iff_eq, isSet, above, ↓reduceIte]
 
 /--
 The bits before a closing one are the bits that were packed.
@@ -206,9 +142,8 @@ theorem unpackBits_packBits_push (bits : Array Bool) (byteCount : Nat)
     rw [byteIs, packByte_bit _ (position / 8) (position % 8) (by omega)]
     -- The byte and the offset within it name the position they came from.
     have index : position / 8 * 8 + position % 8 = position := by omega
-    rw [index]
     -- The position is inside the data, so the closing bit is not the one read.
-    rw [Array.getElem?_eq_getElem (by simp; omega), Option.getD_some,
+    rw [index, Array.getElem?_eq_getElem (by simp; omega), Option.getD_some,
       Array.getElem_push_lt inBits]
 
 /--
@@ -244,9 +179,7 @@ theorem unpackDelimited_packBitsDelimited (limit : Option Nat) (data : Array Boo
     simpa using clear
   -- A byte with a bit set is not the zero byte.
   have notZero : ¬ (packByte (data.push true) (data.size / 8) = 0) := by
-    intro zero
-    rw [zero] at isSet
-    simp at isSet
+    intro zero; simp [zero] at isSet
   -- The number of complete earlier bytes plus the delimiter position recovers the exact data-bit count.
   have counted : 8 * ((data.size + 8) / 8 - 1)
       + highestBit (packBits (data.push true) ((data.size + 8) / 8))[data.size / 8]!
@@ -259,8 +192,7 @@ theorem unpackDelimited_packBitsDelimited (limit : Option Nat) (data : Array Boo
   simp only [unpackDelimited, widthIs, beq_iff_eq,
     show ¬ (data.size + 8) / 8 = 0 by omega, if_neg, not_false_eq_true,
     show (data.size + 8) / 8 - 1 = data.size / 8 by omega, finalIs, if_neg notZero]
-  rw [show (data.size + 8) / 8 - 1 = data.size / 8 by omega] at counted
-  rw [finalIs] at counted
+  rw [show (data.size + 8) / 8 - 1 = data.size / 8 by omega, finalIs] at counted
   -- The declared capacity, where there is one, holds the count that came back.
   cases limit with
   | none => simp only [counted, recovered, Pure.pure, Except.pure]
@@ -289,15 +221,11 @@ theorem roundTrip_bitVector {length : Nat} {data : Array Bool} (fits : data.size
     rw [byteIs]
     refine packByte_high_clear data _ _ (by omega) ?_
     -- The last byte starts a whole number of bytes in, and the data ends inside it.
-    have : length % 8 != 0 := odd
-    simp only [bne_iff_ne, ne_eq] at this
+    simp only [bne_iff_ne, ne_eq] at odd
     omega
   -- The bits come back because the bytes hold every one of them.
   have unpacked : unpackBits (packBits data ((length + 7) / 8)) length = data := by
-    have room : data.size ≤ 8 * ((data.size + 7) / 8) := by omega
-    have recovered := unpackBits_packBits data ((data.size + 7) / 8) room
-    rw [fits] at recovered
-    exact recovered
+    subst fits; exact unpackBits_packBits data _ (by omega)
   -- Either the count fills its last byte, or the padding check runs and passes.
   split
   · rename_i checked
@@ -314,9 +242,7 @@ theorem roundTrip_bitList {limit : Nat} {data : Array Bool} (fits : data.size �
   simp only [serialize, if_pos fits]
   show deserialize (.bitList limit) (packBitsDelimited data) = _
   simp only [deserialize,
-    unpackDelimited_packBitsDelimited (some limit) data (fun _ named => by
-      cases named
-      exact fits)]
+    unpackDelimited_packBitsDelimited (some limit) data (fun _ named => by cases named; exact fits)]
   rfl
 
 /-- A progressive bit sequence its capacity admits survives being written and read back. -/

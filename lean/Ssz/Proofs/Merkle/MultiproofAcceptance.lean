@@ -18,11 +18,8 @@ theorem verifyMerkleMultiproof_eq_true_iff (leaves proof : List Bytes)
   · cases leafCheck : checkChunks leaves with
     | error fault =>
       -- A reported width error contradicts the claim that all supplied leaves are complete.
-      have invalid : ¬∀ node ∈ leaves, node.size = bytesPerChunk := by
-        intro widths
-        have := (checkChunks_ok_iff leaves).mpr widths
-        rw [leafCheck] at this
-        cases this
+      have invalid : ¬∀ node ∈ leaves, node.size = bytesPerChunk := fun widths =>
+        nomatch leafCheck.symm.trans ((checkChunks_ok_iff leaves).mpr widths)
       simp [verifyMerkleMultiproof, checkChunk, width, leafCheck, invalid,
         Bind.bind, Except.bind]
     | ok checked =>
@@ -31,11 +28,8 @@ theorem verifyMerkleMultiproof_eq_true_iff (leaves proof : List Bytes)
       cases proofCheck : checkChunks proof with
       | error fault =>
         -- The same equivalence rules out a successful answer after a malformed helper node.
-        have invalid : ¬∀ node ∈ proof, node.size = bytesPerChunk := by
-          intro widths
-          have := (checkChunks_ok_iff proof).mpr widths
-          rw [proofCheck] at this
-          cases this
+        have invalid : ¬∀ node ∈ proof, node.size = bytesPerChunk := fun widths =>
+          nomatch proofCheck.symm.trans ((checkChunks_ok_iff proof).mpr widths)
         simp [verifyMerkleMultiproof, checkChunk, width, leafCheck, proofCheck, invalid,
           Bind.bind, Except.bind]
       | ok checked =>
@@ -62,21 +56,20 @@ theorem calculateMultiMerkleRoot_shape {leaves proof : List Bytes} {indices : Li
   · simp [throw, Bind.bind, Except.bind] at built
   · rename_i lengths
     have lengths : leaves.length = indices.length := by simpa using lengths
-    cases helperIndices : getHelperIndices indices with
-    | error fault => simp [helperIndices, Bind.bind, Except.bind] at built
-    | ok helpers =>
-      simp only [helperIndices, Bind.bind, Except.bind] at built
-      split at built
-      · simp [throw] at built
-      · rename_i proofLengths
-        have proofLengths : proof.length = helpers.length := by simpa using proofLengths
-        refine ⟨helpers, rfl, lengths, proofLengths, ?_⟩
-        -- The validated counts make index projection recover the entire claim-plus-helper sequence.
-        have positions : (indices.zip leaves ++ helpers.zip proof).map Prod.fst = indices ++ helpers := by
-          simp [List.map_fst_zip, lengths, proofLengths]
-        -- The initial maximum depth then depends only on those positions, not on the node bytes.
-        have height := congrArg (fun xs => (xs.map levelOf).foldl max 0) positions
-        simp only [List.map_map, Function.comp_def] at height
-        simpa only [height, multiproofHeight] using built
+    cases helperIndices : getHelperIndices indices <;>
+      simp only [helperIndices, Bind.bind, Except.bind, reduceCtorEq] at built
+    rename_i helpers
+    split at built
+    · simp [throw] at built
+    · rename_i proofLengths
+      have proofLengths : proof.length = helpers.length := by simpa using proofLengths
+      refine ⟨helpers, rfl, lengths, proofLengths, ?_⟩
+      -- The validated counts make index projection recover the entire claim-plus-helper sequence.
+      have positions : (indices.zip leaves ++ helpers.zip proof).map Prod.fst = indices ++ helpers := by
+        simp [List.map_fst_zip, lengths, proofLengths]
+      -- The initial maximum depth then depends only on those positions, not on the node bytes.
+      have height := congrArg (fun xs => (xs.map levelOf).foldl max 0) positions
+      simp only [List.map_map, Function.comp_def] at height
+      simpa only [height, multiproofHeight] using built
 
 end Ssz

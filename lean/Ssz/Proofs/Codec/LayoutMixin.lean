@@ -11,14 +11,11 @@ theorem sequenceLayout_mixin {element : Desc} {values : List Value} {positions :
   -- The packing decision changes only the leaves and capacity, leaving the supplied metadata unchanged.
   unfold sequenceLayout at success
   split at success
-  · cases wrote : serializeEach element values with
-    | error err => simp [wrote, Bind.bind, Except.bind] at success
-    -- Successful basic-element packing retains the caller's exact optional word.
-    | ok parts =>
-      simp only [wrote, Bind.bind, Except.bind, pure, Except.pure, Except.ok.injEq] at success
-      exact congrArg MerkleLayout.mixin success.symm
-  -- Composite elements also retain the same word while keeping their own child positions.
-  · simp only [pure, Except.pure, Except.ok.injEq] at success
+  · cases wrote : serializeEach element values <;>
+      simp only [wrote, Bind.bind, Except.bind, pure, Except.pure, Except.ok.injEq,
+        reduceCtorEq] at success
     exact congrArg MerkleLayout.mixin success.symm
+  · cases success
+    rfl
 
 end Ssz

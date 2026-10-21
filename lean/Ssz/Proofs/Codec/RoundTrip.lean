@@ -16,35 +16,24 @@ theorem recovered {shape : Desc} (covered : Recovers shape) :
     intro _ admits
     cases admits with
     | bool b =>
-      refine ⟨reads_back (roundTrip_bool b), ?_⟩
-      intro _ _ fixed wrote
-      simp only [Desc.fixedSize, Option.some.injEq] at fixed
-      subst fixed
-      simp only [serialize] at wrote
-      rw [← Except.ok.inj wrote]
+      refine ⟨reads_back (roundTrip_bool b), fun _ _ fixed wrote => ?_⟩
+      simp [Desc.fixedSize, serialize] at fixed wrote
+      subst fixed wrote
       simp
   | uint =>
     intro _ admits
     cases admits with
     | uint bound =>
-      refine ⟨reads_back (roundTrip_uint bound), ?_⟩
-      intro _ _ fixed wrote
-      simp only [Desc.fixedSize, Option.some.injEq] at fixed
-      simp only [serialize, if_pos bound] at wrote
-      subst fixed
-      rw [← Except.ok.inj wrote]
+      refine ⟨reads_back (roundTrip_uint bound), fun _ _ fixed wrote => ?_⟩
+      simp [Desc.fixedSize, serialize, bound] at fixed wrote
+      subst fixed wrote
       exact uintBytes_size _ _
   | byteVector =>
     intro _ admits
     cases admits with
     | byteVector exact =>
-      refine ⟨reads_back (roundTrip_byteVector exact), ?_⟩
-      intro _ _ fixed wrote
-      simp only [Desc.fixedSize, Option.some.injEq] at fixed
-      simp only [serialize, exact, beq_self_eq_true, if_pos] at wrote
-      subst fixed
-      rw [← Except.ok.inj wrote]
-      exact exact
+      exact ⟨reads_back (roundTrip_byteVector exact), fun _ _ fixed wrote => by
+        simp_all [Desc.fixedSize, serialize]⟩
   | byteList =>
     intro _ admits
     cases admits with
@@ -53,13 +42,10 @@ theorem recovered {shape : Desc} (covered : Recovers shape) :
     intro _ admits
     cases admits with
     | bitVector exact =>
-      refine ⟨reads_back (roundTrip_bitVector exact), ?_⟩
-      intro _ _ fixed wrote
-      simp only [Desc.fixedSize, Option.some.injEq] at fixed
-      simp only [serialize, exact, beq_self_eq_true, if_pos] at wrote
-      subst fixed
-      rw [← Except.ok.inj wrote]
-      simp [packBits]
+      refine ⟨reads_back (roundTrip_bitVector exact), fun _ _ fixed wrote => ?_⟩
+      simp [Desc.fixedSize, serialize, exact, packBits] at fixed wrote
+      subst fixed wrote
+      simp
   | bitList =>
     intro _ admits
     cases admits with
@@ -215,42 +201,18 @@ theorem recovered {shape : Desc} (covered : Recovers shape) :
         (by intro cap named; rw [lengths]; simpa [withinBound, named] using within) nameable
       simp only [deserialize, sliced, decoded, Bind.bind, Except.bind]
       rfl
-  | @container _ fields _ ih =>
+  | @container _ fields _ ih | @progressiveContainer _ _ fields _ ih =>
     intro _ admits
-    cases admits with
-    | container paired each =>
-      rename_i values
-      have facts : ∀ pair ∈ fields.zip values, Recovered pair.1 pair.2 := fun pair member =>
-        ih pair.1 (List.of_mem_zip member).1 (each pair member)
-      obtain ⟨reads, widths⟩ := recovered_struct fields values paired facts
-      refine ⟨?_, ?_⟩
-      · intro bytes wrote
-        simp only [serialize] at wrote
-        obtain ⟨parts, sliced, decoded⟩ := reads bytes wrote
-        simp only [deserialize, sliced, decoded, Bind.bind, Except.bind]
-        rfl
-      · intro width bytes fixed wrote
-        simp only [serialize] at wrote
-        simp only [Desc.fixedSize] at fixed
-        exact widths width bytes fixed wrote
-  | @progressiveContainer _ _ fields _ ih =>
-    intro _ admits
-    cases admits with
-    | progressiveContainer paired each =>
-      rename_i values
-      have facts : ∀ pair ∈ fields.zip values, Recovered pair.1 pair.2 := fun pair member =>
-        ih pair.1 (List.of_mem_zip member).1 (each pair member)
-      obtain ⟨reads, widths⟩ := recovered_struct fields values paired facts
-      refine ⟨?_, ?_⟩
-      · intro bytes wrote
-        simp only [serialize] at wrote
-        obtain ⟨parts, sliced, decoded⟩ := reads bytes wrote
-        simp only [deserialize, sliced, decoded, Bind.bind, Except.bind]
-        rfl
-      · intro width bytes fixed wrote
-        simp only [serialize] at wrote
-        simp only [Desc.fixedSize] at fixed
-        exact widths width bytes fixed wrote
+    cases admits
+    rename_i values paired each
+    have facts : ∀ pair ∈ fields.zip values, Recovered pair.1 pair.2 := fun pair member =>
+      ih pair.1 (List.of_mem_zip member).1 (each pair member)
+    obtain ⟨reads, widths⟩ := recovered_struct fields values paired facts
+    refine ⟨fun bytes wrote => ?_, fun width bytes fixed wrote => widths width bytes
+      (by simpa only [Desc.fixedSize] using fixed) (by simpa only [serialize] using wrote)⟩
+    obtain ⟨parts, sliced, decoded⟩ := reads bytes (by simpa only [serialize] using wrote)
+    simp only [deserialize, sliced, decoded, Bind.bind, Except.bind]
+    rfl
   | compatibleUnion _ ih =>
     intro _ admits
     cases admits with
@@ -301,61 +263,40 @@ theorem recovers_of_wellFormed : ∀ (shape : Desc), shape.wellFormed = .ok () �
         ∧ ∀ width, field.fixedSize = some width → 0 < width) with
   | bool =>
     -- A boolean always occupies one byte.
-    intro _
-    exact ⟨.bool, by intro width fixed; simp [Desc.fixedSize] at fixed; omega⟩
+    exact fun _ => ⟨.bool, by intro width fixed; simp [Desc.fixedSize] at fixed; omega⟩
   | uint width =>
     -- Each of the six permitted integer widths is positive.
-    intro sound
-    refine ⟨.uint width, ?_⟩
-    intro answer fixed
-    simp only [Desc.fixedSize, Option.some.injEq] at fixed
-    subst answer
-    simp [Desc.wellFormed] at sound
-    omega
+    exact fun sound => ⟨.uint width, fun _ fixed => by
+      simp_all [Desc.fixedSize, Desc.wellFormed]; omega⟩
   | byteVector length =>
     -- A legal fixed byte string has at least one byte.
-    intro sound
-    refine ⟨.byteVector length, ?_⟩
-    intro answer fixed
-    simp [Desc.fixedSize] at fixed
-    simp [Desc.wellFormed] at sound
-    omega
+    exact fun sound => ⟨.byteVector length, fun _ fixed => by
+      simp_all [Desc.fixedSize, Desc.wellFormed]; omega⟩
   | bitVector length =>
     -- A positive bit count occupies at least one byte after rounding up.
-    intro sound
-    refine ⟨.bitVector length, ?_⟩
-    intro answer fixed
-    simp [Desc.fixedSize] at fixed
-    simp [Desc.wellFormed] at sound
-    omega
+    exact fun sound => ⟨.bitVector length, fun _ fixed => by
+      simp_all [Desc.fixedSize, Desc.wellFormed]; omega⟩
   | byteList limit =>
     -- Variable-size byte strings have no fixed width to prove positive.
-    intro _
-    exact ⟨.byteList limit, by simp [Desc.fixedSize]⟩
+    exact fun _ => ⟨.byteList limit, by simp [Desc.fixedSize]⟩
   | bitList limit =>
     -- The delimiter recovers the bit count, including an empty value.
-    intro _
-    exact ⟨.bitList limit, by simp [Desc.fixedSize]⟩
+    exact fun _ => ⟨.bitList limit, by simp [Desc.fixedSize]⟩
   | progressiveBitList limit =>
     -- A bound rules on the count alone, leaving the bit encoding as it is.
-    intro _
-    exact ⟨.progressiveBitList limit, by simp [Desc.fixedSize]⟩
+    exact fun _ => ⟨.progressiveBitList limit, by simp [Desc.fixedSize]⟩
   | vector element length ih =>
     intro sound
     obtain ⟨covered, positive⟩ := ih (wellFormed_vector sound)
     -- Fixed elements multiply their width by the positive element count.
     have nonempty : length ≠ 0 := by
-      intro empty
-      subst length
-      simp [Desc.wellFormed, Bind.bind, Except.bind] at sound
+      rintro rfl; simp [Desc.wellFormed, Bind.bind, Except.bind] at sound
     cases fixedIs : element.fixedSize with
     | none => exact ⟨.vectorVarying fixedIs covered, by simp [Desc.fixedSize, fixedIs]⟩
     | some width =>
-      refine ⟨.vectorFixed fixedIs covered, ?_⟩
-      intro answer fixed
-      simp [Desc.fixedSize, fixedIs] at fixed
-      subst answer
-      exact Nat.mul_pos (positive width fixedIs) (by omega)
+      refine ⟨.vectorFixed fixedIs covered, fun answer fixed => ?_⟩
+      simp only [Desc.fixedSize, fixedIs, Option.map_some, Option.some.injEq] at fixed
+      exact fixed ▸ Nat.mul_pos (positive width fixedIs) (by omega)
   | list element limit ih =>
     intro sound
     obtain ⟨covered, positive⟩ := ih (wellFormed_list sound)
@@ -379,9 +320,7 @@ theorem recovers_of_wellFormed : ∀ (shape : Desc), shape.wellFormed = .ok () �
     -- Each declared field is covered, and a legal container has at least one.
     have nonempty : ¬ fields.isEmpty = true := by
       intro empty
-      have := List.isEmpty_iff.mp empty
-      subst fields
-      simp [Desc.wellFormed, Bind.bind, Except.bind] at sound
+      simp [List.isEmpty_iff.mp empty, Desc.wellFormed, Bind.bind, Except.bind] at sound
     exact ⟨.container (fun field member => (facts field member).1),
       fun width fixed => fieldsFixedSize_pos fields width nonempty
         (fun field member => (facts field member).2) fixed⟩

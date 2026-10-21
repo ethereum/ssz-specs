@@ -33,9 +33,8 @@ theorem schedulePrefix_get (block : ByteArray) (start count upper i : Nat)
     by_cases same : count = upper + 1
     · subst count; rfl
     -- When this is not the full prefix, removing its last appended entry leaves the requested position intact.
-    · have lower : count ≤ upper := by omega
-      rw [schedulePrefix, Vector.getElem_push_lt (by omega)]
-      exact ih count within lower
+    · rw [schedulePrefix, Vector.getElem_push_lt (by omega)]
+      exact ih count within (by omega)
 
 /-- The first sixteen schedule words are the block's big-endian input words. -/
 theorem schedule_input (block : ByteArray) (start i : Nat) (input : i < 16) :
@@ -54,11 +53,11 @@ theorem schedule_recurrence (block : ByteArray) (start i : Nat)
       sigma1 ((schedule block start)[i - 2]'(by omega)) := by
   -- The recurrence reads only older words, whose values are preserved in the final schedule.
   unfold schedule
-  rw [schedulePrefix_get block start (i + 1) 64 i (by omega) (by omega)]
-  rw [schedulePrefix_get block start i 64 (i - 16) (by omega) (by omega)]
-  rw [schedulePrefix_get block start i 64 (i - 15) (by omega) (by omega)]
-  rw [schedulePrefix_get block start i 64 (i - 7) (by omega) (by omega)]
-  rw [schedulePrefix_get block start i 64 (i - 2) (by omega) (by omega)]
+  rw [schedulePrefix_get block start (i + 1) 64 i (by omega) (by omega),
+    schedulePrefix_get block start i 64 (i - 16) (by omega) (by omega),
+    schedulePrefix_get block start i 64 (i - 15) (by omega) (by omega),
+    schedulePrefix_get block start i 64 (i - 7) (by omega) (by omega),
+    schedulePrefix_get block start i 64 (i - 2) (by omega) (by omega)]
   simp [schedulePrefix, show ¬ i < 16 by omega]
 
 /-- A length occupies the final eight bytes of the padded message. -/
@@ -113,8 +112,7 @@ theorem pad_delimiter (message : ByteArray) :
     (pad message)[message.size]'(by rw [pad_size]; omega) = 0x80 := by
   -- The first appended byte lies after every original byte and before both suffix regions.
   unfold pad
-  rw [ByteArray.getElem_append_left (by simp; omega)]
-  rw [ByteArray.getElem_append_left (by simp)]
+  rw [ByteArray.getElem_append_left (by simp; omega), ByteArray.getElem_append_left (by simp)]
   exact Array.getElem_push_eq
 
 /-- Every whole byte between the delimiter and the length is zero. -/
@@ -148,18 +146,14 @@ theorem pad_length_suffix (message : ByteArray) :
 private theorem messageBitLength_toNat (size : Nat) (admitted : size < 2 ^ 61) :
     (UInt64.ofNat size * 8).toNat = size * 8 := by
   -- FIPS 180-4 admits fewer than 2^64 message bits, so this multiplication cannot wrap.
-  have sizeBound : size < UInt64.size := by change size < 18446744073709551616; omega
-  simp only [UInt64.toNat_mul, UInt64.toNat_ofNat_of_lt' sizeBound]
-  change (size * 8) % 18446744073709551616 = size * 8
-  exact Nat.mod_eq_of_lt (by omega)
+  simp [UInt64.toNat_mul, UInt64.toNat_ofNat]
+  omega
 
 private theorem lengthByteOffset_toNat (i : Fin 8) :
     (8 * UInt64.ofNat i.val).toNat = 8 * i.val := by
   -- The eight byte positions occupy only bit offsets zero through fifty-six.
-  have bound : i.val < UInt64.size := by change i.val < 18446744073709551616; omega
-  simp only [UInt64.toNat_mul, UInt64.toNat_ofNat_of_lt' bound]
-  change (8 * i.val) % 18446744073709551616 = 8 * i.val
-  exact Nat.mod_eq_of_lt (by omega)
+  simp [UInt64.toNat_mul, UInt64.toNat_ofNat]
+  omega
 
 private theorem lengthByteShift_toNat (i : Fin 8) :
     (56 - 8 * UInt64.ofNat i.val).toNat = 56 - 8 * i.val := by

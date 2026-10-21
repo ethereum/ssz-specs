@@ -16,10 +16,7 @@ private theorem layout_ext {left right : MerkleLayout}
   -- A layout carries only its leaves, capacity, and optional mixing word.
   cases left
   cases right
-  cases leaves
-  cases limit
-  cases mixin
-  rfl
+  simp_all
 
 /--
 Without a collision between the two computations, an SSZ root determines its whole value.
@@ -97,9 +94,9 @@ theorem hashTreeRoot_binding {shape : Desc} {left right : Value} {root : Bytes}
   · exact .inl (valueTreeAt_eq_of_noCollision shape.nesting (Nat.le_refl _) sound
       leftFits rightFits leftSized rightSized leftTrace rightTrace clean
       (leftRoot.trans rightRoot.symm))
-  · have collision : Collision leftTree rightTree := Classical.not_not.mp clean
-    -- The collision witnesses come from the two computations rather than unrelated SHA-256 inputs.
-    obtain ⟨a, aMember, b, bMember, different, hashed⟩ := collision
+  · -- The collision witnesses come from the two computations rather than unrelated SHA-256 inputs.
+    obtain ⟨a, aMember, b, bMember, different, hashed⟩ : Collision leftTree rightTree :=
+      Classical.not_not.mp clean
     -- Each witnessed message concatenates two 32-byte child nodes.
     exact .inr ⟨leftTree, rightTree, leftTrace, rightTrace, a, aMember, b, bMember,
       messages_size leftTree leftComplete a aMember,

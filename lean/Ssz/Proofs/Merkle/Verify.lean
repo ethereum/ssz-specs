@@ -11,23 +11,14 @@ theorem combine_sibling {node : Nat → Bytes} (tree : MerkleTree node) (index :
     (named : 1 ≤ index / 2) :
     (if index % 2 = 1 then combine (node (gindexSibling index)) (node index)
       else combine (node index) (node (gindexSibling index))) = node (index / 2) := by
+  rw [tree _ named]
   rcases Nat.mod_two_eq_zero_or_one index with even | odd
   · -- An even node is the left child, so the sibling joins on the right.
-    rw [if_neg (by omega)]
     obtain ⟨whole, pair⟩ := gindexSibling_even even
-    have expanded : combine (node index) (node (gindexSibling index))
-        = combine (node (2 * (index / 2))) (node (2 * (index / 2) + 1)) := by
-      rw [← pair, ← whole]
-    rw [expanded]
-    exact (tree _ named).symm
+    rw [if_neg (by omega), ← pair, ← whole]
   · -- An odd node is the right child, so the sibling joins on the left.
-    rw [if_pos (by omega)]
     obtain ⟨whole, pair⟩ := gindexSibling_odd odd
-    have expanded : combine (node (gindexSibling index)) (node index)
-        = combine (node (2 * (index / 2))) (node (2 * (index / 2) + 1)) := by
-      rw [← whole, ← pair]
-    rw [expanded]
-    exact (tree _ named).symm
+    rw [if_pos odd, ← whole, ← pair]
 
 /-- One level of the climb joins a node with its sibling, giving the node above them. -/
 theorem climbBranch_step {node : Nat → Bytes} (tree : MerkleTree node) (index level : Nat)
@@ -68,25 +59,15 @@ theorem climbBranch_folds {node : Nat → Bytes} (tree : MerkleTree node) :
     intro index level reaches
     -- The first sibling is the one at this level, and the rest belong one level up.
     rw [List.range_succ_eq_map]
-    simp only [List.map_cons, List.map_map, Function.comp_def, Nat.add_zero]
-    rw [climbBranch]
-    -- The levels the rest of the branch names are the ones the climb reaches next.
-    have shift : (fun step => node (gindexSibling (index >>> (level + (step + 1)))))
-        = fun step => node (gindexSibling (index >>> (level + 1 + step))) := by
-      funext step
-      have same : level + (step + 1) = level + 1 + step := by omega
-      rw [same]
+    simp only [List.map_cons, List.map_map, Function.comp_def, Nat.add_zero, climbBranch]
     -- The remaining climb still has to reach the root, which is what it opened able to do.
     have onward : 1 ≤ index >>> (level + 1 + count) := by
-      have same : level + 1 + count = level + (count + 1) := by omega
-      rw [same]
-      exact reaches
+      rwa [Nat.add_assoc, Nat.add_comm 1]
     -- One level of the climb is a node joined with its sibling, which is the node above.
     have above : 1 ≤ index >>> (level + 1) :=
       Nat.le_trans onward (by rw [Nat.shiftRight_add]; exact shiftRight_le _ _)
-    rw [shift, climbBranch_step tree index level above, ih index (level + 1) onward]
-    have same : level + 1 + count = level + (count + 1) := by omega
-    rw [same]
+    rw [climbBranch_step tree index level above]
+    simpa [Nat.add_assoc, Nat.add_comm, Nat.add_left_comm] using ih index (level + 1) onward
 
 /-- Reading an index that names a node gives its depth, which is at least one level. -/
 theorem gindexLength_ok {index depth : Nat} (measured : gindexLength index = .ok depth) :
@@ -94,15 +75,13 @@ theorem gindexLength_ok {index depth : Nat} (measured : gindexLength index = .ok
   -- A number naming no node is refused, and so is the root, which sits on no branch.
   unfold gindexLength gindexDepth at measured
   split at measured
-  · simp [Bind.bind, Except.bind] at measured
-  · rename_i named
-    simp only [Bind.bind, Except.bind] at measured
+  · cases measured
+  · simp only [Bind.bind, Except.bind] at measured
     split at measured
-    · simp at measured
-    · rename_i deep
-      simp only [Except.ok.injEq] at measured
-      simp only [beq_iff_eq] at deep
-      exact ⟨measured.symm, by omega, measured ▸ deep⟩
+    · cases measured
+    · cases measured
+      simp_all
+      omega
 
 /-- The branch of an index is the tree's siblings, one per level below the root. -/
 theorem getBranchIndices_eq {index : Nat} {branch : List Nat}
@@ -111,16 +90,10 @@ theorem getBranchIndices_eq {index : Nat} {branch : List Nat}
       ∧ 1 ≤ index ∧ Nat.log2 index ≠ 0 := by
   -- The walk upward names one ancestor per level, and the branch is what sits beside them.
   unfold getBranchIndices getPathIndices at built
-  cases measured : gindexLength index with
-  | error _ =>
-    rw [measured] at built
-    simp [Bind.bind, Except.bind] at built
-  | ok depth =>
-    obtain ⟨named, positive, deep⟩ := gindexLength_ok measured
-    subst named
-    rw [measured] at built
-    simp [Bind.bind, Except.bind, pure, Except.pure, List.map_map, Function.comp_def] at built
-    exact ⟨built.symm, positive, deep⟩
+  cases measured : gindexLength index <;>
+    simp [measured, Bind.bind, Except.bind, pure, Except.pure, List.map_map, Function.comp_def] at built
+  obtain ⟨rfl, positive, deep⟩ := gindexLength_ok measured
+  exact ⟨built.symm, positive, deep⟩
 
 /-- A climb reaches its last ancestor when each step agrees with its parent. -/
 theorem climbBranch_folds_on_path (node : Nat → Bytes) (index : Nat) :

@@ -13,17 +13,10 @@ Without this the capacity check names a number unrelated to the tree built.
 -/
 theorem le_two_pow_depthFor (leafCount : Nat) : leafCount ≤ 2 ^ depthFor leafCount := by
   -- Recursing the proof the way the definition recurses keeps the two in step.
+  -- Widths double one level up, and the halved count already fits the level below.
   induction leafCount using depthFor.induct with
-  | case1 leafCount small =>
-    -- Zero and one both fit the single position of a depth-zero tree.
-    rw [depthFor]
-    simp [small]
-  | case2 leafCount large ih =>
-    -- Widths double one level up, and the halved count already fits the level below.
-    rw [depthFor]
-    -- Unfolding the doubling turns the hypothesis into plain linear arithmetic.
-    simp only [if_neg large, Nat.pow_succ]
-    omega
+  | case1 leafCount small => simp [depthFor, small]
+  | case2 leafCount large ih => rw [depthFor, if_neg large, Nat.pow_succ]; omega
 
 /--
 No shallower tree holds them, so the depth chosen is the least one that does.
@@ -36,27 +29,21 @@ theorem depthFor_le_of_le_two_pow {leafCount depth : Nat} (holds : leafCount ≤
   induction leafCount using depthFor.induct generalizing depth with
   | case1 leafCount small =>
     -- A depth-zero tree is already the shallowest there is.
-    rw [depthFor]
-    simp [small]
+    simp [depthFor, small]
   | case2 leafCount large ih =>
     -- Two or more leaves need a level, so the bound must have come from one too.
     rw [depthFor, if_neg large]
-    match depth with
-    | 0 => simp at holds; omega
-    | shallower + 1 =>
-      have : (leafCount + 1) / 2 ≤ 2 ^ shallower := by
-        rw [Nat.pow_succ] at holds
-        omega
-      have := ih this
+    cases depth with
+    | zero => simp at holds; omega
+    | succ shallower =>
+      have := @ih shallower (by rw [Nat.pow_succ] at holds; omega)
       omega
 
 /-- A leaf count that is already a power of two needs exactly the depth it names. -/
 theorem depthFor_pow (depth : Nat) : depthFor (2 ^ depth) = depth := by
   -- No shallower tree holds that many leaves, and no deeper one is chosen.
-  have below : depthFor (2 ^ depth) ≤ depth := depthFor_le_of_le_two_pow (Nat.le_refl _)
-  have above : 2 ^ depth ≤ 2 ^ depthFor (2 ^ depth) := le_two_pow_depthFor (2 ^ depth)
-  have widened : depth ≤ depthFor (2 ^ depth) :=
-    (Nat.pow_le_pow_iff_right (by omega)).mp above
+  have below := depthFor_le_of_le_two_pow (Nat.le_refl (2 ^ depth))
+  have above := (Nat.pow_le_pow_iff_right (by omega)).mp (le_two_pow_depthFor (2 ^ depth))
   omega
 
 /--
@@ -109,17 +96,10 @@ Nothing above the leaves can tell the two apart.
 theorem padded_append_zeros (zero : α) (chunks : Array α) (count : Nat) :
     padded zero (chunks ++ Array.replicate count zero) = padded zero chunks := by
   -- Leaf supplies are functions, so they are equal once they agree pointwise.
+  -- Past the data, the padding reads zero whether or not it was written.
   funext position
-  simp only [padded, Array.getElem?_append]
-  -- Inside the data both sides read the same node.
-  split
-  · rfl
-  -- Past the data the original array has nothing there.
-  · rename_i past_data
-    have absent : chunks[position]? = none := Array.getElem?_eq_none (by omega)
-    -- What remains is the padding, which reads zero whether or not it was written.
-    simp only [absent, Option.getD_none, Array.getElem?_replicate]
-    split <;> rfl
+  simp only [padded, Array.getElem?_append, Array.getElem?_replicate]
+  split <;> grind
 
 /--
 Materializing the padding does not change the root.
@@ -141,8 +121,6 @@ theorem subtreeRoot_padded_past_data (combine : α → α → α) (zero : α) (d
   -- Every position the tree reads lies past the data, so every leaf is zero.
   rw [← subtreeRoot_const_zero combine zero depth]
   refine subtreeRoot_congr combine depth fun position _ => ?_
-  simp only [padded]
-  rw [Array.getElem?_eq_none (by omega)]
-  rfl
+  simp [padded, Array.getElem?_eq_none (show chunks.size ≤ start + position by omega)]
 
 end Ssz

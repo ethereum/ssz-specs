@@ -83,27 +83,23 @@ theorem fork_binding {left right otherLeft otherRight : CommitmentTree}
   by_cases inputs : left.root ++ right.root = otherLeft.root ++ otherRight.root
   · exact .inl (Array.append_inj inputs ((root_size _ complete.1).trans
       (root_size _ otherComplete.1).symm))
-  · refine .inr ⟨_, List.mem_cons_self, _, List.mem_cons_self, inputs, ?_⟩
-    apply ByteArray.ext
-    exact same
+  · exact .inr ⟨_, List.mem_cons_self, _, List.mem_cons_self, inputs, ByteArray.ext same⟩
 
 /-- A collision in the left subcomputations remains a collision in the full trees. -/
 theorem Collision.left {left otherLeft : CommitmentTree} (right otherRight : CommitmentTree)
     (collision : Collision left otherLeft) :
     Collision (.fork left right) (.fork otherLeft otherRight) := by
   -- The left subtree keeps both witnesses when its message list is included in the larger tree.
-  rcases collision with ⟨first, firstMem, second, secondMem, distinct, hashed⟩
-  exact ⟨first, List.mem_cons_of_mem _ (List.mem_append_left _ firstMem),
-    second, List.mem_cons_of_mem _ (List.mem_append_left _ secondMem), distinct, hashed⟩
+  obtain ⟨first, firstMem, second, secondMem, rest⟩ := collision
+  exact ⟨first, by simp [messages, firstMem], second, by simp [messages, secondMem], rest⟩
 
 /-- A collision in the right subcomputations remains a collision in the full trees. -/
 theorem Collision.right {right otherRight : CommitmentTree} (left otherLeft : CommitmentTree)
     (collision : Collision right otherRight) :
     Collision (.fork left right) (.fork otherLeft otherRight) := by
   -- The right subtree keeps both witnesses when its message list is included in the larger tree.
-  rcases collision with ⟨first, firstMem, second, secondMem, distinct, hashed⟩
-  exact ⟨first, List.mem_cons_of_mem _ (List.mem_append_right _ firstMem),
-    second, List.mem_cons_of_mem _ (List.mem_append_right _ secondMem), distinct, hashed⟩
+  obtain ⟨first, firstMem, second, secondMem, rest⟩ := collision
+  exact ⟨first, by simp [messages, firstMem], second, by simp [messages, secondMem], rest⟩
 
 /-- A fixed tree shape commits to every leaf unless its own hash computations collide. -/
 theorem binding (left right : CommitmentTree) (complete : left.Complete)
@@ -176,8 +172,7 @@ theorem perfect_injective (depth : Nat) {left right : Nat → Bytes}
   induction depth generalizing left right with
   | zero =>
     intro i within
-    have zero : i = 0 := Nat.lt_one_iff.mp within
-    subst i
+    obtain rfl := Nat.lt_one_iff.mp within
     exact CommitmentTree.leaf.inj same
   | succ depth ih =>
     obtain ⟨first, second⟩ := CommitmentTree.fork.inj same

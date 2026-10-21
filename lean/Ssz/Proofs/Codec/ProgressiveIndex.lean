@@ -67,8 +67,7 @@ private theorem progressive_selection : ∀ chunk depth spine start count,
           progressiveChunkGindex (chunk - 2 ^ depth) (depth + 2) (spine * 2 + 1) := by
         rw [progressiveChunkGindex, if_neg fits]
       have turn : gindexBit (progressiveChunkGindex chunk depth spine) turns = true := by
-        rw [gindexBit_parity, index, ancestor]
-        simp
+        rw [gindexBit_parity, index, ancestor]; simp
       refine ⟨turns + 1, stop, by omega, ?_, ?_, left, capacity, ?_, reached⟩
       · rw [index, shiftRight_succ, ancestor]
         omega
@@ -99,8 +98,7 @@ theorem progressiveChunkGindex_selection (chunk count : Nat) (inside : chunk < c
   · have smaller := Nat.div_le_self (progressiveChunkGindex chunk) (2 ^ turns)
     rw [Nat.shiftRight_eq_div_pow] at ancestor
     omega
-  · rw [turnsDepth, gindexBit_parity, ancestor]
-    rfl
+  · rw [turnsDepth, gindexBit_parity, ancestor]; rfl
   · simpa only [turnsDepth, Nat.pow_zero] using walked
 
 /-- Reading a progressive chunk continues into the bounded level that contains precisely that chunk. -/

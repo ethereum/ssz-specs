@@ -52,35 +52,23 @@ theorem gindexConcat_root_left {inner : Nat} (named : 1 ≤ inner) :
   have bound := (gindexDepth_bounds named).1
   simp [Nat.add_sub_cancel' bound]
 
-/-- Successful splicing always names a real node. -/
-theorem gindexConcat_positive {outer inner result : Nat}
-    (joined : gindexConcat outer inner = .ok result) : 1 ≤ result := by
-  -- Neither operand may be zero, because zero has no root bit to preserve.
-  by_cases outerNamed : 1 ≤ outer
-  · by_cases innerNamed : 1 ≤ inner
-    · rw [gindexConcat_eq outerNamed innerNamed] at joined
-      cases joined
-      -- The retained leading bit contributes a strictly positive value to the joined index.
-      have power := Nat.two_pow_pos (Nat.log2 inner)
-      have grows : 2 ^ Nat.log2 inner ≤ outer * 2 ^ Nat.log2 inner := by
-        simpa using Nat.mul_le_mul_right (2 ^ Nat.log2 inner) outerNamed
-      omega
-    · simp [gindexConcat, gindexDepth, show inner < 1 by omega,
-        show ¬outer < 1 by omega, Bind.bind, Except.bind] at joined
-  · simp [gindexConcat, gindexDepth, show outer < 1 by omega, Bind.bind, Except.bind] at joined
-
 /-- A successful splice has two valid operands and the prescribed leading-bit arithmetic. -/
 theorem gindexConcat_facts {outer inner result : Nat}
     (joined : gindexConcat outer inner = .ok result) :
     1 ≤ outer ∧ 1 ≤ inner ∧ result = outer * 2 ^ Nat.log2 inner + (inner - 2 ^ Nat.log2 inner) := by
   -- Neither operand may be zero, because zero has no root bit to preserve.
-  by_cases outerNamed : 1 ≤ outer
-  · by_cases innerNamed : 1 ≤ inner
-    · rw [gindexConcat_eq outerNamed innerNamed] at joined
-      exact ⟨outerNamed, innerNamed, (Except.ok.inj joined).symm⟩
-    · simp [gindexConcat, gindexDepth, show inner < 1 by omega,
-        show ¬outer < 1 by omega, Bind.bind, Except.bind] at joined
-  · simp [gindexConcat, gindexDepth, show outer < 1 by omega, Bind.bind, Except.bind] at joined
+  simp only [gindexConcat, gindexDepth] at joined
+  split at joined <;> split at joined <;>
+    simp_all [Bind.bind, Except.bind, pure, Except.pure] <;> omega
+
+/-- Successful splicing always names a real node. -/
+theorem gindexConcat_positive {outer inner result : Nat}
+    (joined : gindexConcat outer inner = .ok result) : 1 ≤ result := by
+  -- The retained leading bit contributes a strictly positive value to the joined index.
+  obtain ⟨outerNamed, -, rfl⟩ := gindexConcat_facts joined
+  have := Nat.mul_le_mul_right (2 ^ Nat.log2 inner) outerNamed
+  have := Nat.two_pow_pos (Nat.log2 inner)
+  omega
 
 /-- Splicing paths adds their depths, so each child turn is retained exactly once. -/
 theorem gindexConcat_depth {outer inner result : Nat}
@@ -144,22 +132,16 @@ theorem getGeneralizedIndex_positive (shape : Desc) (path : List PathStep) (inde
     cases first : shape.resolveStep step with
     | error fault => simp [getGeneralizedIndex, first, Bind.bind, Except.bind] at resolved
     | ok target =>
-      obtain ⟨head, next⟩ := target
-      cases next with
+      obtain ⟨head, _ | child⟩ := target
       -- A terminal mixing word has the fixed generalized index three.
-      | none =>
-        have headThree := resolveStep_terminal_index first
-        cases rest <;> simp [getGeneralizedIndex, first, Bind.bind, Except.bind,
+      · cases rest <;> simp [getGeneralizedIndex, first, Bind.bind, Except.bind,
           pure, Except.pure, throw, throwThe, MonadExceptOf.throw] at resolved
+        have := resolveStep_terminal_index first
         omega
       -- A successful nested path finishes with a valid generalized-index splice.
-      | some child =>
-        rw [getGeneralizedIndex_cons first] at resolved
-        cases suffix : getGeneralizedIndex child rest with
-        | error fault => simp [suffix, Bind.bind, Except.bind] at resolved
-        | ok tail =>
-          simp only [suffix, Bind.bind, Except.bind] at resolved
-          exact gindexConcat_positive resolved
+      · rw [getGeneralizedIndex_cons first] at resolved
+        cases suffix : getGeneralizedIndex child rest <;> simp [suffix, Bind.bind, Except.bind] at resolved
+        exact gindexConcat_positive resolved
 
 /-- A resolved child followed by any resolved suffix selects their spliced generalized index. -/
 theorem getGeneralizedIndex_step {shape child : Desc} {step : PathStep} {head tail whole : Nat}

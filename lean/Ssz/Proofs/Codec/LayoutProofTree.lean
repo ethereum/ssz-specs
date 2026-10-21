@@ -102,10 +102,8 @@ theorem nodeRoot_mixed_layout {shape : Desc} {value : Value} {layout : MerkleLay
     have notRoot : index ≠ 1 := by omega
     -- The contents’ initial left turn excludes the right-hand word even at the same depth.
     have notWord : index ≠ 3 := by
-      intro same
-      subst index
-      change true = false at leftSide
-      contradiction
+      rintro rfl
+      cases leftSide
     have deep : Nat.log2 index ≠ 0 := by
       have recursion := levelOf_parent named
       change Nat.log2 index = _ at recursion
@@ -145,10 +143,8 @@ theorem nodeRoot_progressive_layout {shape : Desc} {value : Value} {layout : Mer
     have notRoot : index ≠ 1 := by omega
     -- The contents’ initial left turn excludes the right-hand word even at the same depth.
     have notWord : index ≠ 3 := by
-      intro same
-      subst index
-      change true = false at leftSide
-      contradiction
+      rintro rfl
+      cases leftSide
     have deep : Nat.log2 index ≠ 0 := by
       have recursion := levelOf_parent named
       change Nat.log2 index = _ at recursion
@@ -192,10 +188,8 @@ theorem buildProof_bounded_layout_correct {shape : Desc} {value : Value} {layout
   obtain ⟨spelled, named, _⟩ := getBranchIndices_eq indexed
   -- The concrete value walker supplies the same siblings as the finite tree whose parent equations are known.
   apply buildProof_from_reading indexed (boundedReading_branch chunks _ index named inside)
-  · intro position member
-    rw [spelled] at member
-    obtain ⟨step, below, same⟩ := List.mem_map.mp member
-    subst position
+  · intro _ member
+    obtain ⟨step, below, rfl⟩ := List.mem_map.mp (spelled ▸ member)
     have positive := path_shift_positive named (List.mem_range.mp below)
     have half := gindexSibling_half (index >>> step)
     apply nodeRoot_bounded_layout laid materialized bounded unmixed fits _ (by omega)
@@ -222,10 +216,8 @@ theorem buildProof_mixed_layout_correct {shape : Desc} {value : Value} {layout :
   have positive : 2 ≤ index := two_le_of_level_positive (depth := Nat.log2 index) rfl (by omega)
   -- The concrete value walker supplies the same siblings as the finite tree whose parent equations are known.
   apply buildProof_from_reading indexed (mixedReading_branch_left chunks _ word index positive leftSide inside)
-  · intro position member
-    rw [spelled] at member
-    obtain ⟨step, below, same⟩ := List.mem_map.mp member
-    subst position
+  · intro _ member
+    obtain ⟨step, below, rfl⟩ := List.mem_map.mp (spelled ▸ member)
     apply nodeRoot_mixed_layout laid materialized bounded mixed fits _
     exact Or.inr (mixed_branch_sibling positive leftSide inside (List.mem_range.mp below))
   · rw [hashTreeRoot_bounded_layout laid materialized bounded fits, mixed]
@@ -249,10 +241,8 @@ theorem buildProof_progressive_layout_correct {shape : Desc} {value : Value} {la
   have positive : 2 ≤ index := two_le_of_level_positive (depth := Nat.log2 index) rfl (by omega)
   -- The concrete value walker supplies the same siblings as the finite tree whose parent equations are known.
   apply buildProof_from_reading indexed (progressiveMixedReading_branch_left chunks word index positive leftSide position)
-  · intro at_ member
-    rw [spelled] at member
-    obtain ⟨step, below, same⟩ := List.mem_map.mp member
-    subst at_
+  · intro _ member
+    obtain ⟨step, below, rfl⟩ := List.mem_map.mp (spelled ▸ member)
     apply nodeRoot_progressive_layout laid materialized progressive mixed _
     exact Or.inr (progressive_mixed_branch_sibling positive leftSide position (List.mem_range.mp below))
   · rw [hashTreeRoot_progressive_layout laid materialized progressive, mixed]

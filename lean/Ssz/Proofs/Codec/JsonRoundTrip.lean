@@ -21,28 +21,17 @@ theorem byteElements_cons (byte : UInt8) (data : Bytes) :
 /-- A run of one-byte values is recovered from the bytes it wrote. -/
 theorem byteElements_byteRun : ∀ (values : List Value) (data : Bytes),
     byteRun values = .ok data → byteElements data = values
-  | [], data, wrote => by
-    simp only [byteRun, Except.ok.injEq] at wrote
-    subst wrote
-    simp [byteElements]
+  | [], data, wrote => by simp_all [byteRun, byteElements]
   | .uint n :: rest, data, wrote => by
-    rw [byteRun] at wrote
-    by_cases wide : 256 ≤ n
-    · simp [wide, Bind.bind, Except.bind] at wrote
-    · rw [if_neg wide] at wrote
-      cases run : byteRun rest with
-      | error _ => simp [run, Bind.bind, Except.bind] at wrote
-      | ok tail =>
-        simp only [run, Bind.bind, Except.bind, pure, Except.pure, Except.ok.injEq] at wrote
-        subst wrote
-        have byte : (UInt8.ofNat n).toNat = n := by
-          simpa [UInt8.toNat_ofNat] using Nat.mod_eq_of_lt (Nat.not_le.mp wide)
-        rw [byteElements_cons, byte, byteElements_byteRun rest tail run]
-  | .bool _ :: _, _, wrote => by simp [byteRun] at wrote
-  | .bytes _ :: _, _, wrote => by simp [byteRun] at wrote
-  | .bits _ :: _, _, wrote => by simp [byteRun] at wrote
-  | .seq _ :: _, _, wrote => by simp [byteRun] at wrote
-  | .union _ _ :: _, _, wrote => by simp [byteRun] at wrote
+    -- A small value writes one byte, and that byte reads back as the same value.
+    cases run : byteRun rest <;> by_cases wide : 256 ≤ n <;>
+      simp [byteRun, run, wide, Bind.bind, Except.bind, pure, Except.pure] at wrote
+    subst wrote
+    rw [byteElements_cons, byteElements_byteRun rest _ run]
+    simp
+    omega
+  | .bool _ :: _, _, wrote | .bytes _ :: _, _, wrote | .bits _ :: _, _, wrote
+  | .seq _ :: _, _, wrote | .union _ _ :: _, _, wrote => by simp [byteRun] at wrote
 
 /-- Each entry of a sequence document reads back as the element it was written from. -/
 theorem valueOfEntries_jsonOfEach (element : Desc) (spelling : Spelling)
@@ -53,40 +42,25 @@ theorem valueOfEntries_jsonOfEach (element : Desc) (spelling : Spelling)
       (∀ value ∈ values, Fits element value) →
       jsonOfEach element spelling values = .ok documents →
       valueOfEntries element spelling documents = .ok values
-  | [], documents, _, wrote => by
-    rw [jsonOfEach] at wrote
-    simp only [Except.ok.injEq] at wrote
-    subst wrote
-    rw [valueOfEntries]
+  | [], documents, _, wrote => by simp_all [jsonOfEach, valueOfEntries]
   | value :: rest, documents, fitted, wrote => by
     rw [jsonOfEach] at wrote
-    cases head : jsonOf element spelling value with
-    | error _ => simp [head, Bind.bind, Except.bind] at wrote
-    | ok first =>
-      cases tail : jsonOfEach element spelling rest with
-      | error _ => simp [head, tail, Bind.bind, Except.bind] at wrote
-      | ok others =>
-        simp only [head, tail, Bind.bind, Except.bind, pure, Except.pure,
-          Except.ok.injEq] at wrote
-        subst wrote
-        rw [valueOfEntries, back value first (fitted value (by simp)) head,
-          valueOfEntries_jsonOfEach element spelling back rest others
-            (fun v member => fitted v (by simp [member])) tail]
-        simp [Bind.bind, Except.bind, pure, Except.pure]
+    cases head : jsonOf element spelling value <;> cases tail : jsonOfEach element spelling rest <;>
+      simp [head, tail, Bind.bind, Except.bind, pure, Except.pure] at wrote
+    subst wrote
+    rw [valueOfEntries, back value _ (fitted value (by simp)) head,
+      valueOfEntries_jsonOfEach element spelling back rest _
+        (fun v member => fitted v (by simp [member])) tail]
+    rfl
 
 /-- Two lists that hold an entry at one position hold their pair there once zipped. -/
 theorem zip_getElem? {α β : Type} :
     ∀ (left : List α) (right : List β) (offset : Nat) (a : α) (b : β),
       left[offset]? = some a → right[offset]? = some b →
-      (left.zip right)[offset]? = some (a, b)
-  | [], _, _, _, _, held, _ => by simp at held
-  | _ :: _, [], _, _, _, _, held => by simp at held
-  | _ :: _, _ :: _, 0, _, _, first, second => by
-    simp only [List.getElem?_cons_zero, Option.some.injEq] at first second
-    simp [first, second]
-  | _ :: left, _ :: right, offset + 1, a, b, first, second => by
-    simp only [List.getElem?_cons_succ] at first second
-    simpa using zip_getElem? left right offset a b first second
+      (left.zip right)[offset]? = some (a, b) := by
+  -- Both lists hold an entry there, so the zipped list holds their pair.
+  intros
+  simp_all [List.getElem?_zip_eq_some]
 
 /-- Distinct names stay distinct once paired with what they hold. -/
 theorem zip_pairwise {α β : Type} (right : List β) :
@@ -99,10 +73,7 @@ theorem zip_pairwise {α β : Type} (right : List β) :
       rw [List.nodup_cons] at distinct
       refine List.Pairwise.cons ?_ (zip_pairwise others rest distinct.2)
       intro pair member same
-      have inside : pair.1 ∈ rest := (List.of_mem_zip member).1
-      apply distinct.1
-      rw [show a = pair.1 from same]
-      exact inside
+      exact distinct.1 ((show a = pair.1 from same) ▸ (List.of_mem_zip member).1)
 
 /-- A declaration that reported no repeated name has none. -/
 theorem nodup_of_firstDuplicate {α : Type} [BEq α] [LawfulBEq α] :
@@ -110,12 +81,9 @@ theorem nodup_of_firstDuplicate {α : Type} [BEq α] [LawfulBEq α] :
   | [], _ => by simp
   | item :: rest, none? => by
     rw [firstDuplicate] at none?
-    by_cases repeated? : rest.contains item = true
-    · rw [if_pos repeated?] at none?
-      exact absurd none? (by simp)
-    · rw [if_neg repeated?] at none?
-      refine List.nodup_cons.mpr ⟨?_, nodup_of_firstDuplicate rest none?⟩
-      simpa using repeated?
+    split at none?
+    · contradiction
+    · next fresh => exact List.nodup_cons.mpr ⟨by simpa using fresh, nodup_of_firstDuplicate rest none?⟩
 
 /-- The part written under one name is read back under that name. -/
 theorem getObjVal?_zip {names : List String} {parts : List Json} (distinct : names.Nodup)
@@ -139,39 +107,30 @@ theorem valueOfFields_jsonOfFields (names : List String) (document : Json) (spel
       (∀ (offset : Nat) (part : Json), documents[offset]? = some part →
         document.getObjVal? (names.getD (position + offset) "") = .ok part) →
       valueOfFields fields names spelling position document = .ok values
-  | [], [], documents, _, _, _, wrote, _ => by
-    rw [jsonOfFields] at wrote
-    simp only [Except.ok.injEq] at wrote
-    subst wrote
-    rw [valueOfFields]
-  | [], _ :: _, _, _, _, _, wrote, _ => by simp [jsonOfFields] at wrote
-  | _ :: _, [], _, _, _, _, wrote, _ => by simp [jsonOfFields] at wrote
+  | [], [], documents, _, _, _, wrote, _ => by simp_all [jsonOfFields, valueOfFields]
+  | [], _ :: _, _, _, _, _, wrote, _ | _ :: _, [], _, _, _, _, wrote, _ => by
+    simp [jsonOfFields] at wrote
   | field :: fields, value :: values, documents, position, rewrites, fitted, wrote, reads => by
     rw [jsonOfFields] at wrote
-    cases head : jsonOf field (spelling.part position) value with
-    | error _ => simp [head, Bind.bind, Except.bind] at wrote
-    | ok first =>
-      cases tail : jsonOfFields fields spelling (position + 1) values with
-      | error _ => simp [head, tail, Bind.bind, Except.bind] at wrote
-      | ok others =>
-        simp only [head, tail, Bind.bind, Except.bind, pure, Except.pure,
-          Except.ok.injEq] at wrote
-        subst wrote
-        have here : document.getObjVal? (names.getD position "") = .ok first := by
-          simpa using reads 0 first (by simp)
-        have inner : valueOf field (spelling.part position) first = .ok value :=
-          rewrites (field, value) (by simp) (spelling.part position) value first
-            (fitted (field, value) (by simp)) head
-        have shorter : valueOfFields fields names spelling (position + 1) document
-            = .ok values :=
-          valueOfFields_jsonOfFields names document spelling fields values others (position + 1)
-            (fun pair member => rewrites pair (by simp [member]))
-            (fun pair member => fitted pair (by simp [member])) tail
-            (fun offset part held => by
-              have := reads (offset + 1) part (by simpa using held)
-              simpa [Nat.add_assoc, Nat.add_comm 1 offset] using this)
-        rw [valueOfFields, here]
-        simp only [Except.toOption, Bind.bind, Except.bind, pure, Except.pure, inner, shorter]
+    cases head : jsonOf field (spelling.part position) value <;>
+      cases tail : jsonOfFields fields spelling (position + 1) values <;>
+      simp [head, tail, Bind.bind, Except.bind, pure, Except.pure] at wrote
+    subst wrote
+    rename_i first others
+    have here : document.getObjVal? (names.getD position "") = .ok first := by
+      simpa using reads 0 first (by simp)
+    have inner : valueOf field (spelling.part position) first = .ok value :=
+      rewrites (field, value) (by simp) (spelling.part position) value first
+        (fitted (field, value) (by simp)) head
+    have shorter : valueOfFields fields names spelling (position + 1) document = .ok values :=
+      valueOfFields_jsonOfFields names document spelling fields values others (position + 1)
+        (fun pair member => rewrites pair (by simp [member]))
+        (fun pair member => fitted pair (by simp [member])) tail
+        (fun offset part held => by
+          simpa [Nat.add_assoc, Nat.add_comm 1 offset] using
+            reads (offset + 1) part (by simpa using held))
+    rw [valueOfFields, here]
+    simp only [Except.toOption, Bind.bind, Except.bind, pure, Except.pure, inner, shorter]
 
 /-- The option a selector names is the one the reader walks to. -/
 theorem valueOfOption_found (spelling : Spelling) (payload : Json) (option : Desc)
@@ -218,47 +177,33 @@ theorem valueOfSequence_jsonOfSequence (element : Desc) (spelling : Spelling)
   rw [jsonOfSequence] at wrote
   by_cases alias? : spelling.isByte = true
   · rw [if_pos alias?] at wrote
-    cases run : byteRun elements with
-    | error _ => simp [run, Bind.bind, Except.bind] at wrote
-    | ok data =>
-      simp only [run, Bind.bind, Except.bind, pure, Except.pure, Except.ok.injEq] at wrote
-      subst wrote
-      rw [valueOfSequence, if_pos alias?]
-      simp [collectionHex, ofHex_toHex, byteElements_byteRun elements data run,
-        Bind.bind, Except.bind, pure, Except.pure]
-      simp
+    cases run : byteRun elements <;> simp [run, Bind.bind, Except.bind, pure, Except.pure] at wrote
+    subst wrote
+    rw [valueOfSequence, if_pos alias?]
+    simp [collectionHex, ofHex_toHex, byteElements_byteRun elements _ run,
+      Bind.bind, Except.bind, pure, Except.pure]
+    simp
   · rw [if_neg alias?] at wrote
-    cases each : jsonOfEach element spelling elements with
-    | error _ => simp [each, Bind.bind, Except.bind] at wrote
-    | ok documents =>
-      simp only [each, Bind.bind, Except.bind, pure, Except.pure, Except.ok.injEq] at wrote
-      subst wrote
-      rw [valueOfSequence, if_neg alias?]
-      simpa using valueOfEntries_jsonOfEach element spelling (fun v d => back spelling v d)
-        elements documents fitted each
+    cases each : jsonOfEach element spelling elements <;>
+      simp [each, Bind.bind, Except.bind, pure, Except.pure] at wrote
+    subst wrote
+    rw [valueOfSequence, if_neg alias?]
+    simpa using valueOfEntries_jsonOfEach element spelling (fun v d => back spelling v d)
+      elements _ fitted each
 
 /-- A struct writes one document per value it holds. -/
 theorem jsonOfFields_length (spelling : Spelling) :
     ∀ (fields : List Desc) (values : List Value) (position : Nat) (documents : List Json),
       jsonOfFields fields spelling position values = .ok documents →
       documents.length = values.length
-  | [], [], _, documents, wrote => by
-    simp only [jsonOfFields, Except.ok.injEq] at wrote
-    simp [← wrote]
-  | [], _ :: _, _, _, wrote => by simp [jsonOfFields] at wrote
-  | _ :: _, [], _, _, wrote => by simp [jsonOfFields] at wrote
+  | [], [], _, documents, wrote => by simp_all [jsonOfFields]
+  | [], _ :: _, _, _, wrote | _ :: _, [], _, _, wrote => by simp [jsonOfFields] at wrote
   | field :: fields, value :: values, position, documents, wrote => by
     rw [jsonOfFields] at wrote
-    cases head : jsonOf field (spelling.part position) value with
-    | error _ => simp [head, Bind.bind, Except.bind] at wrote
-    | ok first =>
-      cases tail : jsonOfFields fields spelling (position + 1) values with
-      | error _ => simp [head, tail, Bind.bind, Except.bind] at wrote
-      | ok others =>
-        simp only [head, tail, Bind.bind, Except.bind, pure, Except.pure,
-          Except.ok.injEq] at wrote
-        subst wrote
-        simp [jsonOfFields_length spelling fields values (position + 1) others tail]
+    cases head : jsonOf field (spelling.part position) value <;>
+      cases tail : jsonOfFields fields spelling (position + 1) values <;>
+      simp [head, tail, Bind.bind, Except.bind, pure, Except.pure] at wrote
+    simp [← wrote, jsonOfFields_length spelling fields values (position + 1) _ tail]
 
 /-- A written struct carries no name it did not declare. -/
 theorem find?_undeclared (names : List String) (documents : List Json) :
@@ -422,47 +367,44 @@ theorem valueOf_jsonOf : ∀ (shape : Desc), shape.wellFormed = .ok () → Rewri
     | @container _ _ values paired each =>
       obtain ⟨counted, once⟩ := wellFormed_container_names sound
       rw [jsonOf] at wrote
-      cases parts : jsonOfFields fields spelling 0 values with
-      | error _ => simp [parts, Bind.bind, Except.bind] at wrote
-      | ok written =>
-        simp only [parts, Bind.bind, Except.bind, pure, Except.pure, Except.ok.injEq] at wrote
-        subst wrote
-        obtain ⟨undeclared, read⟩ := valueOf_struct (ih (wellFormed_container sound))
-          (nodup_of_firstDuplicate names once) counted paired each parts
-        rw [Json.mkObj, valueOf]
-        simp only [Json.mkObj] at undeclared read
-        simp only [undeclared, read, Bind.bind, Except.bind]
-        rfl
+      cases parts : jsonOfFields fields spelling 0 values <;>
+        simp only [parts, Bind.bind, Except.bind, pure, Except.pure, Except.ok.injEq,
+          reduceCtorEq] at wrote
+      subst wrote
+      obtain ⟨undeclared, read⟩ := valueOf_struct (ih (wellFormed_container sound))
+        (nodup_of_firstDuplicate names once) counted paired each parts
+      rw [Json.mkObj, valueOf]
+      simp only [Json.mkObj] at undeclared read
+      simp only [undeclared, read, Bind.bind, Except.bind]
+      rfl
   | progressiveContainer active names fields ih =>
     intro sound spelling value document fitted wrote
     cases fitted with
     | @progressiveContainer _ _ _ values paired each =>
       obtain ⟨counted, once⟩ := wellFormed_progressiveContainer_names sound
       rw [jsonOf] at wrote
-      cases parts : jsonOfFields fields spelling 0 values with
-      | error _ => simp [parts, Bind.bind, Except.bind] at wrote
-      | ok written =>
-        simp only [parts, Bind.bind, Except.bind, pure, Except.pure, Except.ok.injEq] at wrote
-        subst wrote
-        obtain ⟨undeclared, read⟩ := valueOf_struct (ih (wellFormed_progressiveContainer sound))
-          (nodup_of_firstDuplicate names once) counted paired each parts
-        rw [Json.mkObj, valueOf]
-        simp only [Json.mkObj] at undeclared read
-        simp only [undeclared, read, Bind.bind, Except.bind]
-        rfl
+      cases parts : jsonOfFields fields spelling 0 values <;>
+        simp only [parts, Bind.bind, Except.bind, pure, Except.pure, Except.ok.injEq,
+          reduceCtorEq] at wrote
+      subst wrote
+      obtain ⟨undeclared, read⟩ := valueOf_struct (ih (wellFormed_progressiveContainer sound))
+        (nodup_of_firstDuplicate names once) counted paired each parts
+      rw [Json.mkObj, valueOf]
+      simp only [Json.mkObj] at undeclared read
+      simp only [undeclared, read, Bind.bind, Except.bind]
+      rfl
   | compatibleUnion selectors options ih =>
     intro sound spelling value document fitted wrote
     cases fitted with
     | @compatibleUnion _ _ selector option data bounded named inner =>
       rw [jsonOf, named] at wrote
       cases payload : jsonOf option
-          (spelling.part ((selectors.findIdx? (· == selector)).getD 0)) data with
-      | error _ => simp [payload, Bind.bind, Except.bind] at wrote
-      | ok written =>
-        simp only [payload, Bind.bind, Except.bind, pure, Except.pure, Except.ok.injEq] at wrote
-        subst wrote
-        exact valueOf_union named (ih (wellFormed_union sound) _ (lookupOption_mem _ _ _ _ named))
-          inner payload
+          (spelling.part ((selectors.findIdx? (· == selector)).getD 0)) data <;>
+        simp only [payload, Bind.bind, Except.bind, pure, Except.pure, Except.ok.injEq,
+          reduceCtorEq] at wrote
+      subst wrote
+      exact valueOf_union named (ih (wellFormed_union sound) _ (lookupOption_mem _ _ _ _ named))
+        inner payload
   | nil =>
     rename_i _ field member
     simp at member

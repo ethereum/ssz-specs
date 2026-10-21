@@ -50,11 +50,8 @@ theorem gindexSibling_half (index : Nat) : gindexSibling index / 2 = index / 2 :
 /-- Siblings sit on opposite sides, so exactly one of the two is the odd one. -/
 theorem gindexSibling_parity (index : Nat) : gindexSibling index % 2 = 1 - index % 2 := by
   -- The lowest bit is what a sibling flips, and the lowest bit is the parity.
-  have flipped : (index ^^^ 1).testBit 0 = !index.testBit 0 := by
-    rw [Nat.testBit_xor]
-    simp
-  simp only [Nat.testBit_zero] at flipped
-  simp only [gindexSibling]
+  have flipped : (index ^^^ 1).testBit 0 = !index.testBit 0 := by rw [Nat.testBit_xor]; simp
+  simp only [Nat.testBit_zero, gindexSibling] at flipped ⊢
   rcases Nat.mod_two_eq_zero_or_one index with side | side <;>
     rcases Nat.mod_two_eq_zero_or_one (index ^^^ 1) with pair | pair <;>
       simp [side, pair] at flipped ⊢

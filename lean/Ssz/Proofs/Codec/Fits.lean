@@ -73,10 +73,7 @@ theorem withinBound_of_boundCheck : ∀ (limit : Option Nat) (count : Nat),
     boundCheck limit count = .ok () → withinBound limit count = true
   | none, _, _ => rfl
   | some bound, count, passed => by
-    by_cases small : count ≤ bound
-    · simpa [withinBound] using small
-    · rw [boundCheck, if_neg small] at passed
-      simp at passed
+    by_cases small : count ≤ bound <;> simp_all [withinBound, boundCheck]
 
 /-- A count its shape admits passes that shape's capacity check. -/
 theorem boundCheck_of_withinBound : ∀ (limit : Option Nat) (count : Nat),

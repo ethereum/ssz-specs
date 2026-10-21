@@ -57,22 +57,15 @@ private theorem assemble_closed
         simp only [log] at bounds
         omega
       rcases candidates with rfl | rfl
-      · have other := reads 3 (by decide)
+      all_goals
+        have two := reads 2 (by decide)
+        have three := reads 3 (by decide)
         simp only [show Nat.log2 2 = 1 from rfl, show Nat.log2 3 = 1 from rfl,
           Nat.sub_self, show gindexBit 2 0 = false from rfl, show gindexBit 3 0 = true from rfl,
-          Bool.false_eq_true, ↓reduceIte, contentsRoot, Except.ok.injEq] at readNode other
+          Bool.false_eq_true, ↓reduceIte, contentsRoot, Except.ok.injEq] at readNode two three
         subst node
-        refine ⟨combine root mixed, mixed, rootRead, ?_, ?_⟩
-        · simpa only [show gindexSibling 2 = 3 from rfl, show gindexSibling 3 = 2 from rfl] using other
-        · rfl
-      · have other := reads 2 (by decide)
-        simp only [show Nat.log2 2 = 1 from rfl, show Nat.log2 3 = 1 from rfl,
-          Nat.sub_self, show gindexBit 2 0 = false from rfl, show gindexBit 3 0 = true from rfl,
-          Bool.false_eq_true, ↓reduceIte, contentsRoot, Except.ok.injEq] at readNode other
-        subst node
-        refine ⟨combine root mixed, root, rootRead, ?_, ?_⟩
-        · simpa only [show gindexSibling 2 = 3 from rfl, show gindexSibling 3 = 2 from rfl] using other
-        · rfl
+      · exact ⟨combine root mixed, mixed, rootRead, three, rfl⟩
+      · exact ⟨combine root mixed, root, rootRead, two, rfl⟩
     · have positive : 0 < Nat.log2 index - 1 := by omega
       cases turn : gindexBit index (Nat.log2 index - 1) with
       | true => simp [turn, boundary] at readNode
@@ -82,8 +75,7 @@ private theorem assemble_closed
           contentsClosed index (Nat.log2 index - 1) positive node readNode
         have parentDeep : 2 ≤ index / 2 := by
           by_cases small : index / 2 < 2
-          · have one : index / 2 = 1 := by omega
-            rw [one, show Nat.log2 1 = 0 from rfl] at depth
+          · rw [show index / 2 = 1 by omega, show Nat.log2 1 = 0 from rfl] at depth
             omega
           · omega
         -- A parent still below the mixing boundary retains the contents’ initial left turn.
@@ -98,8 +90,7 @@ private theorem assemble_closed
         · rw [reads _ parentDeep]
           simp only [parentTurn, Bool.false_eq_true, ↓reduceIte]
           simpa only [depth, Nat.add_sub_cancel] using parentRead
-        · rw [reads _ siblingNamed]
-          rw [siblingTurn]
+        · rw [reads _ siblingNamed, siblingTurn]
           simpa only [Bool.false_eq_true, ↓reduceIte, siblingDepth] using siblingRead
 
 /-- Every readable non-root node of a successfully rooted value authenticates to its parent. -/
@@ -169,15 +160,8 @@ theorem nodeRoot_closed (shape : Desc) (value : Value) (root : Bytes)
       rw [← nodeRootAt_eq_nodeRoot shape value index (budget + 1) (by dsimp [budget]; omega)]
       simp only [nodeRootAt, show ¬index < 1 by omega, ↓reduceIte, beq_iff_eq, notRoot,
         laid, Bind.bind, Except.bind, gindexLength, gindexDepth]
-      simp only [↓reduceIte, logarithm,
-        ]
-      cases mixed : layout.mixin with
-      | none =>
-        simp [contents]
-        cases layout.limit <;> rfl
-      | some word =>
-        simp [contents, Pure.pure, Except.pure,
-          throw, throwThe, MonadExceptOf.throw]
-        cases layout.limit <;> rfl
+      simp only [↓reduceIte, logarithm]
+      cases layout.mixin <;> simp [contents, Pure.pure, Except.pure, throw, throwThe,
+        MonadExceptOf.throw] <;> cases layout.limit <;> rfl
 
 end Ssz

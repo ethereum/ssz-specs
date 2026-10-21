@@ -23,14 +23,12 @@ theorem progressiveNode_step (budget : Nat) (layout : MerkleLayout)
       else progressiveNode budget layout index depth (start + capacity) (capacity * 4) := by
   -- The left side is a bounded tree, and the right side repeats the same walk one level farther.
   rw [progressiveNode, spineWalk]
-  by_cases empty : start ≥ layout.leaves.count
-  · simp [empty, throw, throwThe, MonadExceptOf.throw, Bind.bind, Except.bind]
-  · simp only [if_neg empty]
-    by_cases left : (!gindexBit index depth) = true
-    · simp [left, Bind.bind, Except.bind, Pure.pure, Except.pure]
-    · simp only [if_neg left]
-      cases walked : spineWalk layout.leaves.count index depth (start + capacity) (capacity * 4)
-      <;> simp [progressiveNode, walked, Bind.bind, Except.bind]
+  split
+  · rfl
+  split
+  · simp [Bind.bind, Except.bind, Pure.pure, Except.pure]
+  cases walked : spineWalk layout.leaves.count index depth (start + capacity) (capacity * 4)
+    <;> simp [progressiveNode, walked, Bind.bind, Except.bind]
 
 /-- Progressive capacities are powers of two with twice the level as their depth. -/
 theorem four_pow_eq (level : Nat) : 4 ^ level = 2 ^ (2 * level) := by
@@ -64,13 +62,7 @@ theorem progressive_suffix_split (chunks : Array Bytes) (start level : Nat)
       combine (subtreeAt chunks (2 * level) start)
         (merkleizeProgressive (chunks.toList.drop (start + 4 ^ level)) (level + 1)) := by
   -- A nonempty suffix opens one level, and the next level starts after its capacity.
-  have nonempty : (chunks.toList.drop start).isEmpty = false := by
-    simp only [List.isEmpty_eq_false_iff]
-    intro empty
-    have lengths := congrArg List.length empty
-    simp only [List.length_drop, Array.length_toList, List.length_nil] at lengths
-    omega
-  rw [merkleizeProgressive, if_neg (by simp [nonempty])]
+  rw [merkleizeProgressive, if_neg (by simp; omega)]
   simp only [List.drop_drop]
   -- The current bounded segment is the prefix of the same suffix used by progressive merkleization.
   have interval := congrArg List.toArray (extract_interval_list chunks start (4 ^ level))
@@ -185,9 +177,7 @@ theorem progressivePosition_parent_sibling (count index : Nat) :
     intro start level position
     refine ⟨position.1, position.1, ?_⟩
     simp only [ProgressivePosition]
-    split
-    · omega
-    · trivial
+    split <;> first | omega | trivial
   | succ depth ih =>
     intro start level position
     obtain ⟨occupied, position⟩ := position
@@ -212,13 +202,11 @@ theorem progressiveInterior_position (count index : Nat) :
   induction depth with
   | zero => intros; trivial
   | succ depth ih =>
-    intro start level interior
-    refine ⟨interior.1, ?_⟩
-    by_cases left : (!gindexBit index depth) = true
-    · simp only [ProgressiveInterior, if_pos left] at interior
-      simpa only [if_pos left] using Nat.le_of_lt interior.2
-    · simp only [ProgressiveInterior, if_neg left] at interior
-      simpa only [if_neg left] using ih _ _ interior.2
+    intro start level ⟨occupied, interior⟩
+    refine ⟨occupied, ?_⟩
+    split at interior
+    · simpa [*] using Nat.le_of_lt interior
+    · simp [*]
 
 /-- Every ancestor of a readable progressive position is readable too. -/
 theorem progressivePosition_ancestor {count index depth start level : Nat}
@@ -249,11 +237,7 @@ theorem progressiveInterior_children (count index : Nat) :
   induction depth with
   | zero =>
     intro start level occupied
-    constructor <;> refine ⟨occupied, ?_⟩ <;> split
-    · omega
-    · trivial
-    · omega
-    · trivial
+    constructor <;> refine ⟨occupied, ?_⟩ <;> split <;> first | omega | trivial
   | succ depth ih =>
     intro start level interior
     obtain ⟨occupied, interior⟩ := interior
@@ -325,9 +309,7 @@ theorem nodeRoot_packed_progressive {shape : Desc} {value : Value} {chunks : Arr
       gindexBit, progressiveMixedReading, Bind.bind, Except.bind, Pure.pure, Except.pure]
   · have notRoot : index ≠ 1 := by omega
     have notWord : index ≠ 3 := by
-      intro same
-      subst index
-      change true = false at leftSide
+      rintro rfl
       contradiction
     have positive : Nat.log2 index ≠ 0 := by
       have recursion := levelOf_parent named
@@ -364,9 +346,7 @@ theorem progressiveMixedReading_parent (chunks : Array Bytes) (word : Bytes) (in
     change Nat.log2 index = _ at recursion
     omega
   have notWord : index ≠ 3 := by
-    intro same
-    subst index
-    change true = false at leftSide
+    rintro rfl
     contradiction
   have left : Nat.log2 (2 * index) = Nat.log2 index + 1 := Nat.log2_two_mul (by omega)
   have right : Nat.log2 (2 * index + 1) = Nat.log2 index + 1 := by
@@ -448,23 +428,22 @@ theorem progressive_mixed_branch_sibling {chunks : Array Bytes} {index step : Na
     have current := progressivePosition_ancestor position step (by omega)
     -- A sibling other than the mixing word must still have a position inside the contents tree.
     have stillInside : 0 < Nat.log2 index - 1 - step := by
-      by_cases positiveRemaining : 0 < Nat.log2 index - 1 - step
-      · exact positiveRemaining
-      · have one : Nat.log2 (index >>> step) = 1 := by
-          change Nat.log2 (index >>> step) + step = Nat.log2 index at currentDepth
-          omega
-        have siblingOne : Nat.log2 (gindexSibling (index >>> step)) = 1 := siblingDepth.trans one
-        have turn := (gindexBit_shift_top (by omega : 1 ≤ index) below).trans leftSide
-        have currentNotOdd : (index >>> step) % 2 ≠ 1 := by
-          have raw : (index >>> step).testBit 0 = false := by
-            simpa only [gindexBit, one, Nat.sub_self] using turn
-          intro odd
-          simp [Nat.testBit_zero, odd] at raw
-        have siblingNotOdd : gindexSibling (index >>> step) % 2 ≠ 1 := by
-          simpa [gindexBit, Nat.testBit_zero, siblingOne] using siblingTurn
-        have flips := gindexSibling_parity (index >>> step)
-        have sides := Nat.mod_two_eq_zero_or_one (index >>> step)
+      refine Nat.pos_of_ne_zero fun remaining => ?_
+      have one : Nat.log2 (index >>> step) = 1 := by
+        change Nat.log2 (index >>> step) + step = Nat.log2 index at currentDepth
         omega
+      have siblingOne : Nat.log2 (gindexSibling (index >>> step)) = 1 := siblingDepth.trans one
+      have turn := (gindexBit_shift_top (by omega : 1 ≤ index) below).trans leftSide
+      have currentNotOdd : (index >>> step) % 2 ≠ 1 := by
+        have raw : (index >>> step).testBit 0 = false := by
+          simpa only [gindexBit, one, Nat.sub_self] using turn
+        intro odd
+        simp [Nat.testBit_zero, odd] at raw
+      have siblingNotOdd : gindexSibling (index >>> step) % 2 ≠ 1 := by
+        simpa [gindexBit, Nat.testBit_zero, siblingOne] using siblingTurn
+      have flips := gindexSibling_parity (index >>> step)
+      have sides := Nat.mod_two_eq_zero_or_one (index >>> step)
+      omega
     have remaining : Nat.log2 index - 1 - step = (Nat.log2 index - 1 - step - 1) + 1 := by omega
     rw [remaining] at current
     have sibling := (progressivePosition_parent_sibling _ _ _ _ _ current).2

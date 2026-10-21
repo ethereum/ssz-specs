@@ -186,9 +186,8 @@ theorem round_refines (state : Vector UInt32 8) (constant word : UInt32) :
 theorem wordAt_refines (block : ByteArray) (start : Nat) :
     (wordAt block start).toBitVec = Spec.inputWord block start := by
   -- Widening a byte preserves its value before the four big-endian contributions are joined.
-  have byte (value : UInt8) : value.toBitVec.setWidth 32 = BitVec.ofNat 32 value.toNat := by
-    apply BitVec.eq_of_toNat_eq
-    simp
+  have byte (value : UInt8) : value.toBitVec.setWidth 32 = BitVec.ofNat 32 value.toNat :=
+    BitVec.eq_of_toNat_eq (by simp)
   simp [wordAt, Spec.inputWord, byte]
 
 /-- Every executable schedule word satisfies the independent recursive bitvector model. -/
@@ -266,12 +265,10 @@ private theorem lengthBytes_refines (size : Nat) (admitted : size < 2 ^ 61) :
   apply Array.ext
   · exact (lengthBytes_size size).trans Array.size_ofFn.symm
   · intro position left right
-    have within : position < 8 := by simpa using left
     -- The admitted length bound prevents overflow when converting bytes to a 64-bit bit count.
-    have digit := lengthBytes_digit size admitted ⟨position, within⟩
-    rw [Array.getElem_ofFn]
     apply UInt8.toNat_inj.mp
-    simpa [ByteArray.getElem_eq_getElem_data] using digit
+    simpa [ByteArray.getElem_eq_getElem_data] using
+      lengthBytes_digit size admitted ⟨position, by simpa using left⟩
 
 /-- Executable padding agrees byte for byte with the independent mathematical padding. -/
 theorem pad_refines (message : ByteArray) (admitted : message.size < 2 ^ 61) :
@@ -297,38 +294,16 @@ theorem blocks_refine (message : ByteArray) (state : Vector UInt32 8) (count : N
 private theorem interpret_word (state : Vector UInt32 8) (position : Nat) (within : position < 8) :
     (Spec.interpret state).words[position] = state[position].toBitVec := by
   -- The named state fields and the executable vector use the same eight positions.
-  have positions : position = 0 ∨ position = 1 ∨ position = 2 ∨ position = 3 ∨
-      position = 4 ∨ position = 5 ∨ position = 6 ∨ position = 7 := by omega
-  rcases positions with rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl <;>
-    simp [Spec.interpret, Spec.State.words]
+  rcases position with _ | _ | _ | _ | _ | _ | _ | _ | position
+  all_goals first | omega | simp [Spec.interpret, Spec.State.words]
 
 /-- Extracting one machine-word byte agrees with selecting a base-256 digit. -/
 private theorem word_digit_refines (word : UInt32) (position : Nat) (within : position < 4) :
     (word >>> (24 - 8 * UInt32.ofNat position)).toUInt8 =
       UInt8.ofNat ((word.toNat / 2 ^ (24 - 8 * position)) % 256) := by
-  -- There are only four byte positions, so the position itself cannot overflow a machine word.
-  have positionNat : (UInt32.ofNat position).toNat = position :=
-    UInt32.toNat_ofNat_of_lt' (by change position < 4294967296; omega)
-  -- Multiplying a byte position by eight gives a bit offset between zero and twenty-four.
-  have productNat : (8 * UInt32.ofNat position).toNat = 8 * position := by
-    simp only [UInt32.toNat_mul, positionNat]
-    change (8 * position) % 4294967296 = 8 * position
-    exact Nat.mod_eq_of_lt (by omega)
-  -- Subtracting that offset from twenty-four never underflows.
-  have shiftNat : (24 - 8 * UInt32.ofNat position).toNat = 24 - 8 * position := by
-    rw [UInt32.toNat_sub_of_le]
-    · simp only [productNat]; rfl
-    · apply UInt32.le_iff_toNat_le.mpr
-      rw [productNat]
-      change 8 * position ≤ 24
-      omega
-  -- The shift stays below the word width, so the machine's masked shift amount is unchanged.
-  apply UInt8.toNat_inj.mp
-  simp only [UInt32.toNat_toUInt8, UInt32.toNat_shiftRight, shiftNat,
-    Nat.mod_eq_of_lt (show 24 - 8 * position < 32 by omega), Nat.shiftRight_eq_div_pow,
-    UInt8.toNat_ofNat']
-  change _ % 256 = (_ % 256) % 256
-  rw [Nat.mod_mod]
+  -- There are only four byte positions, and each shift stays below the word width.
+  rcases position with _ | _ | _ | _ | position
+  all_goals first | omega | (apply UInt8.toNat_inj.mp; simp [Nat.shiftRight_eq_div_pow])
 
 /-- Executable digest output agrees byte for byte with the mathematical word digits. -/
 theorem digest_refines (state : Vector UInt32 8) :

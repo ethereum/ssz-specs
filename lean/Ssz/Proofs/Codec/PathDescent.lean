@@ -69,8 +69,7 @@ theorem spineWalk_append_left (count outer combined extra : Nat)
   | zero =>
     intro start capacity stop walked left
     simp [spineWalk] at walked
-    subst stop
-    contradiction
+    simp [← walked] at left
   | succ depth ih =>
     intro start capacity stop walked left
     have bit := gindexBit_append outer combined extra depth shifted
@@ -86,8 +85,7 @@ theorem spineWalk_append_left (count outer combined extra : Nat)
       cases turn : gindexBit outer depth with
       | false =>
         simp [turn, Pure.pure, Except.pure] at walked
-        subst stop
-        simp [Pure.pure, Except.pure]
+        simp [← walked, Pure.pure, Except.pure]
       | true =>
         simp [turn] at walked ⊢
         exact ih _ _ _ walked left
@@ -126,9 +124,7 @@ theorem nodeRoot_left_contents (shape : Desc) (value : Value) (layout : MerkleLa
   -- A left mixing turn, when present, leaves the rest of the path inside the contents tree.
   have positive : 0 < shape.nesting := shape.nesting_pos
   have depthPositive : Nat.log2 index ≠ 0 := by
-    have parent := levelOf_parent named
-    change Nat.log2 index = _ at parent
-    omega
+    have := levelOf_parent named; simp only [levelOf] at this; omega
   rw [← nodeRootAt_eq_nodeRoot shape value index shape.nesting (Nat.le_refl _)]
   cases depth : shape.nesting with
   | zero => omega
@@ -137,12 +133,8 @@ theorem nodeRoot_left_contents (shape : Desc) (value : Value) (layout : MerkleLa
     simp [nodeRootAt, laid, show ¬index < 1 by omega, show index ≠ 1 by omega,
       gindexLength, gindexDepth, depthPositive, Bind.bind, Except.bind]
     cases mixed : layout.mixin with
-    | none =>
-      simp
-      cases layout.limit <;> rfl
-    | some word =>
-      simp [left word mixed]
-      cases layout.limit <;> rfl
+    | none => simp; cases layout.limit <;> rfl
+    | some word => simp [left word mixed]; cases layout.limit <;> rfl
 
 private theorem nodeRoot_bounded_unmixed (shape : Desc) (value : Value) (layout : MerkleLayout)
     (laid : merkleLayout shape value = .ok layout) (chunks : Array Bytes)
@@ -193,18 +185,13 @@ private theorem concat_left_turn (outer inner index : Nat) (named : 2 ≤ outer)
   obtain ⟨_, innerNamed, value⟩ := gindexConcat_facts joined
   -- Removing the appended suffix recovers the original outer address.
   have shifted : index >>> Nat.log2 inner = outer := by
-    rw [value]
-    exact gindexSplice_prefix outer inner innerNamed
+    rw [value]; exact gindexSplice_prefix outer inner innerNamed
   have outerDepth : 0 < Nat.log2 outer := by
-    have parent := levelOf_parent named
-    change Nat.log2 outer = _ at parent
-    omega
+    have := levelOf_parent named; simp only [levelOf] at this; omega
   have depth := gindexConcat_depth joined
   have remaining : Nat.log2 index - 1 = (Nat.log2 outer - 1) + Nat.log2 inner := by omega
   refine ⟨?_, ?_, remaining⟩
-  · have bounded := shiftRight_le index (Nat.log2 inner)
-    rw [shifted] at bounded
-    omega
+  · have := shifted ▸ shiftRight_le index (Nat.log2 inner); omega
   · rw [remaining, gindexBit_append outer index (Nat.log2 inner) (Nat.log2 outer - 1) shifted, left]
 
 /-- Concatenating a path beneath mixed bounded contents reads the selected nested value. -/
@@ -252,16 +239,12 @@ theorem nodeRoot_progressive_splice (shape : Desc) (value : Value) (layout : Mer
   have enough : child.nesting ≤ shape.nesting - 1 := by omega
   -- Removing the appended suffix recovers the original outer address.
   have shifted : index >>> Nat.log2 inner = outer := by
-    rw [combined]
-    exact gindexSplice_prefix outer inner innerNamed
+    rw [combined]; exact gindexSplice_prefix outer inner innerNamed
   have indexNamed : 2 ≤ index := by
-    have below := shiftRight_le index (Nat.log2 inner)
-    rw [shifted] at below
-    omega
+    have := shifted ▸ shiftRight_le index (Nat.log2 inner); omega
   -- Appending a child path preserves the initial left turn past a mixing word.
-  have indexLeft : ∀ word, layout.mixin = some word → gindexBit index (Nat.log2 index - 1) = false := by
-    intro word mixed
-    exact (concat_left_turn outer inner index outerNamed joined (left word mixed)).2.1
+  have indexLeft : ∀ word, layout.mixin = some word → gindexBit index (Nat.log2 index - 1) = false :=
+    fun word mixed => (concat_left_turn outer inner index outerNamed joined (left word mixed)).2.1
   rw [nodeRoot_left_contents shape value layout laid index indexNamed indexLeft]
   have descend := progressiveNode_splice layout (shape.nesting - 1) slots nested child innerValue
     enough outer inner _ 0 1 innerNamed stop walked turned atLeaf selected

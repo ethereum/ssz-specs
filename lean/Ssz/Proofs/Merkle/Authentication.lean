@@ -88,21 +88,15 @@ theorem climbBranch_binding (index : Nat) : ∀ level left leftProof right right
           cases direction : gindexBit index level <;>
             simpa [parent, otherParent, first, second, direction, combine] using joined
         · -- Otherwise any merger must occur later, between the two distinct parents.
-          have parentWidth : parent.size = bytesPerChunk := by
-            dsimp only [parent]
-            split <;> simp
-          have otherWidth : otherParent.size = bytesPerChunk := by
-            dsimp only [otherParent]
-            split <;> simp
           -- If the immediate parents differ, the common final root forces a merger farther up the branches.
-          have next := ih (level + 1) parent otherParent others parentWidth otherWidth
+          have next := ih (level + 1) parent otherParent others
+            (by dsimp only [parent]; split <;> simp)
+            (by dsimp only [otherParent]; split <;> simp)
             (fun node member => leftWidths node (List.mem_cons_of_mem _ member))
             (fun node member => rightWidths node (List.mem_cons_of_mem _ member))
             (by simpa using lengths) same
-          rcases next with equal | ⟨a, aIn, b, bIn, different, collision⟩
-          · exact False.elim (joined equal)
-          · exact .inr ⟨a, List.mem_cons_of_mem _ aIn, b, List.mem_cons_of_mem _ bIn,
-              different, collision⟩
+          obtain ⟨a, aIn, b, bIn, different, collision⟩ := next.resolve_left joined
+          exact .inr ⟨a, List.mem_cons_of_mem _ aIn, b, List.mem_cons_of_mem _ bIn, different, collision⟩
 
 /-- A branch passes width validation exactly when every supplied sibling is a full node. -/
 theorem checkChunks_ok_iff (nodes : List Bytes) :
@@ -111,9 +105,8 @@ theorem checkChunks_ok_iff (nodes : List Bytes) :
   induction nodes with
   | nil => simp [checkChunks]
   | cons node nodes ih =>
-    by_cases width : node.size = bytesPerChunk
-    · simp [checkChunks, checkChunk, width, Bind.bind, Except.bind, ih]
-    · simp [checkChunks, checkChunk, width, Bind.bind, Except.bind]
+    by_cases width : node.size = bytesPerChunk <;>
+      simp [checkChunks, checkChunk, width, Bind.bind, Except.bind, ih]
 
 /-- Acceptance requires complete nodes and reconstruction of exactly the expected root. -/
 theorem verifyMerkleProof_eq_true_iff (leaf : Bytes) (proof : List Bytes) (index : Nat) (root : Bytes) :
@@ -121,27 +114,10 @@ theorem verifyMerkleProof_eq_true_iff (leaf : Bytes) (proof : List Bytes) (index
       leaf.size = bytesPerChunk ∧ root.size = bytesPerChunk ∧
       (∀ node ∈ proof, node.size = bytesPerChunk) ∧ calculateMerkleRoot leaf proof index = .ok root := by
   -- A successful answer requires all width checks and equality with the reconstructed root.
-  by_cases leafWidth : leaf.size = bytesPerChunk
-  · by_cases rootWidth : root.size = bytesPerChunk
-    · cases widths : checkChunks proof with
-      | error fault =>
-        have invalid : ¬∀ node ∈ proof, node.size = bytesPerChunk := by
-          intro all
-          have := checkChunks_ok_iff proof |>.mpr all
-          rw [widths] at this
-          cases this
-        simp [verifyMerkleProof, checkChunk, leafWidth, rootWidth, widths, invalid,
-          Bind.bind, Except.bind]
-      | ok checked =>
-        cases checked
-        have all := (checkChunks_ok_iff proof).mp widths
-        cases rebuilt : calculateMerkleRoot leaf proof index <;>
-          simp [verifyMerkleProof, checkChunk, leafWidth, rootWidth, widths, rebuilt,
-            Bind.bind, Except.bind, pure, Except.pure]
-        intro _
-        exact all
-    · simp [verifyMerkleProof, checkChunk, leafWidth, rootWidth, Bind.bind, Except.bind]
-  · simp [verifyMerkleProof, checkChunk, leafWidth, Bind.bind, Except.bind]
+  simp only [verifyMerkleProof, ← checkChunks_ok_iff]
+  cases checkChunks proof <;> cases calculateMerkleRoot leaf proof index <;>
+    by_cases leafWidth : leaf.size = bytesPerChunk <;> by_cases rootWidth : root.size = bytesPerChunk <;>
+    simp_all [checkChunk, Bind.bind, Except.bind, pure, Except.pure]
 
 private theorem calculateMerkleRoot_shape {leaf root : Bytes} {proof : List Bytes} {index : Nat}
     (built : calculateMerkleRoot leaf proof index = .ok root) :
@@ -178,11 +154,8 @@ theorem verifyMerkleProof_binding {left right root : Bytes} {leftProof rightProo
   -- Compare the two actual upward computations without assuming hash injectivity.
   have compared := climbBranch_binding index 0 left leftProof right rightProof leftWidth rightWidth
     leftWidths rightWidths (leftLength.trans rightLength.symm) (leftRoot.trans rightRoot.symm)
-  rcases compared with same | ⟨a, aIn, b, bIn, different, collision⟩
-  · exact .inl same
-  · exact .inr ⟨a, aIn, b, bIn,
-      branchMessages_size index 0 left leftProof leftWidth leftWidths a aIn,
-      branchMessages_size index 0 right rightProof rightWidth rightWidths b bIn,
-      different, collision⟩
+  exact compared.imp id fun ⟨a, aIn, b, bIn, different, collision⟩ => ⟨a, aIn, b, bIn,
+    branchMessages_size index 0 left leftProof leftWidth leftWidths a aIn,
+    branchMessages_size index 0 right rightProof rightWidth rightWidths b bIn, different, collision⟩
 
 end Ssz

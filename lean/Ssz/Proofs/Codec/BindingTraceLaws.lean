@@ -23,9 +23,7 @@ theorem bounded_complete (trees : Array CommitmentTree) (capacity : Nat)
   unfold paddedTrees
   cases found : trees[i]? with
   | none => simp [Complete]
-  | some tree =>
-    simp only [Option.getD_some]
-    exact complete tree (Array.mem_of_getElem? found)
+  | some tree => exact complete tree (Array.mem_of_getElem? found)
 
 /-- Progressive grouping preserves complete nodes along its entire spine. -/
 theorem progressive_complete (trees : List CommitmentTree) (level : Nat)
@@ -68,39 +66,27 @@ private theorem trace_slots (budget : Nat)
     -- Successful materialization requires the head slot and the remaining slots to root successfully.
     cases first : (match slot with
       | none => Except.ok zeroChunk
-      | some (shape, value) => hashTreeRootAt budget shape value) with
-    | error err => simp [first, Bind.bind, Except.bind] at success
-    | ok root =>
-      cases rest : slots.mapM (fun slot : Option (Desc × Value) => match slot with
-        | none => Except.ok zeroChunk
-        | some (shape, value) => hashTreeRootAt budget shape value) with
-      | error err => simp [first, rest, Bind.bind, Except.bind] at success
-      | ok tail =>
-        simp only [first, rest, Bind.bind, Except.bind, pure, Except.pure,
-          Except.ok.injEq] at success
-        -- The remaining slots already have complete expanded computations with the expected roots.
-        obtain ⟨trees, traced, same, complete⟩ := ih tail rest
-        -- A gap contributes a plain zero leaf, while an occupied slot uses the recursive child expansion.
-        have head : ∃ tree, (match slot with
-          | none => Except.ok (CommitmentTree.leaf zeroChunk)
-          | some (shape, value) => valueTreeAt budget shape value) = .ok tree ∧
-          tree.root = root ∧ tree.Complete := by
-          cases slot with
-          | none =>
-            simp only [Except.ok.injEq] at first
-            subst root
-            exact ⟨.leaf zeroChunk, rfl, rfl, zeroChunk_size⟩
-          | some pair => exact children pair.1 pair.2 root first
-        obtain ⟨tree, wrote, rooted, width⟩ := head
-        -- Prepending the expanded head preserves ordered roots and complete node widths.
-        refine ⟨tree :: trees, ?_, ?_, ?_⟩
-        · simp only [List.mapM_cons, wrote, traced, Bind.bind, Except.bind,
-            pure, Except.pure]
-        · simpa [same, rooted] using success
-        · intro t member
-          rcases List.mem_cons.mp member with rfl | member
-          · exact width
-          · exact complete t member
+      | some (shape, value) => hashTreeRootAt budget shape value) <;>
+    cases rest : slots.mapM (fun slot : Option (Desc × Value) => match slot with
+      | none => Except.ok zeroChunk
+      | some (shape, value) => hashTreeRootAt budget shape value) <;>
+      simp only [first, rest, Bind.bind, Except.bind, pure, Except.pure, Except.ok.injEq,
+        reduceCtorEq] at success
+    rename_i root _
+    -- The remaining slots already have complete expanded computations with the expected roots.
+    obtain ⟨trees, traced, same, complete⟩ := ih _ rest
+    -- A gap contributes a plain zero leaf, while an occupied slot uses the recursive child expansion.
+    obtain ⟨tree, wrote, rooted, width⟩ : ∃ tree, (match slot with
+        | none => Except.ok (CommitmentTree.leaf zeroChunk)
+        | some (shape, value) => valueTreeAt budget shape value) = .ok tree ∧
+        tree.root = root ∧ tree.Complete := by
+      cases slot with
+      | none => cases first; exact ⟨.leaf zeroChunk, rfl, rfl, zeroChunk_size⟩
+      | some pair => exact children pair.1 pair.2 root first
+    -- Prepending the expanded head preserves ordered roots and complete node widths.
+    exact ⟨tree :: trees,
+      by simp only [List.mapM_cons, wrote, traced, Bind.bind, Except.bind, pure, Except.pure],
+      by simpa [same, rooted] using success, List.forall_mem_cons.mpr ⟨width, complete⟩⟩
 
 /--
 Every successful SSZ root has a complete expanded computation with exactly the same result.
@@ -147,29 +133,18 @@ theorem valueTreeAt_of_hashTreeRootAt (budget : Nat) (shape : Desc) (value : Val
                 (fun roots => Except.ok roots.toArray) = .ok chunks := by
               apply Eq.trans ?_ materialized
               congr 2
-            clear materialized
-            have materialized := normalized
             cases rooted : slots.mapM (fun slot : Option (Desc × Value) => match slot with
               | none => Except.ok zeroChunk
-              | some (shape, value) => hashTreeRootAt budget shape value) with
-            | error err =>
-              simp only [Except.bind] at materialized
-              rw [rooted] at materialized
-              contradiction
-            | ok roots =>
-              have eqChunks : roots.toArray = chunks := by
-                simp only [Except.bind] at materialized
-                rw [rooted] at materialized
-                exact Except.ok.inj materialized
-              -- The slot expansion preserves the ordered root list and establishes complete child computations.
-              obtain ⟨trees, traced, same, complete⟩ := trace_slots budget ih slots roots rooted
-              refine ⟨trees.toArray, ?_, ?_, ?_⟩
-              · simp only [layoutTreesAt, leaves, pure, Except.pure, Bind.bind, Except.bind]
-                apply Eq.trans ?_ (congrArg (fun result : Except Err (List CommitmentTree) =>
-                  result.bind fun result => Except.ok result.toArray) traced)
-                congr 2
-              · simpa [List.map_toArray, same] using eqChunks
-              · simpa using complete
+              | some (shape, value) => hashTreeRootAt budget shape value) <;>
+              simp only [Except.bind, rooted, Except.ok.injEq, reduceCtorEq] at normalized
+            -- The slot expansion preserves the ordered root list and establishes complete child computations.
+            obtain ⟨trees, traced, same, complete⟩ := trace_slots budget ih slots _ rooted
+            refine ⟨trees.toArray, ?_, by simpa [List.map_toArray, same] using normalized,
+              by simpa using complete⟩
+            simp only [layoutTreesAt, leaves, pure, Except.pure, Bind.bind, Except.bind]
+            apply Eq.trans ?_ (congrArg (fun result : Except Err (List CommitmentTree) =>
+              result.bind fun result => Except.ok result.toArray) traced)
+            congr 2
         obtain ⟨trees, traced, rooted, complete⟩ := tracing
         -- Replacing each root with its computation preserves the leaf count used for capacity checks.
         have counts : trees.size = chunks.size := by rw [← rooted, Array.size_map]
@@ -222,8 +197,7 @@ theorem valueTreeAt_complete {budget : Nat} {shape : Desc} {value : Value}
   obtain ⟨other, otherTrace, same, complete⟩ :=
     valueTreeAt_of_hashTreeRootAt budget shape value root rooted
   -- Deterministic expansion identifies that complete computation with the supplied successful one.
-  have equal : tree = other := Except.ok.inj (traced.symm.trans otherTrace)
-  subst other
+  cases Except.ok.inj (traced.symm.trans otherTrace)
   exact ⟨complete, same ▸ rooted⟩
 
 /-- The public root computation has a complete trace with exactly the same commitment. -/
@@ -246,23 +220,17 @@ private theorem mapM_success_relation {α β ε : Type} (f : α → Except ε β
     exact ⟨rfl, by simp⟩
   | cons x xs ih =>
     -- Overall success excludes failure in either the head operation or the remaining traversal.
-    cases head : f x with
-    | error err => simp [List.mapM_cons, head, Bind.bind, Except.bind] at success
-    | ok y =>
-      cases tail : xs.mapM f with
-      | error err => simp [List.mapM_cons, head, tail, Bind.bind, Except.bind] at success
-      | ok rest =>
-        simp only [List.mapM_cons, head, tail, Bind.bind, Except.bind, pure, Except.pure,
-          Except.ok.injEq] at success
-        subst ys
-        -- The tail already preserves its count and the result associated with each input position.
-        obtain ⟨lengths, each⟩ := ih tail
-        refine ⟨by simp [lengths], ?_⟩
-        intro i hi hj
-        -- The first position uses the head result, while each later position refers to the tail traversal.
-        cases i with
-        | zero => exact head
-        | succ i => exact each i (by simpa using hi) (by simpa using hj)
+    cases head : f x <;> cases tail : xs.mapM f <;>
+      simp only [List.mapM_cons, head, tail, Bind.bind, Except.bind, pure, Except.pure,
+        Except.ok.injEq, reduceCtorEq] at success
+    subst ys
+    -- The tail already preserves its count and the result associated with each input position.
+    obtain ⟨lengths, each⟩ := ih tail
+    refine ⟨by simp [lengths], fun i hi hj => ?_⟩
+    -- The first position uses the head result, while each later position refers to the tail traversal.
+    cases i with
+    | zero => exact head
+    | succ i => exact each i (by simpa using hi) (by simpa using hj)
 
 /-- Nested materialization records one successful child computation at every supplied slot. -/
 theorem layoutTreesAt_nested_relation (budget : Nat) (layout : MerkleLayout)
@@ -281,24 +249,20 @@ theorem layoutTreesAt_nested_relation (budget : Nat) (layout : MerkleLayout)
     apply Eq.trans ?_ success
     simp only [layoutTreesAt, nested, pure, Except.pure, Bind.bind]
     congr 2
-  cases wrote : slots.mapM f with
-  | error err => simp [wrote, Except.bind] at normalized
-  | ok result =>
-    simp only [wrote, Except.bind, Except.ok.injEq] at normalized
-    subst trees
-    -- Successful traversal gives both the preserved position count and each slot's exact result.
-    obtain ⟨lengths, each⟩ := mapM_success_relation f wrote
-    refine ⟨by simpa using lengths, ?_⟩
-    intro i hi hj
-    have rooted := each i hi (by simpa using hj)
-    -- At an inactive position the result is a zero leaf.
-    -- An occupied position retains its own value expansion.
-    cases selected : slots[i] with
-    | none =>
-      simp only [f, selected, Except.ok.injEq] at rooted
-      exact rooted.symm
-    | some pair =>
-      simpa only [f, selected, List.getElem_toArray] using rooted
+  cases wrote : slots.mapM f <;> simp only [wrote, Except.bind, Except.ok.injEq, reduceCtorEq] at normalized
+  subst trees
+  -- Successful traversal gives both the preserved position count and each slot's exact result.
+  obtain ⟨lengths, each⟩ := mapM_success_relation f wrote
+  refine ⟨by simpa using lengths, fun i hi hj => ?_⟩
+  have rooted := each i hi (by simpa using hj)
+  -- At an inactive position the result is a zero leaf.
+  -- An occupied position retains its own value expansion.
+  cases selected : slots[i] with
+  | none =>
+    simp only [f, selected, Except.ok.injEq] at rooted
+    exact rooted.symm
+  | some pair =>
+    simpa only [f, selected, List.getElem_toArray] using rooted
 
 /-- Nested traces retain exactly the number of declared slots, including inactive slots. -/
 theorem layoutTreesAt_nested_size (budget : Nat) (layout : MerkleLayout)

@@ -8,12 +8,9 @@ namespace Ssz
 theorem two_le_of_level_positive {index depth : Nat}
     (level : levelOf index = depth) (positive : 0 < depth) : 2 ≤ index := by
   -- Both zero and one have depth zero.
-  by_cases large : 2 ≤ index
-  · exact large
-  · have cases : index = 0 ∨ index = 1 := by omega
-    rcases cases with zero | one
-    · subst index; change 0 = depth at level; omega
-    · subst index; change 0 = depth at level; omega
+  match index with
+  | 0 | 1 => change 0 = depth at level; omega
+  | _ + 2 => omega
 
 /-- Ancestors below the root along all requested branches. -/
 def claimPaths (indices : List Nat) : List Nat :=
@@ -27,10 +24,7 @@ theorem collectPathIndices_info {indices paths : List Nat}
     paths = claimPaths indices ∧ ∀ index ∈ indices, 2 ≤ index := by
   -- Validation is performed once for every requested branch.
   induction indices generalizing paths with
-  | nil =>
-    simp [collectPathIndices] at collected
-    subst paths
-    simp [claimPaths]
+  | nil => simp_all [collectPathIndices, claimPaths]
   | cons index rest ih =>
     unfold collectPathIndices at collected
     cases measured : gindexLength index with
@@ -44,14 +38,9 @@ theorem collectPathIndices_info {indices paths : List Nat}
         obtain ⟨shape, valid⟩ := ih rec
         simp [getPathIndices, measured, rec, Bind.bind, Except.bind, Pure.pure,
           Except.pure] at collected
-        constructor
-        · rw [← collected, shape]
-          rfl
-        · intro i member
-          rcases List.mem_cons.mp member with same | member
-          · subst i
-            exact two_le_of_level_positive (depth := Nat.log2 index) rfl (by omega)
-          · exact valid i member
+        refine ⟨by rw [← collected, shape]; rfl, ?_⟩
+        simp only [List.mem_cons, forall_eq_or_imp]
+        exact ⟨two_le_of_level_positive (depth := Nat.log2 index) rfl (by omega), valid⟩
 
 /-- A successful request always names at least one branch. -/
 theorem rejectRelated_nonempty {indices : List Nat}
@@ -120,37 +109,23 @@ theorem claimPaths_child {indices : List Nat} (nonempty : indices ≠ [])
     | cons claim rest =>
       -- A nonempty request supplies a branch whose last child sits immediately below the root.
       have named : 1 ≤ claim := by have := valid claim (by simp); omega
-      have deep : 0 < Nat.log2 claim := by
-        have bounds := gindexDepth_bounds named
-        by_cases zero : Nat.log2 claim = 0
-        · have small : claim < 2 := by simpa [zero] using bounds.2
-          have := valid claim (by simp)
-          omega
-        · omega
+      have deep : 0 < Nat.log2 claim := (Nat.le_log2 (by omega)).mpr (valid claim (by simp))
       refine ⟨claim >>> (Nat.log2 claim - 1), ?_, ?_⟩
       · apply List.mem_flatMap.mpr
         refine ⟨claim, by simp, List.mem_map.mpr ?_⟩
         exact ⟨Nat.log2 claim - 1, List.mem_range.mpr (by omega), rfl⟩
-      · rw [← shiftRight_succ]
-        have last : Nat.log2 claim - 1 + 1 = Nat.log2 claim := by omega
-        rw [last, shiftRight_depth named]
+      · rw [← shiftRight_succ, Nat.sub_add_cancel deep, shiftRight_depth named]
   · obtain ⟨claim, claimed, stepMember⟩ := List.mem_flatMap.mp member
     obtain ⟨step, inRange, same⟩ := List.mem_map.mp stepMember
     -- An unclaimed ancestor cannot be the branch's initial requested position.
-    have positive : 0 < step := by
-      by_cases zero : step = 0
-      · subst step
-        simp only [Nat.shiftRight_zero] at same
-        subst index
-        exact False.elim (unclaimed claimed)
-      · omega
+    have positive : 0 < step := Nat.pos_of_ne_zero fun zero => by
+      simp only [zero, Nat.shiftRight_zero] at same
+      exact unclaimed (same ▸ claimed)
     refine ⟨claim >>> (step - 1), ?_, ?_⟩
     · apply List.mem_flatMap.mpr
       refine ⟨claim, claimed, List.mem_map.mpr ?_⟩
       exact ⟨step - 1, List.mem_range.mpr (by have := List.mem_range.mp inRange; omega), rfl⟩
-    · rw [← shiftRight_succ]
-      have previous : step - 1 + 1 = step := by omega
-      rw [previous, same]
+    · rw [← shiftRight_succ, Nat.sub_add_cancel positive, same]
 
 /-- Both children of an unclaimed ancestor are either reconstructible or supplied as helpers. -/
 theorem helperFrontier_children {indices helpers : List Nat}
@@ -162,10 +137,9 @@ theorem helperFrontier_children {indices helpers : List Nat}
   obtain ⟨nonempty, valid, shape⟩ := getHelperIndices_frontier built
   obtain ⟨child, member, parent⟩ := claimPaths_child nonempty valid inside unclaimed
   -- The opposite child is either another requested path or exactly one required helper.
-  have sibling : gindexSibling child ∈ claimPaths indices ∨ gindexSibling child ∈ helpers := by
-    by_cases onPath : gindexSibling child ∈ claimPaths indices
-    · exact Or.inl onPath
-    · exact Or.inr ((shape _).mpr ⟨List.mem_map.mpr ⟨child, member, rfl⟩, onPath⟩)
+  have sibling : gindexSibling child ∈ claimPaths indices ∨ gindexSibling child ∈ helpers :=
+    (Classical.em _).imp_right fun onPath =>
+      (shape _).mpr ⟨List.mem_map.mpr ⟨child, member, rfl⟩, onPath⟩
   rcases Nat.mod_two_eq_zero_or_one child with even | odd
   · obtain ⟨left, right⟩ := gindexSibling_even even
     rw [parent] at left right
@@ -199,10 +173,8 @@ theorem levelOf_mono {left right : Nat} (positive : 1 ≤ left) (ordered : left 
 theorem claim_mem_paths {indices : List Nat} (valid : ∀ index ∈ indices, 2 ≤ index)
     {index : Nat} (claimed : index ∈ indices) : index ∈ claimPaths indices := by
   -- Depth is positive because a request cannot name the root itself.
-  have positive : 0 < Nat.log2 index := by
-    have unfolded := levelOf_parent (valid index claimed)
-    change Nat.log2 index = _ at unfolded
-    omega
+  have positive : 0 < Nat.log2 index :=
+    (Nat.le_log2 (Nat.ne_zero_of_lt (valid index claimed))).mpr (valid index claimed)
   apply List.mem_flatMap.mpr
   exact ⟨index, claimed, List.mem_map.mpr ⟨0, List.mem_range.mpr positive, by simp⟩⟩
 
@@ -234,9 +206,8 @@ theorem helperFrontier_sibling {indices helpers : List Nat}
   rcases member with path | helper
   · have positive := (claimPaths_bounds valid path).1
     refine ⟨positive, ?_, claimPaths_parent valid path⟩
-    by_cases siblingPath : gindexSibling index ∈ claimPaths indices
-    · exact Or.inl siblingPath
-    · exact Or.inr ((shape _).mpr ⟨List.mem_map.mpr ⟨index, path, rfl⟩, siblingPath⟩)
+    exact (Classical.em _).imp_right fun siblingPath =>
+      (shape _).mpr ⟨List.mem_map.mpr ⟨index, path, rfl⟩, siblingPath⟩
   -- A helper is the sibling of a path node, so the pair shares its already classified parent.
   · obtain ⟨mapped, _⟩ := (shape index).mp helper
     obtain ⟨sibling, path, same⟩ := List.mem_map.mp mapped

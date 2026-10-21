@@ -8,13 +8,7 @@ namespace Ssz
 theorem nesting_le_deepest (shape : Desc) (fields : List Desc)
     (member : shape ∈ fields) : shape.nesting ≤ Desc.deepestNesting fields := by
   -- The maximum over fields bounds each individual field depth.
-  induction fields with
-  | nil => simp at member
-  | cons first rest ih =>
-    simp only [List.mem_cons] at member
-    rcases member with rfl | member
-    · exact Nat.le_max_left _ _
-    · exact Nat.le_trans (ih member) (Nat.le_max_right _ _)
+  induction fields <;> grind [Desc.deepestNesting]
 
 private theorem sequenceLayout_depth (element : Desc) (values : List Value)
     (positions : Option Nat) (mixin : Option Bytes) (layout : MerkleLayout)
@@ -26,15 +20,10 @@ private theorem sequenceLayout_depth (element : Desc) (values : List Value)
   unfold sequenceLayout at success
   split at success
   · cases h : serializeEach element values <;>
-      simp [h, Bind.bind, Except.bind, Pure.pure, Except.pure] at success
-    subst layout
-    simp [MerkleLayout.packing] at nested
-  · simp [Pure.pure, Except.pure] at success
-    subst layout
-    simp [MerkleLayout.nesting] at nested
-    subst slots
-    obtain ⟨_, _, eq⟩ := List.mem_map.mp member
-    exact (Option.some.inj eq |> Prod.mk.inj).1.symm
+      simp [h, Bind.bind, Except.bind, pure, Except.pure] at success
+    simp [← success, MerkleLayout.packing] at nested
+  · simp_all [pure, Except.pure, MerkleLayout.nesting]
+    grind
 
 /-- Every present nested leaf has strictly smaller type depth than its enclosing value. -/
 theorem merkleLayout_child_nesting (shape : Desc) (value : Value) (layout : MerkleLayout)
@@ -52,68 +41,41 @@ theorem merkleLayout_child_nesting (shape : Desc) (value : Value) (layout : Merk
       cases nested
     | subst layout
       cases nested
-  -- Every nested vector position has the declared element type, one type level below the vector.
-  case vector.seq element length elements =>
-    split at success <;> try simp only [reduceCtorEq] at success
-    have eq := sequenceLayout_depth element elements (some length) none layout
-      success slots nested child inner member
-    simp [eq, Desc.nesting]
-  -- A list's count word adds no nested value type.
-  case list.seq element limit elements =>
-    split at success <;> try simp only [reduceCtorEq] at success
-    have eq := sequenceLayout_depth element elements (some limit) (some (lengthWord elements.length))
-      layout success slots nested child inner member
-    simp [eq, Desc.nesting]
-  -- Progressive tree depth does not increase the nesting depth of element types.
-  case progressiveList.seq element limit elements =>
-    have eq := sequenceLayout_depth element elements none (some (lengthWord elements.length))
-      layout success slots nested child inner member
-    simp [eq, Desc.nesting]
+  -- Sequence positions all have the declared element type, one type level below the sequence.
+  case vector.seq element _ elements | list.seq element _ elements
+    | progressiveList.seq element _ elements =>
+    (try split at success) <;> try simp only [reduceCtorEq] at success
+    simp [sequenceLayout_depth _ _ _ _ _ success slots nested child inner member, Desc.nesting]
+  -- Pairing preserves field membership, so the maximum declared depth bounds the child.
   case container.seq names fields elements =>
-    -- Pairing preserves field membership, so the maximum declared depth bounds the child.
-    split at success <;> try simp only [reduceCtorEq, Except.ok.injEq] at success
-    subst layout
-    simp [MerkleLayout.nesting] at nested
-    subst slots
-    have paired : (child, inner) ∈ fields.zip elements := by simpa using member
-    have bounded := nesting_le_deepest child fields (List.of_mem_zip paired).1
-    simpa [Desc.nesting] using Nat.lt_succ_of_le bounded
+    split at success <;> simp only [reduceCtorEq, Except.ok.injEq] at success
+    subst success
+    simp only [MerkleLayout.nesting, Leaves.nested.injEq] at nested
+    subst nested
+    exact Nat.lt_succ_of_le
+      (nesting_le_deepest child fields (List.of_mem_zip (by simpa using member)).1)
   case progressiveContainer.seq active names fields elements =>
     -- EIP-7495 gaps add positions but never introduce a new field type.
-    cases hs : layoutSlots active fields elements with
-    | error e => simp [hs] at success
-    | ok placed =>
-      simp [hs] at success
-      subst layout
-      simp [MerkleLayout.nesting] at nested
-      subst slots
-      unfold layoutSlots at hs
-      split at hs <;> try simp only [reduceCtorEq, Bind.bind, Except.bind,
-        throw, throwThe, MonadExceptOf.throw] at hs
-      split at hs <;> try simp only [reduceCtorEq,
-         ] at hs
-      have fieldsPlaced := placeSlots_fields hs
-      have paired : (child, inner) ∈ fields.zip elements := by
-        rw [← fieldsPlaced]
-        exact List.mem_filterMap.mpr ⟨some (child, inner), member, rfl⟩
-      have bounded := nesting_le_deepest child fields (List.of_mem_zip paired).1
-      simpa [Desc.nesting] using Nat.lt_succ_of_le bounded
+    cases hs : layoutSlots active fields elements <;> simp [hs] at success
+    subst success
+    simp only [MerkleLayout.nesting, Leaves.nested.injEq] at nested
+    subst nested
+    simp only [layoutSlots] at hs
+    split at hs <;> try contradiction
+    split at hs <;> try contradiction
+    have paired : (child, inner) ∈ fields.zip elements := by
+      rw [← placeSlots_fields hs]
+      exact List.mem_filterMap.mpr ⟨some (child, inner), member, rfl⟩
+    exact Nat.lt_succ_of_le (nesting_le_deepest child fields (List.of_mem_zip paired).1)
   case compatibleUnion.union selectors options selector data =>
     -- EIP-8016 selectors choose an existing option without changing its type.
-    cases hl : lookupOption selectors options selector with
-    | error e => simp [hl] at success
-    | ok chosen =>
-      cases hw : selectorWord selector with
-      | error e => simp [hl, hw] at success
-      | ok word =>
-        simp [hl, hw] at success
-        subst layout
-        simp [MerkleLayout.nesting] at nested
-        subst slots
-        simp at member
-        rcases member with ⟨rfl, rfl⟩
-        have bounded := nesting_le_deepest child options
-          (lookupOption_mem selectors options selector child hl)
-        simpa [Desc.nesting] using Nat.lt_succ_of_le bounded
+    cases hl : lookupOption selectors options selector <;>
+      cases hw : selectorWord selector <;> simp [hl, hw] at success
+    subst success
+    simp only [MerkleLayout.nesting, Leaves.nested.injEq] at nested
+    subst nested
+    simp only [List.mem_singleton, Option.some.injEq, Prod.mk.injEq] at member
+    rcases member with ⟨rfl, rfl⟩
+    exact Nat.lt_succ_of_le (nesting_le_deepest child options (lookupOption_mem _ _ _ _ hl))
 
 end Ssz

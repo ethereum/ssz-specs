@@ -100,11 +100,9 @@ private theorem two_pow_depthFor_lt (count : Nat) (nonempty : 0 < count) :
     simp only [Nat.pow_zero]
     omega
   | succ shallower =>
-    have tight : 2 ^ shallower < count := by
-      rcases Nat.lt_or_ge (2 ^ shallower) count with below | above
-      · exact below
-      · have := depthFor_le_of_le_two_pow above
-        omega
+    have tight : 2 ^ shallower < count := Nat.lt_of_not_le fun above => by
+      have := depthFor_le_of_le_two_pow above
+      omega
     rw [Nat.pow_succ]
     omega
 
@@ -168,76 +166,18 @@ def subtreeAtCounted (chunks : Array Bytes) (depth start : Nat) : Bytes × Nat :
       (combine (subtreeAtCounted chunks d start).1 (subtreeAtCounted chunks d (start + 2 ^ d)).1,
         1 + (subtreeAtCounted chunks d start).2 + (subtreeAtCounted chunks d (start + 2 ^ d)).2)
 
-/-- A counted subtree past the data is the table entry, folding nothing. -/
-private theorem subtreeAtCounted_past (chunks : Array Bytes) (depth start : Nat)
-    (past : chunks.size ≤ start) :
-    subtreeAtCounted chunks depth start = (zeroSubtree depth, 0) := by
-  rw [subtreeAtCounted.eq_def]
-  simp [past]
-
-/-- A counted leaf reads its node, folding nothing. -/
-private theorem subtreeAtCounted_leaf (chunks : Array Bytes) (start : Nat)
-    (inside : start < chunks.size) :
-    subtreeAtCounted chunks 0 start = (padded zeroChunk chunks start, 0) := by
-  rw [subtreeAtCounted.eq_def]
-  simp [Nat.not_le.mpr inside]
-
-/-- A counted node folds its two halves and charges that fold on top of theirs. -/
-private theorem subtreeAtCounted_node (chunks : Array Bytes) (depth start : Nat)
-    (inside : start < chunks.size) :
-    subtreeAtCounted chunks (depth + 1) start
-      = (combine (subtreeAtCounted chunks depth start).1
-            (subtreeAtCounted chunks depth (start + 2 ^ depth)).1,
-          1 + (subtreeAtCounted chunks depth start).2
-            + (subtreeAtCounted chunks depth (start + 2 ^ depth)).2) := by
-  rw [subtreeAtCounted.eq_def]
-  simp [Nat.not_le.mpr inside]
-
 /-- Counting the folds leaves the root the implementation produces untouched. -/
 theorem subtreeAtCounted_fst (chunks : Array Bytes) :
     ∀ depth start, (subtreeAtCounted chunks depth start).1 = subtreeAt chunks depth start := by
-  intro depth
-  induction depth with
-  | zero =>
-    intro start
-    rw [subtreeAt.eq_def]
-    split
-    · rename_i past
-      rw [subtreeAtCounted_past chunks 0 start (by omega)]
-    · rename_i inside
-      rw [subtreeAtCounted_leaf chunks start (by omega)]
-  | succ depth ih =>
-    intro start
-    rw [subtreeAt.eq_def]
-    split
-    · rename_i past
-      rw [subtreeAtCounted_past chunks (depth + 1) start (by omega)]
-    · rename_i inside
-      rw [subtreeAtCounted_node chunks depth start (by omega)]
-      show combine (subtreeAtCounted chunks depth start).1
-          (subtreeAtCounted chunks depth (start + 2 ^ depth)).1
-        = combine (subtreeAt chunks depth start) (subtreeAt chunks depth (start + 2 ^ depth))
-      rw [ih start, ih (start + 2 ^ depth)]
+  intro depth start
+  -- Both recursions branch on the same tests, so unfolding the implementation closes every case.
+  fun_induction subtreeAtCounted chunks depth start <;> rw [subtreeAt.eq_def] <;> grind
 
 /-- The folds counted along that recursion are exactly the modelled cost. -/
 theorem subtreeAtCounted_snd (chunks : Array Bytes) :
     ∀ depth start, (subtreeAtCounted chunks depth start).2 = subtreeCost chunks depth start := by
-  intro depth
-  induction depth with
-  | zero =>
-    intro start
-    by_cases past : chunks.size ≤ start
-    · rw [subtreeAtCounted_past chunks 0 start past, subtreeCost_leaf]
-    · rw [subtreeAtCounted_leaf chunks start (by omega), subtreeCost_leaf]
-  | succ depth ih =>
-    intro start
-    by_cases past : chunks.size ≤ start
-    · rw [subtreeAtCounted_past chunks (depth + 1) start past,
-        subtreeCost_past chunks (depth + 1) start past]
-    · rw [subtreeAtCounted_node chunks depth start (by omega),
-        subtreeCost_node chunks depth start (by omega)]
-      show 1 + (subtreeAtCounted chunks depth start).2
-          + (subtreeAtCounted chunks depth (start + 2 ^ depth)).2 = _
-      rw [ih start, ih (start + 2 ^ depth)]
+  intro depth start
+  -- Both recursions branch on the same tests, so unfolding the cost closes every case.
+  fun_induction subtreeAtCounted chunks depth start <;> rw [subtreeCost.eq_def] <;> grind
 
 end Ssz

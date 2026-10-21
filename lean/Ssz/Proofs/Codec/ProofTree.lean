@@ -97,9 +97,8 @@ theorem boundedReading_parent (chunks : Array Bytes) (height index : Nat)
   -- Each child has one additional branch bit, and both halve back to their parent.
   have left : Nat.log2 (2 * index) = Nat.log2 index + 1 := Nat.log2_two_mul (by omega)
   have right : Nat.log2 (2 * index + 1) = Nat.log2 index + 1 := by
-    have parent := levelOf_parent (index := 2 * index + 1) (by omega)
-    have half : (2 * index + 1) / 2 = index := by omega
-    simpa only [levelOf, half] using parent
+    simpa [levelOf, show (2 * index + 1) / 2 = index by omega] using
+      levelOf_parent (index := 2 * index + 1) (by omega)
   simp only [boundedReading, left, right]
   exact boundedTreeNode_split chunks height index (Nat.log2 index) 0 internal
 
@@ -136,9 +135,7 @@ theorem nodeRoot_packed {shape : Desc} {value : Value} {chunks : Array Bytes} {c
     rw [nodeRoot_root, hashTreeRoot_packed layout fits, boundedReading_root]
   · have below : 2 ≤ index := by omega
     have deep : Nat.log2 index ≠ 0 := by
-      have recursion := levelOf_parent below
-      change Nat.log2 index = _ at recursion
-      omega
+      have := levelOf_parent below; simp only [levelOf] at this; omega
     cases index with
     | zero => omega
     | succ previous =>
@@ -164,16 +161,10 @@ theorem boundedReading_branch (chunks : Array Bytes) (height index : Nat)
   rw [shiftRight_succ, gindexBit_parity]
   simp only [decide_eq_true_eq]
   rcases Nat.mod_two_eq_zero_or_one (index >>> level) with even | odd
-  · rw [if_neg (by omega)]
-    obtain ⟨left, right⟩ := gindexSibling_even even
-    rw [right]
-    exact (congrArg (fun at_ => combine (boundedReading chunks height at_)
-      (boundedReading chunks height (2 * ((index >>> level) / 2) + 1))) left).trans equation.symm
-  · rw [if_pos odd]
-    obtain ⟨right, left⟩ := gindexSibling_odd odd
-    rw [left]
-    exact (congrArg (fun at_ => combine (boundedReading chunks height (2 * ((index >>> level) / 2)))
-      (boundedReading chunks height at_)) right).trans equation.symm
+  · obtain ⟨left, right⟩ := gindexSibling_even even
+    rw [if_neg (by omega), right, equation, ← left]
+  · obtain ⟨right, left⟩ := gindexSibling_odd odd
+    rw [if_pos odd, left, equation, ← right]
 
 /-- A proof built inside a bounded packed value rebuilds the value's root. -/
 theorem buildProof_packed_rebuilds_root {shape : Desc} {value : Value}
@@ -255,20 +246,13 @@ theorem mixedReading_parent (chunks : Array Bytes) (height : Nat) (word : Bytes)
         (mixedReading chunks height word (2 * index + 1)) := by
   -- The left subtree uses the same intervals after its initial mixing turn is removed.
   have positive : 0 < Nat.log2 index := by
-    have recursion := levelOf_parent named
-    change Nat.log2 index = _ at recursion
-    omega
+    have := levelOf_parent named; simp only [levelOf] at this; omega
   -- A node whose first turn goes left cannot name the right-hand mixing word.
-  have notWord : index ≠ 3 := by
-    intro wordIndex
-    subst index
-    change true = false at leftSide
-    contradiction
+  have notWord : index ≠ 3 := by rintro rfl; exact absurd leftSide (by decide)
   have left : Nat.log2 (2 * index) = Nat.log2 index + 1 := Nat.log2_two_mul (by omega)
   have right : Nat.log2 (2 * index + 1) = Nat.log2 index + 1 := by
-    have recursion := levelOf_parent (index := 2 * index + 1) (by omega)
-    have half : (2 * index + 1) / 2 = index := by omega
-    simpa only [levelOf, half] using recursion
+    simpa [levelOf, show (2 * index + 1) / 2 = index by omega] using
+      levelOf_parent (index := 2 * index + 1) (by omega)
   have depth : Nat.log2 index = Nat.log2 index - 1 + 1 := by omega
   simp only [mixedReading, if_neg (by omega : index ≠ 1), if_neg notWord,
     if_neg (by omega : 2 * index ≠ 1), if_neg (by omega : 2 * index ≠ 3),
@@ -297,15 +281,9 @@ theorem nodeRoot_packed_mixed {shape : Desc} {value : Value} {chunks : Array Byt
       gindexBit, mixedReading, Bind.bind, Except.bind, Pure.pure, Except.pure]
   · have notRoot : index ≠ 1 := by omega
     -- A node whose first turn goes left cannot name the right-hand mixing word.
-    have notWord : index ≠ 3 := by
-      intro same
-      subst index
-      change true = false at leftSide
-      contradiction
+    have notWord : index ≠ 3 := by rintro rfl; exact absurd leftSide (by decide)
     have positive : Nat.log2 index ≠ 0 := by
-      have recursion := levelOf_parent named
-      change Nat.log2 index = _ at recursion
-      omega
+      have := levelOf_parent named; simp only [levelOf] at this; omega
     cases index with
     | zero => omega
     | succ previous =>
@@ -370,16 +348,10 @@ theorem mixedReading_branch_left (chunks : Array Bytes) (height : Nat) (word : B
   rw [shiftRight_succ, gindexBit_parity]
   simp only [decide_eq_true_eq]
   rcases Nat.mod_two_eq_zero_or_one (index >>> level) with even | odd
-  · rw [if_neg (by omega)]
-    obtain ⟨left, right⟩ := gindexSibling_even even
-    rw [right]
-    exact (congrArg (fun at_ => combine (mixedReading chunks height word at_)
-      (mixedReading chunks height word (2 * ((index >>> level) / 2) + 1))) left).trans equation.symm
-  · rw [if_pos odd]
-    obtain ⟨right, left⟩ := gindexSibling_odd odd
-    rw [left]
-    exact (congrArg (fun at_ => combine (mixedReading chunks height word (2 * ((index >>> level) / 2)))
-      (mixedReading chunks height word at_)) right).trans equation.symm
+  · obtain ⟨left, right⟩ := gindexSibling_even even
+    rw [if_neg (by omega), right, equation, ← left]
+  · obtain ⟨right, left⟩ := gindexSibling_odd odd
+    rw [if_pos odd, left, equation, ← right]
 
 /-- Swapping siblings changes only the lowest turn of their indices. -/
 theorem gindexBit_sibling_high (index position : Nat) (above : 0 < position) :
@@ -408,25 +380,17 @@ theorem mixed_branch_sibling {index step height : Nat}
   · exact Or.inl word
   · right
     have high : 0 < Nat.log2 (index >>> step) - 1 := by
-      have positiveDepth := levelOf_parent positive
+      have := levelOf_parent positive; simp only [levelOf] at this
       by_cases low : Nat.log2 (index >>> step) = 1
-      · have bounds := gindexDepth_bounds (by omega : 1 ≤ index >>> step)
-        have upper : index >>> step < 4 := by simpa [low] using bounds.2
-        have cases : index >>> step = 2 ∨ index >>> step = 3 := by omega
-        rcases cases with two | three
-        · have sibling : gindexSibling (index >>> step) = 3 := by rw [two]; rfl
-          exact False.elim (word sibling)
-        · rw [three] at turn
-          change true = false at turn
-          contradiction
-      · change Nat.log2 (index >>> step) = _ at positiveDepth
-        omega
-    refine ⟨by omega, ?_, ?_⟩
-    · change Nat.log2 (gindexSibling (index >>> step)) = Nat.log2 (index >>> step) at siblingDepth
-      rw [siblingDepth, gindexBit_sibling_high _ _ high]
-      exact turn
-    · change levelOf (gindexSibling (index >>> step)) - 1 ≤ height
-      omega
+      · have bounds := (gindexDepth_bounds (by omega : 1 ≤ index >>> step)).2
+        rw [low] at bounds
+        obtain two | three : index >>> step = 2 ∨ index >>> step = 3 := by omega
+        · exact absurd (by rw [two]; rfl) word
+        · rw [three] at turn; exact absurd turn (by decide)
+      · omega
+    simp only [levelOf] at siblingDepth depth
+    refine ⟨by omega, ?_, by omega⟩
+    rwa [siblingDepth, gindexBit_sibling_high _ _ high]
 
 /-- Constructed branches inside packed bounded contents rebuild the mixed value's root. -/
 theorem buildProof_packed_mixed_rebuilds_root {shape : Desc} {value : Value}

@@ -37,10 +37,7 @@ theorem getGeneralizedIndex_container_field (names : List String) (fields : List
     getGeneralizedIndex (.container names fields) [.position ordinal] =
       .ok (nextPow2 fields.length + ordinal) := by
   -- Containers allocate one Merkle leaf per field in declaration order.
-  have positive : 1 ≤ nextPow2 fields.length + ordinal := by
-    have width := Nat.two_pow_pos (depthFor fields.length)
-    unfold nextPow2
-    omega
+  have positive : 1 ≤ nextPow2 fields.length + ordinal := Nat.le_add_right_of_le (Nat.two_pow_pos _)
   simp [getGeneralizedIndex, Desc.resolveStep, Desc.chunkPosition, Desc.elementType, selected, Desc.chunkCount,
     Bind.bind, Except.bind, Pure.pure, Except.pure,
     gindexConcat_root_right positive]
@@ -81,10 +78,7 @@ theorem container_field_path_reads (names : List String) (fields : List Desc) (v
   have inside : ordinal < fields.length := (List.getElem?_eq_some_iff.mp selectedType).1
   have depth := bounded_leaf_depth inside
   have position := bounded_leaf_position inside
-  have indexPositive : 1 ≤ nextPow2 fields.length + ordinal := by
-    have := Nat.two_pow_pos (depthFor fields.length)
-    unfold nextPow2
-    omega
+  have indexPositive : 1 ≤ nextPow2 fields.length + ordinal := Nat.le_add_right_of_le (Nat.two_pow_pos _)
   -- The type lookup and value lookup share an ordinal, so their zipped entry is the selected child.
   have slots : ((fields.zip values).map some)[ordinal]? = some (some (child, inner)) := by
     have zipped : (fields.zip values)[ordinal]? = some (child, inner) :=
@@ -117,10 +111,7 @@ theorem nodeRoot_bounded_leaf {shape : Desc} {value : Value} {layout : MerkleLay
     (fits : chunks.size ≤ capacity) (inside : ordinal < capacity) :
     nodeRoot shape value (nextPow2 capacity + ordinal) = .ok (padded zeroChunk chunks ordinal) := by
   -- At leaf depth the selected interval has one node, so no parent hash is added.
-  have positive : 1 ≤ nextPow2 capacity + ordinal := by
-    have := Nat.two_pow_pos (depthFor capacity)
-    unfold nextPow2
-    omega
+  have positive : 1 ≤ nextPow2 capacity + ordinal := Nat.le_add_right_of_le (Nat.two_pow_pos _)
   rw [nodeRoot_bounded_layout laid materialized bounded unmixed fits _ positive
     (by simp only [bounded_leaf_depth inside, Nat.le_refl])]
   simp [boundedReading, boundedTreeNode, bounded_leaf_depth inside,
@@ -159,16 +150,12 @@ theorem nodeRoot_mixed_leaf {shape : Desc} {value : Value} {layout : MerkleLayou
   -- The right-hand word does not change which chunk a left-hand leaf contains.
   obtain ⟨depth, turn, position⟩ := mixed_leaf_index inside
   have positive : 2 ≤ 2 * nextPow2 capacity + ordinal := by
-    have := Nat.two_pow_pos (depthFor capacity)
-    unfold nextPow2
-    omega
+    have := Nat.two_pow_pos (depthFor capacity); unfold nextPow2; omega
   -- A left-content leaf cannot be the right-hand mixing word at generalized index three.
   have notWord : 2 * nextPow2 capacity + ordinal ≠ 3 := by
     intro same
-    have depthThree : Nat.log2 3 = 1 := rfl
-    rw [same, depthThree] at depth
-    have zero : depthFor capacity = 0 := by omega
-    rw [same, zero] at turn
+    rw [same, show Nat.log2 3 = 1 from rfl] at depth
+    rw [same, show depthFor capacity = 0 by omega] at turn
     contradiction
   rw [nodeRoot_mixed_layout laid materialized bounded mixed fits _
     (Or.inr (Or.inr ⟨positive, by simpa [depth] using turn, by simp [depth]⟩))]
@@ -190,8 +177,7 @@ theorem nodeRoot_progressive_leaf {shape : Desc} {value : Value} {layout : Merkl
   obtain ⟨stop, named, turn, walked, left, capacity, position, _⟩ :=
     progressiveChunkGindex_selection ordinal layout.leaves.count present
   -- The chosen progressive segment has a power-of-two capacity, giving its exact bounded-tree height.
-  have height : depthFor stop.capacity = stop.depth := by
-    rw [capacity, depthFor_pow]
+  have height : depthFor stop.capacity = stop.depth := by rw [capacity, depthFor_pow]
   have depthPositive : Nat.log2 (progressiveChunkGindex ordinal) ≠ 0 := by
     have recursion := levelOf_parent named
     change Nat.log2 (progressiveChunkGindex ordinal) = _ at recursion

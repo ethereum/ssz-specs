@@ -9,21 +9,10 @@ private theorem throw_error {α : Type} (fault : Err) :
 
 /-- Adjacent, ordered byte ranges concatenate without gaps or overlap. -/
 theorem extract_join (data : Bytes) {start middle stop : Nat}
-    (ordered : start ≤ middle) (onward : middle ≤ stop) (bounded : stop ≤ data.size) :
+    (ordered : start ≤ middle) (onward : middle ≤ stop) :
     data.extract start middle ++ data.extract middle stop = data.extract start stop := by
-  -- The lengths add because the intervals share exactly one boundary.
-  apply Array.ext
-  · simp only [Array.size_append, Array.size_extract, Nat.min_eq_left (Nat.le_trans onward bounded),
-      Nat.min_eq_left bounded]
-    omega
-  · intro position left right
-    -- The boundary decides which of the two adjacent ranges supplies this byte.
-    by_cases first : position < (data.extract start middle).size
-    · simp only [Array.getElem_append_left first, Array.getElem_extract]
-    · simp only [Array.getElem_append_right (Nat.le_of_not_lt first), Array.getElem_extract]
-      congr 1
-      simp only [Array.size_extract, Nat.min_eq_left (Nat.le_trans onward bounded)] at *
-      omega
+  -- The two intervals share exactly one boundary, so they merge into one interval.
+  rw [Array.extract_append_extract, Nat.min_eq_left ordered, Nat.max_eq_right onward]
 
 /-- Concatenating two lists of parts concatenates their byte representations. -/
 theorem concatParts_append (left right : List Bytes) :
@@ -47,7 +36,6 @@ theorem concat_fixed_slices (data : Bytes) (width count : Nat)
     simp only [List.map_cons, List.map_nil, concatParts, Array.append_empty]
     -- Their common boundary prevents both missing bytes and overlapping bytes.
     exact extract_join data (by omega) (Nat.mul_le_mul_right width (by omega))
-      (by simpa only [Nat.mul_comm] using bounded)
 
 /-- Reading an integer inside a slice agrees with reading the same bytes in the source. -/
 theorem readUint_extract (data : Bytes) (start stop : Nat) :
@@ -95,9 +83,7 @@ theorem offsetSpans_partition (data : Bytes) :
     simp only [offsetSpans] at read
     split at read
     · cases read
-    · simp at read
-      subst spans
-      rename_i ordered
+    · cases read
       -- The final interval ends at the scope boundary even when its length is zero.
       have finish : start + (scope - start) = scope := by omega
       simp [finish, runningOffsets, concatParts]
@@ -107,22 +93,21 @@ theorem offsetSpans_partition (data : Bytes) :
     simp only [offsetSpans] at read
     split at read
     · cases read
-    · rename_i ordered
-      cases tail : offsetSpans (next :: rest) scope with
-      | error fault => simp [tail, Bind.bind, Except.bind] at read
-      | ok widths =>
-        simp [tail, Bind.bind, Except.bind, pure, Except.pure] at read
-        subst spans
-        -- The remaining offsets already reconstruct the suffix and its running positions.
-        obtain ⟨within, offsets, joined⟩ := ih next scope widths tail bounded
-        -- Monotonic offsets make subtraction exact when recovering the next boundary.
-        have finish : start + (next - start) = next := by omega
-        have sized : (data.extract start next).size = next - start := by simp; omega
-        simp only [List.zip_cons_cons, List.map_cons, finish, runningOffsets,
-          sized, concatParts]
-        rw [offsets, joined]
-        -- Joining the first interval to the reconstructed suffix covers the entire body.
-        exact ⟨by omega, rfl, extract_join data (by omega) within bounded⟩
+    · cases tail : offsetSpans (next :: rest) scope <;>
+        simp only [tail, Bind.bind, Except.bind, pure, Except.pure, Except.ok.injEq,
+          reduceCtorEq] at read
+      subst spans
+      rename_i widths
+      -- The remaining offsets already reconstruct the suffix and its running positions.
+      obtain ⟨within, offsets, joined⟩ := ih next scope widths tail bounded
+      -- Monotonic offsets make subtraction exact when recovering the next boundary.
+      have finish : start + (next - start) = next := by omega
+      have sized : (data.extract start next).size = next - start := by simp; omega
+      simp only [List.zip_cons_cons, List.map_cons, finish, runningOffsets,
+        sized, concatParts]
+      rw [offsets, joined]
+      -- Joining the first interval to the reconstructed suffix covers the entire body.
+      exact ⟨by omega, rfl, extract_join data (by omega) within⟩
 
 /-- The offset header is exactly the little-endian encoding of its running body positions. -/
 theorem headOf_offsets (parts : List Bytes) (start : Nat) :
@@ -223,7 +208,7 @@ theorem assemble_offset_slices (data : Bytes) (count : Nat) (spans : List Nat)
       bodiesOf (offsetSlots parts) = data
     rw [headWidth_offset, countIs, headOf_offsets, partition.1,
       readOffsets_bytes data count room, bodiesOf_offset, partition.2,
-      extract_join data (by omega) room (by omega), Array.extract_size]
+      extract_join data (by omega) room, Array.extract_size]
   -- The original accepted size guarantees that assembling these parts is permitted.
   exact assemble_of_parts raw bounded
 
@@ -241,9 +226,7 @@ theorem vectorSlices_assemble {element : Desc} {count : Nat} {data : Bytes}
     subst slices
     simp only [Desc.isFixed, fixed, Option.isSome_some]
     -- The decoder has established the exact total length and the composite size bound.
-    apply assemble_fixed_slices
-    · simp_all [Nat.mul_comm]
-    · omega
+    apply assemble_fixed_slices <;> first | omega | simp_all [Nat.mul_comm]
   | none =>
     simp [vectorSlices, fixed, throw_error, Bind.bind, Except.bind, pure, Except.pure,
       Nat.ne_of_gt positive] at read
@@ -252,12 +235,7 @@ theorem vectorSlices_assemble {element : Desc} {count : Nat} {data : Bytes}
     subst slices
     simp only [Desc.isFixed, fixed, Option.isSome_none]
     -- Acceptance supplies the header boundary, monotonic offsets, and the final scope.
-    apply assemble_offset_slices
-    · exact positive
-    · omega
-    · simp_all
-    · assumption
-    · omega
+    apply assemble_offset_slices <;> first | assumption | omega | simp_all
 
 private theorem readOffsets_first (data : Bytes) (count : Nat) (positive : 0 < count) :
     (readOffsets data count)[0]! = readUint data 0 bytesPerOffset := by
@@ -283,21 +261,11 @@ theorem listSlices_assemble {element : Desc} {limit : Option Nat} {data : Bytes}
     -- Nonempty inputs reconstruct either by equal-width intervals or by the accepted offset table.
     first
     | apply assemble_fixed_slices
-      · symm
-        -- The decoder rejects partial fixed-size elements, making count-times-width exact.
-        apply Nat.div_mul_cancel
-        apply Nat.dvd_of_mod_eq_zero
-        assumption
+      -- The decoder rejects partial fixed-size elements, making count-times-width exact.
+      · exact (Nat.div_mul_cancel (Nat.dvd_of_mod_eq_zero ‹_›)).symm
       · assumption
     | apply assemble_offset_slices
-      · simp_all only [bytesPerOffset]
-        omega
-      · simp_all only [bytesPerOffset]
-        omega
-      · rw [readOffsets_first data _ (by simp_all only [bytesPerOffset]; omega)]
-        simp_all only [bytesPerOffset]
-        omega
-      · assumption
-      · assumption
+      all_goals try rw [readOffsets_first data _ (by simp_all only [bytesPerOffset]; omega)]
+      all_goals first | assumption | (simp_all only [bytesPerOffset]; omega)
 
 end Ssz

@@ -12,31 +12,25 @@ private theorem placeSlots_preserves {active : List Bool} {fields : List (Desc �
   induction active generalizing fields slots with
   | nil =>
     -- With no positions left, success requires no fields left either.
-    cases fields <;> simp [placeSlots] at placed
-    subst slots
-    simp
+    cases fields <;> simp_all [placeSlots]
   | cons bit active ih =>
     cases bit with
     | false =>
       -- Removing a gap keeps the field sequence and shortens the layout by one.
-      cases tail : placeSlots active fields with
-      | error fault => simp [placeSlots, tail, Bind.bind, Except.bind] at placed
-      | ok rest =>
+      cases tail : placeSlots active fields <;>
         simp [placeSlots, tail, Bind.bind, Except.bind, pure, Except.pure] at placed
-        subst slots
-        simpa using ih tail
+      subst slots
+      simpa using ih tail
     | true =>
       -- An occupied position keeps the first field and delegates the remaining positions.
       cases fields with
       | nil => simp [placeSlots] at placed
       | cons field fields =>
-        cases tail : placeSlots active fields with
-        | error fault => simp [placeSlots, tail, Bind.bind, Except.bind] at placed
-        | ok rest =>
+        cases tail : placeSlots active fields <;>
           simp [placeSlots, tail, Bind.bind, Except.bind, pure, Except.pure] at placed
-          subst slots
-          obtain ⟨ordered, sized⟩ := ih tail
-          simp [ordered, sized]
+        subst slots
+        obtain ⟨ordered, sized⟩ := ih tail
+        simp [ordered, sized]
 
 /-- Removing gaps from a successful layout recovers the declared fields in order. -/
 theorem placeSlots_fields {active : List Bool} {fields : List (Desc × Value)}

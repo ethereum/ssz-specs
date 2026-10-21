@@ -26,22 +26,18 @@ theorem zeroRootsUpTo_get (built : Nat) :
   | zero =>
     -- Only depth zero fits, and the table opens with the zero node itself.
     intro depth holds
-    have : depth = 0 := by omega
-    subst this
+    obtain rfl : depth = 0 := by omega
     rfl
   | succ built ih =>
     intro depth holds
-    have size : (zeroRootsUpTo built).size = built + 1 := zeroRootsUpTo_size built
     -- Either the entry was already there before this level, or it is the one just added.
-    rcases Nat.lt_or_ge depth (built + 1) with below | at_top
+    by_cases below : depth < built + 1
     · -- A shallower entry was already in the table, and pushing on the end left it alone.
-      have : depth ≠ (zeroRootsUpTo built).size := by omega
-      simp only [zeroRootsUpTo, Array.getElem?_push, if_neg this]
+      simp only [zeroRootsUpTo, Array.getElem?_push, zeroRootsUpTo_size, if_neg (Nat.ne_of_lt below)]
       exact ih depth (by omega)
     · -- The new entry folds the previous one against itself, which is the level above.
-      have top : depth = built + 1 := by omega
-      subst top
-      simp only [zeroRootsUpTo, Array.getElem?_push, if_pos size.symm, Option.getD_some, zeroRoot]
+      obtain rfl : depth = built + 1 := by omega
+      simp only [zeroRootsUpTo, Array.getElem?_push, zeroRootsUpTo_size, if_pos, Option.getD_some, zeroRoot]
       -- The entry below it is already known to be the subtree one level down.
       rw [ih built (Nat.le_refl built)]
 
@@ -60,9 +56,8 @@ theorem zeroSubtree_eq (depth : Nat) :
       simpa [zeroRoots, zeroRootsUpTo_size] using Nat.lt_succ_of_le covered
     simpa [zeroSubtree, Array.getElem?_eq_getElem present] using zeroRoots_get covered
   · -- Beyond the cache, the recursive definition supplies the root directly.
-    have absent : zeroRoots[depth]? = none := Array.getElem?_eq_none (by
-      simp only [zeroRoots, zeroRootsUpTo_size]
-      omega)
+    have absent : zeroRoots[depth]? = none :=
+      Array.getElem?_eq_none (by simp only [zeroRoots, zeroRootsUpTo_size]; omega)
     simp [zeroSubtree, absent]
 
 /-- Packing uses the smallest number of whole nodes that can hold the bytes. -/
@@ -116,10 +111,8 @@ theorem subtreeAt_eq_subtreeRoot (chunks : Array Bytes) :
     -- Either the leaf lies past the data, or it is read from it.
     split
     · -- Past the data, the lookup answers with the zero node the leaf would have read.
-      rename_i past
       rw [zeroSubtree_eq]
-      have absent : chunks[start]? = none := Array.getElem?_eq_none (by omega)
-      simp [subtreeRoot, zeroRoot, padded, absent]
+      simp [subtreeRoot, zeroRoot, padded, Array.getElem?_eq_none (show chunks.size ≤ start by omega)]
     · simp [subtreeRoot, padded]
   | succ depth ih =>
     intro start
@@ -127,7 +120,6 @@ theorem subtreeAt_eq_subtreeRoot (chunks : Array Bytes) :
     -- Either the whole subtree lies past the data, or part of it does not.
     split
     · -- A subtree wholly past the data is the empty tree of its depth, by the lemma above.
-      rename_i past
       rw [zeroSubtree_eq]
       exact (subtreeRoot_padded_past_data combine zeroChunk (depth + 1) chunks (by omega)).symm
     · -- Otherwise both sides fold the same two halves, and the shift lines up.
@@ -135,12 +127,7 @@ theorem subtreeAt_eq_subtreeRoot (chunks : Array Bytes) :
       -- Each half is the same claim one level down, which the hypothesis gives twice.
       rw [subtreeRoot, ih start, ih (start + 2 ^ depth)]
       -- The right half starts a half-width along, which is the shift the fold applies.
-      have shift : (fun i => padded zeroChunk chunks (start + 2 ^ depth + i))
-          = fun i => padded zeroChunk chunks (start + (i + 2 ^ depth)) := by
-        funext position
-        congr 1
-        omega
-      rw [shift]
+      simp only [Nat.add_assoc, Nat.add_comm (2 ^ depth)]
 
 /--
 A subtree is its two halves combined, whatever sits under it.
@@ -156,27 +143,16 @@ theorem subtreeAt_split (chunks : Array Bytes) {depth : Nat}
   split
   · -- Wholly past the data, so both halves read the zero subtree one level down.
     rename_i past
-    rw [zeroSubtree_eq]
-    have rightPast : start + 2 ^ depth ≥ chunks.size :=
-      Nat.le_trans past (Nat.le_add_right start (2 ^ depth))
-    have leftZero : subtreeAt chunks depth start = zeroSubtree depth := by
-      rw [subtreeAt.eq_def, if_pos past]
-    have rightZero : subtreeAt chunks depth (start + 2 ^ depth)
-        = zeroSubtree depth := by
-      rw [subtreeAt.eq_def, if_pos rightPast]
-    rw [leftZero, rightZero, zeroSubtree_eq]
+    rw [subtreeAt.eq_def chunks depth start, if_pos past, subtreeAt.eq_def chunks depth (start + 2 ^ depth),
+      if_pos (Nat.le_add_right_of_le past), zeroSubtree_eq, zeroSubtree_eq]
     rfl
   · rfl
 
 /-- The bounded tree over a whole node array, read as the specification states it. -/
 theorem subtreeAt_zero_eq (chunks : Array Bytes) {depth : Nat} :
     subtreeAt chunks depth 0 = subtreeRoot combine depth (padded zeroChunk chunks) := by
-  rw [subtreeAt_eq_subtreeRoot chunks depth 0]
   -- Starting at position zero, the shift the walk applies is no shift at all.
-  congr 1
-  funext position
-  congr 1
-  omega
+  simp only [subtreeAt_eq_subtreeRoot chunks depth 0, Nat.zero_add]
 
 /--
 Merkleizing one window of the leaves gives the subtree standing over that window.
@@ -202,12 +178,8 @@ theorem merkleizeBounded_window (chunks : Array Bytes) {depth : Nat}
   split
   · rfl
   · -- A position the window does not reach is one the whole tree reads as zero too.
-    rename_i outside
-    revert below outside
-    generalize 2 ^ depth = width
-    intro below outside
-    have absent : chunks[start + position]? = none := Array.getElem?_eq_none (by omega)
-    simp [absent]
+    generalize 2 ^ depth = width at *
+    simp [Array.getElem?_eq_none (show chunks.size ≤ start + position by omega)]
 
 /--
 Merkleizing a short buffer gives the root of one filled out with zeros.
@@ -220,9 +192,7 @@ theorem merkleizeBounded_append_zeros (chunks : Array Bytes)
     merkleizeBounded (chunks ++ Array.replicate count zeroChunk) (some capacity)
       = merkleizeBounded chunks (some capacity) := by
   -- The padded buffer is longer, but still inside the capacity, so neither side refuses.
-  have grown : (chunks ++ Array.replicate count zeroChunk).size = chunks.size + count := by
-    simp
-  simp only [merkleizeBounded, grown, if_neg (by omega : ¬ capacity < chunks.size + count),
+  simp only [merkleizeBounded, Array.size_append, Array.size_replicate, if_neg (by omega : ¬ capacity < chunks.size + count),
     if_neg (by omega : ¬ capacity < chunks.size)]
   -- Both roots are then the specification's, over leaf supplies already known equal.
   rw [subtreeAt_zero_eq _, subtreeAt_zero_eq _, padded_append_zeros]

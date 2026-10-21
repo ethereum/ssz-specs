@@ -25,37 +25,27 @@ theorem optionsCompatible_pairwise : ∀ (selectors : List Nat) (options : List 
       ∀ left ∈ options, ∀ right ∈ options, isCompatible left right = true := by
   intro selectors options
   induction options generalizing selectors with
-  | nil =>
-    intro _ left member
-    simp at member
+  | nil => simp
   | cons option rest ih =>
     intro checked left leftIn right rightIn
     rw [Desc.optionsCompatible] at checked
     -- A clash with any later option would have been found, and the search found none.
     cases searched : (List.range rest.length).find? (fun slot => !isCompatible option rest[slot]!)
-      with
-    | some _ =>
-      rw [searched] at checked
-      simp [Bind.bind, Except.bind] at checked
-    | none =>
-      rw [searched] at checked
-      -- Each later option is compatible with this one, read off the empty search.
-      have later : ∀ other ∈ rest, isCompatible option other = true := by
-        intro other member
-        obtain ⟨slot, bounded, held⟩ := List.mem_iff_getElem.mp member
-        have missed := List.find?_eq_none.mp searched slot (List.mem_range.mpr bounded)
-        rw [getElem!_pos rest slot bounded, held] at missed
-        simpa using missed
-      -- The four ways two options can be drawn from this list.
-      rcases List.mem_cons.mp leftIn with leftHere | leftLater <;>
-        rcases List.mem_cons.mp rightIn with rightHere | rightLater
-      · rw [leftHere, rightHere]
-        exact isCompatible_refl option
-      · rw [leftHere]
-        exact later right rightLater
-      · rw [rightHere, isCompatible_symm]
-        exact later left leftLater
-      · exact ih (selectors.drop 1) checked left leftLater right rightLater
+      <;> simp only [searched, Bind.bind, Except.bind, reduceCtorEq] at checked
+    -- Each later option is compatible with this one, read off the empty search.
+    have later : ∀ other ∈ rest, isCompatible option other = true := by
+      intro other member
+      obtain ⟨slot, bounded, held⟩ := List.mem_iff_getElem.mp member
+      have missed := List.find?_eq_none.mp searched slot (List.mem_range.mpr bounded)
+      rw [getElem!_pos rest slot bounded, held] at missed
+      simpa using missed
+    -- The four ways two options can be drawn from this list.
+    rcases List.mem_cons.mp leftIn with rfl | leftLater <;>
+      rcases List.mem_cons.mp rightIn with rfl | rightLater
+    · exact isCompatible_refl _
+    · exact later right rightLater
+    · exact (isCompatible_symm _ _).trans (later left leftLater)
+    · exact ih (selectors.drop 1) checked left leftLater right rightLater
 
 /--
 Whichever option a union carries, that option hangs at the same node.
@@ -84,33 +74,13 @@ theorem activeSlots_getElem? : ∀ (active : List Bool) (start ordinal : Nat),
     (activeSlots active start)[ordinal]? = (activePosition active ordinal).map (· + start) := by
   intro active
   induction active with
-  | nil =>
-    intro _ _
-    simp [activeSlots, activePosition]
+  | nil => simp [activeSlots, activePosition]
   | cons present rest ih =>
     intro start ordinal
-    cases present with
-    | false =>
-      -- A gap consumes a position and no ordinal, so the rest answers one position later.
-      simp only [activeSlots, List.zipIdx_cons, List.filterMap_cons, activePosition,
-        Bool.false_eq_true, if_false]
-      rw [show ((rest.zipIdx (start + 1)).filterMap
-        fun (present, position) => if present then some position else none)
-          = activeSlots rest (start + 1) from rfl, ih (start + 1) ordinal]
-      cases activePosition rest ordinal <;> simp <;> omega
-    | true =>
-      cases ordinal with
-      | zero =>
-        -- The first field of the layout sits where the walk has reached.
-        simp [activeSlots, List.zipIdx_cons, activePosition]
-      | succ ordinal =>
-        -- Passing a field consumes both a position and an ordinal.
-        simp only [activeSlots, List.zipIdx_cons, List.filterMap_cons, activePosition,
-          if_true, List.getElem?_cons_succ]
-        rw [show ((rest.zipIdx (start + 1)).filterMap
-          fun (present, position) => if present then some position else none)
-            = activeSlots rest (start + 1) from rfl, ih (start + 1) ordinal]
-        cases activePosition rest ordinal <;> simp <;> omega
+    -- A gap consumes only a position, while a field consumes a position and an ordinal.
+    simp only [activeSlots] at ih ⊢
+    cases present <;> cases ordinal <;>
+      simp [List.zipIdx_cons, activePosition, ih] <;> cases activePosition rest _ <;> simp <;> omega
 
 /-- A placed field appears in the layout's own list of placed fields. -/
 theorem placedOrdinals_mem {active : List Bool} {names : List String}

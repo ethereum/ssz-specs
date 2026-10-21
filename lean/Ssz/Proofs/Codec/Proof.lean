@@ -53,8 +53,7 @@ theorem buildProof_rebuilds_root {shape : Desc} {value : Value} {index : Nat}
   subst branch
   -- The local parent equations reach the root, which the walker identifies with the value.
   rw [branch_rebuilds_root_on_path parents indexed]
-  have root := walk 1 (by simp)
-  simpa only [nodeRoot_root] using root.symm
+  simpa only [nodeRoot_root] using (walk 1 (by simp)).symm
 
 /-- Zero is rejected independently of the type and value being walked. -/
 theorem nodeRoot_zero (shape : Desc) (value : Value) :

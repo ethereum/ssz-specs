@@ -51,9 +51,7 @@ theorem serializeEach_basic_size {shape : Desc} (basic : shape.isBasic = true) :
       (parts.foldl (fun total part => total ++ part) front).size =
         front.size + (parts.map Array.size).sum := by
     intro parts
-    induction parts with
-    | nil => intro front; simp
-    | cons part parts ih => intro front; simp [ih, Nat.add_assoc]
+    induction parts <;> simp [*, Nat.add_assoc]
   intro values
   induction values with
   | nil => intro _; exact ⟨[], by simp [serializeEach], by simp⟩
@@ -78,9 +76,8 @@ private theorem sequence_fits {element : Desc} {values : List Value}
     refine ⟨.nesting (values.map fun value => some (element, value)) positions mixin,
       by simp [sequenceLayout, basic, pure, Except.pure], ?_, ?_⟩
     · intro shape value member
-      simp only [List.mem_map, Option.some.injEq, Prod.mk.injEq] at member
-      obtain ⟨item, member, rfl, rfl⟩ := member
-      exact ⟨each item member, sound⟩
+      obtain ⟨inside, rfl⟩ := by simpa using member
+      exact ⟨each value inside, sound⟩
     · simpa [MerkleLayout.nesting, Leaves.count] using bounded
   | true =>
     -- A basic sequence occupies its element count times its declared byte width.
@@ -90,16 +87,12 @@ private theorem sequence_fits {element : Desc} {values : List Value}
       by simp [sequenceLayout, basic, wrote, Bind.bind, Except.bind, pure, Except.pure], ?_⟩
     apply packed_fits
     intro capacity named
-    cases positions with
-    | none => simp at named
-    | some count =>
-      simp only [Option.map_some, Option.some.injEq] at named
-      subst capacity
-      change chunksForBytes (parts.foldl _ (#[] : Bytes)).size ≤ _
-      rw [sized]
-      unfold chunksForBytes
-      exact Nat.div_le_div_right (Nat.sub_le_sub_right
-        (Nat.add_le_add_right (Nat.mul_le_mul_right _ (bounded count rfl)) _) _)
+    obtain ⟨count, rfl, rfl⟩ := Option.map_eq_some_iff.mp named
+    change chunksForBytes (parts.foldl _ (#[] : Bytes)).size ≤ _
+    rw [sized]
+    unfold chunksForBytes
+    exact Nat.div_le_div_right (Nat.sub_le_sub_right
+      (Nat.add_le_add_right (Nat.mul_le_mul_right _ (bounded count rfl)) _) _)
 
 /-- A matching active-field count supplies exactly one slot per layout position. -/
 theorem placeSlots_exists : ∀ active fields,
@@ -109,9 +102,7 @@ theorem placeSlots_exists : ∀ active fields,
   induction active with
   | nil =>
     intro fields counted
-    have empty : fields = [] := List.eq_nil_of_length_eq_zero (by simpa using counted.symm)
-    subst fields
-    exact ⟨[], rfl⟩
+    cases fields <;> simp_all [placeSlots]
   | cons bit active ih =>
     intro fields counted
     cases bit with
@@ -143,8 +134,7 @@ private theorem fixed_fits {shape : Desc} {value : Value} {bytes : Bytes}
   refine ⟨.packing (packBytes bytes) (some (packBytes bytes).size),
     by simp [fixedLeaf, wrote, Bind.bind, Except.bind, pure, Except.pure], ?_⟩
   apply packed_fits
-  intro capacity named
-  cases named
+  rintro _ ⟨⟩
   simp [chunksForBytes]
 
 private theorem bits_fits (data : Array Bool) (limit : Option Nat) (mixin : Option Bytes)
@@ -170,23 +160,20 @@ theorem layout_exists {shape : Desc} {value : Value}
     refine ⟨.packing (packBytes data) (some (chunksForBytes limit)) (lengthWord data.size),
       by simp [merkleLayout, Nat.not_lt.mpr within, pure, Except.pure], ?_⟩
     apply packed_fits
-    intro capacity named
-    cases named
+    rintro _ ⟨⟩
     unfold chunksForBytes
     exact Nat.div_le_div_right (Nat.sub_le_sub_right (Nat.add_le_add_right within _) _)
   | @bitVector length data exact =>
     refine ⟨.packing (packedBits data) (some (chunksForBits length)),
       by simp [merkleLayout, exact, pure, Except.pure], ?_⟩
     apply bits_fits
-    intro capacity named
-    cases named
+    rintro _ ⟨⟩
     simp [exact]
   | @bitList limit data within =>
     refine ⟨.packing (packedBits data) (some (chunksForBits limit)) (lengthWord data.size),
       by simp [merkleLayout, Nat.not_lt.mpr within, pure, Except.pure], ?_⟩
     apply bits_fits
-    intro capacity named
-    cases named
+    rintro _ ⟨⟩
     unfold chunksForBits
     exact Nat.div_le_div_right (Nat.sub_le_sub_right (Nat.add_le_add_right within _) _)
   | progressiveBitList =>
@@ -206,8 +193,7 @@ theorem layout_exists {shape : Desc} {value : Value}
     refine ⟨.nesting ((fields.zip values).map some) (some fields.length),
       by simp [merkleLayout, paired, pure, Except.pure], ?_, ?_⟩
     · intro child inner member
-      simp only [List.mem_map, Option.some.injEq] at member
-      obtain ⟨pair, member, rfl⟩ := member
+      replace member : (child, inner) ∈ fields.zip values := by simpa using member
       exact ⟨each (child, inner) member, allWellFormed_mem _ (wellFormed_container sound)
         child (List.of_mem_zip member).1⟩
     · simp [MerkleLayout.nesting, Leaves.count, paired]
@@ -230,8 +216,7 @@ theorem layout_exists {shape : Desc} {value : Value}
       by simp [merkleLayout, named, selectorWord, show ¬ selector > 255 by omega,
       Bind.bind, Except.bind, pure, Except.pure], ?_, ?_⟩
     · intro child value member
-      simp only [List.mem_singleton, Option.some.injEq, Prod.mk.injEq] at member
-      rcases member with ⟨rfl, rfl⟩
+      obtain ⟨rfl, rfl⟩ := by simpa using member
       exact ⟨inner, allWellFormed_mem _ (wellFormed_union sound) _ (lookupOption_mem _ _ _ _ named)⟩
     · simp [MerkleLayout.nesting, Leaves.count]
 
@@ -261,10 +246,7 @@ private theorem root_slots (budget : Nat) : ∀ slots : List (Option (Desc × Va
     obtain ⟨root, first, sized⟩ := head
     refine ⟨root :: tail, ?_, ?_⟩
     · simp only [List.mapM_cons, first, rooted, Bind.bind, Except.bind, pure, Except.pure]
-    · intro chunk member
-      rcases List.mem_cons.mp member with rfl | member
-      · exact sized
-      · exact widths chunk member
+    · exact List.forall_mem_cons.mpr ⟨sized, widths⟩
 
 private theorem materialize_layout (budget : Nat) (layout : MerkleLayout)
     (fitted : LayoutFits layout)
@@ -290,8 +272,7 @@ private theorem materialize_layout (budget : Nat) (layout : MerkleLayout)
       congr 2
     refine ⟨chunks.toArray, wrote, ?_, ?_⟩
     · simpa using widths
-    · rw [layoutChunksAt_size _ _ _ wrote]
-      exact fitted.2
+    · exact layoutChunksAt_size _ _ _ wrote ▸ fitted.2
 
 /-- A sufficient type-depth budget roots every admissible value into one complete node. -/
 theorem hashTreeRootAt_total (budget : Nat) (shape : Desc) (value : Value)

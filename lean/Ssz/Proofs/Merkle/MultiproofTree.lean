@@ -110,10 +110,7 @@ private theorem foldLevelNodes_local_agrees {tree : Nat → Bytes} {depth : Nat}
     NodesAgree tree (outParents ++ outKept) := by
   -- Follow the executable worker while maintaining agreement for both output groups.
   induction pending generalizing outParents outKept with
-  | nil =>
-    simp [foldLevelNodes] at folded
-    rcases folded with ⟨rfl, rfl⟩
-    simp [NodesAgree]
+  | nil => simp_all [foldLevelNodes, NodesAgree]
   | cons pair rest ih =>
     rcases pair with ⟨index, value⟩
     have head : value = tree index := pendingAgree index value (by simp)
@@ -124,19 +121,12 @@ private theorem foldLevelNodes_local_agrees {tree : Nat → Bytes} {depth : Nat}
     simp only [foldLevelNodes] at folded
     split at folded
     · -- Shallower nodes retain the same stored value and subtree.
-      cases rec : foldLevelNodes depth nodes rest with
-      | error error => simp [rec, Bind.bind, Except.bind] at folded
-      | ok result =>
-        rcases result with ⟨ps, ks⟩
+      cases rec : foldLevelNodes depth nodes rest <;>
         simp [rec, Bind.bind, Except.bind, Pure.pure, Except.pure] at folded
-        rcases folded with ⟨rfl, rfl⟩
-        have agrees := ih remaining tail rec
-        intro i v member
-        simp only [List.mem_append, List.mem_cons] at member
-        rcases member with member | same | member
-        · exact agrees i v (by simp [member])
-        · cases same; exact head
-        · exact agrees i v (by simp [member])
+      rcases folded with ⟨rfl, rfl⟩
+      have agrees := ih remaining tail rec
+      simp only [NodesAgree, List.mem_append, List.mem_cons] at agrees ⊢
+      grind
     · rename_i atDepth
       have atDepth : levelOf index = depth := by simpa using atDepth
       split at folded
@@ -147,21 +137,13 @@ private theorem foldLevelNodes_local_agrees {tree : Nat → Bytes} {depth : Nat}
         | some siblingValue =>
           -- The even child owns the hash, and lookup supplies the matching right subtree.
           have siblingAgrees := nodeAt_agrees allAgree sibling
-          cases rec : foldLevelNodes depth nodes rest with
-          | error error => simp [sibling, rec, Bind.bind, Except.bind] at folded
-          | ok result =>
-            rcases result with ⟨ps, ks⟩
+          have parent := parents index value List.mem_cons_self atDepth even
+          cases rec : foldLevelNodes depth nodes rest <;>
             simp [sibling, rec, Bind.bind, Except.bind, Pure.pure, Except.pure] at folded
-            rcases folded with ⟨rfl, rfl⟩
-            have agrees := ih remaining tail rec
-            intro i v member
-            simp only [List.mem_append, List.mem_cons] at member
-            rcases member with (same | member) | member
-            · cases same
-              rw [head, siblingAgrees]
-              exact parents index value List.mem_cons_self atDepth even
-            · exact agrees i v (by simp [member])
-            · exact agrees i v (by simp [member])
+          rcases folded with ⟨rfl, rfl⟩
+          have agrees := ih remaining tail rec
+          simp only [NodesAgree, List.mem_append, List.mem_cons] at agrees ⊢
+          grind
       · -- The odd child contributes no second parent.
         split at folded
         · simp [throw] at folded
@@ -176,18 +158,14 @@ theorem foldLevel_proofTree {source nodes result : List (Nat × Bytes)} {height 
     NodesAgree (proofTreeNode source height) result := by
   -- The worker returns parents and retained nodes as the two halves of the next frontier.
   unfold foldLevel at folded
-  cases rec : foldLevelNodes depth nodes nodes with
-  | error fault => simp [rec, Bind.bind, Except.bind] at folded
-  | ok pair =>
-    rcases pair with ⟨parents, kept⟩
+  cases rec : foldLevelNodes depth nodes nodes <;>
     simp [rec, Bind.bind, Except.bind, Pure.pure, Except.pure] at folded
-    subst result
-    apply foldLevelNodes_local_agrees (tree := proofTreeNode source height) _ agree agree rec
-    intro index value member atDepth even
-    have low := two_le_of_level_positive atDepth positive
-    apply proofTreeNode_parent low (by omega) even
-    exact source_parent_absent separated
-      (supported index (List.mem_map.mpr ⟨_, member, rfl⟩)) low
+  subst result
+  apply foldLevelNodes_local_agrees (tree := proofTreeNode source height) _ agree agree rec
+  intro index value member atDepth even
+  have low := two_le_of_level_positive atDepth positive
+  apply proofTreeNode_parent low (by omega) even
+  exact source_parent_absent separated (supported index (List.mem_map.mpr ⟨_, member, rfl⟩)) low
 
 /-- Every successful fold agrees with the tree cut at its original proof frontier. -/
 theorem foldToRoot_proofTree {source : List (Nat × Bytes)} {height : Nat}
@@ -200,13 +178,9 @@ theorem foldToRoot_proofTree {source : List (Nat × Bytes)} {height : Nat}
   induction depth with
   | zero =>
     intro _ nodes _ agree root built
-    simp only [foldToRoot] at built
-    cases found : nodeAt nodes 1 with
-    | none => simp [found] at built
-    | some value =>
-      simp [found] at built
-      subst root
-      simpa [proofTreeNode, show levelOf 1 = 0 from rfl] using nodeAt_agrees agree found
+    cases found : nodeAt nodes 1 <;> simp [foldToRoot, found] at built
+    subst root
+    simpa [proofTreeNode, show levelOf 1 = 0 from rfl] using nodeAt_agrees agree found
   | succ depth ih =>
     intro bounded nodes supported agree root built
     simp only [foldToRoot] at built
@@ -286,15 +260,21 @@ theorem proofTree_complete {nodes : List (Nat × Bytes)}
     (widths : ∀ index value, (index, value) ∈ nodes → value.size = bytesPerChunk)
     (height index : Nat) : (proofTree nodes height index).Complete := by
   -- Supplied leaves have validated widths, and absent bottom leaves use the zero chunk.
-  induction height generalizing index with
-  | zero =>
-    cases found : nodeAt nodes index with
-    | none => simp [proofTree, found, CommitmentTree.Complete, zeroChunk_size]
-    | some value => simpa [proofTree, found, CommitmentTree.Complete] using widths _ _ (nodeAt_member found)
-  | succ height ih =>
-    cases found : nodeAt nodes index with
-    | none => simpa [proofTree, found, CommitmentTree.Complete] using And.intro (ih (2 * index)) (ih (2 * index + 1))
-    | some value => simpa [proofTree, found, CommitmentTree.Complete] using widths _ _ (nodeAt_member found)
+  induction height generalizing index <;> cases found : nodeAt nodes index <;>
+    simp [proofTree, CommitmentTree.Complete, zeroChunk_size, *] <;>
+    exact widths _ _ (nodeAt_member found)
+
+/-- A strict ancestor of a supplied node is not supplied itself. -/
+private theorem nodeAt_ancestor_absent {nodes : List (Nat × Bytes)} (separated : ProofAntichain nodes)
+    {target start step : Nat} {value : Bytes} (found : nodeAt nodes target = some value)
+    (descended : target >>> step = start) (above : start < target) : nodeAt nodes start = none := by
+  -- A supplied ancestor would have to be the node below it, which it strictly precedes.
+  cases supplied : nodeAt nodes start with
+  | none => rfl
+  | some _ =>
+    have := separated target (List.mem_map.mpr ⟨_, nodeAt_member found, rfl⟩) start
+      (List.mem_map.mpr ⟨_, nodeAt_member supplied, rfl⟩) _ descended
+    omega
 
 /-- Equality of reconstruction trees preserves every supplied node on their common frontier. -/
 theorem proofTree_supplied_injective {left right : List (Nat × Bytes)}
@@ -305,10 +285,6 @@ theorem proofTree_supplied_injective {left right : List (Nat × Bytes)}
     ∀ distance height start, distance ≤ height → 1 ≤ start → target >>> distance = start →
       proofTree left height start = proofTree right height start → first = second := by
   -- Both frontiers contain the target, so neither can stop at an earlier ancestor.
-  have leftMember : target ∈ left.map Prod.fst :=
-    List.mem_map.mpr ⟨_, nodeAt_member leftFound, rfl⟩
-  have rightMember : target ∈ right.map Prod.fst :=
-    List.mem_map.mpr ⟨_, nodeAt_member rightFound, rfl⟩
   intro distance
   induction distance with
   | zero =>
@@ -320,35 +296,17 @@ theorem proofTree_supplied_injective {left right : List (Nat × Bytes)}
     exact CommitmentTree.leaf.inj same
   | succ distance ih =>
     intro height start bounded positive descended same
-    cases height with
-    | zero => omega
-    | succ height =>
-      -- Removing the next low bit identifies the child on the common path.
-      have half : (target >>> distance) / 2 = start := by
-        simpa [shiftRight_succ] using descended
-      have targetAbove : start < target := by
-        have below := shiftRight_le target distance
-        omega
-      have leftAbsent : nodeAt left start = none := by
-        cases found : nodeAt left start with
-        | none => rfl
-        | some value =>
-          have member : start ∈ left.map Prod.fst :=
-            List.mem_map.mpr ⟨_, nodeAt_member found, rfl⟩
-          have := leftSeparated target leftMember start member _ descended
-          omega
-      have rightAbsent : nodeAt right start = none := by
-        cases found : nodeAt right start with
-        | none => rfl
-        | some value =>
-          have member : start ∈ right.map Prod.fst :=
-            List.mem_map.mpr ⟨_, nodeAt_member found, rfl⟩
-          have := rightSeparated target rightMember start member _ descended
-          omega
-      simp only [proofTree, leftAbsent, rightAbsent, CommitmentTree.fork.injEq] at same
-      rcases Nat.mod_two_eq_zero_or_one (target >>> distance) with even | odd
-      · exact ih height (2 * start) (by omega) (by omega) (by omega) same.1
-      · exact ih height (2 * start + 1) (by omega) (by omega) (by omega) same.2
+    obtain _ | height := height; · omega
+    -- Removing the next low bit identifies the child on the common path.
+    have half : (target >>> distance) / 2 = start := by
+      simpa [shiftRight_succ] using descended
+    have targetAbove : start < target := by have := shiftRight_le target distance; omega
+    have leftAbsent := nodeAt_ancestor_absent leftSeparated leftFound descended targetAbove
+    have rightAbsent := nodeAt_ancestor_absent rightSeparated rightFound descended targetAbove
+    simp only [proofTree, leftAbsent, rightAbsent, CommitmentTree.fork.injEq] at same
+    rcases Nat.mod_two_eq_zero_or_one (target >>> distance) with even | odd
+    · exact ih height (2 * start) (by omega) (by omega) (by omega) same.1
+    · exact ih height (2 * start + 1) (by omega) (by omega) (by omega) same.2
 
 /-- A fixed valid proof frontier binds every supplied node unless reconstruction hashes collide. -/
 theorem proofTree_binding {left right : List (Nat × Bytes)} {height : Nat}
@@ -362,12 +320,10 @@ theorem proofTree_binding {left right : List (Nat × Bytes)} {height : Nat}
     (rightFound : nodeAt right index = some second) :
     first = second ∨ CommitmentTree.Collision (proofTree left height 1) (proofTree right height 1) := by
   -- A shared frontier fixes the complete tree shape before its hashes are compared.
-  rcases CommitmentTree.binding _ _ (proofTree_complete leftWidths height 1)
-    (proofTree_complete rightWidths height 1) (proofTree_sameShape positions height 1) same with
-      equal | collision
-  · exact .inl (proofTree_supplied_injective leftSeparated rightSeparated leftFound rightFound
-      (Nat.log2 index) height 1 bounded (by decide) (shiftRight_depth positive) equal)
-  · exact .inr collision
+  exact (CommitmentTree.binding _ _ (proofTree_complete leftWidths height 1)
+    (proofTree_complete rightWidths height 1) (proofTree_sameShape positions height 1) same).imp_left
+      (proofTree_supplied_injective leftSeparated rightSeparated leftFound rightFound
+        (Nat.log2 index) height 1 bounded (by decide) (shiftRight_depth positive))
 
 /--
 Different proof frontiers still bind any node they both open.
@@ -386,10 +342,6 @@ theorem proofTree_opening_binding {left right : List (Nat × Bytes)}
       first = second ∨ CommitmentTree.Collision
         (proofTree left leftHeight start) (proofTree right rightHeight start) := by
   -- Both frontiers contain the target, so neither can stop at an earlier ancestor.
-  have leftMember : target ∈ left.map Prod.fst :=
-    List.mem_map.mpr ⟨_, nodeAt_member leftFound, rfl⟩
-  have rightMember : target ∈ right.map Prod.fst :=
-    List.mem_map.mpr ⟨_, nodeAt_member rightFound, rfl⟩
   intro distance
   induction distance with
   | zero =>
@@ -401,49 +353,25 @@ theorem proofTree_opening_binding {left right : List (Nat × Bytes)}
     exact .inl same
   | succ distance ih =>
     intro leftHeight rightHeight start leftBound rightBound positive descended same
-    cases leftHeight with
-    | zero => omega
-    | succ leftHeight =>
-      cases rightHeight with
-      | zero => omega
-      | succ rightHeight =>
-        -- The next child is determined by the target index, independently of the proof frontier.
-        have half : (target >>> distance) / 2 = start := by
-          simpa [shiftRight_succ] using descended
-        have targetAbove : start < target := by
-          have below := shiftRight_le target distance
-          omega
-        have leftAbsent : nodeAt left start = none := by
-          cases found : nodeAt left start with
-          | none => rfl
-          | some value =>
-            have member : start ∈ left.map Prod.fst :=
-              List.mem_map.mpr ⟨_, nodeAt_member found, rfl⟩
-            have := leftSeparated target leftMember start member _ descended
-            omega
-        have rightAbsent : nodeAt right start = none := by
-          cases found : nodeAt right start with
-          | none => rfl
-          | some value =>
-            have member : start ∈ right.map Prod.fst :=
-              List.mem_map.mpr ⟨_, nodeAt_member found, rfl⟩
-            have := rightSeparated target rightMember start member _ descended
-            omega
-        simp only [proofTree, leftAbsent, rightAbsent] at same ⊢
-        have leftComplete := proofTree_complete leftWidths (leftHeight + 1) start
-        have rightComplete := proofTree_complete rightWidths (rightHeight + 1) start
-        simp only [proofTree, leftAbsent, rightAbsent] at leftComplete rightComplete
-        -- Equal parent hashes either preserve both child roots or already witness a collision.
-        rcases CommitmentTree.fork_binding leftComplete rightComplete same with children | collision
-        · rcases Nat.mod_two_eq_zero_or_one (target >>> distance) with even | odd
-          · rcases ih leftHeight rightHeight (2 * start) (by omega) (by omega)
-              (by omega) (by omega) children.1 with equal | collision
-            · exact .inl equal
-            · exact .inr (collision.left _ _)
-          · rcases ih leftHeight rightHeight (2 * start + 1) (by omega) (by omega)
-              (by omega) (by omega) children.2 with equal | collision
-            · exact .inl equal
-            · exact .inr (collision.right _ _)
-        · exact .inr collision
+    obtain _ | leftHeight := leftHeight; · omega
+    obtain _ | rightHeight := rightHeight; · omega
+    -- The next child is determined by the target index, independently of the proof frontier.
+    have half : (target >>> distance) / 2 = start := by
+      simpa [shiftRight_succ] using descended
+    have targetAbove : start < target := by have := shiftRight_le target distance; omega
+    have leftAbsent := nodeAt_ancestor_absent leftSeparated leftFound descended targetAbove
+    have rightAbsent := nodeAt_ancestor_absent rightSeparated rightFound descended targetAbove
+    simp only [proofTree, leftAbsent, rightAbsent] at same ⊢
+    have leftComplete := proofTree_complete leftWidths (leftHeight + 1) start
+    have rightComplete := proofTree_complete rightWidths (rightHeight + 1) start
+    simp only [proofTree, leftAbsent, rightAbsent] at leftComplete rightComplete
+    -- Equal parent hashes either preserve both child roots or already witness a collision.
+    rcases CommitmentTree.fork_binding leftComplete rightComplete same with children | collision
+    · rcases Nat.mod_two_eq_zero_or_one (target >>> distance) with even | odd
+      · exact (ih leftHeight rightHeight (2 * start) (by omega) (by omega)
+          (by omega) (by omega) children.1).imp_right (·.left _ _)
+      · exact (ih leftHeight rightHeight (2 * start + 1) (by omega) (by omega)
+          (by omega) (by omega) children.2).imp_right (·.right _ _)
+    · exact .inr collision
 
 end Ssz

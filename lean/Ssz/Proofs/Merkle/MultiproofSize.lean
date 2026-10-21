@@ -11,53 +11,37 @@ private theorem dedup_info (indices : List Nat) :
   | cons head rest =>
     rw [List.eraseDups_cons]
     have filtered := dedup_info (rest.filter fun item => !item == head)
-    constructor
-    · exact List.Sublist.cons_cons _ (filtered.1.trans (List.filter_sublist))
-    · rw [List.nodup_cons]
-      refine ⟨?_, filtered.2⟩
-      simp
+    exact ⟨.cons_cons _ (filtered.1.trans List.filter_sublist),
+      List.nodup_cons.mpr ⟨by simp, filtered.2⟩⟩
 termination_by indices.length
 decreasing_by have := List.length_filter_le (fun item => !item == head) rest; simp_all; omega
 
 /-- The paths of a request hold one node per level below the root for each claim. -/
 theorem claimPaths_length (indices : List Nat) :
     (claimPaths indices).length = (indices.map levelOf).sum := by
-  have unfolded : indices.map levelOf = indices.map Nat.log2 := rfl
-  rw [unfolded]
+  -- Each claim contributes one node per level, and the level is the logarithm.
   simp [claimPaths]
+  rfl
 
 /-- Building the helper list never produces more nodes than the claims have ancestors. -/
 theorem getHelperIndices_length_le_claimPaths {indices helpers : List Nat}
     (built : getHelperIndices indices = .ok helpers) :
     helpers.length ≤ (claimPaths indices).length := by
   unfold getHelperIndices at built
-  cases accepted : rejectRelated indices with
-  | error fault => simp [accepted, Bind.bind, Except.bind] at built
-  | ok checked =>
-    cases checked
-    cases collected : collectPathIndices indices with
-    | error fault => simp [accepted, collected, Bind.bind, Except.bind] at built
-    | ok paths =>
-      obtain ⟨shape, _⟩ := collectPathIndices_info collected
-      simp [accepted, collected, Bind.bind, Except.bind, Pure.pure, Except.pure] at built
-      subst helpers
-      rw [← shape, List.length_mergeSort]
-      refine Nat.le_trans (List.length_filter_le _ _) ?_
-      refine Nat.le_trans (dedup_info _).1.length_le ?_
-      simp
+  cases accepted : rejectRelated indices <;> cases collected : collectPathIndices indices <;>
+    simp [accepted, collected, Bind.bind, Except.bind, Pure.pure, Except.pure] at built
+  subst helpers
+  obtain ⟨shape, _⟩ := collectPathIndices_info collected
+  rw [← shape, List.length_mergeSort]
+  refine Nat.le_trans (List.length_filter_le _ _) ?_
+  refine Nat.le_trans (dedup_info _).1.length_le ?_
+  simp
 
 private theorem sum_map_levelOf {indices : List Nat} {depth : Nat}
     (uniform : ∀ index ∈ indices, levelOf index = depth) :
     (indices.map levelOf).sum = indices.length * depth := by
-  induction indices with
-  | nil => simp
-  | cons head rest ih =>
-    have tail : ∀ index ∈ rest, levelOf index = depth :=
-      fun index member => uniform index (List.mem_cons_of_mem _ member)
-    simp only [List.map_cons, List.sum_cons, uniform head List.mem_cons_self, ih tail,
-      List.length_cons]
-    rw [Nat.add_mul, Nat.one_mul]
-    omega
+  induction indices <;> simp_all [Nat.add_mul]
+  omega
 
 /--
 A proof of several nodes at one depth carries at most one helper per claim per level.
@@ -68,9 +52,8 @@ theorem getHelperIndices_length_le_depth {indices helpers : List Nat} {depth : N
     (built : getHelperIndices indices = .ok helpers)
     (uniform : ∀ index ∈ indices, levelOf index = depth) :
     helpers.length ≤ indices.length * depth := by
-  have bound := getHelperIndices_length_le_claimPaths built
-  rw [claimPaths_length, sum_map_levelOf uniform] at bound
-  exact bound
+  simpa [claimPaths_length, sum_map_levelOf uniform] using
+    getHelperIndices_length_le_claimPaths built
 
 /--
 Claiming every node at one depth leaves the proof with nothing to carry.
@@ -98,34 +81,26 @@ theorem getHelperIndices_full_level {indices helpers : List Nat} {depth : Nat}
   subst ancestor
   have positive : 0 < 2 ^ step := Nat.two_pow_pos step
   have split : 2 ^ depth = 2 ^ (depth - step) * 2 ^ step := by
-    rw [← Nat.pow_add]
-    congr 1
-    omega
+    rw [← Nat.pow_add, Nat.sub_add_cancel (Nat.le_of_lt below)]
   have splitUp : 2 ^ (depth + 1) = 2 ^ (depth - step + 1) * 2 ^ step := by
-    rw [← Nat.pow_add]
-    congr 1
-    omega
+    rw [← Nat.pow_add, show depth - step + 1 + step = depth + 1 by omega]
   have ancestorLower : 2 ^ (depth - step) ≤ claim / 2 ^ step :=
     (Nat.le_div_iff_mul_le positive).mpr (by rw [← split]; exact lower)
   have ancestorUpper : claim / 2 ^ step < 2 ^ (depth - step + 1) :=
     Nat.div_lt_of_lt_mul (by rw [Nat.mul_comm, ← splitUp]; exact upper)
   have even : 2 ^ (depth - step) = 2 * 2 ^ (depth - step - 1) := by
-    rw [← Nat.pow_succ']
-    congr 1
-    omega
+    rw [← Nat.pow_succ', Nat.succ_eq_add_one, Nat.sub_add_cancel (by omega)]
   have evenUp : 2 ^ (depth - step + 1) = 4 * 2 ^ (depth - step - 1) := by
-    rw [show depth - step + 1 = (depth - step - 1) + 2 by omega, Nat.pow_add]
+    rw [Nat.pow_succ, even]
     omega
   have half := gindexSibling_half (claim / 2 ^ step)
   have parity := gindexSibling_parity (claim / 2 ^ step)
   have siblingLower : 2 ^ (depth - step) ≤ gindexSibling (claim / 2 ^ step) := by omega
   have siblingUpper : gindexSibling (claim / 2 ^ step) < 2 ^ (depth - step + 1) := by omega
-  have targetLower : 2 ^ depth ≤ gindexSibling (claim / 2 ^ step) * 2 ^ step := by
-    rw [split]
-    exact Nat.mul_le_mul_right _ siblingLower
-  have targetUpper : gindexSibling (claim / 2 ^ step) * 2 ^ step < 2 ^ (depth + 1) := by
-    rw [splitUp]
-    exact Nat.mul_lt_mul_of_lt_of_le siblingUpper (Nat.le_refl _) positive
+  have targetLower : 2 ^ depth ≤ gindexSibling (claim / 2 ^ step) * 2 ^ step :=
+    split ▸ Nat.mul_le_mul_right _ siblingLower
+  have targetUpper : gindexSibling (claim / 2 ^ step) * 2 ^ step < 2 ^ (depth + 1) :=
+    splitUp ▸ Nat.mul_lt_mul_of_lt_of_le siblingUpper (Nat.le_refl _) positive
   have targetClaimed := complete _ targetLower targetUpper
   have targetDepth : Nat.log2 (gindexSibling (claim / 2 ^ step) * 2 ^ step) = depth :=
     uniform _ targetClaimed
@@ -150,26 +125,16 @@ theorem sharedPaths_nodup (indices : List Nat) : (sharedPaths indices).Nodup :=
 private theorem length_filter_split (l : List Nat) (bound : Nat) :
     (l.filter fun node => node < bound).length + (l.filter fun node => bound ≤ node).length
       = l.length := by
+  -- Each node lands in exactly one of the two filters.
   induction l with
   | nil => simp
   | cons head rest ih =>
-    rw [List.filter_cons, List.filter_cons]
-    by_cases small : head < bound
-    · have other : ¬ bound ≤ head := by omega
-      simp [small, other]
-      omega
-    · have other : bound ≤ head := by omega
-      simp [small, other]
-      omega
+    by_cases small : head < bound <;> simp [small, Nat.le_of_not_lt, Nat.not_le_of_lt] <;> omega
 
 private theorem sum_map_const (l : List Nat) (value : Nat) :
     (l.map fun _ => value).sum = l.length * value := by
-  induction l with
-  | nil => simp
-  | cons head rest ih =>
-    simp only [List.map_cons, List.sum_cons, ih, List.length_cons]
-    rw [Nat.add_mul, Nat.one_mul]
-    omega
+  induction l <;> simp_all [Nat.add_mul]
+  omega
 
 private theorem claimPaths_lt {indices : List Nat} {depth : Nat}
     (uniform : ∀ index ∈ indices, levelOf index = depth) {node : Nat}
@@ -189,9 +154,7 @@ private theorem helper_lt {indices helpers : List Nat} {depth : Nat}
   obtain ⟨ancestor, onPath, flipped⟩ := List.mem_map.mp mapped
   subst node
   have bound := claimPaths_lt uniform onPath
-  have even : (2:Nat) ^ (depth + 1) = 2 * 2 ^ depth := by
-    rw [Nat.pow_succ]
-    omega
+  have even : (2:Nat) ^ (depth + 1) = 2 * 2 ^ depth := Nat.pow_succ'
   have half := gindexSibling_half ancestor
   have parity := gindexSibling_parity ancestor
   omega
@@ -209,9 +172,7 @@ private theorem frontier_nodup {indices helpers : List Nat}
 private theorem children_length (parents : List Nat) :
     (parents.flatMap fun parent => [2 * parent, 2 * parent + 1]).length
       = 2 * parents.length := by
-  rw [List.length_flatMap,
-    show (parents.map fun parent => ([2 * parent, 2 * parent + 1] : List Nat).length)
-      = parents.map (fun _ => 2) from rfl, sum_map_const]
+  simp [List.length_flatMap, sum_map_const]
   omega
 
 private theorem frontier_subset_children {indices helpers : List Nat} {depth : Nat}
@@ -221,29 +182,30 @@ private theorem frontier_subset_children {indices helpers : List Nat} {depth : N
       (((sharedPaths indices).filter fun node => node < 2 ^ depth) ++ [1]).flatMap
         fun parent => [2 * parent, 2 * parent + 1] := by
   intro node member
-  have classified : node ∈ claimPaths indices ∨ node ∈ helpers := by
+  obtain ⟨classified, bound⟩ : (node ∈ claimPaths indices ∨ node ∈ helpers) ∧
+      node < 2 ^ (depth + 1) := by
     rcases List.mem_append.mp member with supplied | shared
-    · exact Or.inr supplied
-    · exact Or.inl (mem_sharedPaths.mp shared)
-  have bound : node < 2 ^ (depth + 1) := by
-    rcases List.mem_append.mp member with supplied | shared
-    · exact helper_lt built uniform supplied
-    · exact claimPaths_lt uniform (mem_sharedPaths.mp shared)
-  have even : (2:Nat) ^ (depth + 1) = 2 * 2 ^ depth := by
-    rw [Nat.pow_succ]
-    omega
+    · exact ⟨Or.inr supplied, helper_lt built uniform supplied⟩
+    · have onPath := mem_sharedPaths.mp shared
+      exact ⟨Or.inl onPath, claimPaths_lt uniform onPath⟩
+  have even : (2:Nat) ^ (depth + 1) = 2 * 2 ^ depth := Nat.pow_succ'
   have small : node / 2 < 2 ^ depth := by omega
   obtain ⟨_, _, parent⟩ := helperFrontier_sibling built classified
   refine List.mem_flatMap.mpr ⟨node / 2, ?_, ?_⟩
   · rcases parent with root | onPath
-    · rw [root]
-      simp
+    · simp [root]
     · exact List.mem_append_left _ (List.mem_filter.mpr
         ⟨mem_sharedPaths.mpr onPath, by simpa using small⟩)
-  · refine List.mem_cons.mpr ?_
-    rcases Nat.mod_two_eq_zero_or_one node with left | right
-    · exact Or.inl (by omega)
-    · exact Or.inr (List.mem_cons.mpr (Or.inl (by omega)))
+  -- The node is the even or the odd child of its half.
+  · simp
+    omega
+
+private theorem claim_lower {indices : List Nat} {depth : Nat}
+    (valid : ∀ index ∈ indices, 2 ≤ index)
+    (uniform : ∀ index ∈ indices, levelOf index = depth) {claim : Nat}
+    (claimed : claim ∈ indices) : 2 ^ depth ≤ claim := by
+  have claimDepth : Nat.log2 claim = depth := uniform claim claimed
+  exact claimDepth ▸ Nat.log2_self_le (by have := valid claim claimed; omega)
 
 /--
 The shared ancestors outnumber the helpers by at least twice the claim count, less two.
@@ -271,11 +233,8 @@ theorem getHelperIndices_length_add_le {indices helpers : List Nat} {depth : Nat
       ≤ ((sharedPaths indices).filter fun node => 2 ^ depth ≤ node).length := by
     refine claims.length_le_of_subset ?_
     intro claim claimed
-    refine List.mem_filter.mpr ⟨mem_sharedPaths.mpr (claim_mem_paths valid claimed), ?_⟩
-    have claimDepth : Nat.log2 claim = depth := uniform claim claimed
-    have reaches := Nat.log2_self_le (show claim ≠ 0 by have := valid claim claimed; omega)
-    rw [claimDepth] at reaches
-    simpa using reaches
+    exact List.mem_filter.mpr ⟨mem_sharedPaths.mpr (claim_mem_paths valid claimed),
+      by simpa using claim_lower valid uniform claimed⟩
   omega
 
 /--
@@ -292,9 +251,7 @@ theorem sharedPaths_length_le {indices : List Nat} {depth : Nat}
   have flatLength : ((List.range (depth - cut)).flatMap
       fun step => indices.map fun claim => claim >>> step).length
       = (depth - cut) * indices.length := by
-    rw [List.length_flatMap]
-    simp only [List.length_map]
-    rw [sum_map_const, List.length_range]
+    simp [List.length_flatMap, sum_map_const]
   have covered : sharedPaths indices ⊆
       ((List.range (2 ^ (cut + 1) - 2)).map fun offset => offset + 2) ++
         (List.range (depth - cut)).flatMap fun step => indices.map fun claim => claim >>> step := by
@@ -309,9 +266,7 @@ theorem sharedPaths_length_le {indices : List Nat} {depth : Nat}
     · have twoLe : 2 ≤ node := (claimPaths_bounds valid (mem_sharedPaths.mp member)).1
       have upper : claim < 2 ^ (depth + 1) := claimDepth ▸ Nat.lt_log2_self
       have splitUp : 2 ^ (depth + 1) = 2 ^ (depth - step + 1) * 2 ^ step := by
-        rw [← Nat.pow_add]
-        congr 1
-        omega
+        rw [← Nat.pow_add, show depth - step + 1 + step = depth + 1 by omega]
       have nodeUpper : node < 2 ^ (depth - step + 1) := by
         rw [← reached, Nat.shiftRight_eq_div_pow]
         exact Nat.div_lt_of_lt_mul (by rw [Nat.mul_comm, ← splitUp]; exact upper)
@@ -319,9 +274,7 @@ theorem sharedPaths_length_le {indices : List Nat} {depth : Nat}
         Nat.pow_le_pow_right (by omega) (by omega)
       exact List.mem_append_left _ (List.mem_map.mpr
         ⟨node - 2, List.mem_range.mpr (by omega), by omega⟩)
-  have pigeon := (sharedPaths_nodup indices).length_le_of_subset covered
-  rw [List.length_append, List.length_map, List.length_range, flatLength] at pigeon
-  exact pigeon
+  simpa [flatLength] using (sharedPaths_nodup indices).length_le_of_subset covered
 
 /--
 A proof of several nodes at one depth carries no helper for the levels the claims share.
@@ -335,17 +288,12 @@ theorem getHelperIndices_length_le_shared {indices helpers : List Nat} {depth : 
     (uniform : ∀ index ∈ indices, levelOf index = depth) :
     helpers.length ≤ indices.length * (depth - Nat.log2 indices.length) := by
   obtain ⟨nonempty, valid, _⟩ := getHelperIndices_frontier built
-  have positive : 1 ≤ indices.length := by
-    cases indices with
-    | nil => exact absurd rfl nonempty
-    | cons _ _ => simp
+  have positive : 1 ≤ indices.length := List.length_pos_iff.mpr nonempty
   have children := getHelperIndices_length_add_le built uniform
   have shared := sharedPaths_length_le uniform valid (Nat.log2 indices.length)
   have reaches : 2 ^ Nat.log2 indices.length ≤ indices.length := Nat.log2_self_le (by omega)
   have double : (2:Nat) ^ (Nat.log2 indices.length + 1)
-      = 2 * 2 ^ Nat.log2 indices.length := by
-    rw [Nat.pow_succ]
-    omega
+      = 2 * 2 ^ Nat.log2 indices.length := Nat.pow_succ'
   rw [Nat.mul_comm]
   omega
 
@@ -362,15 +310,6 @@ private theorem children_nodup {parents : List Nat} (distinct : parents.Nodup) :
     have apart : parent ≠ head := fun same => fresh (same ▸ member)
     simp only [List.mem_cons, List.not_mem_nil, or_false] at here pair
     omega
-
-private theorem claim_lower {indices : List Nat} {depth : Nat}
-    (valid : ∀ index ∈ indices, 2 ≤ index)
-    (uniform : ∀ index ∈ indices, levelOf index = depth) {claim : Nat}
-    (claimed : claim ∈ indices) : 2 ^ depth ≤ claim := by
-  have claimDepth : Nat.log2 claim = depth := uniform claim claimed
-  have reaches := Nat.log2_self_le (show claim ≠ 0 by have := valid claim claimed; omega)
-  rw [claimDepth] at reaches
-  exact reaches
 
 private theorem children_subset_frontier {indices helpers : List Nat} {depth : Nat}
     (built : getHelperIndices indices = .ok helpers)
@@ -390,16 +329,10 @@ private theorem children_subset_frontier {indices helpers : List Nat} {depth : N
     · simp only [List.mem_singleton] at root
       exact ⟨Or.inl root, fun claimed => by have := valid parent claimed; omega⟩
   obtain ⟨left, right⟩ := helperFrontier_children built classified.1 classified.2
-  have place : ∀ node : Nat, (node ∈ claimPaths indices ∨ node ∈ helpers) →
-      node ∈ helpers ++ sharedPaths indices := by
-    intro node reached
-    rcases reached with onPath | supplied
-    · exact List.mem_append_right _ (mem_sharedPaths.mpr onPath)
-    · exact List.mem_append_left _ supplied
+  -- The child is one of the two, and each is a shared ancestor or a helper.
   simp only [List.mem_cons, List.not_mem_nil, or_false] at pair
-  rcases pair with even | odd
-  · exact even ▸ place _ left
-  · exact odd ▸ place _ right
+  rcases pair with rfl | rfl <;> simp only [List.mem_append, mem_sharedPaths]
+    <;> exact Or.symm ‹_›
 
 /--
 The shared ancestors outnumber the helpers by at most twice the claim count, less two.
@@ -433,13 +366,11 @@ theorem getHelperIndices_length_add_ge {indices helpers : List Nat} {depth : Nat
     obtain ⟨claim, claimed, stepMember⟩ := List.mem_flatMap.mp (mem_sharedPaths.mp shared)
     obtain ⟨step, _, reached⟩ := List.mem_map.mp stepMember
     by_cases bottom : step = 0
-    · rw [bottom] at reached
+    · subst bottom
       simpa using reached ▸ claimed
     · have claimDepth : Nat.log2 claim = depth := uniform claim claimed
       have upper : claim < 2 ^ (depth + 1) := claimDepth ▸ Nat.lt_log2_self
-      have even : (2:Nat) ^ (depth + 1) = 2 * 2 ^ depth := by
-        rw [Nat.pow_succ]
-        omega
+      have even : (2:Nat) ^ (depth + 1) = 2 * 2 ^ depth := Nat.pow_succ'
       have climbed : claim >>> step ≤ claim >>> 1 := by
         rw [show step = 1 + (step - 1) by omega, Nat.shiftRight_add]
         exact shiftRight_le _ _
@@ -464,31 +395,23 @@ private theorem digitSum_step (value : Nat) (positive : 0 < value) :
   rw [digitSum]
 
 private theorem digitSum_le : ∀ levels value : Nat, value < 2 ^ levels → digitSum value ≤ levels
-  | 0, value, small => by
-    have : value = 0 := by simpa using small
-    simp [this, digitSum]
+  | 0, value, small => by simp_all [digitSum]
   | levels + 1, value, small => by
     by_cases zero : value = 0
     · simp [zero, digitSum]
-    · have half : value / 2 < 2 ^ levels := by
-        rw [Nat.pow_succ] at small
-        omega
+    · have half : value / 2 < 2 ^ levels := by rw [Nat.pow_succ] at small; omega
       have below := digitSum_le levels (value / 2) half
       rw [digitSum_step value (by omega)]
       omega
 
 private theorem digitSum_le_pred :
     ∀ levels value : Nat, value + 2 ≤ 2 ^ (levels + 1) → digitSum value ≤ levels
-  | 0, value, small => by
-    have : value = 0 := by simpa using small
-    simp [this, digitSum]
+  | 0, value, small => by simp_all [digitSum]
   | levels + 1, value, small => by
     by_cases zero : value = 0
     · simp [zero, digitSum]
     rw [digitSum_step value (by omega)]
-    have grow : (2:Nat) ^ (levels + 2) = 2 * 2 ^ (levels + 1) := by
-      rw [Nat.pow_succ]
-      omega
+    have grow : (2:Nat) ^ (levels + 2) = 2 * 2 ^ (levels + 1) := Nat.pow_succ'
     rcases Nat.mod_two_eq_zero_or_one value with even | odd
     · have half : value / 2 < 2 ^ (levels + 1) := by omega
       have below := digitSum_le (levels + 1) (value / 2) half
@@ -497,23 +420,16 @@ private theorem digitSum_le_pred :
       have below := digitSum_le_pred levels (value / 2) half
       omega
 
-private theorem shiftSum_zero : ∀ levels : Nat, shiftSum levels 0 = 0
-  | 0 => rfl
-  | levels + 1 => by
-    rw [shiftSum]
-    simpa using shiftSum_zero levels
+private theorem shiftSum_zero (levels : Nat) : shiftSum levels 0 = 0 := by
+  induction levels <;> simp_all [shiftSum]
 
 private theorem shiftSum_digitSum :
     ∀ levels value : Nat, value < 2 ^ levels → shiftSum levels value + digitSum value = 2 * value
-  | 0, value, small => by
-    have : value = 0 := by simpa using small
-    simp [this, digitSum, shiftSum]
+  | 0, value, small => by simp_all [digitSum, shiftSum]
   | levels + 1, value, small => by
     by_cases zero : value = 0
     · simp [zero, digitSum, shiftSum, shiftSum_zero]
-    · have half : value / 2 < 2 ^ levels := by
-        rw [Nat.pow_succ] at small
-        omega
+    · have half : value / 2 < 2 ^ levels := by rw [Nat.pow_succ] at small; omega
       have below := shiftSum_digitSum levels (value / 2) half
       rw [digitSum_step value (by omega), shiftSum]
       omega
@@ -523,32 +439,18 @@ private theorem shiftSum_eq (levels value : Nat) :
   induction levels generalizing value with
   | zero => simp [shiftSum]
   | succ levels ih =>
-    rw [shiftSum, ih (value / 2), List.range_succ_eq_map]
-    simp only [List.map_cons, List.sum_cons, List.map_map, Function.comp_def,
-      Nat.shiftRight_zero]
-    congr 1
-    refine congrArg List.sum (List.map_congr_left ?_)
-    intro step _
-    rw [Nat.succ_eq_add_one, Nat.add_comm step 1, Nat.shiftRight_add]
-    rfl
+    -- Halving first is one more shift on every later term.
+    simp [shiftSum, ih, List.range_succ_eq_map, Function.comp_def, Nat.shiftRight_succ_inside]
 
 private theorem sum_map_add (l : List Nat) (f g : Nat → Nat) :
     (l.map fun item => f item + g item).sum = (l.map f).sum + (l.map g).sum := by
-  induction l with
-  | nil => simp
-  | cons head rest ih =>
-    simp only [List.map_cons, List.sum_cons, ih]
-    omega
+  induction l <;> simp_all
+  omega
 
 private theorem sum_map_le {l : List Nat} {f g : Nat → Nat}
     (pointwise : ∀ item ∈ l, f item ≤ g item) : (l.map f).sum ≤ (l.map g).sum := by
-  induction l with
-  | nil => simp
-  | cons head rest ih =>
-    have tail := ih fun item member => pointwise item (List.mem_cons_of_mem _ member)
-    simp only [List.map_cons, List.sum_cons]
-    have front := pointwise head List.mem_cons_self
-    omega
+  induction l <;> simp_all
+  omega
 
 private theorem shift_add_le (first last shift : Nat) (ordered : first ≤ last) :
     (last - first) >>> shift + first >>> shift ≤ last >>> shift := by
@@ -586,28 +488,17 @@ private theorem shift_lower {value depth shift : Nat} (lower : 2 ^ depth ≤ val
     (below : shift ≤ depth) : 2 ^ (depth - shift) ≤ value >>> shift := by
   rw [Nat.shiftRight_eq_div_pow]
   refine (Nat.le_div_iff_mul_le (Nat.two_pow_pos shift)).mpr ?_
-  rw [← Nat.pow_add, show depth - shift + shift = depth by omega]
-  exact lower
+  rwa [← Nat.pow_add, show depth - shift + shift = depth by omega]
 
 private theorem shift_upper {value depth shift : Nat} (upper : value < 2 ^ (depth + 1))
     (below : shift ≤ depth) : value >>> shift < 2 ^ (depth - shift + 1) := by
   rw [Nat.shiftRight_eq_div_pow]
   refine Nat.div_lt_of_lt_mul ?_
-  rw [← Nat.pow_add, show shift + (depth - shift + 1) = depth + 1 by omega]
-  exact upper
-
-private theorem lt_div_add_one_mul {value divisor : Nat} (positive : 0 < divisor) :
-    value < (value / divisor + 1) * divisor := by
-  have divides := Nat.div_add_mod value divisor
-  have remainder := Nat.mod_lt value positive
-  have expand : (value / divisor + 1) * divisor = divisor * (value / divisor) + divisor := by
-    grind
-  omega
+  rwa [← Nat.pow_add, show shift + (depth - shift + 1) = depth + 1 by omega]
 
 private theorem shift_monotone {small large shift : Nat} (ordered : small ≤ large) :
     small >>> shift ≤ large >>> shift := by
-  rw [Nat.shiftRight_eq_div_pow, Nat.shiftRight_eq_div_pow]
-  exact Nat.div_le_div_right ordered
+  simpa [Nat.shiftRight_eq_div_pow] using Nat.div_le_div_right ordered
 
 private theorem run_mem_claimPaths {first count depth shift node : Nat}
     (positive : 0 < count) (lower : 2 ^ depth ≤ first)
@@ -627,13 +518,13 @@ private theorem run_mem_claimPaths {first count depth shift node : Nat}
     have atLeast : first ≤ node * 2 ^ shift := by
       have grow : (first / 2 ^ shift + 1) * 2 ^ shift ≤ node * 2 ^ shift :=
         Nat.mul_le_mul_right _ step
-      have room := lt_div_add_one_mul (value := first) (divisor := 2 ^ shift) positivePow
+      have room := Nat.lt_mul_div_succ first positivePow
+      rw [Nat.mul_comm] at room
       omega
     have atMost : node * 2 ^ shift ≤ first + count - 1 :=
       (Nat.le_div_iff_mul_le positivePow).mp (by rw [← Nat.shiftRight_eq_div_pow]; exact top)
     have recovered : (node * 2 ^ shift) >>> shift = node := by
-      rw [Nat.shiftRight_eq_div_pow]
-      exact Nat.mul_div_cancel node positivePow
+      rw [Nat.shiftRight_eq_div_pow, Nat.mul_div_cancel node positivePow]
     exact ⟨node * 2 ^ shift, List.mem_range'_1.mpr ⟨atLeast, by omega⟩, List.mem_map.mpr
       ⟨shift, List.mem_range.mpr (by rw [mark _ atLeast (by omega)]; omega), recovered⟩⟩
 
@@ -649,9 +540,7 @@ theorem sharedPaths_length_ge_run {first count depth : Nat}
     (upper : first + count ≤ 2 ^ (depth + 1)) :
     depth + 2 * count
       ≤ (sharedPaths (List.range' first count)).length + 2 + Nat.log2 count := by
-  have double : (2:Nat) ^ (depth + 1) = 2 * 2 ^ depth := by
-    rw [Nat.pow_succ]
-    omega
+  have double : (2:Nat) ^ (depth + 1) = 2 * 2 ^ depth := Nat.pow_succ'
   have lastUpper : first + count - 1 < 2 ^ (depth + 1) := by omega
   have ordered : first ≤ first + count - 1 := by omega
   have inner : ∀ shift, shift < depth → (List.range' (first >>> shift)
@@ -680,8 +569,7 @@ theorem sharedPaths_length_ge_run {first count depth : Nat}
     exact mem_sharedPaths.mpr (run_mem_claimPaths positive lower upper
       (List.mem_range.mp stepMember) atLeast (by omega))
   have pigeon := distinct.length_le_of_subset covered
-  rw [List.length_flatMap] at pigeon
-  simp only [List.length_range'] at pigeon
+  simp only [List.length_flatMap, List.length_range'] at pigeon
   have terms : ∀ shift ∈ List.range depth, 1 + (count - 1) >>> shift
       ≤ (first + count - 1) >>> shift - first >>> shift + 1 := by
     intro shift _
@@ -695,9 +583,7 @@ theorem sharedPaths_length_ge_run {first count depth : Nat}
       sum_map_const, List.length_range, shiftSum_eq]
     omega
   have digits : digitSum (count - 1) ≤ Nat.log2 count :=
-    digitSum_le_pred (Nat.log2 count) (count - 1) (by
-      have := Nat.lt_log2_self (n := count)
-      omega)
+    digitSum_le_pred (Nat.log2 count) (count - 1) (by have := Nat.lt_log2_self (n := count); omega)
   have whole : shiftSum depth (count - 1) + digitSum (count - 1) = 2 * (count - 1) :=
     shiftSum_digitSum depth (count - 1) (by omega)
   omega
@@ -728,7 +614,7 @@ theorem getHelperIndices_length_ge_run {first count depth : Nat} {helpers : List
     exact (Nat.log2_eq_iff (by omega)).mpr ⟨by omega, by omega⟩
   have children := getHelperIndices_length_add_ge built uniform
   have ancestors := sharedPaths_length_ge_run positive lower upper
-  rw [show (List.range' first count).length = count from List.length_range'] at children
+  rw [List.length_range'] at children
   omega
 
 end Ssz

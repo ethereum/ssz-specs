@@ -27,18 +27,14 @@ theorem listSlices_concat_fixed {element : Desc} {width : Nat}
     -- Canonical fixed-width windows recover each concatenated part exactly.
     have extracted := map_extract_concatParts width (part :: rest) widths
     -- Adding a capacity check changes only whether the recovered count is permitted.
-    cases limit with
-    | none =>
-      simpa only [listSlices, sizeIs, fixed, beq_iff_eq, bne_iff_ne,
+    cases limit <;>
+      simp only [listSlices, sizeIs, fixed, beq_iff_eq, bne_iff_ne,
         if_neg notEmpty, if_neg (Nat.ne_of_gt positive), if_neg (Nat.not_le.mpr nameable),
-        Nat.mul_mod_left, ne_self_iff_false, counted, if_false, Bind.bind, Except.bind, Pure.pure, Except.pure] using congrArg Except.ok extracted
-    | some cap =>
-      have inLimit := within cap rfl
-      simpa only [listSlices, sizeIs, fixed, beq_iff_eq, bne_iff_ne,
-        if_neg notEmpty, if_neg (Nat.ne_of_gt positive), if_neg (Nat.not_le.mpr nameable),
-        Nat.mul_mod_left, ne_self_iff_false, counted, if_false, Bind.bind, Except.bind, Pure.pure, Except.pure,
-        if_neg (Nat.not_lt.mpr inLimit)]
-        using congrArg Except.ok extracted
+        Nat.mul_mod_left, ne_self_iff_false, counted, if_false, Bind.bind, Except.bind, Pure.pure,
+        Except.pure]
+    · exact congrArg Except.ok extracted
+    · rw [if_neg (Nat.not_lt.mpr (within _ rfl))]
+      exact congrArg Except.ok extracted
 
 /-- A variable-width sequence splits at the offsets originally written for its parts. -/
 theorem listSlices_offset_parts {element : Desc} (varying : element.fixedSize = none)
@@ -86,20 +82,12 @@ theorem listSlices_offset_parts {element : Desc} (varying : element.fixedSize = 
     change listSlices element limit (headOf (parts.length * bytesPerOffset) (offsetSlots parts)
       ++ concatParts parts) = .ok parts
     -- Both capacity choices use the same recovered offsets and body spans.
-    cases limit with
-    | none =>
-      simpa only [listSlices, varying, sizeIs, firstIs, counted, if_neg (Nat.not_le.mpr nameable),
+    cases limit <;>
+      simp only [listSlices, varying, sizeIs, firstIs, counted, if_neg (Nat.not_le.mpr nameable),
         beq_iff_eq, bne_iff_ne, if_neg notEmpty, if_neg scopeEnough, if_neg firstEnough,
-        Nat.mul_mod_left, ne_self_iff_false, if_false, if_neg inScope,
-        readOffsets_headOf parts _ _ nameable, offsetSpans_runningOffsets,
-        Bind.bind, Except.bind, Pure.pure, Except.pure] using congrArg Except.ok extracted
-    | some cap =>
-      have inLimit : parts.length ≤ cap := within cap rfl
-      simpa only [listSlices, varying, sizeIs, firstIs, counted, if_neg (Nat.not_le.mpr nameable),
-        beq_iff_eq, bne_iff_ne, if_neg notEmpty, if_neg scopeEnough, if_neg firstEnough,
-        Nat.mul_mod_left, ne_self_iff_false, if_false, if_neg inScope,
-        readOffsets_headOf parts _ _ nameable, offsetSpans_runningOffsets,
-        Bind.bind, Except.bind, Pure.pure, Except.pure, if_neg (Nat.not_lt.mpr inLimit)]
-        using congrArg Except.ok extracted
+        Nat.mul_mod_left, ne_self_iff_false, if_false, if_neg inScope]
+    all_goals try rw [if_neg (Nat.not_lt.mpr (within _ rfl))]
+    all_goals simpa only [readOffsets_headOf parts _ _ nameable, offsetSpans_runningOffsets,
+      Bind.bind, Except.bind, Pure.pure, Except.pure] using congrArg Except.ok extracted
 
 end Ssz

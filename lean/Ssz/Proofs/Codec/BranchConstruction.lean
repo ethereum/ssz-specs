@@ -27,36 +27,23 @@ theorem closed_branch_climb (read : Nat → Except Err Bytes) (closed : WalkerCl
       have small := shiftRight_le (index >>> (level + 1)) count
       rw [← Nat.shiftRight_add] at small
       exact Nat.le_trans onward small
-    have named : 2 ≤ index >>> level := by
-      rw [shiftRight_succ] at above
-      omega
+    rw [shiftRight_succ] at above
     -- Closure supplies the next sibling and parent from the currently readable child.
     obtain ⟨parent, sibling, parentRead, siblingRead, parentEq⟩ :=
-      closed (index >>> level) node named readable
-    have parentRead' : read (index >>> (level + 1)) = .ok parent := by
-      simpa only [shiftRight_succ] using parentRead
+      closed (index >>> level) node (by omega) readable
     obtain ⟨proof, root, proofRead, rootRead, climbed⟩ :=
-      ih index (level + 1) parent onward parentRead'
+      ih index (level + 1) parent onward (by simpa only [shiftRight_succ] using parentRead)
     refine ⟨sibling :: proof, root, ?_, ?_, ?_⟩
-    · rw [List.range_succ_eq_map]
-      simp only [List.map_cons, List.map_map, Function.comp_def, Nat.add_zero]
-      -- Advancing the climb level names exactly the suffix of the original sibling list.
-      have tail : (fun step => gindexSibling (index >>> (level + (step + 1)))) =
-          fun step => gindexSibling (index >>> (level + 1 + step)) := by
-        funext step
-        congr 2
-        omega
-      rw [tail]
-      simp [List.mapM_cons, siblingRead, proofRead, Bind.bind, Except.bind, Pure.pure, Except.pure]
+    -- Advancing the climb level names exactly the suffix of the original sibling list.
+    · simp only [Nat.add_assoc, Nat.add_comm 1] at proofRead
+      simp [List.range_succ_eq_map, Function.comp_def, siblingRead, proofRead, Bind.bind,
+        Except.bind, pure, Except.pure]
     · simpa only [Nat.add_assoc, Nat.add_comm count 1] using rootRead
-    · simp only [climbBranch, gindexBit_parity, decide_eq_true_eq]
-      -- The current path bit chooses which side of the parent hash receives the supplied sibling.
-      have stepEq : (if (index >>> level) % 2 = 1 then combine sibling node else combine node sibling) = parent := by
-        rcases Nat.mod_two_eq_zero_or_one (index >>> level) with even | odd
-        · simpa only [if_pos even, if_neg (by omega : (index >>> level) % 2 ≠ 1)] using parentEq.symm
-        · simpa only [if_neg (by omega : (index >>> level) % 2 ≠ 0), if_pos odd] using parentEq.symm
-      rw [stepEq]
-      exact climbed
+    -- The current path bit chooses which side of the parent hash receives the supplied sibling.
+    · subst parentEq
+      rw [← climbed]
+      rcases Nat.mod_two_eq_zero_or_one (index >>> level) with bit | bit <;>
+        simp [climbBranch, gindexBit_parity, bit]
 
 /-- A readable node of a closed tree has a complete branch reconstructing its root. -/
 theorem closed_branch_rebuilds_root {read : Nat → Except Err Bytes} (closed : WalkerClosed read)
@@ -79,18 +66,12 @@ theorem closed_branch_rebuilds_root {read : Nat → Except Err Bytes} (closed : 
         items.mapM read = .ok values → values.length = items.length := by
       intro items
       induction items with
-      | nil => intro values built; simp [Pure.pure, Except.pure] at built; subst values; rfl
+      | nil => simp [pure, Except.pure]
       | cons head tail ih =>
         intro values built
-        cases headRead : read head with
-        | error error => simp [List.mapM_cons, headRead, Bind.bind, Except.bind] at built
-        | ok value =>
-          cases tailRead : tail.mapM read with
-          | error error => simp [List.mapM_cons, headRead, tailRead, Bind.bind, Except.bind] at built
-          | ok rest =>
-            simp [List.mapM_cons, headRead, tailRead, Bind.bind, Except.bind, Pure.pure, Except.pure] at built
-            subst values
-            simpa using ih rest tailRead
+        cases headRead : read head <;> cases tailRead : tail.mapM read <;>
+          simp_all [List.mapM_cons, Bind.bind, Except.bind, pure, Except.pure]
+        grind
     simpa only [List.length_map, List.length_range] using length_eq _ _ proofRead
   -- A valid non-root index exposes precisely the branch depth used by the reconstruction algorithm.
   have measured : gindexLength index = .ok (Nat.log2 index) := by

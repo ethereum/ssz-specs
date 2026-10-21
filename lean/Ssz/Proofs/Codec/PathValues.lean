@@ -14,14 +14,10 @@ theorem rooted_bounded_chunks {shape : Desc} {value : Value} {layout : MerkleLay
   -- Successful whole-value rooting supplies the exact leaf array and successful contents computation.
   obtain ⟨actual, chunks, contents, actualLayout, materialized, tree, _⟩ :=
     hashTreeRoot_materializes shape value root rooted
-  rw [laid] at actualLayout
-  cases actualLayout
+  cases laid.symm.trans actualLayout
   rw [bounded] at tree
-  refine ⟨chunks, materialized, ?_⟩
-  by_cases fits : chunks.size ≤ capacity
-  · exact fits
-  · simp [merkleizeBounded, show capacity < chunks.size by omega, Functor.map, Except.map, throw, throwThe,
-      MonadExceptOf.throw] at tree
+  refine ⟨chunks, materialized, Nat.not_lt.mp fun over => ?_⟩
+  simp [merkleizeBounded, over, Functor.map, Except.map, throw, throwThe, MonadExceptOf.throw] at tree
 
 /-- Composite sequence elements occupy one whole chunk apiece. -/
 theorem Desc.itemLength_composite {element : Desc} (composite : element.isBasic = false) :
@@ -34,9 +30,7 @@ theorem gindexConcat_mixed_leaf {capacity ordinal : Nat} (inside : ordinal < cap
     gindexConcat 2 (nextPow2 capacity + ordinal) = .ok (2 * nextPow2 capacity + ordinal) := by
   -- The leaf's leading width bit is replaced by the mixed root's left-child prefix.
   have positive : 1 ≤ nextPow2 capacity + ordinal := by
-    have := Nat.two_pow_pos (depthFor capacity)
-    unfold nextPow2
-    omega
+    have := Nat.two_pow_pos (depthFor capacity); unfold nextPow2; omega
   rw [gindexConcat_eq (by decide) positive, bounded_leaf_depth inside]
   simp [nextPow2]
 
@@ -86,8 +80,7 @@ theorem PathSelects.vectorElement {element : Desc} {count : Nat} {values : List 
     · rw [resolveStep_vector element count ordinal inside, Desc.itemLength_composite composite]
       -- A composite occupies exactly one 32-byte leaf, so byte-based capacity arithmetic reduces to the element count.
       have nodes : (count * bytesPerChunk + bytesPerChunk - 1) / bytesPerChunk = count := by
-        unfold bytesPerChunk
-        omega
+        unfold bytesPerChunk; omega
       rw [nodes]
       simp [bytesPerChunk]
 
@@ -111,8 +104,7 @@ theorem PathSelects.listElement {element : Desc} {limit : Nat} {values : List Va
     · rw [resolveStep_list element limit ordinal inside, Desc.itemLength_composite composite]
       -- A composite occupies exactly one 32-byte leaf, so byte-based capacity arithmetic reduces to the element count.
       have nodes : (limit * bytesPerChunk + bytesPerChunk - 1) / bytesPerChunk = limit := by
-        unfold bytesPerChunk
-        omega
+        unfold bytesPerChunk; omega
       rw [nodes]
       simp [bytesPerChunk, gindexConcat_mixed_leaf inside, Bind.bind, Except.bind,
         Pure.pure, Except.pure]
@@ -148,17 +140,15 @@ theorem PathSelects.progressiveField {active : List Bool} {names : List String}
   obtain ⟨root, rooted, _⟩ := hashTreeRoot_total _ _ sound fitted
   obtain ⟨layout, chunks, contents, laid, _, _, _⟩ :=
     hashTreeRoot_materializes _ _ root rooted
-  cases slots : layoutSlots active fields values with
-  | error e => simp [merkleLayout, slots, Bind.bind, Except.bind] at laid
-  | ok entries =>
+  cases slots : layoutSlots active fields values <;>
     simp [merkleLayout, slots, Bind.bind, Except.bind, Pure.pure, Except.pure] at laid
-    subst layout
-    -- The field ordinal and the active-position lookup identify the same type-value pair.
-    obtain ⟨position, placed, chosen⟩ := layoutSlots_position slots _ _ _ selectedType selectedValue
-    exact PathSelects.nestedProgressive
-      (layout := MerkleLayout.nesting entries none (activeFieldsWord active))
-      (by simp [merkleLayout, slots, Bind.bind, Except.bind, Pure.pure, Except.pure]) rfl rfl rfl
-      chosen (resolveStep_progressiveContainer active names fields ordinal position child selectedType placed) suffix
+  rename_i entries
+  -- The field ordinal and the active-position lookup identify the same type-value pair.
+  obtain ⟨position, placed, chosen⟩ := layoutSlots_position slots _ _ _ selectedType selectedValue
+  exact PathSelects.nestedProgressive
+    (layout := MerkleLayout.nesting entries none (activeFieldsWord active))
+    (by simp [merkleLayout, slots, Bind.bind, Except.bind, Pure.pure, Except.pure]) rfl rfl rfl
+    chosen (resolveStep_progressiveContainer active names fields ordinal position child selectedType placed) suffix
 
 /-- A successful union lookup selects the same first matching declaration as its type path. -/
 theorem lookupOption_position (selectors : List Nat) (options : List Desc) (selector : Nat)
@@ -173,8 +163,7 @@ theorem lookupOption_position (selectors : List Nat) (options : List Desc) (sele
     | cons option options =>
       -- Both lookups stop at the first matching tag and advance their option ordinal together.
       by_cases matched : first == selector
-      · simp [lookupOption, matched] at chosen
-        subst child
+      · obtain rfl : option = child := by simpa [lookupOption, matched] using chosen
         exact ⟨0, by simp [List.idxOf?_cons, matched], rfl⟩
       · simp [lookupOption, matched] at chosen
         obtain ⟨slot, named, found⟩ := ih options chosen

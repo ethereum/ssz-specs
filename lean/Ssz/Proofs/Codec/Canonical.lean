@@ -23,9 +23,8 @@ theorem uintBytes_readUint (data : Bytes) :
       simp only [Array.size_append, Array.size_singleton]
       rw [Nat.add_comm 1, readUint]
       have first : (#[byte] ++ ({ toList := bytes } : Bytes))[0]?.getD 0 = byte := by simp
-      rw [first, readUint_shift]
       have low := UInt8.toNat_lt byte
-      rw [uintBytes]
+      rw [first, readUint_shift, uintBytes]
       -- Reduction modulo 256 recovers the low byte without interference from higher digits.
       have remainder : (byte.toNat + 256 * readUint ({ toList := bytes } : Bytes) 0 ({ toList := bytes } : Bytes).size) % 256 =
           byte.toNat := by omega
@@ -42,13 +41,11 @@ theorem canonical_uint {width : Nat} {data : Bytes} {value : Value}
     serialize (.uint width) value = .ok data := by
   -- The decoder fixes the width and reads all bytes as one little-endian integer.
   simp only [deserialize] at read
-  split at read
-  · simp [Bind.bind, Except.bind] at read
-  · simp [pure, Except.pure] at read
-    -- The accepted value is the recovered payload, whose encoding preserves the original bytes.
-    subst value
-    have sized : data.size = width := by simp_all
-    simp [serialize, readUint_lt, ← sized, uintBytes_readUint]
+  split at read <;> simp [Bind.bind, Except.bind, pure, Except.pure] at read
+  -- The accepted value is the recovered payload, whose encoding preserves the original bytes.
+  subst value
+  have sized : data.size = width := by simp_all
+  simp [serialize, readUint_lt, ← sized, uintBytes_readUint]
 
 /-- A fixed byte string is already its canonical representation. -/
 theorem canonical_byteVector {length : Nat} {data : Bytes} {value : Value}
@@ -56,12 +53,10 @@ theorem canonical_byteVector {length : Nat} {data : Bytes} {value : Value}
     serialize (.byteVector length) value = .ok data := by
   -- Acceptance establishes the exact declared byte count.
   simp only [deserialize] at read
-  split at read
-  · simp [Bind.bind, Except.bind] at read
-  · simp [pure, Except.pure] at read
-    -- The accepted value is the recovered payload, whose encoding preserves the original bytes.
-    subst value
-    simp_all [serialize]
+  -- The accepted value is the recovered payload, whose encoding preserves the original bytes.
+  split at read <;> simp [Bind.bind, Except.bind, pure, Except.pure] at read
+  subst value
+  simp_all [serialize]
 
 /-- A bounded byte string is already its canonical representation. -/
 theorem canonical_byteList {limit : Nat} {data : Bytes} {value : Value}
@@ -69,12 +64,10 @@ theorem canonical_byteList {limit : Nat} {data : Bytes} {value : Value}
     serialize (.byteList limit) value = .ok data := by
   -- Acceptance establishes the byte capacity bound without changing the payload.
   simp only [deserialize] at read
-  split at read
-  · simp [Bind.bind, Except.bind] at read
-  · simp [pure, Except.pure] at read
-    -- The accepted value is the recovered payload, whose encoding preserves the original bytes.
-    subst value
-    simp_all [serialize]
+  -- The accepted value is the recovered payload, whose encoding preserves the original bytes.
+  split at read <;> simp [Bind.bind, Except.bind, pure, Except.pure] at read
+  subst value
+  simp_all [serialize]
 
 set_option maxRecDepth 4096 in
 private theorem byte_bit (byte : UInt8) (offset : Fin 8) :
@@ -143,10 +136,8 @@ theorem canonical_bitVector {length : Nat} {data : Bytes} {value : Value}
     (read : deserialize (.bitVector length) data = .ok value) :
     serialize (.bitVector length) value = .ok data := by
   -- Acceptance forces the smallest byte count capable of holding the declared bits.
-  have sized : data.size = (length + 7) / 8 := by
-    by_cases same : data.size = (length + 7) / 8
-    · exact same
-    · simp [deserialize, same, Bind.bind, Except.bind] at read
+  have sized : data.size = (length + 7) / 8 := Decidable.byContradiction fun same => by
+    simp [deserialize, same, Bind.bind, Except.bind] at read
   have padding : ∀ index, index < data.size → ∀ offset, offset < 8 →
       length ≤ index * 8 + offset →
       ((data[index]! >>> UInt8.ofNat offset) &&& 1 == 1) = false := by
@@ -156,10 +147,9 @@ theorem canonical_bitVector {length : Nat} {data : Bytes} {value : Value}
     have remainder : length % 8 ≠ 0 := by omega
     have lower : length % 8 ≤ offset := by omega
     -- A nonzero high padding region would have caused the decoder to reject the final byte.
-    have clear : data[data.size - 1]! >>> UInt8.ofNat (length % 8) = 0 := by
-      by_cases same : data[data.size - 1]! >>> UInt8.ofNat (length % 8) = 0
-      · exact same
-      · rw [sized] at same
+    have clear : data[data.size - 1]! >>> UInt8.ofNat (length % 8) = 0 :=
+      Decidable.byContradiction fun same => by
+        rw [sized] at same
         simp [deserialize, sized, remainder, same, show 1 ≤ length by omega,
           throw_error, Bind.bind, Except.bind] at read
     subst index
@@ -179,14 +169,11 @@ theorem canonical_bitVector {length : Nat} {data : Bytes} {value : Value}
 theorem canonical_bool {data : Bytes} {value : Value}
     (read : deserialize .bool data = .ok value) : serialize .bool value = .ok data := by
   -- A boolean consumes exactly one byte.
-  have sized : data.size = 1 := by
-    by_cases same : data.size = 1
-    · exact same
-    · simp [deserialize, same, Bind.bind, Except.bind] at read
+  have sized : data.size = 1 := Decidable.byContradiction fun same => by
+    simp [deserialize, same, Bind.bind, Except.bind] at read
   -- Expose that sole byte so the two accepted boolean encodings can be checked directly.
   obtain ⟨byte, rfl⟩ := Array.size_eq_one_iff.mp sized
-  simp only [deserialize] at read
-  simp at read
+  simp [deserialize] at read
   -- Only zero and one can survive the decoder, and each re-encodes to itself.
   split at read
   all_goals simp_all [pure, Except.pure]

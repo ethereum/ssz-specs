@@ -68,12 +68,10 @@ decreasing_by
   | case1 trees level empty => simp [progressive, merkleizeProgressive, empty, root]
   | case2 trees level nonempty ih =>
     -- The current level separates into a bounded prefix and the remaining progressive suffix.
+    -- The suffix has the same root by recursion, and taking prefixes commutes with reading child roots.
     rw [progressive, if_neg nonempty, merkleizeProgressive]
     simp only [List.isEmpty_map, nonempty, Bool.false_eq_true, if_false, root,
-      bounded_root]
-    -- The suffix has the same root by recursion, and taking prefixes commutes with reading child roots.
-    rw [ih]
-    simp only [List.map_toArray, List.map_take, List.map_drop]
+      bounded_root, ih, List.map_toArray, List.map_take, List.map_drop]
 
 /-- The bounded or progressive contents of one layout. -/
 def content (trees : Array CommitmentTree) : Option Nat → CommitmentTree

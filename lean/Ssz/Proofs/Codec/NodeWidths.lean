@@ -21,32 +21,22 @@ private theorem packing_width (data : Bytes) (limit : Option Nat) (mixin : Optio
     (mixed : ∀ word, mixin = some word → word.size = bytesPerChunk) :
     LayoutWidth (.packing (packBytes data) limit mixin) := by
   -- Packed leaves and the optional word are separate complete nodes.
-  constructor
-  · intro chunks same
-    simp [MerkleLayout.packing] at same
-    subst chunks
-    exact packed_nodes_width data
-  · exact mixed
+  exact ⟨fun chunks same => by cases same; exact packed_nodes_width data, mixed⟩
 
 private theorem nesting_width (values : List (Option (Desc × Value)))
     (limit : Option Nat) (mixin : Option Bytes)
     (mixed : ∀ word, mixin = some word → word.size = bytesPerChunk) :
     LayoutWidth (.nesting values limit mixin) := by
   -- Nested leaf widths are supplied by recursive rooting rather than by this layout.
-  constructor
-  · intro chunks same
-    cases same
-  · exact mixed
+  exact ⟨fun _ same => (by cases same), mixed⟩
 
 private theorem fixedLeaf_width (shape : Desc) (value : Value) (layout : MerkleLayout)
     (success : fixedLeaf shape value = .ok layout) : LayoutWidth layout := by
   -- Fixed encodings are split into padded nodes and carry no mixing word.
-  cases h : serialize shape value with
-  | error e => simp [fixedLeaf, h, Bind.bind, Except.bind] at success
-  | ok bytes =>
+  cases h : serialize shape value <;>
     simp [fixedLeaf, h, Bind.bind, Except.bind, Pure.pure, Except.pure] at success
-    subst layout
-    exact packing_width bytes _ none (by simp)
+  subst layout
+  exact packing_width _ _ none (by simp)
 
 private theorem sequenceLayout_width (element : Desc) (values : List Value)
     (limit : Option Nat) (mixin : Option Bytes) (layout : MerkleLayout)
@@ -55,12 +45,10 @@ private theorem sequenceLayout_width (element : Desc) (values : List Value)
   -- Basic elements pack bytes, while composite elements defer to their own roots.
   unfold sequenceLayout at success
   split at success
-  · cases h : serializeEach element values with
-    | error e => simp [h, Bind.bind, Except.bind] at success
-    | ok bytes =>
+  · cases h : serializeEach element values <;>
       simp [h, Bind.bind, Except.bind, Pure.pure, Except.pure] at success
-      subst layout
-      exact packing_width _ _ _ mixed
+    subst layout
+    exact packing_width _ _ _ mixed
   · simp [Pure.pure, Except.pure] at success
     subst layout
     exact nesting_width _ _ _ mixed
@@ -76,27 +64,21 @@ theorem merkleLayout_width (shape : Desc) (value : Value) (layout : MerkleLayout
   all_goals try solve
     | simp only [Bind.bind, Except.bind, Pure.pure, Except.pure] at success
       subst layout
-      apply packing_width
-      intro word same
-      simp at same
-      subst word
-      simp
+      exact packing_width _ _ _ (by intro word same; simp at same; subst word; simp)
   all_goals try solve
     | split at success <;>
         simp [Bind.bind, Except.bind, Pure.pure, Except.pure, throw, throwThe,
           MonadExceptOf.throw] at success
       subst layout
-      apply packing_width
-      intro word same
-      simp at same
-      subst word
-      simp
+      exact packing_width _ _ _ (by intro word same; simp at same; subst word; simp)
   all_goals try solve
-    | apply sequenceLayout_width _ _ _ _ _ (by intro word same; simp at same; subst word; simp) success
+    | refine sequenceLayout_width _ _ _ _ _ ?_ success
+      intro word same; simp at same; subst word; simp
     | split at success <;>
         simp [Bind.bind, Except.bind, Pure.pure, Except.pure, throw, throwThe,
           MonadExceptOf.throw] at success
-      apply sequenceLayout_width _ _ _ _ _ (by intro word same; simp at same; subst word; simp) success
+      refine sequenceLayout_width _ _ _ _ _ ?_ success
+      intro word same; simp at same; subst word; simp
   -- A fixed bit count determines byte packing, whose final partial node is zero-padded.
   case bitVector.bits length data =>
     split at success <;>
@@ -131,23 +113,16 @@ theorem merkleLayout_width (shape : Desc) (value : Value) (layout : MerkleLayout
       exact nesting_width _ _ (some (activeFieldsWord active)) (by intro word same; have eq := Option.some.inj same; rw [← eq]; simp)
   -- A permitted selector is extended from its one-byte encoding to a complete 32-byte word.
   case compatibleUnion.union selectors options selector data =>
-    cases chosen : lookupOption selectors options selector with
-    | error e => simp [chosen, Bind.bind, Except.bind] at success
-    | ok child =>
-      cases hw : selectorWord selector with
-      | error e => simp [chosen, hw, Bind.bind, Except.bind] at success
-      | ok word =>
-        simp [chosen, hw, Bind.bind, Except.bind, Pure.pure, Except.pure] at success
-        subst layout
-        apply nesting_width
-        intro actual same
-        have eq := Option.some.inj same
-        subst actual
-        unfold selectorWord at hw
-        split at hw <;> simp [Bind.bind, Except.bind, Pure.pure, Except.pure,
-          throw, throwThe, MonadExceptOf.throw] at hw
-        subst word
-        exact lengthWord_size selector
+    cases chosen : lookupOption selectors options selector <;> cases hw : selectorWord selector <;>
+      simp [chosen, hw, Bind.bind, Except.bind, Pure.pure, Except.pure] at success
+    subst layout
+    refine nesting_width _ _ _ fun actual same => ?_
+    cases Option.some.inj same
+    unfold selectorWord at hw
+    split at hw <;> simp [Bind.bind, Except.bind, Pure.pure, Except.pure,
+      throw, throwThe, MonadExceptOf.throw] at hw
+    subst hw
+    exact lengthWord_size selector
 
 private theorem mapM_width {α : Type} (f : α → Except Err Bytes)
     (widths : ∀ value node, f value = .ok node → node.size = bytesPerChunk)
@@ -155,23 +130,12 @@ private theorem mapM_width {α : Type} (f : α → Except Err Bytes)
     ∀ node ∈ nodes, node.size = bytesPerChunk := by
   -- A successful traversal contributes one complete root for each retained value.
   induction values generalizing nodes with
-  | nil =>
-    simp [Pure.pure, Except.pure] at success
-    subst nodes
-    simp
+  | nil => simp_all [Pure.pure, Except.pure]
   | cons value values ih =>
-    cases head : f value with
-    | error e => simp [List.mapM_cons, head, Bind.bind, Except.bind] at success
-    | ok node =>
-      cases tail : values.mapM f with
-      | error e => simp [List.mapM_cons, head, tail, Bind.bind, Except.bind] at success
-      | ok others =>
-        simp [List.mapM_cons, head, tail, Bind.bind, Except.bind, Pure.pure, Except.pure] at success
-        subst nodes
-        intro result member
-        rcases List.mem_cons.mp member with rfl | member
-        · exact widths value _ head
-        · exact ih others tail result member
+    cases head : f value <;> cases tail : values.mapM f <;>
+      simp [List.mapM_cons, head, tail, Bind.bind, Except.bind, Pure.pure, Except.pure] at success
+    subst nodes
+    exact List.forall_mem_cons.mpr ⟨widths value _ head, ih _ tail⟩
 
 private theorem layoutChunksAt_width (budget : Nat) (layout : MerkleLayout)
     (layoutWidth : LayoutWidth layout)
@@ -232,15 +196,10 @@ theorem hashTreeRootAt_size (budget : Nat) (shape : Desc) (value : Value) (root 
             simp [limit, mixed, Pure.pure, Except.pure] at success
           all_goals subst root; simp
         | some capacity =>
-          cases made : merkleizeBounded chunks (some capacity) with
-          | error e => simp [limit, made] at success
-          | ok contents =>
-            cases mixed : layout.mixin <;>
-              simp [limit, made, mixed, Pure.pure, Except.pure] at success
-            · subst root
-              exact merkleizeBounded_size complete made
-            · subst root
-              exact mixIn_size _ _
+          cases made : merkleizeBounded chunks (some capacity) <;> cases mixed : layout.mixin <;>
+            simp [limit, made, mixed, Pure.pure, Except.pure] at success <;> subst root
+          · exact merkleizeBounded_size complete made
+          · exact mixIn_size _ _
 
 /-- Every successfully computed SSZ root occupies exactly 32 bytes. -/
 theorem hashTreeRoot_size (shape : Desc) (value : Value) (root : Bytes)
@@ -262,19 +221,12 @@ private theorem boundedNode_size (budget : Nat) (layout : MerkleLayout)
     cases materialized : layoutChunksAt budget layout
         (start + gindexBelow index depth * (nextPow2 capacity >>> depth))
         (some (start + gindexBelow index depth * (nextPow2 capacity >>> depth) +
-          (nextPow2 capacity >>> depth))) with
-    | error e => simp [materialized, Bind.bind, Except.bind] at read
-    | ok chunks =>
-      simp only [materialized, Bind.bind, Except.bind] at read
-      exact merkleizeBounded_size
-        (layoutChunksAt_width budget layout layoutWidth (hashTreeRootAt_size budget) _ _ chunks materialized) read
-  · cases leaves : layout.leaves with
-    | packed data => simp [leaves, throw, throwThe, MonadExceptOf.throw] at read
-    | nested slots =>
-      simp only [leaves] at read
-      split at read
-      · exact nestedWidth _ _ _ node read
-      · simp [throw, throwThe, MonadExceptOf.throw] at read
+          (nextPow2 capacity >>> depth))) <;>
+      simp only [materialized, Bind.bind, Except.bind, reduceCtorEq] at read
+    exact merkleizeBounded_size
+      (layoutChunksAt_width budget layout layoutWidth (hashTreeRootAt_size budget) _ _ _ materialized) read
+  · cases leaves : layout.leaves <;> simp only [leaves] at read <;> (try split at read) <;>
+      first | exact nestedWidth _ _ _ node read | simp [throw, throwThe, MonadExceptOf.throw] at read
 
 private theorem progressiveNode_size (budget : Nat) (layout : MerkleLayout)
     (layoutWidth : LayoutWidth layout)
@@ -285,18 +237,15 @@ private theorem progressiveNode_size (budget : Nat) (layout : MerkleLayout)
     node.size = bytesPerChunk := by
   -- A spine root is a digest, while a turn into a level uses bounded-node width.
   simp only [progressiveNode] at read
-  cases walk : spineWalk layout.leaves.count index depth start capacity with
-  | error e => simp [walk, Bind.bind, Except.bind] at read
-  | ok stop =>
-    simp only [walk, Bind.bind, Except.bind] at read
-    split at read
-    · exact boundedNode_size budget layout layoutWidth nestedWidth _ _ _ _ node read
-    · cases materialized : layoutChunksAt budget layout stop.leavesFrom with
-      | error e => simp [materialized] at read
-      | ok chunks =>
-        simp [materialized, Pure.pure, Except.pure] at read
-        subst node
-        exact merkleizeProgressive_size _ _
+  cases walk : spineWalk layout.leaves.count index depth start capacity <;>
+    simp only [walk, Bind.bind, Except.bind, reduceCtorEq] at read
+  rename_i stop
+  split at read
+  · exact boundedNode_size budget layout layoutWidth nestedWidth _ _ _ _ node read
+  · cases materialized : layoutChunksAt budget layout stop.leavesFrom <;>
+      simp [materialized, Pure.pure, Except.pure] at read
+    subst node
+    exact merkleizeProgressive_size _ _
 
 /-- Every successful value-tree walk returns a complete hash node. -/
 theorem nodeRootAt_size (budget : Nat) (shape : Desc) (value : Value) (index : Nat) (node : Bytes)
@@ -317,36 +266,13 @@ theorem nodeRootAt_size (budget : Nat) (shape : Desc) (value : Value) (index : N
       -- Direct mixing-word reads use the layout’s own width guarantee.
       have widths := merkleLayout_width shape value layout laid
       simp only [nodeRootAt, if_neg invalid, beq_iff_eq, if_neg root, laid, Bind.bind, Except.bind] at read
-      cases hg : gindexLength index with
-      | error e => simp [hg] at read
-      | ok depth =>
-        simp only [hg] at read
-        cases mixed : layout.mixin with
-        | none =>
-          simp only [mixed] at read
-          cases limit : layout.limit with
-          | none =>
-            simp only [limit] at read
-            exact progressiveNode_size budget layout widths ih _ _ _ _ node read
-          | some capacity =>
-            simp only [limit] at read
-            exact boundedNode_size budget layout widths ih _ _ _ _ node read
-        | some word =>
-          simp [mixed, Pure.pure, Except.pure, throw, throwThe, MonadExceptOf.throw,
-            ] at read
-          split at read
-          · split at read
-            · simp at read
-              subst node
-              exact widths.2 word mixed
-            · cases read
-          · cases limit : layout.limit with
-            | none =>
-              simp only [limit] at read
-              exact progressiveNode_size budget layout widths ih _ _ _ _ node read
-            | some capacity =>
-              simp only [limit] at read
-              exact boundedNode_size budget layout widths ih _ _ _ _ node read
+      -- A mixing-word read returns that word, and every other read descends into the leaves.
+      cases hg : gindexLength index <;> cases mixed : layout.mixin <;> cases limit : layout.limit <;>
+        simp only [hg, mixed, limit, reduceCtorEq] at read <;> (repeat' split at read) <;>
+        first
+          | exact progressiveNode_size budget layout widths ih _ _ _ _ node read
+          | exact boundedNode_size budget layout widths ih _ _ _ _ node read
+          | cases read <;> exact widths.2 _ mixed
 
 /-- Every readable SSZ node occupies exactly 32 bytes. -/
 theorem nodeRoot_size (shape : Desc) (value : Value) (index : Nat) (node : Bytes)

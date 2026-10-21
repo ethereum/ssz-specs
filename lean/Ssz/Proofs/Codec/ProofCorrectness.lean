@@ -29,23 +29,15 @@ private theorem mapM_node_width (read : Nat → Except Err Bytes)
     ∀ node ∈ nodes, node.size = bytesPerChunk := by
   -- Every output node comes from one successful read, so its width follows individually.
   induction indices generalizing nodes with
-  | nil =>
-    simp [Pure.pure, Except.pure] at built
-    subst nodes
-    simp
+  | nil => simp_all [Pure.pure, Except.pure]
   | cons index rest ih =>
-    cases head : read index with
-    | error e => simp [List.mapM_cons, head, Bind.bind, Except.bind] at built
-    | ok node =>
-      cases tail : rest.mapM read with
-      | error e => simp [List.mapM_cons, head, tail, Bind.bind, Except.bind] at built
-      | ok others =>
-        simp [List.mapM_cons, head, tail, Bind.bind, Except.bind, Pure.pure, Except.pure] at built
-        subst nodes
-        intro value member
-        rcases List.mem_cons.mp member with rfl | member
-        · exact widths index _ head
-        · exact ih others tail value member
+    cases head : read index <;> cases tail : rest.mapM read <;>
+      simp [List.mapM_cons, head, tail, Bind.bind, Except.bind, Pure.pure, Except.pure] at built
+    subst nodes
+    intro value member
+    rcases List.mem_cons.mp member with rfl | member
+    · exact widths index _ head
+    · exact ih _ tail value member
 
 /-- Every constructed branch for a readable node passes verification against the value's root. -/
 theorem buildProof_verifies (shape : Desc) (value : Value) (root : Bytes)

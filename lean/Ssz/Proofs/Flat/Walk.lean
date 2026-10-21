@@ -51,13 +51,11 @@ theorem foldUpTo_headD (combine : α → α → α) (zero : α) :
   induction remaining with
   | zero =>
     -- Nothing left to fold: the first node is the leaf, and an absent one is the padding.
-    intro folded level
-    exact headD_eq_paddedList _ level
+    exact fun _ level => headD_eq_paddedList _ level
   | succ remaining ih =>
     intro folded level
     -- The height the walk has reached is the same counted from either end.
-    have height : folded + (remaining + 1) = folded + 1 + remaining := by omega
-    rw [foldUpTo, height, ih]
+    rw [foldUpTo, show folded + (remaining + 1) = folded + 1 + remaining by omega, ih]
     -- A pair of empty subtrees is the empty subtree one level up.
     show subtreeRoot combine remaining
         (paddedList (combine (zeroRoot combine zero folded) (zeroRoot combine zero folded)) _) = _
@@ -73,15 +71,13 @@ theorem foldUpTo_ne_nil (combine : α → α → α) (zero : α) :
   | zero => intro _ _ nonempty; exact nonempty
   | succ remaining ih =>
     -- One level folded away still has something on it, and the rest is the same claim.
-    intro folded _ nonempty
-    exact ih (folded + 1) (pairLevel_ne_nil combine _ nonempty)
+    exact fun folded _ nonempty => ih (folded + 1) (pairLevel_ne_nil combine _ nonempty)
 
 /-- The walk computes the tree the specification defines, over the leaves it was given. -/
 theorem merkleizeFlat_eq (combine : α → α → α) (zero : α) (depth : Nat) (level : List α) :
     merkleizeFlat combine zero depth level
       = subtreeRoot combine depth (paddedList zero level) := by
   -- A walk of the full depth starts at height zero, where the padding is the zero node.
-  have whole := foldUpTo_headD combine zero depth 0 level
-  simpa [merkleizeFlat, zeroRoot] using whole
+  simpa [merkleizeFlat, zeroRoot] using foldUpTo_headD combine zero depth 0 level
 
 end Ssz

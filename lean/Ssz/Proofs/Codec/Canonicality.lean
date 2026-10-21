@@ -23,10 +23,8 @@ theorem serialize_of_deserialize (shape : Desc) :
   | vector element count ih =>
     intro legal data value read
     -- A legal vector has at least one element, so its fixed-width or offset layout fixes the entire byte budget.
-    have positive : 0 < count := by
-      by_cases zero : count = 0
-      · simp [Desc.wellFormed, zero, Bind.bind, Except.bind] at legal
-      · omega
+    have positive : 0 < count := Nat.pos_of_ne_zero fun zero => by
+      simp [Desc.wellFormed, zero, Bind.bind, Except.bind] at legal
     exact canonical_vector positive (ih (wellFormed_vector legal)) read
   | list element limit ih =>
     intro legal data value read
@@ -42,16 +40,14 @@ theorem serialize_of_deserialize (shape : Desc) :
     cases parts : structSlices fields data with
     | error fault => simp [deserialize, parts, Bind.bind, Except.bind] at read
     | ok slices =>
-      cases decoded : deserializeFields fields slices with
-      | error fault => simp [deserialize, parts, decoded, Bind.bind, Except.bind] at read
-      | ok values =>
+      cases decoded : deserializeFields fields slices <;>
         simp [deserialize, parts, decoded, Bind.bind, Except.bind, pure, Except.pure] at read
-        subst value
-        have encoded := serializeFields_of_deserializeFields fields slices values
-          (fun field member => ih field member (allWellFormed_mem fields fieldsLegal field member))
-          decoded
-        simp [serialize, serializeStruct, encoded, Bind.bind, Except.bind,
-          structSlices_assemble_inverse fields data slices parts]
+      subst value
+      have encoded := serializeFields_of_deserializeFields fields slices _
+        (fun field member => ih field member (allWellFormed_mem fields fieldsLegal field member))
+        decoded
+      simp [serialize, serializeStruct, encoded, Bind.bind, Except.bind,
+        structSlices_assemble_inverse fields data slices parts]
   -- Only the selected option needs reconstruction, using its own canonical encoding.
   | compatibleUnion selectors options ih =>
     intro legal data value read
@@ -61,9 +57,8 @@ theorem serialize_of_deserialize (shape : Desc) :
   | cons field fields ihHead ihTail =>
     rename_i held member legal data value read
     -- A nested type is either the first declaration or belongs to the remaining declarations.
-    rcases List.mem_cons.mp member with first | later
-    · subst held
-      exact ihHead legal data value read
+    rcases List.mem_cons.mp member with rfl | later
+    · exact ihHead legal data value read
     · exact ihTail held later legal data value read
 
 /-- Successful serialization and successful deserialization describe the same relation. -/

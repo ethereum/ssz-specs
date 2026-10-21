@@ -32,10 +32,7 @@ private theorem unpackBits_push {data : Bytes} {count : Nat}
     -- The final position is the closing bit.
     by_cases before : position < count
     · simp [Array.getElem_push, unpackBits, before]
-    · have last : position = count := by simpa using (show position = count by
-        simp only [unpackBits_size] at right
-        omega)
-      subst position
+    · obtain rfl : position = count := by simp at right; omega
       simpa [unpackBits, Array.getElem_push] using closing.symm
 
 /-- Re-encoding a successfully decoded delimited bit sequence reproduces its input. -/
@@ -55,15 +52,8 @@ theorem packBitsDelimited_unpackDelimited {limit : Option Nat} {data : Bytes}
   let count := 8 * (data.size - 1) + highestBit data[data.size - 1]!
   -- Successful decoding keeps precisely that data prefix, regardless of a capacity limit.
   have decoded : bits = unpackBits data count := by
-    simp only [unpackDelimited, show (data.size == 0) = false by simp [nonempty],
-      show (data[data.size - 1]! == 0) = false by simp [nonzero], Bool.false_eq_true,
-      if_false] at read
-    cases limit with
-    | none => simpa [pure, Except.pure, count] using read.symm
-    | some cap =>
-      by_cases over : cap < 8 * (data.size - 1) + highestBit data[data.size - 1]!
-      · simp [over, throw_error, Bind.bind, Except.bind] at read
-      · simpa [over, pure, Except.pure, count] using read.symm
+    cases limit <;> simp [unpackDelimited, nonempty, nonzero, throw_error, Bind.bind, Except.bind,
+      pure, Except.pure] at read <;> (try split at read) <;> simp_all [count]
   -- The highest set bit supplies both the delimiter and the clear padding above it.
   obtain ⟨small, set, high⟩ := highestBit_spec _ nonzero
   -- Locate the delimiter in the final byte and recover its position within that byte.
@@ -93,27 +83,22 @@ theorem canonical_bitList {limit : Nat} {data : Bytes} {value : Value}
     (read : deserialize (.bitList limit) data = .ok value) :
     serialize (.bitList limit) value = .ok data := by
   -- Successful decoding must have recovered a delimited bit sequence.
-  cases decoded : unpackDelimited (some limit) data with
-  | error fault => simp [deserialize, decoded, Bind.bind, Except.bind] at read
-  | ok bits =>
+  cases decoded : unpackDelimited (some limit) data <;>
     simp [deserialize, decoded, Bind.bind, Except.bind, pure, Except.pure] at read
-    -- Re-encode the recovered data bits with the same closing bit and padding.
-    subst value
-    simp [serialize, unpackDelimited_bound decoded, packBitsDelimited_unpackDelimited decoded]
+  -- Re-encode the recovered data bits with the same closing bit and padding.
+  subst value
+  simp [serialize, unpackDelimited_bound decoded, packBitsDelimited_unpackDelimited decoded]
 
 /-- Progressive bit lists have the same canonical delimiter rule under their own bound. -/
 theorem canonical_progressiveBitList {limit : Option Nat} {data : Bytes} {value : Value}
     (read : deserialize (.progressiveBitList limit) data = .ok value) :
     serialize (.progressiveBitList limit) value = .ok data := by
   -- Successful decoding must have recovered a delimited bit sequence.
-  cases decoded : unpackDelimited limit data with
-  | error fault => simp [deserialize, decoded, Bind.bind, Except.bind] at read
-  | ok bits =>
+  cases decoded : unpackDelimited limit data <;>
     simp [deserialize, decoded, Bind.bind, Except.bind, pure, Except.pure] at read
-    -- Re-encode the recovered data bits with the same closing bit and padding.
-    subst value
-    simp [serialize, boundCheck_of_withinBound limit _ (unpackDelimited_within decoded),
-      Bind.bind, Except.bind, Pure.pure, Except.pure,
-      packBitsDelimited_unpackDelimited decoded]
+  -- Re-encode the recovered data bits with the same closing bit and padding.
+  subst value
+  simp [serialize, boundCheck_of_withinBound limit _ (unpackDelimited_within decoded),
+    Bind.bind, Except.bind, Pure.pure, Except.pure, packBitsDelimited_unpackDelimited decoded]
 
 end Ssz

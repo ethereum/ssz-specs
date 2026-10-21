@@ -18,9 +18,7 @@ theorem merkleLayout_child_fits {shape : Desc} {value : Value} {layout : MerkleL
   rw [laid] at generated
   cases Except.ok.inj generated
   -- The selected occupied position inherits the layout's child guarantee.
-  have children := valid.1
-  rw [nested] at children
-  exact children child inner member
+  exact (nested ▸ valid.1) child inner member
 
 private theorem sequence_child_sized {element : Desc} {values : List Value}
     {positions : Option Nat} {mixin : Option Bytes} {layout : MerkleLayout}
@@ -107,10 +105,8 @@ theorem merkleLayout_child_sized {shape : Desc} {value : Value} {layout : Merkle
         split at placed
         · cases placed
         -- Removing gaps recovers the original field sequence, so each occupied slot inherits its field bound.
-        · have fieldsEqual := placeSlots_fields placed
-          apply each (child, inner)
-          rw [← fieldsEqual]
-          exact List.mem_filterMap.mpr ⟨some (child, inner), member, rfl⟩
+        · exact each (child, inner)
+            (placeSlots_fields placed ▸ List.mem_filterMap.mpr ⟨_, member, rfl⟩)
   -- The selector identifies one option whose nested count bounds were already established.
   case compatibleUnion selectors options selector option value named innerSized =>
     simp only [named] at laid

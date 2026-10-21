@@ -13,16 +13,12 @@ private theorem packBytes_chunk {data : Bytes} (width : data.size = bytesPerChun
   apply Array.ext
   · simp [size]
   · intro position inside _
-    rw [size] at inside
-    have first : position = 0 := by omega
-    subst first
+    obtain rfl : position = 0 := by omega
     apply Array.ext
-    · rw [packBytes_chunk_size _ _ (by omega)]
-      simp [width]
+    · simp [packBytes_chunk_size _ _ (by omega : 0 < _), width]
     · intro byte inner _
       rw [packBytes_chunk_size _ _ (by omega)] at inner
-      have := packBytes_get data 0 byte (by omega) inner (by omega)
-      simpa using this
+      simpa using packBytes_get data 0 byte (by omega) inner (by omega)
 
 /-- A complete node held as a fixed byte array is its own root. -/
 theorem hashTreeRoot_chunk {data : Bytes} (width : data.size = bytesPerChunk) :
@@ -52,35 +48,8 @@ private theorem mapM_set {α β : Type} (f : α → Except Err β) :
       entries[position]? = some original → f replacement = f original →
       (entries.set position replacement).mapM f = entries.mapM f
   | [], _, _, _, held, _ => by simp at held
-  | _ :: rest, 0, _, original, held, agree => by
-    simp only [List.getElem?_cons_zero, Option.some.injEq] at held
-    subst held
-    simp [List.mapM_cons, agree]
-  | entry :: rest, position + 1, replacement, original, held, agree => by
-    simp only [List.getElem?_cons_succ] at held
-    simp [List.mapM_cons, mapM_set f rest position replacement original held agree]
-
-/-- Two lists that hold an entry at one position hold their pair there once zipped. -/
-private theorem zip_map_getElem? {α β : Type} :
-    ∀ (left : List α) (right : List β) (position : Nat) (a : α) (b : β),
-      left[position]? = some a → right[position]? = some b →
-      ((left.zip right).map some)[position]? = some (some (a, b))
-  | [], _, _, _, _, held, _ => by simp at held
-  | _ :: _, [], _, _, _, _, held => by simp at held
-  | _ :: _, _ :: _, 0, _, _, first, second => by
-    simp only [List.getElem?_cons_zero, Option.some.injEq] at first second
-    simp [first, second]
-  | _ :: leftRest, _ :: rightRest, position + 1, a, b, first, second => by
-    simp only [List.getElem?_cons_succ] at first second
-    simpa using zip_map_getElem? leftRest rightRest position a b first second
-
-/-- Mapping over a list with one entry replaced replaces that entry of the result. -/
-private theorem map_set {α β : Type} (f : α → β) :
-    ∀ (entries : List α) (position : Nat) (a : α),
-      (entries.set position a).map f = (entries.map f).set position (f a)
-  | [], _, _ => by simp
-  | _ :: _, 0, _ => by simp
-  | entry :: rest, position + 1, a => by simp [map_set f rest position a]
+  | _ :: rest, position, _, _, held, agree => by
+    cases position <;> simp_all [List.mapM_cons, mapM_set f rest]
 
 /--
 A field replaced by its own root gives the same struct root.
@@ -104,19 +73,15 @@ theorem hashTreeRoot_summary {names : List String} {fields : List Desc} {values 
   -- One budget serves both shapes, so neither side depends on its own declared nesting.
   obtain ⟨inner, split⟩ :
       ∃ inner, max (Desc.container names (fields.set position (.byteVector bytesPerChunk))).nesting
-        (Desc.container names fields).nesting = inner + 1 := by
-    refine ⟨max (Desc.container names (fields.set position (.byteVector bytesPerChunk))).nesting
-      (Desc.container names fields).nesting - 1, ?_⟩
-    have : 0 < (Desc.container names fields).nesting := by simp [Desc.nesting]
-    omega
+        (Desc.container names fields).nesting = inner + 1 :=
+    ⟨_, (Nat.succ_pred_eq_of_pos (Nat.lt_of_lt_of_le (by simp [Desc.nesting])
+      (Nat.le_max_right ..))).symm⟩
   rw [← hashTreeRootAt_eq_hashTreeRoot _ _ _ (split ▸ Nat.le_max_left ..),
     ← hashTreeRootAt_eq_hashTreeRoot _ _ _ (split ▸ Nat.le_max_right ..)]
   -- The replaced leaf has the root the original field had, so the two leaf lists agree.
   have enough : nested.nesting ≤ inner := by
-    have member : nested ∈ fields := List.mem_of_getElem? declared
-    have bound := nesting_le_deepest nested fields member
-    have top : (Desc.container names fields).nesting ≤ inner + 1 :=
-      split ▸ Nat.le_max_right ..
+    have bound := nesting_le_deepest nested fields (List.mem_of_getElem? declared)
+    have top : (Desc.container names fields).nesting ≤ inner + 1 := split ▸ Nat.le_max_right ..
     simp only [Desc.nesting] at top
     omega
   have shallow : (Desc.byteVector bytesPerChunk).nesting ≤ inner := by
@@ -127,12 +92,6 @@ theorem hashTreeRoot_summary {names : List String} {fields : List Desc} {values 
       = hashTreeRootAt inner nested held := by
     rw [hashTreeRootAt_eq_hashTreeRoot _ _ _ shallow,
       hashTreeRootAt_eq_hashTreeRoot _ _ _ enough, rooted, hashTreeRoot_chunk width]
-  -- Both structs declare the same field count, so both trees have the same capacity.
-  have sameLength : (fields.set position (.byteVector bytesPerChunk)).length = fields.length :=
-    List.length_set ..
-  -- Both structs declare the same field count, so both trees have the same capacity.
-  have sameLength : (fields.set position (.byteVector bytesPerChunk)).length = fields.length :=
-    List.length_set ..
   -- The two leaf lists differ at one position, and the leaf read agrees there.
   have chunks : ∀ (limit : Option Nat) (mixin : Option Bytes),
       layoutChunksAt inner ⟨.nested (((fields.zip values).map some).set position
@@ -142,11 +101,11 @@ theorem hashTreeRoot_summary {names : List String} {fields : List Desc} {values 
     simp only [layoutChunksAt, Leaves.count, Option.getD_none, Nat.sub_zero, List.drop_zero,
       List.take_length]
     congr 1
-    refine mapM_set _ _ position _ (some (nested, held))
-      (zip_map_getElem? fields values position nested held declared carried) ?_
-    exact leaf
+    exact mapM_set _ _ position _ (some (nested, held))
+      (by simp [List.getElem?_zip_eq_some, declared, carried]) leaf
+  -- Both structs declare the same field count, so both trees have the same capacity.
   simp only [hashTreeRootAt, merkleLayout, List.length_set, paired, bne_self_eq_false,
-    Bool.false_eq_true, if_false, Bind.bind, Except.bind, pure, Except.pure, sameLength,
-    zip_set, map_set, MerkleLayout.nesting, chunks]
+    Bool.false_eq_true, if_false, Bind.bind, Except.bind, pure, Except.pure,
+    zip_set, List.map_set, MerkleLayout.nesting, chunks]
 
 end Ssz

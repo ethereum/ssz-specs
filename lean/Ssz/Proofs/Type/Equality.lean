@@ -10,14 +10,8 @@ theorem Value.beq_eq (left right : Value) : Value.beq left right = true ↔ left
   -- Nested induction proves the value comparison and its list traversal together.
   induction left using Value.rec
     (motive_2 := fun left => ∀ right, Value.beqList left right = true ↔ left = right)
-    generalizing right with
-  | bool | uint | bytes | bits => cases right <;> simp [Value.beq]
-  | seq elements ih => cases right <;> simp [Value.beq, ih]
-  | union selector data ih => cases right <;> simp [Value.beq, ih]
-  | nil => rename_i right; cases right <;> simp [Value.beqList]
-  | cons head tail ihHead ihTail =>
-      rename_i right
-      cases right <;> simp [Value.beqList, ihHead, ihTail]
+    generalizing right <;> (first | cases right | (rename_i right; cases right)) <;>
+    simp [Value.beq, Value.beqList, *]
 
 -- Structural comparison supplies both reflexivity and sound equality for boolean reasoning.
 instance : LawfulBEq Value where
@@ -29,20 +23,8 @@ theorem Desc.beq_eq (left right : Desc) : Desc.beq left right = true ↔ left = 
   -- Nested induction covers field lists and union options along with their enclosing types.
   induction left using Desc.rec
     (motive_2 := fun left => ∀ right, Desc.beqList left right = true ↔ left = right)
-    generalizing right with
-  | bool | uint | byteVector | byteList | bitVector | bitList | progressiveBitList =>
-      cases right <;> simp [Desc.beq]
-  | vector element length ih | list element length ih =>
-      cases right <;> simp [Desc.beq, ih]
-  | progressiveList element limit ih => cases right <;> simp [Desc.beq, ih]
-  | container names fields ih => cases right <;> simp [Desc.beq, ih]
-  | progressiveContainer active names fields ih =>
-      cases right <;> simp [Desc.beq, ih, and_assoc]
-  | compatibleUnion selectors options ih => cases right <;> simp [Desc.beq, ih]
-  | nil => rename_i right; cases right <;> simp [Desc.beqList]
-  | cons head tail ihHead ihTail =>
-      rename_i right
-      cases right <;> simp [Desc.beqList, ihHead, ihTail]
+    generalizing right <;> (first | cases right | (rename_i right; cases right)) <;>
+    simp [Desc.beq, Desc.beqList, and_assoc, *]
 
 -- Declaration comparison can be used as ordinary equality throughout the specification.
 instance : LawfulBEq Desc where

@@ -14,8 +14,7 @@ theorem layoutTreesAt_size {budget : Nat} {layout : MerkleLayout}
   cases leaves : layout.leaves with
   | packed chunks =>
     simp only [layoutTreesAt, leaves, Except.ok.injEq] at success
-    rw [← success]
-    simp [Leaves.count]
+    simp [← success, Leaves.count]
   | nested slots =>
     simpa only [leaves, Leaves.count] using
       layoutTreesAt_nested_size budget layout slots leaves trees success
@@ -62,13 +61,10 @@ theorem layout_leaves_eq_of_noCollision {budget : Nat} {left right : MerkleLayou
     | packed other =>
       simp only [layoutTreesAt, l, Except.ok.injEq] at tracedA
       simp only [layoutTreesAt, r, Except.ok.injEq] at tracedB
-      subst a
-      subst b
+      subst a b
       apply congrArg Leaves.packed
-      have lengths : chunks.size = other.size := by simpa using counts
       -- Recover the packed arrays by their common count and equal node at each position.
-      apply Array.ext lengths
-      intro i hi hj
+      refine Array.ext (by simpa using counts) fun i hi _ => ?_
       have equal := roots i (by simpa using hi)
       simpa only [Array.getElem_map, CommitmentTree.root] using equal
   | nested slots =>
@@ -87,35 +83,29 @@ theorem layout_leaves_eq_of_noCollision {budget : Nat} {left right : MerkleLayou
       have types : (slots[i]).map Prod.fst = (others[i]).map Prod.fst := by
         have atIndex := congrArg (fun xs : List (Option Desc) => xs[i]!) shaped
         simpa only [getElem!_pos, List.length_map, hi, hj, List.getElem_map] using atIndex
-      cases first : slots[i] with
-      | none =>
-        cases second : others[i] with
-        | none => rfl
-        | some pair => simp [first, second] at types
-      | some firstPair =>
-        cases second : others[i] with
-        | none => simp [first, second] at types
-        | some secondPair =>
-          obtain ⟨child, firstValue⟩ := firstPair
-          obtain ⟨otherChild, secondValue⟩ := secondPair
-          have typeEqual : child = otherChild := by simpa [first, second] using types
-          subst otherChild
-          have boundA : i < a.size := by omega
-          have boundB : i < b.size := by omega
-          -- At each occupied position, materialization identifies the exact child computation.
-          have firstTrace := layoutTreesAt_nested_getElem budget left slots l a tracedA
-            i hi child firstValue first
-          have secondTrace := layoutTreesAt_nested_getElem budget right others r b tracedB
-            i hj child secondValue second
-          -- Every child hash input also occurs in the enclosing contents tree.
-          have includedA := CommitmentTree.content_included a left.limit roomA i boundA
-          have includedB := CommitmentTree.content_included b right.limit roomB i boundB
-          -- The enclosing collision-free assumption therefore restricts to these two child computations.
-          have childClean := clean.restrict includedA includedB
-          -- The recursive binding obligation recovers equal child values from their authenticated roots.
-          have equal := children slots others child firstValue secondValue a[i] b[i] l r
-            (first ▸ List.getElem_mem hi) (second ▸ List.getElem_mem hj)
-            firstTrace secondTrace (roots i boundA) childClean
-          exact congrArg (fun value => some (child, value)) equal
+      cases first : slots[i] <;> cases second : others[i] <;>
+        simp only [first, second, Option.map, reduceCtorEq, Option.some.injEq] at types
+      · rfl
+      rename_i firstPair secondPair
+      obtain ⟨child, firstValue⟩ := firstPair
+      obtain ⟨otherChild, secondValue⟩ := secondPair
+      subst types
+      have boundA : i < a.size := by omega
+      have boundB : i < b.size := by omega
+      -- At each occupied position, materialization identifies the exact child computation.
+      have firstTrace := layoutTreesAt_nested_getElem budget left slots l a tracedA
+        i hi child firstValue first
+      have secondTrace := layoutTreesAt_nested_getElem budget right others r b tracedB
+        i hj child secondValue second
+      -- Every child hash input also occurs in the enclosing contents tree.
+      have includedA := CommitmentTree.content_included a left.limit roomA i boundA
+      have includedB := CommitmentTree.content_included b right.limit roomB i boundB
+      -- The enclosing collision-free assumption therefore restricts to these two child computations.
+      have childClean := clean.restrict includedA includedB
+      -- The recursive binding obligation recovers equal child values from their authenticated roots.
+      have equal := children slots others child firstValue secondValue a[i] b[i] l r
+        (first ▸ List.getElem_mem hi) (second ▸ List.getElem_mem hj)
+        firstTrace secondTrace (roots i boundA) childClean
+      exact congrArg (fun value => some (child, value)) equal
 
 end Ssz

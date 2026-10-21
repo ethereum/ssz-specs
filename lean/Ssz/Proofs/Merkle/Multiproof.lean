@@ -24,12 +24,10 @@ theorem nodeAt_agrees {tree : Nat → Bytes} {nodes : List (Nat × Bytes)}
   cases located : nodes.find? (fun pair => pair.1 == index) with
   | none => simp [located] at found
   | some pair =>
-    have member := List.mem_of_find?_eq_some located
-    have named := List.find?_some located
-    simp only [beq_iff_eq] at named
+    have named : pair.1 = index := by simpa using List.find?_some located
     simp only [located, Option.map_some, Option.some.injEq] at found
     rw [← found, ← named]
-    exact agree pair.1 pair.2 member
+    exact agree pair.1 pair.2 (List.mem_of_find?_eq_some located)
 
 /-- Folding one level preserves every stored node's value in the finite tree. -/
 theorem foldLevelNodes_agrees {tree : Nat → Bytes} {height depth : Nat}
@@ -40,10 +38,7 @@ theorem foldLevelNodes_agrees {tree : Nat → Bytes} {height depth : Nat}
     NodesAgree tree (outParents ++ outKept) := by
   -- The induction follows the actual level worker, retaining both output groups.
   induction pending generalizing outParents outKept with
-  | nil =>
-    simp [foldLevelNodes] at folded
-    rcases folded with ⟨rfl, rfl⟩
-    simp [NodesAgree]
+  | nil => simp_all [foldLevelNodes, NodesAgree]
   | cons pair rest ih =>
     rcases pair with ⟨index, value⟩
     have head : value = tree index := pendingAgree index value (by simp)
@@ -51,19 +46,12 @@ theorem foldLevelNodes_agrees {tree : Nat → Bytes} {height depth : Nat}
     simp only [foldLevelNodes] at folded
     split at folded
     · -- Shallower nodes are carried forward unchanged.
-      cases rec : foldLevelNodes depth nodes rest with
-      | error error => simp [rec, Bind.bind, Except.bind] at folded
-      | ok result =>
-        rcases result with ⟨ps, ks⟩
+      cases rec : foldLevelNodes depth nodes rest <;>
         simp [rec, Bind.bind, Except.bind, Pure.pure, Except.pure] at folded
-        rcases folded with ⟨rfl, rfl⟩
-        have agrees := ih tail rec
-        intro i v member
-        simp only [List.mem_append, List.mem_cons] at member
-        rcases member with member | same | member
-        · exact agrees i v (by simp [member])
-        · cases same; exact head
-        · exact agrees i v (by simp [member])
+      rcases folded with ⟨rfl, rfl⟩
+      have agrees := ih tail rec
+      simp only [NodesAgree, List.mem_append, List.mem_cons] at agrees ⊢
+      grind
     · rename_i atDepth
       have atDepth : levelOf index = depth := by simpa using atDepth
       split at folded
@@ -73,22 +61,13 @@ theorem foldLevelNodes_agrees {tree : Nat → Bytes} {height depth : Nat}
         | none => simp [sibling, throw] at folded
         | some siblingValue =>
           have siblingAgrees := nodeAt_agrees allAgree sibling
-          cases rec : foldLevelNodes depth nodes rest with
-          | error error => simp [sibling, rec, Bind.bind, Except.bind] at folded
-          | ok result =>
-            rcases result with ⟨ps, ks⟩
+          have parent := parents index (two_le_of_level_positive atDepth positive) (by omega) even
+          cases rec : foldLevelNodes depth nodes rest <;>
             simp [sibling, rec, Bind.bind, Except.bind, Pure.pure, Except.pure] at folded
-            rcases folded with ⟨rfl, rfl⟩
-            have agrees := ih tail rec
-            intro i v member
-            simp only [List.mem_append, List.mem_cons] at member
-            rcases member with (same | member) | member
-            · cases same
-              rw [head, siblingAgrees]
-              exact parents index (two_le_of_level_positive atDepth positive)
-                (by omega) even
-            · exact agrees i v (by simp [member])
-            · exact agrees i v (by simp [member])
+          rcases folded with ⟨rfl, rfl⟩
+          have agrees := ih tail rec
+          simp only [NodesAgree, List.mem_append, List.mem_cons] at agrees ⊢
+          grind
       · -- Odd nodes are consumed by their even sibling.
         split at folded
         · simp [throw] at folded
@@ -101,13 +80,10 @@ theorem foldLevel_agrees {tree : Nat → Bytes} {height depth : Nat}
     (built : foldLevel depth nodes = .ok folded) : NodesAgree tree folded := by
   -- The worker's two groups are exactly the concatenated result of the public fold.
   unfold foldLevel at built
-  cases rec : foldLevelNodes depth nodes nodes with
-  | error error => simp [rec, Bind.bind, Except.bind] at built
-  | ok result =>
-    rcases result with ⟨ps, ks⟩
+  cases rec : foldLevelNodes depth nodes nodes <;>
     simp [rec, Bind.bind, Except.bind, Pure.pure, Except.pure] at built
-    subst folded
-    exact foldLevelNodes_agrees parents positive bounded agree agree rec
+  subst folded
+  exact foldLevelNodes_agrees parents positive bounded agree agree rec
 
 /-- Successful reconstruction returns the root of the finite tree supplying its nodes. -/
 theorem foldToRoot_agrees {tree : Nat → Bytes} {height : Nat}
@@ -119,13 +95,9 @@ theorem foldToRoot_agrees {tree : Nat → Bytes} {height : Nat}
   induction depth with
   | zero =>
     intro _ nodes agree root built
-    simp only [foldToRoot] at built
-    cases found : nodeAt nodes 1 with
-    | none => simp [found] at built
-    | some value =>
-      simp [found] at built
-      subst root
-      exact nodeAt_agrees agree found
+    cases found : nodeAt nodes 1 <;> simp [foldToRoot, found] at built
+    subst root
+    exact nodeAt_agrees agree found
   | succ depth ih =>
     intro bounded nodes agree root built
     simp only [foldToRoot] at built
@@ -145,10 +117,8 @@ theorem nodeAt_exists {nodes : List (Nat × Bytes)} {index : Nat} {value : Bytes
   | cons pair rest ih =>
     rcases pair with ⟨at_, stored⟩
     by_cases same : at_ = index
-    · subst at_
-      exact ⟨stored, by simp [nodeAt]⟩
-    · have tail : (index, value) ∈ rest := by simpa [same, Ne.symm same] using member
-      obtain ⟨found, located⟩ := ih tail
+    · subst at_; exact ⟨stored, by simp [nodeAt]⟩
+    · obtain ⟨found, located⟩ := ih (by simpa [same, Ne.symm same] using member)
       exact ⟨found, by simpa [nodeAt, same] using located⟩
 
 /-- A successful lookup returns a pair actually present in the supplied node set. -/
@@ -159,12 +129,10 @@ theorem nodeAt_member {nodes : List (Nat × Bytes)} {index : Nat} {value : Bytes
   cases located : nodes.find? (fun pair => pair.1 == index) with
   | none => simp [located] at found
   | some pair =>
-    have member := List.mem_of_find?_eq_some located
-    have named := List.find?_some located
-    simp only [beq_iff_eq] at named
+    have named : pair.1 = index := by simpa using List.find?_some located
     simp only [located, Option.map_some, Option.some.injEq] at found
     rw [← found, ← named]
-    exact member
+    exact List.mem_of_find?_eq_some located
 
 /-- Every node being folded has its sibling among the available nodes. -/
 def SiblingsPresent (depth : Nat) (nodes pending : List (Nat × Bytes)) : Prop :=
@@ -226,43 +194,25 @@ theorem foldLevelNodes_siblings {depth : Nat} {nodes pending : List (Nat × Byte
     rcases pair with ⟨index, value⟩
     by_cases atDepth : levelOf index = depth
     · rcases Nat.mod_two_eq_zero_or_one index with even | odd
-      · cases sibling : nodeAt nodes (index + 1) with
-        | none => simp [foldLevelNodes, atDepth, even, sibling, throw] at built
-        | some found =>
-          cases rec : foldLevelNodes depth nodes rest with
-          | error error =>
-            simp [foldLevelNodes, atDepth, even, sibling, rec, Bind.bind, Except.bind] at built
-          | ok result =>
-            have tail := ih rec
-            intro i v member level
-            rcases List.mem_cons.mp member with same | member
-            · cases same
-              obtain ⟨whole, side⟩ := gindexSibling_even even
-              have side : gindexSibling index = index + 1 := by omega
-              exact ⟨found, by rw [side]; exact nodeAt_member sibling⟩
-            · exact tail i v member level
-      · cases sibling : nodeAt nodes (index - 1) with
-        | none => simp [foldLevelNodes, atDepth, odd, sibling, throw] at built
-        | some found =>
-          have rebuilt : foldLevelNodes depth nodes rest = .ok (parents, kept) := by
-            simpa [foldLevelNodes, atDepth, odd, sibling] using built
-          have tail := ih rebuilt
-          intro i v member level
-          rcases List.mem_cons.mp member with same | member
-          · cases same
-            obtain ⟨whole, side⟩ := gindexSibling_odd odd
-            have side : gindexSibling index = index - 1 := by omega
-            exact ⟨found, by rw [side]; exact nodeAt_member sibling⟩
-          · exact tail i v member level
-    · cases rec : foldLevelNodes depth nodes rest with
-      | error error =>
-        simp [foldLevelNodes, atDepth, rec, Bind.bind, Except.bind] at built
-      | ok result =>
+      · cases sibling : nodeAt nodes (index + 1) <;> cases rec : foldLevelNodes depth nodes rest <;>
+          simp [foldLevelNodes, atDepth, even, sibling, rec, throw, Bind.bind, Except.bind] at built
+        have side : gindexSibling index = index + 1 := by have := gindexSibling_even even; omega
         have tail := ih rec
-        intro i v member level
-        rcases List.mem_cons.mp member with same | member
-        · cases same; exact False.elim (atDepth level)
-        · exact tail i v member level
+        have present := nodeAt_member sibling
+        simp only [SiblingsPresent, List.mem_cons] at tail ⊢
+        grind
+      · cases sibling : nodeAt nodes (index - 1) <;>
+          simp [foldLevelNodes, atDepth, odd, sibling, throw] at built
+        have tail := ih built
+        have side : gindexSibling index = index - 1 := by have := gindexSibling_odd odd; omega
+        have present := nodeAt_member sibling
+        simp only [SiblingsPresent, List.mem_cons] at tail ⊢
+        grind
+    · cases rec : foldLevelNodes depth nodes rest <;>
+        simp [foldLevelNodes, atDepth, rec, Bind.bind, Except.bind] at built
+      have tail := ih rec
+      simp only [SiblingsPresent, List.mem_cons] at tail ⊢
+      grind
 
 /-- A level fold succeeds exactly when all of its consumed nodes have siblings. -/
 theorem foldLevel_success_iff {depth : Nat} {nodes : List (Nat × Bytes)} :
@@ -271,9 +221,8 @@ theorem foldLevel_success_iff {depth : Nat} {nodes : List (Nat × Bytes)} :
   constructor
   · rintro ⟨result, built⟩
     unfold foldLevel at built
-    cases rec : foldLevelNodes depth nodes nodes with
-    | error error => simp [rec, Bind.bind, Except.bind] at built
-    | ok groups => exact foldLevelNodes_siblings rec
+    cases rec : foldLevelNodes depth nodes nodes <;> simp [rec, Bind.bind, Except.bind] at built
+    exact foldLevelNodes_siblings rec
   · exact foldLevel_complete
 
 /-- Reading any index sequence from a tree yields a node set agreeing with that tree. -/
@@ -283,21 +232,15 @@ theorem nodesAgree_zip_map (tree : Nat → Bytes) (indices : List Nat) :
   induction indices with
   | nil => simp [NodesAgree]
   | cons index rest ih =>
-    intro i value member
-    simp only [List.map_cons, List.zip_cons_cons, List.mem_cons] at member
-    rcases member with same | member
-    · cases same; rfl
-    · exact ih i value member
+    simp only [NodesAgree, List.map_cons, List.zip_cons_cons, List.mem_cons] at ih ⊢
+    grind
 
 /-- Two agreeing node sets can be supplied together without changing their meaning. -/
 theorem NodesAgree.append {tree : Nat → Bytes} {left right : List (Nat × Bytes)}
     (leftAgree : NodesAgree tree left) (rightAgree : NodesAgree tree right) :
     NodesAgree tree (left ++ right) := by
   -- Each supplied pair originates in one of the two inputs.
-  intro i value member
-  rcases List.mem_append.mp member with member | member
-  · exact leftAgree i value member
-  · exact rightAgree i value member
+  exact fun i value member => (List.mem_append.mp member).elim (leftAgree i value) (rightAgree i value)
 
 /-- A successful multiproof reconstruction agrees with the finite tree supplying its nodes. -/
 theorem calculateMultiMerkleRoot_agrees {tree : Nat → Bytes}
@@ -330,25 +273,13 @@ theorem verifyMerkleMultiproof_agrees {tree : Nat → Bytes}
     root = tree 1 := by
   -- Width checks can reject a proof, but only reconstruction can accept its root.
   unfold verifyMerkleMultiproof at accepted
-  cases rootWidth : checkChunk root with
-  | error error => simp [rootWidth, Bind.bind, Except.bind] at accepted
-  | ok checked =>
-    cases leafWidths : checkChunks leaves with
-    | error error => simp [rootWidth, leafWidths, Bind.bind, Except.bind] at accepted
-    | ok checked =>
-      cases proofWidths : checkChunks proof with
-      | error error => simp [rootWidth, leafWidths, proofWidths, Bind.bind, Except.bind] at accepted
-      | ok checked =>
-        cases reconstructed : calculateMultiMerkleRoot leaves proof indices with
-        | error error =>
-          simp [rootWidth, leafWidths, proofWidths, reconstructed, Bind.bind, Except.bind] at accepted
-        | ok rebuilt =>
-          have same : rebuilt = root := by
-            simpa [rootWidth, leafWidths, proofWidths, reconstructed, Bind.bind, Except.bind,
-              Pure.pure, Except.pure, beq_iff_eq] using accepted
-          rw [← same]
-          exact calculateMultiMerkleRoot_agrees helperIndices leafValues proofValues parents
-            reconstructed
+  cases rootWidth : checkChunk root <;> cases leafWidths : checkChunks leaves <;>
+    cases proofWidths : checkChunks proof <;>
+    cases reconstructed : calculateMultiMerkleRoot leaves proof indices <;>
+    simp [rootWidth, leafWidths, proofWidths, reconstructed, Bind.bind, Except.bind, Pure.pure,
+      Except.pure] at accepted
+  subst root
+  exact calculateMultiMerkleRoot_agrees helperIndices leafValues proofValues parents reconstructed
 
 /-- The position retained or created when a node is visited at one level. -/
 def FoldedIndex (depth child index : Nat) : Prop :=
@@ -364,46 +295,29 @@ theorem foldLevelNodes_indices {depth : Nat} {nodes pending : List (Nat × Bytes
       ∃ child ∈ pending.map Prod.fst, FoldedIndex depth child index := by
   -- Odd nodes contribute no duplicate parent because their even sibling owns the pair.
   induction pending generalizing parents kept with
-  | nil =>
-    simp [foldLevelNodes] at built
-    rcases built with ⟨rfl, rfl⟩
-    simp
+  | nil => simp_all [foldLevelNodes]
   | cons pair rest ih =>
     rcases pair with ⟨child, value⟩
     by_cases atDepth : levelOf child = depth
     · rcases Nat.mod_two_eq_zero_or_one child with even | odd
-      · cases sibling : nodeAt nodes (child + 1) with
-        | none => simp [foldLevelNodes, atDepth, even, sibling, throw] at built
-        | some found =>
-          cases rec : foldLevelNodes depth nodes rest with
-          | error error =>
-            simp [foldLevelNodes, atDepth, even, sibling, rec, Bind.bind, Except.bind] at built
-          | ok result =>
-            rcases result with ⟨ps, ks⟩
-            simp [foldLevelNodes, atDepth, even, sibling, rec, Bind.bind, Except.bind,
-              Pure.pure, Except.pure] at built
-            rcases built with ⟨rfl, rfl⟩
-            intro index
-            simpa [FoldedIndex, atDepth, even, List.map_append, List.mem_append] using
-              or_congr (Iff.rfl : (index = gindexParent child) ↔ _) (ih rec index)
-      · cases sibling : nodeAt nodes (child - 1) with
-        | none => simp [foldLevelNodes, atDepth, odd, sibling, throw] at built
-        | some found =>
-          have rebuilt : foldLevelNodes depth nodes rest = .ok (parents, kept) := by
-            simpa [foldLevelNodes, atDepth, odd, sibling] using built
-          intro index
-          simpa [FoldedIndex, atDepth, odd] using ih rebuilt index
-    · cases rec : foldLevelNodes depth nodes rest with
-      | error error => simp [foldLevelNodes, atDepth, rec, Bind.bind, Except.bind] at built
-      | ok result =>
-        rcases result with ⟨ps, ks⟩
-        simp [foldLevelNodes, atDepth, rec, Bind.bind, Except.bind,
-          Pure.pure, Except.pure] at built
+      · cases sibling : nodeAt nodes (child + 1) <;> cases rec : foldLevelNodes depth nodes rest <;>
+          simp [foldLevelNodes, atDepth, even, sibling, rec, throw, Bind.bind, Except.bind,
+            Pure.pure, Except.pure] at built
         rcases built with ⟨rfl, rfl⟩
         intro index
-        simpa [FoldedIndex, atDepth, List.map_append, List.mem_append,
-          or_comm, or_left_comm, or_assoc] using
-          or_congr (Iff.rfl : (index = child) ↔ _) (ih rec index)
+        simpa [FoldedIndex, atDepth, even, List.map_append, List.mem_append] using
+          or_congr (Iff.rfl : (index = gindexParent child) ↔ _) (ih rec index)
+      · cases sibling : nodeAt nodes (child - 1) <;>
+          simp [foldLevelNodes, atDepth, odd, sibling, throw] at built
+        intro index
+        simpa [FoldedIndex, atDepth, odd] using ih built index
+    · cases rec : foldLevelNodes depth nodes rest <;>
+        simp [foldLevelNodes, atDepth, rec, Bind.bind, Except.bind, Pure.pure, Except.pure] at built
+      rcases built with ⟨rfl, rfl⟩
+      intro index
+      simpa [FoldedIndex, atDepth, List.map_append, List.mem_append,
+        or_comm, or_left_comm, or_assoc] using
+        or_congr (Iff.rfl : (index = child) ↔ _) (ih rec index)
 
 /-- One successful fold has precisely the positions prescribed by pairing its input level. -/
 theorem foldLevel_indices {depth : Nat} {nodes result : List (Nat × Bytes)}
@@ -412,13 +326,10 @@ theorem foldLevel_indices {depth : Nat} {nodes result : List (Nat × Bytes)}
       ∃ child ∈ nodes.map Prod.fst, FoldedIndex depth child index := by
   -- The public fold concatenates the worker's two output groups.
   unfold foldLevel at built
-  cases rec : foldLevelNodes depth nodes nodes with
-  | error error => simp [rec, Bind.bind, Except.bind] at built
-  | ok groups =>
-    rcases groups with ⟨parents, kept⟩
+  cases rec : foldLevelNodes depth nodes nodes <;>
     simp [rec, Bind.bind, Except.bind, Pure.pure, Except.pure] at built
-    subst result
-    exact foldLevelNodes_indices rec
+  subst result
+  exact foldLevelNodes_indices rec
 
 /-- Positions present after every deeper level has been folded. -/
 def FrontierAt (indices helpers : List Nat) (depth : Nat) (nodes : List (Nat × Bytes)) : Prop :=
@@ -437,12 +348,8 @@ theorem FrontierAt.siblings {indices helpers : List Nat}
   -- A sibling is either already supplied or rebuilt by the deeper levels.
   intro index value member atDepth
   obtain ⟨_, support⟩ := frontier.1 index (List.mem_map.mpr ⟨(index, value), member, rfl⟩)
-  have support : index ∈ claimPaths indices ∨ index ∈ helpers := by
-    rcases support with root | support
-    · subst index
-      have rootLevel : levelOf 1 = 0 := rfl
-      omega
-    · exact support
+  have support : index ∈ claimPaths indices ∨ index ∈ helpers :=
+    support.resolve_left fun root => by subst index; have : levelOf 1 = 0 := rfl; omega
   obtain ⟨positive, sibling, _⟩ := helperFrontier_sibling built support
   have sameDepth : levelOf (gindexSibling index) = depth + 1 :=
     (levelOf_sibling positive).trans atDepth
@@ -474,10 +381,8 @@ theorem FrontierAt.fold {indices helpers : List Nat}
       subst index
       obtain ⟨_, support⟩ := frontier.1 child childMember
       have positive := two_le_of_level_positive atDepth (by omega)
-      have support : child ∈ claimPaths indices ∨ child ∈ helpers := by
-        rcases support with root | support
-        · subst child; have : levelOf 1 = 0 := rfl; omega
-        · exact support
+      have support : child ∈ claimPaths indices ∨ child ∈ helpers :=
+        support.resolve_left fun root => by subst child; have : levelOf 1 = 0 := rfl; omega
       have parent := (helperFrontier_sibling built support).2.2
       have parentDepth := levelOf_parent positive
       exact ⟨by unfold gindexParent; omega, parent.elim Or.inl (fun path => Or.inr (Or.inl path))⟩
@@ -490,12 +395,10 @@ theorem FrontierAt.fold {indices helpers : List Nat}
       exact ⟨index, frontier.2.1 index (List.mem_append.mpr (Or.inl claimed)) (by omega),
         Or.inl ⟨by omega, rfl⟩⟩
     · obtain ⟨left, _⟩ := helperFrontier_children built inside claimed
-      have positive : 1 ≤ index := by
-        rcases inside with root | path
-        · omega
-        · have := (claimPaths_bounds valid path).1; omega
-      have childDepth : levelOf (2 * index) = depth + 1 := by
-        exact (Nat.log2_two_mul (by omega)).trans (congrArg (· + 1) atDepth)
+      have positive : 1 ≤ index :=
+        inside.elim (by omega) fun path => by have := (claimPaths_bounds valid path).1; omega
+      have childDepth : levelOf (2 * index) = depth + 1 :=
+        (Nat.log2_two_mul (by omega)).trans (congrArg (· + 1) atDepth)
       have childMember : 2 * index ∈ nodes.map Prod.fst := by
         rcases left with path | helper
         · exact frontier.2.2 _ (Or.inr path) childDepth
@@ -539,13 +442,8 @@ theorem frontierAt_initial {indices helpers : List Nat}
   refine ⟨?_, ?_, ?_⟩
   · intro index member
     rw [positions] at member
-    refine ⟨bounded index member, ?_⟩
-    rcases List.mem_append.mp member with requested | helper
-    · exact Or.inr (Or.inl (claim_mem_paths valid requested))
-    · exact Or.inr (Or.inr helper)
-  · intro index member _
-    rw [positions]
-    exact member
+    exact ⟨bounded index member, .inr ((List.mem_append.mp member).imp_left (claim_mem_paths valid))⟩
+  · exact fun index member _ => positions ▸ member
   · intro index inside atDepth
     rw [positions]
     by_cases requested : index ∈ indices
@@ -624,9 +522,7 @@ theorem checkChunks_map {tree : Nat → Bytes} {indices : List Nat}
   induction indices with
   | nil => rfl
   | cons index rest ih =>
-    have head := widths index (by simp)
-    have tail := ih (fun i member => widths i (by simp [member]))
-    simp [checkChunks, checkChunk, head, tail, Bind.bind, Except.bind]
+    simp_all [checkChunks, checkChunk, Bind.bind, Except.bind]
 
 /-- A multiproof read from a finite tree of 32-byte nodes is accepted by the public verifier. -/
 theorem multiproof_verifies {tree : Nat → Bytes} {indices helpers : List Nat}

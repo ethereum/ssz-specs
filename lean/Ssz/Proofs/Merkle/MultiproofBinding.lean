@@ -46,8 +46,7 @@ private theorem separated (valid : Reconstruction leaves proof indices helpers r
 private theorem unique (valid : Reconstruction leaves proof indices helpers root) :
     ((suppliedNodes leaves proof indices helpers).map Prod.fst).Nodup := by
   -- Each supplied position has exactly one value, so lookup cannot hide another claim.
-  rw [valid.positions]
-  exact getHelperIndices_all_nodup valid.helperIndices
+  exact valid.positions ▸ getHelperIndices_all_nodup valid.helperIndices
 
 private theorem widths (valid : Reconstruction leaves proof indices helpers root) :
     ∀ index value, (index, value) ∈ suppliedNodes leaves proof indices helpers →
@@ -110,12 +109,10 @@ theorem verifyMerkleMultiproof_overlap_binding
     leftFound rightFound (Nat.log2 index) (multiproofHeight leftIndices leftHelpers)
     (multiproofHeight rightIndices rightHelpers) 1 leftBound rightBound (by decide)
     (shiftRight_depth positive) (left.rebuilt.trans right.rebuilt.symm)
-  rcases binding with equal | ⟨first, firstMember, second, secondMember, distinct, hashed⟩
-  · exact .inl equal
-  · -- Locate both distinct compression inputs in the actual verifier executions.
-    obtain ⟨firstExecuted, firstWidth⟩ := left.message firstMember
-    obtain ⟨secondExecuted, secondWidth⟩ := right.message secondMember
-    exact .inr ⟨first, firstExecuted, second, secondExecuted, firstWidth, secondWidth, distinct, hashed⟩
+  -- Locate both distinct compression inputs in the actual verifier executions.
+  exact binding.imp id fun ⟨first, firstMember, second, secondMember, distinct, hashed⟩ =>
+    ⟨first, (left.message firstMember).1, second, (right.message secondMember).1,
+      (left.message firstMember).2, (right.message secondMember).2, distinct, hashed⟩
 
 /--
 Two accepted multiproofs for the same positions bind every claimed value.
@@ -140,16 +137,13 @@ theorem verifyMerkleMultiproof_binding {leftLeaves leftProof rightLeaves rightPr
         first.size = 64 ∧ second.size = 64 ∧ first ≠ second ∧
         Sha256.hash (ByteArray.mk first) = Sha256.hash (ByteArray.mk second)
   · exact .inr collision
-  · left
-    apply List.ext_getElem
-    · omega
-    · intro position leftBound rightBound
-      have indexBound : position < indices.length := by omega
-      -- Every shared position is bound by the theorem for overlapping requests.
-      have first : (indices[position], leftLeaves[position]) ∈ indices.zip leftLeaves :=
-        List.mem_iff_getElem.mpr ⟨position, by simp; omega, by simp⟩
-      have second : (indices[position], rightLeaves[position]) ∈ indices.zip rightLeaves :=
-        List.mem_iff_getElem.mpr ⟨position, by simp; omega, by simp⟩
-      exact (verifyMerkleMultiproof_overlap_binding leftAccepted rightAccepted first second).resolve_right collision
+  · refine .inl (List.ext_getElem (by omega) fun position leftBound rightBound => ?_)
+    have indexBound : position < indices.length := by omega
+    -- Every shared position is bound by the theorem for overlapping requests.
+    have first : (indices[position], leftLeaves[position]) ∈ indices.zip leftLeaves :=
+      List.mem_iff_getElem.mpr ⟨position, by simp; omega, by simp⟩
+    have second : (indices[position], rightLeaves[position]) ∈ indices.zip rightLeaves :=
+      List.mem_iff_getElem.mpr ⟨position, by simp; omega, by simp⟩
+    exact (verifyMerkleMultiproof_overlap_binding leftAccepted rightAccepted first second).resolve_right collision
 
 end Ssz

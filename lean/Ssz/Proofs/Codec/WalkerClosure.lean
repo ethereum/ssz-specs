@@ -21,8 +21,7 @@ private theorem boundedTreeNode_parent (chunks : Array Bytes) (height index dept
         (boundedTreeNode chunks height index depth start) := by
   -- Parity identifies the current child and the other half of its parent's interval.
   have equation := boundedTreeNode_split chunks height (index / 2) (depth - 1) start (by omega)
-  have next : depth - 1 + 1 = depth := by omega
-  rw [next] at equation
+  rw [show depth - 1 + 1 = depth by omega] at equation
   rcases Nat.mod_two_eq_zero_or_one index with even | odd
   · obtain ⟨child, sibling⟩ := gindexSibling_even even
     rw [← sibling, ← child] at equation
@@ -46,14 +45,11 @@ theorem boundedNode_closed (layout : MerkleLayout) (budget : Nat) (chunks : Arra
   -- Every interval read uses the same fully materialized leaves as the original value root.
   have windows := layoutChunksAt_window budget layout chunks materialized
   by_cases inside : depth ≤ depthFor capacity
-  · have current := boundedNode_window windows index depth start capacity inside
-    rw [current] at read
-    cases read
-    refine ⟨boundedTreeNode chunks (depthFor capacity) (index / 2) (depth - 1) start,
+  · cases (boundedNode_window windows index depth start capacity inside).symm.trans read
+    exact ⟨boundedTreeNode chunks (depthFor capacity) (index / 2) (depth - 1) start,
       boundedTreeNode chunks (depthFor capacity) (gindexSibling index) depth start,
-      boundedNode_window windows _ _ _ _ (by omega),
-      boundedNode_window windows _ _ _ _ inside, ?_⟩
-    exact boundedTreeNode_parent chunks _ index depth start positive inside
+      boundedNode_window windows _ _ _ _ (by omega), boundedNode_window windows _ _ _ _ inside,
+      boundedTreeNode_parent chunks _ index depth start positive inside⟩
   · have deeper : depthFor capacity < depth := by omega
     -- Below leaf depth, success requires a filled composite slot.
     simp only [boundedNode, nextPow2, Nat.log2_two_pow, if_neg inside] at read
@@ -70,9 +66,7 @@ theorem boundedNode_closed (layout : MerkleLayout) (budget : Nat) (chunks : Arra
         -- Descending below an outer leaf leaves at least one turn inside its actual child tree.
         have rebasedPositive : 2 ≤ gindexRebase index (depth - depthFor capacity) := by
           unfold gindexRebase
-          have power : 2 ≤ 2 ^ (depth - depthFor capacity) := by
-            have monotone := Nat.pow_le_pow_right (by decide : 0 < 2) belowPositive
-            simpa using monotone
+          have power : 2 ≤ 2 ^ (depth - depthFor capacity) := Nat.le_self_pow (by omega) 2
           omega
         obtain ⟨parent, sibling, parentRead, siblingRead, equation⟩ :=
           closed _ node rebasedPositive read
@@ -96,8 +90,7 @@ theorem boundedNode_closed (layout : MerkleLayout) (budget : Nat) (chunks : Arra
         refine ⟨parent, sibling, ?_, ?_, ?_⟩
         · rw [boundedNode_nested_at layout budget slots nested child inner enough
             (index / 2) (depth - 1) start capacity (by omega) parentSelected]
-          rw [remaining, gindexRebase_parent] at parentRead
-          exact parentRead
+          rwa [remaining, gindexRebase_parent] at parentRead
         · rw [boundedNode_nested_at layout budget slots nested child inner enough
             (gindexSibling index) depth start capacity (by omega) siblingSelected]
           rw [remaining, gindexRebase_sibling]
@@ -106,15 +99,9 @@ theorem boundedNode_closed (layout : MerkleLayout) (budget : Nat) (chunks : Arra
         · have parity : gindexRebase index (depth - depthFor capacity) % 2 = index % 2 := by
             rw [remaining]
             rcases Nat.mod_two_eq_zero_or_one index with even | odd
-            · obtain ⟨childIndex, _⟩ := gindexSibling_even even
-              have rebased := (congrArg (gindexRebase · (depth - 1 - depthFor capacity + 1))
-                childIndex).trans (gindexRebase_children (index / 2) (depth - 1 - depthFor capacity)).1
-              rw [rebased, even]
+            · rw [(gindexSibling_even even).1, (gindexRebase_children _ _).1]
               omega
-            · obtain ⟨childIndex, _⟩ := gindexSibling_odd odd
-              have rebased := (congrArg (gindexRebase · (depth - 1 - depthFor capacity + 1))
-                childIndex).trans (gindexRebase_children (index / 2) (depth - 1 - depthFor capacity)).2
-              rw [rebased, odd]
+            · rw [(gindexSibling_odd odd).1, (gindexRebase_children _ _).2]
               omega
           simpa only [parity] using equation
       · simp [throw, throwThe, MonadExceptOf.throw] at read

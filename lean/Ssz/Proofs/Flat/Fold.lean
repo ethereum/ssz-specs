@@ -69,11 +69,8 @@ theorem paddedList_pairLevel (combine : α → α → α) (fill : α) (level : L
     -- An empty level reads as the fill everywhere, above and below alike.
     simp [paddedList, levelFold, pairLevel]
   | case2 node =>
-    match position with
-    -- A lone node is paired with the fill, which is the one leaf the level above holds.
-    | 0 => simp [paddedList, levelFold, pairLevel]
-    -- Past that node both sides read two fills and combine them.
-    | _ + 1 => simp [paddedList, levelFold, pairLevel]
+    -- A lone node is paired with the fill, and past it both sides read two fills.
+    cases position <;> simp [paddedList, levelFold, pairLevel]
   | case3 left right rest ih =>
     match position with
     -- The first leaf above is the first pair below.
@@ -81,10 +78,7 @@ theorem paddedList_pairLevel (combine : α → α → α) (fill : α) (level : L
     -- Every later one skips the pair just folded, which is the same claim two shorter.
     | position + 1 =>
       have below : 2 * (position + 1) = 2 * position + 1 + 1 := by omega
-      have rest_agrees := ih position
-      simp only [paddedList, levelFold] at rest_agrees
-      simp only [paddedList, levelFold, pairLevel, below, List.getElem?_cons_succ]
-      exact rest_agrees
+      simpa only [paddedList, levelFold, pairLevel, below, List.getElem?_cons_succ] using ih position
 
 /-- Folding pairs a level up, so its length halves, an odd node keeping a place of its own. -/
 theorem pairLevel_length (combine : α → α → α) (fill : α) (level : List α) :
@@ -120,18 +114,14 @@ theorem pairLevel_ne_nil (combine : α → α → α) (fill : α) {level : List 
   -- Every nonempty input has either a complete first pair or a left node that can pair with fill.
   match level with
   | [] => exact absurd rfl nonempty
-  | [_] => simp [pairLevel]
-  | _ :: _ :: _ => simp [pairLevel]
+  | [_] | _ :: _ :: _ => simp [pairLevel]
 
 /-- Two lists of the same length agree once every position reads the same. -/
 theorem list_eq_of_getD {fill : α} {left right : List α} (sameLength : left.length = right.length)
     (agree : ∀ position : Nat, left[position]?.getD fill = right[position]?.getD fill) :
     left = right := by
-  apply List.ext_getElem sameLength
-  intro position inLeft inRight
-  have here := agree position
   -- Inside both lists a lookup answers, so dropping the default keeps the equality.
-  rw [List.getElem?_eq_getElem inLeft, List.getElem?_eq_getElem inRight] at here
-  simpa using here
+  refine List.ext_getElem sameLength fun position inLeft inRight => ?_
+  simpa [List.getElem?_eq_getElem inLeft, List.getElem?_eq_getElem inRight] using agree position
 
 end Ssz

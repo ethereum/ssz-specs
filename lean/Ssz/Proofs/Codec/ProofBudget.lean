@@ -23,8 +23,7 @@ private theorem boundedNode_budget_congr (layout : MerkleLayout) (left right : N
     | nested slots =>
       dsimp only
       split
-      · rename_i child inner found
-        exact children slots hl child inner (List.mem_of_getElem? found) _
+      · exact children slots hl _ _ (List.mem_of_getElem? ‹_›) _
       · rfl
 
 private theorem progressiveNode_budget_congr (layout : MerkleLayout) (left right : Nat)
@@ -54,53 +53,41 @@ theorem nodeRootAt_budget_eq (shape : Desc) (value : Value) (index left right : 
   generalize depthEq : shape.nesting = depth
   induction depth using Nat.strongRecOn generalizing shape value index left right with
   | ind depth ih =>
-    have positive : 0 < shape.nesting := by
-      cases shape <;> simp [Desc.nesting]
-    cases left with
-    | zero => omega
-    | succ left =>
-      cases right with
-      | zero => omega
-      | succ right =>
-        by_cases invalid : index < 1
-        · simp [nodeRootAt, invalid, throw, throwThe, MonadExceptOf.throw, Bind.bind, Except.bind]
-        by_cases root : index = 1
-        · simp [nodeRootAt, root]
-        cases hl : merkleLayout shape value with
-        | error e => simp [nodeRootAt, invalid, root, hl, Bind.bind, Except.bind]
-        | ok layout =>
-          -- Each retained leaf has the same root at both sufficient budgets, including sliced intervals.
-          have chunks : ∀ start stop, layoutChunksAt left layout start stop =
-              layoutChunksAt right layout start stop := by
-            intro start stop
-            apply layoutChunksAt_budget_eq
-            intro slots nested child inner member
-            have smaller := merkleLayout_child_nesting shape value layout hl
-              slots nested child inner member
-            omega
-          -- Every selected child has strictly smaller type depth, so the induction applies independently of its index.
-          have children : ∀ slots, layout.leaves = .nested slots →
-              ∀ child inner, some (child, inner) ∈ slots → ∀ at_,
-                nodeRootAt left child inner at_ = nodeRootAt right child inner at_ := by
-            intro slots nested child inner member at_
-            have smaller := merkleLayout_child_nesting shape value layout hl
-              slots nested child inner member
-            exact ih child.nesting (by omega) child inner at_ left right
-              (by omega) (by omega) rfl
-          -- The same interval and child results cover both bounded trees and progressive spines.
-          have bounded := boundedNode_budget_congr layout left right chunks children
-          have progressive := progressiveNode_budget_congr layout left right chunks children
-          simp only [nodeRootAt, show ¬index < 1 from invalid, root, ↓reduceIte,
-            beq_iff_eq, hl, Bind.bind, Except.bind]
-          cases hg : gindexLength index with
-          | error e => rfl
-          | ok full =>
-            dsimp only
-            cases hm : layout.mixin with
-            | none =>
-              simp [bounded, progressive]
-            | some word =>
-              simp [bounded, progressive, Pure.pure, Except.pure]
+    have positive : 0 < shape.nesting := by cases shape <;> simp [Desc.nesting]
+    rcases left with _ | left; · omega
+    rcases right with _ | right; · omega
+    by_cases invalid : index < 1
+    · simp [nodeRootAt, invalid, throw, throwThe, MonadExceptOf.throw, Bind.bind, Except.bind]
+    by_cases root : index = 1
+    · simp [nodeRootAt, root]
+    cases hl : merkleLayout shape value with
+    | error e => simp [nodeRootAt, invalid, root, hl, Bind.bind, Except.bind]
+    | ok layout =>
+      -- Each retained leaf has the same root at both sufficient budgets, including sliced intervals.
+      have chunks : ∀ start stop, layoutChunksAt left layout start stop =
+          layoutChunksAt right layout start stop := fun start stop =>
+        layoutChunksAt_budget_eq layout left right (fun slots nested child inner member => by
+          have := merkleLayout_child_nesting shape value layout hl slots nested child inner member
+          omega) start stop
+      -- Every selected child has strictly smaller type depth, so the induction applies independently of its index.
+      have children : ∀ slots, layout.leaves = .nested slots →
+          ∀ child inner, some (child, inner) ∈ slots → ∀ at_,
+            nodeRootAt left child inner at_ = nodeRootAt right child inner at_ := by
+        intro slots nested child inner member at_
+        have smaller := merkleLayout_child_nesting shape value layout hl
+          slots nested child inner member
+        exact ih child.nesting (by omega) child inner at_ left right
+          (by omega) (by omega) rfl
+      -- The same interval and child results cover both bounded trees and progressive spines.
+      have bounded := boundedNode_budget_congr layout left right chunks children
+      have progressive := progressiveNode_budget_congr layout left right chunks children
+      simp only [nodeRootAt, show ¬index < 1 from invalid, root, ↓reduceIte,
+        beq_iff_eq, hl, Bind.bind, Except.bind]
+      cases hg : gindexLength index with
+      | error e => rfl
+      | ok full =>
+        dsimp only
+        cases layout.mixin <;> simp [bounded, progressive, Pure.pure, Except.pure]
 
 /-- The public walk agrees with any budget covering the type's nesting depth. -/
 theorem nodeRootAt_eq_nodeRoot (shape : Desc) (value : Value) (index budget : Nat)

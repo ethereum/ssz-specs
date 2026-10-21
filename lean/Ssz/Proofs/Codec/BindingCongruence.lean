@@ -48,8 +48,7 @@ theorem perfectTrees_included (depth : Nat) (leaves : Nat → CommitmentTree)
   -- Follow the selected position through successive equal-width halves of the perfect tree.
   induction depth generalizing leaves i with
   | zero =>
-    have zero : i = 0 := Nat.lt_one_iff.mp within
-    subst i
+    obtain rfl : i = 0 := Nat.lt_one_iff.mp within
     exact Included.refl _
   | succ depth ih =>
     by_cases before : i < 2 ^ depth
@@ -91,8 +90,7 @@ theorem perfectTrees_roots (depth : Nat) (left right : Nat → CommitmentTree)
   induction depth generalizing left right with
   | zero =>
     intro i within
-    have zero : i = 0 := Nat.lt_one_iff.mp within
-    subst i
+    obtain rfl : i = 0 := Nat.lt_one_iff.mp within
     exact same
   | succ depth ih =>
     have both := clean.fork_roots first second same
@@ -137,8 +135,7 @@ theorem progressive_included (trees : List CommitmentTree) (level i : Nat)
   induction trees, level using progressive.induct generalizing i with
   | case1 trees level empty =>
     -- An empty suffix contains no stored position, so the assumed position cannot lie here.
-    have nil := List.isEmpty_iff.mp empty
-    subst trees
+    obtain rfl := List.isEmpty_iff.mp empty
     simp at within
   | case2 trees level nonempty ih =>
     rw [progressive, if_neg nonempty]
@@ -166,18 +163,12 @@ theorem progressive_roots (left right : List CommitmentTree) (level : Nat)
   -- Equal leaf counts make both progressive spines end at the same level.
   induction left, level using progressive.induct generalizing right with
   | case1 left level empty =>
-    have nil := List.isEmpty_iff.mp empty
-    subst left
+    obtain rfl := List.isEmpty_iff.mp empty
     simp
   | case2 left level nonempty ih =>
     -- If one suffix is nonempty, the equal count forces the other suffix to be nonempty too.
     have otherNonempty : ¬ right.isEmpty = true := by
-      intro empty
-      have nil := List.isEmpty_iff.mp empty
-      subst right
-      have nil := List.eq_nil_of_length_eq_zero lengths
-      subst left
-      exact nonempty rfl
+      simp_all [List.isEmpty_iff, ← List.length_eq_zero_iff]
     rw [progressive.eq_def left level, if_neg nonempty] at first clean same
     rw [progressive.eq_def right level, if_neg otherNonempty] at second clean same
     -- The enclosing hash authenticates both the bounded prefix root and the remaining spine root.
@@ -228,8 +219,7 @@ theorem content_included (trees : Array CommitmentTree) (limit : Option Nat)
     (i : Nat) (within : i < trees.size) : Included trees[i] (content trees limit) := by
   -- Both tree shapes retain every stored child computation when their capacity requirements hold.
   cases limit with
-  | none =>
-    exact progressive_included trees.toList 0 i (by simpa)
+  | none => exact progressive_included trees.toList 0 i (by simpa)
   | some capacity => exact bounded_included trees capacity (room capacity rfl) i within
 
 /-- A layout's mixing word is authenticated before its variable tree shape is inspected. -/
@@ -264,17 +254,10 @@ theorem withMixin_comparison {left right : CommitmentTree} {a b : Option Bytes}
     (same : (left.withMixin a).root = (right.withMixin b).root) :
     a = b ∧ left.root = right.root := by
   -- Equal metadata presence excludes comparing a mixed root with an unmixed root.
-  cases a with
-  | none =>
-    cases b with
-    | none => exact ⟨rfl, same⟩
-    | some word => cases presence
-  | some word =>
-    cases b with
-    | none => cases presence
-    | some other =>
-      -- With metadata on both sides, the final hash authenticates the contents root and the word separately.
-      have both := withMixin_roots first second clean same
-      exact ⟨congrArg some both.2, both.1⟩
+  cases a <;> cases b <;> simp at presence
+  · exact ⟨rfl, same⟩
+  -- With metadata on both sides, the final hash authenticates the contents root and the word separately.
+  · have both := withMixin_roots first second clean same
+    exact ⟨congrArg some both.2, both.1⟩
 
 end Ssz.CommitmentTree

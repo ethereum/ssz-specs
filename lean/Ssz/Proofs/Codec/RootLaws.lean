@@ -11,31 +11,15 @@ private theorem mapM_window {α β ε : Type} (f : α → Except ε β)
     ((xs.drop start).take count).mapM f = .ok ((ys.drop start).take count) := by
   -- A successful traversal supplies a successful root for each retained position.
   induction xs generalizing ys start count with
-  | nil =>
-    simp [Pure.pure, Except.pure] at success
-    subst ys
-    simp [Pure.pure, Except.pure]
+  | nil => simp_all [Pure.pure, Except.pure]
   | cons x xs ih =>
-    cases hx : f x with
-    | error e => simp [List.mapM_cons, hx, Bind.bind, Except.bind] at success
-    | ok y =>
-      cases ht : xs.mapM f with
-      | error e =>
-        simp [List.mapM_cons, hx, ht, Bind.bind, Except.bind] at success
-      | ok tail =>
-        simp [List.mapM_cons, hx, ht, Bind.bind, Except.bind,
-          Pure.pure, Except.pure] at success
-        subst ys
-        -- Skipping removes a matched pair, while taking retains the same root.
-        cases start with
-        | succ start => simpa using ih ht start count
-        | zero =>
-          cases count with
-          | zero => simp [Pure.pure, Except.pure]
-          | succ count =>
-            simpa [List.mapM_cons, hx, ih ht 0 count, Bind.bind, Except.bind,
-              Functor.map, Except.map, Pure.pure, Except.pure] using
-              congrArg (fun rest => rest.map (y :: ·)) (ih ht 0 count)
+    cases hx : f x <;> cases ht : xs.mapM f <;>
+      simp_all [List.mapM_cons, Bind.bind, Except.bind, Pure.pure, Except.pure, eq_comm (b := ys)]
+    -- Skipping removes a matched pair, while taking retains the same root.
+    rcases start with _ | start <;> rcases count with _ | count <;>
+      simp_all [List.mapM_cons, Bind.bind, Except.bind, Pure.pure, Except.pure]
+    have := ih 0 count
+    simp_all
 
 private theorem mapM_success_mono {α β ε : Type} (f g : α → Except ε β)
     (preserves : ∀ x y, f x = .ok y → g x = .ok y)
@@ -45,18 +29,8 @@ private theorem mapM_success_mono {α β ε : Type} (f g : α → Except ε β)
   induction xs generalizing ys with
   | nil => simpa using success
   | cons x xs ih =>
-    cases hx : f x with
-    | error e => simp [List.mapM_cons, hx, Bind.bind, Except.bind] at success
-    | ok y =>
-      cases ht : xs.mapM f with
-      | error e =>
-        simp [List.mapM_cons, hx, ht, Bind.bind, Except.bind] at success
-      | ok tail =>
-        simp [List.mapM_cons, hx, ht, Bind.bind, Except.bind,
-           Pure.pure, Except.pure] at success
-        subst ys
-        simp [List.mapM_cons, preserves x y hx, ih ht, Bind.bind, Except.bind,
-            Pure.pure, Except.pure]
+    cases hx : f x <;> cases ht : xs.mapM f <;>
+      simp_all [List.mapM_cons, Bind.bind, Except.bind, Pure.pure, Except.pure]
 
 private theorem layoutChunksAt_preserves (budget larger : Nat)
     (preserves : ∀ shape value root, hashTreeRootAt budget shape value = .ok root →
@@ -97,19 +71,17 @@ theorem hashTreeRootAt_success_mono (budget larger : Nat) (enough : budget ≤ l
   induction budget generalizing larger shape value root with
   | zero => simp [hashTreeRootAt] at success
   | succ budget ih =>
-    cases larger with
-    | zero => omega
-    | succ larger =>
-      -- Layout selection itself is independent of recursion budget.
-      cases hl : merkleLayout shape value with
-      | error e => simp [hashTreeRootAt, hl, Bind.bind, Except.bind] at success
-      | ok layout =>
-        cases hc : layoutChunksAt budget layout with
-        | error e => simp [hashTreeRootAt, hl, hc, Bind.bind, Except.bind] at success
-        | ok chunks =>
-          have lifted := layoutChunksAt_preserves budget larger
-            (fun s v r h => ih larger (by omega) s v r h) layout chunks hc
-          simpa [hashTreeRootAt, hl, hc, lifted, Bind.bind, Except.bind] using success
+    rcases larger with _ | larger; · omega
+    -- Layout selection itself is independent of recursion budget.
+    cases hl : merkleLayout shape value with
+    | error e => simp [hashTreeRootAt, hl, Bind.bind, Except.bind] at success
+    | ok layout =>
+      cases hc : layoutChunksAt budget layout with
+      | error e => simp [hashTreeRootAt, hl, hc, Bind.bind, Except.bind] at success
+      | ok chunks =>
+        have lifted := layoutChunksAt_preserves budget larger
+          (fun s v r h => ih larger (by omega) s v r h) layout chunks hc
+        simpa [hashTreeRootAt, hl, hc, lifted, Bind.bind, Except.bind] using success
 
 private theorem mapM_congr_on {α β ε : Type} (f g : α → Except ε β)
     (xs : List α) (same : ∀ x ∈ xs, f x = g x) : xs.mapM f = xs.mapM g := by
@@ -130,37 +102,33 @@ theorem hashTreeRootAt_budget_eq (shape : Desc) (value : Value) (left right : Na
   | ind depth ih =>
     have positive : 0 < shape.nesting := by
       cases shape <;> simp [Desc.nesting]
-    cases left with
-    | zero => omega
-    | succ left =>
-      cases right with
-      | zero => omega
-      | succ right =>
-        -- Layout selection itself is independent of recursion budget.
-        cases hl : merkleLayout shape value with
-        | error e => simp [hashTreeRootAt, hl, Bind.bind, Except.bind]
-        | ok layout =>
-          -- Equal child roots give equal leaves before either tree shape hashes them.
-          have chunksEq : layoutChunksAt left layout = layoutChunksAt right layout := by
-            rcases layout with ⟨leaves, limit, mixin⟩
-            cases leaves with
-            | packed data => simp [layoutChunksAt]
-            | nested slots =>
-              simp only [layoutChunksAt, Leaves.count, Option.getD_none,
-                List.drop_zero, Nat.sub_zero, List.take_length]
-              apply congrArg (fun result : Except Err (List Bytes) =>
-                result.bind (fun nodes => .ok nodes.toArray))
-              apply mapM_congr_on
-              intro slot member
-              cases slot with
-              | none => rfl
-              | some pair =>
-                -- Entering one child spends one level from each sufficient budget.
-                have smaller := merkleLayout_child_nesting shape value _ hl slots rfl
-                  pair.1 pair.2 member
-                exact ih pair.1.nesting (by omega) pair.1 pair.2 left right
-                  (by omega) (by omega) rfl
-          simp [hashTreeRootAt, hl, chunksEq, Bind.bind, Except.bind]
+    rcases left with _ | left; · omega
+    rcases right with _ | right; · omega
+    -- Layout selection itself is independent of recursion budget.
+    cases hl : merkleLayout shape value with
+    | error e => simp [hashTreeRootAt, hl, Bind.bind, Except.bind]
+    | ok layout =>
+      -- Equal child roots give equal leaves before either tree shape hashes them.
+      have chunksEq : layoutChunksAt left layout = layoutChunksAt right layout := by
+        rcases layout with ⟨leaves, limit, mixin⟩
+        cases leaves with
+        | packed data => simp [layoutChunksAt]
+        | nested slots =>
+          simp only [layoutChunksAt, Leaves.count, Option.getD_none,
+            List.drop_zero, Nat.sub_zero, List.take_length]
+          apply congrArg (fun result : Except Err (List Bytes) =>
+            result.bind (fun nodes => .ok nodes.toArray))
+          apply mapM_congr_on
+          intro slot member
+          cases slot with
+          | none => rfl
+          | some pair =>
+            -- Entering one child spends one level from each sufficient budget.
+            have smaller := merkleLayout_child_nesting shape value _ hl slots rfl
+              pair.1 pair.2 member
+            exact ih pair.1.nesting (by omega) pair.1 pair.2 left right
+              (by omega) (by omega) rfl
+      simp [hashTreeRootAt, hl, chunksEq, Bind.bind, Except.bind]
 
 /-- Any sufficient recursion budget agrees with the root computed at the type's own depth. -/
 theorem hashTreeRootAt_eq_hashTreeRoot (shape : Desc) (value : Value) (budget : Nat)
@@ -245,22 +213,10 @@ private theorem mapM_length {α β ε : Type} (f : α → Except ε β)
     ys.length = xs.length := by
   -- A successful traversal replaces each input by exactly one output.
   induction xs generalizing ys with
-  | nil =>
-    simp [Pure.pure, Except.pure] at success
-    subst ys
-    rfl
+  | nil => simp_all [Pure.pure, Except.pure]
   | cons x xs ih =>
-    cases hx : f x with
-    | error e => simp [List.mapM_cons, hx, Bind.bind, Except.bind] at success
-    | ok y =>
-      cases ht : xs.mapM f with
-      | error e =>
-        simp [List.mapM_cons, hx, ht, Bind.bind, Except.bind] at success
-      | ok tail =>
-        simp [List.mapM_cons, hx, ht, Bind.bind, Except.bind,
-           Pure.pure, Except.pure] at success
-        subst ys
-        simp [ih ht]
+    cases hx : f x <;> cases ht : xs.mapM f <;>
+      simp_all [List.mapM_cons, Bind.bind, Except.bind, Pure.pure, Except.pure, eq_comm (b := ys)]
 
 /-- Successful materialization produces one node per leaf, including empty positions. -/
 theorem layoutChunksAt_size (budget : Nat) (layout : MerkleLayout)
@@ -295,16 +251,9 @@ private theorem mapM_success_member {α β ε : Type} (f : α → Except ε β)
   induction xs generalizing ys with
   | nil => simp at member
   | cons first rest ih =>
-    cases head : f first with
-    | error e => simp [List.mapM_cons, head, Bind.bind, Except.bind] at success
-    | ok y =>
-      cases tail : rest.mapM f with
-      | error e =>
-        simp [List.mapM_cons, head, tail, Bind.bind, Except.bind] at success
-      | ok remaining =>
-        rcases List.mem_cons.mp member with rfl | member
-        · exact ⟨y, head⟩
-        · exact ih tail member
+    cases head : f first <;> cases tail : rest.mapM f <;>
+      simp_all [List.mapM_cons, Bind.bind, Except.bind]
+    rcases member with rfl | member <;> simp_all
 
 /-- Every present leaf of a successfully materialized layout has a successful root. -/
 theorem layoutChunksAt_child_root (budget : Nat) (layout : MerkleLayout)

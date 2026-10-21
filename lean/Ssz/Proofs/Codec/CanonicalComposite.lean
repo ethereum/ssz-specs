@@ -4,25 +4,20 @@ import Ssz.Proofs.Codec.CanonicalTable
 
 namespace Ssz
 
+private theorem bind_ok {α β : Type} {x : Except Err α} {f : α → Except Err β} {b : β}
+    (h : (x >>= f) = .ok b) : ∃ a, x = .ok a ∧ f a = .ok b := by
+  cases x <;> simp_all [Bind.bind, Except.bind]
+
 /-- A decode reads one value for each slice it was handed. -/
 private theorem deserializeEach_length {element : Desc} :
     ∀ (slices : List Bytes) (values : List Value),
       deserializeEach element slices = .ok values → slices.length = values.length
-  | [], values, read => by
-    simp only [deserializeEach, Except.ok.injEq] at read
-    simp [← read]
+  | [], values, read => by simp_all [deserializeEach]
   | slice :: rest, values, read => by
     rw [deserializeEach] at read
-    cases head : deserialize element slice with
-    | error _ => simp [head, Bind.bind, Except.bind] at read
-    | ok first =>
-      cases tail : deserializeEach element rest with
-      | error _ => simp [head, tail, Bind.bind, Except.bind] at read
-      | ok others =>
-        simp only [head, tail, Bind.bind, Except.bind, pure, Except.pure,
-          Except.ok.injEq] at read
-        subst read
-        simp [deserializeEach_length rest others tail]
+    obtain ⟨first, head, read⟩ := bind_ok read
+    obtain ⟨others, tail, ⟨⟩⟩ := bind_ok read
+    simp [deserializeEach_length rest others tail]
 
 /-- Re-encoding individually canonical elements recovers every original slice in order. -/
 theorem serializeEach_of_deserializeEach {element : Desc}
@@ -35,23 +30,16 @@ theorem serializeEach_of_deserializeEach {element : Desc}
   induction slices with
   | nil =>
     intro values read
-    simp [deserializeEach] at read
-    subst values
-    simp [serializeEach]
+    simp_all [deserializeEach, serializeEach]
   | cons slice slices ih =>
     intro values read
-    cases head : deserialize element slice with
-    | error fault => simp [deserializeEach, head, Bind.bind, Except.bind] at read
-    | ok value =>
-      -- A successful composite decode requires the remaining slices to decode successfully too.
-      cases tail : deserializeEach element slices with
-      | error fault => simp [deserializeEach, head, tail, Bind.bind, Except.bind] at read
-      | ok rest =>
-        simp [deserializeEach, head, tail, Bind.bind, Except.bind, pure, Except.pure] at read
-        -- Re-encode the first value and the remaining values using their individual canonicality proofs.
-        subst values
-        simp [serializeEach, canonical slice value head, ih rest tail,
-          Bind.bind, Except.bind, pure, Except.pure]
+    rw [deserializeEach] at read
+    -- A successful composite decode requires the remaining slices to decode successfully too.
+    obtain ⟨value, head, read⟩ := bind_ok read
+    obtain ⟨rest, tail, ⟨⟩⟩ := bind_ok read
+    -- Re-encode the first value and the remaining values using their individual canonicality proofs.
+    simp [serializeEach, canonical slice value head, ih rest tail,
+      Bind.bind, Except.bind, pure, Except.pure]
 
 /-- Re-encoding canonical field values recovers each field's original slice. -/
 theorem serializeFields_of_deserializeFields : ∀ fields slices values,
@@ -72,20 +60,15 @@ theorem serializeFields_of_deserializeFields : ∀ fields slices values,
     cases slices with
     | nil => simp [deserializeFields] at read
     | cons slice slices =>
-      cases head : deserialize field slice with
-      | error fault => simp [deserializeFields, head, Bind.bind, Except.bind] at read
-      | ok value =>
-        -- A successful composite decode requires the remaining slices to decode successfully too.
-        cases tail : deserializeFields fields slices with
-        | error fault => simp [deserializeFields, head, tail, Bind.bind, Except.bind] at read
-        | ok rest =>
-          simp [deserializeFields, head, tail, Bind.bind, Except.bind, pure, Except.pure] at read
-          -- Re-encode the first value and the remaining values using their individual canonicality proofs.
-          subst values
-          have later := ih slices rest
-            (fun item member => canonical item (List.mem_cons_of_mem _ member)) tail
-          simp [serializeFields, canonical field List.mem_cons_self slice value head, later,
-            Bind.bind, Except.bind, pure, Except.pure]
+      rw [deserializeFields] at read
+      -- A successful composite decode requires the remaining slices to decode successfully too.
+      obtain ⟨value, head, read⟩ := bind_ok read
+      obtain ⟨rest, tail, ⟨⟩⟩ := bind_ok read
+      -- Re-encode the first value and the remaining values using their individual canonicality proofs.
+      have later := ih slices rest
+        (fun item member => canonical item (List.mem_cons_of_mem _ member)) tail
+      simp [serializeFields, canonical field List.mem_cons_self slice value head, later,
+        Bind.bind, Except.bind, pure, Except.pure]
 
 /-- Decoding a union retains its selector and reconstructs its option's exact encoding. -/
 theorem canonical_option : ∀ selectors options selector data value,
@@ -107,13 +90,10 @@ theorem canonical_option : ∀ selectors options selector data value,
     | cons option options =>
       -- A matching selector fixes which type decodes and re-encodes the payload.
       by_cases same : chosen == selector
-      · cases body : deserialize option data with
-        | error fault => simp [deserializeOption, same, body, Bind.bind, Except.bind] at read
-        | ok held =>
-          simp [deserializeOption, same, body, Bind.bind, Except.bind, pure, Except.pure] at read
-          subst value
-          exact ⟨option, held, rfl, by simp [lookupOption, same],
-            canonical option List.mem_cons_self data held body⟩
+      · simp only [deserializeOption, same, if_true] at read
+        obtain ⟨held, body, ⟨⟩⟩ := bind_ok read
+        exact ⟨option, held, rfl, by simp [lookupOption, same],
+          canonical option List.mem_cons_self data held body⟩
       -- A nonmatching entry leaves the payload unchanged while searching the remaining options.
       · obtain ⟨heldOption, held, eq, named, encoded⟩ := ih options selector data value
           (fun item member => canonical item (List.mem_cons_of_mem _ member))
@@ -129,7 +109,7 @@ theorem firstByte_append_tail (data : Bytes) (nonempty : 0 < data.size) :
     simpa [uintBytes, readUint, getElem!_pos, nonempty, Array.getElem?_eq_getElem nonempty]
       using encoded.symm
   -- The selector slice and payload slice are adjacent and cover the whole message.
-  rw [← first, extract_join data (by omega) (by omega) (by omega), Array.extract_size]
+  rw [← first, extract_join data (by omega) (by omega), Array.extract_size]
 
 /-- Canonical option encodings give a canonical union encoding, including its selector. -/
 theorem canonical_union {selectors : List Nat} {options : List Desc} {data : Bytes} {value : Value}
@@ -159,21 +139,16 @@ theorem canonical_vector {element : Desc} {count : Nat} {data : Bytes} {value : 
     serialize (.vector element count) value = .ok data := by
   have domain := fits_of_deserialize _ _ _ read
   -- Recover the element boundaries before considering the values inside those boundaries.
-  cases parts : vectorSlices element count data with
-  | error fault => simp [deserialize, parts, Bind.bind, Except.bind] at read
-  | ok slices =>
-    -- Each accepted slice supplies one decoded element in the original order.
-    cases decoded : deserializeEach element slices with
-    | error fault => simp [deserialize, parts, decoded, Bind.bind, Except.bind] at read
-    | ok values =>
-      simp [deserialize, parts, decoded, Bind.bind, Except.bind, pure, Except.pure] at read
-      -- Re-encoding each element recovers its slice, and canonical assembly recovers the whole byte string.
-      subst value
-      cases domain with
-      | vector sized _ =>
-        simp [serialize, sized, serializeSequence,
-          serializeEach_of_deserializeEach canonical slices values decoded,
-          Bind.bind, Except.bind, vectorSlices_assemble positive parts]
+  rw [deserialize] at read
+  obtain ⟨slices, parts, read⟩ := bind_ok read
+  -- Each accepted slice supplies one decoded element in the original order.
+  obtain ⟨values, decoded, ⟨⟩⟩ := bind_ok read
+  -- Re-encoding each element recovers its slice, and canonical assembly recovers the whole byte string.
+  cases domain with
+  | vector sized _ =>
+    simp [serialize, sized, serializeSequence,
+      serializeEach_of_deserializeEach canonical slices values decoded,
+      Bind.bind, Except.bind, vectorSlices_assemble positive parts]
 
 /-- A bounded list of canonical elements has a canonical encoding. -/
 theorem canonical_list {element : Desc} {limit : Nat} {data : Bytes} {value : Value}
@@ -183,21 +158,16 @@ theorem canonical_list {element : Desc} {limit : Nat} {data : Bytes} {value : Va
     serialize (.list element limit) value = .ok data := by
   have domain := fits_of_deserialize _ _ _ read
   -- Recover the element boundaries before considering the values inside those boundaries.
-  cases parts : listSlices element (some limit) data with
-  | error fault => simp [deserialize, parts, Bind.bind, Except.bind] at read
-  | ok slices =>
-    -- Each accepted slice supplies one decoded element in the original order.
-    cases decoded : deserializeEach element slices with
-    | error fault => simp [deserialize, parts, decoded, Bind.bind, Except.bind] at read
-    | ok values =>
-      simp [deserialize, parts, decoded, Bind.bind, Except.bind, pure, Except.pure] at read
-      -- Re-encoding each element recovers its slice, and canonical assembly recovers the whole byte string.
-      subst value
-      cases domain with
-      | list within _ =>
-        simp [serialize, within, serializeSequence,
-          serializeEach_of_deserializeEach canonical slices values decoded,
-          Bind.bind, Except.bind, listSlices_assemble parts]
+  rw [deserialize] at read
+  obtain ⟨slices, parts, read⟩ := bind_ok read
+  -- Each accepted slice supplies one decoded element in the original order.
+  obtain ⟨values, decoded, ⟨⟩⟩ := bind_ok read
+  -- Re-encoding each element recovers its slice, and canonical assembly recovers the whole byte string.
+  cases domain with
+  | list within _ =>
+    simp [serialize, within, serializeSequence,
+      serializeEach_of_deserializeEach canonical slices values decoded,
+      Bind.bind, Except.bind, listSlices_assemble parts]
 
 /-- A progressive list of canonical elements has a canonical encoding. -/
 theorem canonical_progressiveList {element : Desc} {limit : Option Nat} {data : Bytes}
@@ -207,21 +177,16 @@ theorem canonical_progressiveList {element : Desc} {limit : Option Nat} {data : 
     (read : deserialize (.progressiveList element limit) data = .ok value) :
     serialize (.progressiveList element limit) value = .ok data := by
   -- Recover the element boundaries before considering the values inside those boundaries.
-  cases parts : listSlices element limit data with
-  | error fault => simp [deserialize, parts, Bind.bind, Except.bind] at read
-  | ok slices =>
-    -- Each accepted slice supplies one decoded element in the original order.
-    cases decoded : deserializeEach element slices with
-    | error fault => simp [deserialize, parts, decoded, Bind.bind, Except.bind] at read
-    | ok values =>
-      simp [deserialize, parts, decoded, Bind.bind, Except.bind, pure, Except.pure] at read
-      -- Re-encoding each element recovers its slice, and canonical assembly recovers the whole byte string.
-      subst value
-      have counted : values.length = slices.length :=
-        (deserializeEach_length slices values decoded).symm
-      simp [serialize, serializeSequence,
-        boundCheck_of_withinBound limit _ (counted ▸ listSlices_within parts),
-        serializeEach_of_deserializeEach canonical slices values decoded,
-        Bind.bind, Except.bind, listSlices_assemble parts]
+  rw [deserialize] at read
+  obtain ⟨slices, parts, read⟩ := bind_ok read
+  -- Each accepted slice supplies one decoded element in the original order.
+  obtain ⟨values, decoded, ⟨⟩⟩ := bind_ok read
+  -- Re-encoding each element recovers its slice, and canonical assembly recovers the whole byte string.
+  have counted : values.length = slices.length :=
+    (deserializeEach_length slices values decoded).symm
+  simp [serialize, serializeSequence,
+    boundCheck_of_withinBound limit _ (counted ▸ listSlices_within parts),
+    serializeEach_of_deserializeEach canonical slices values decoded,
+    Bind.bind, Except.bind, listSlices_assemble parts]
 
 end Ssz

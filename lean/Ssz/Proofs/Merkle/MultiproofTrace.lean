@@ -56,65 +56,49 @@ private theorem foldLevelNodes_covered {trees : Nat → CommitmentTree} {depth :
     rcases folded with ⟨rfl, rfl⟩
     simp [MessagesCovered]
   | cons pair rest ih =>
-    rcases pair with ⟨index, value⟩
+    obtain ⟨index, value⟩ := pair
     have inNodes := included (index, value) List.mem_cons_self
-    have remaining : ∀ pair ∈ rest, pair ∈ nodes :=
-      fun pair member => included pair (List.mem_cons_of_mem _ member)
-    have tailParents : ∀ i v, (i, v) ∈ rest → levelOf i = depth → i % 2 = 0 →
-        trees (gindexParent i) = .fork (trees i) (trees (i + 1)) :=
-      fun i v member => parents i v (List.mem_cons_of_mem _ member)
+    have later := @ih (fun pair member => included pair (List.mem_cons_of_mem _ member))
+      (fun i v member => parents i v (List.mem_cons_of_mem _ member))
     simp only [foldLevelNodes] at folded
     split at folded
     · -- Retained nodes inherit their already covered subtree messages.
-      cases rec : foldLevelNodes depth nodes rest with
-      | error fault => simp [rec, Bind.bind, Except.bind] at folded
-      | ok result =>
-        rcases result with ⟨ps, ks⟩
-        simp [rec, Bind.bind, Except.bind, Pure.pure, Except.pure] at folded
-        rcases folded with ⟨rfl, rfl⟩
-        have later := ih remaining tailParents rec
-        intro i v member message hashed
-        simp only [List.mem_append, List.mem_cons] at member
-        rcases member with member | same | member
-        · exact later i v (by simp [member]) message hashed
-        · cases same
-          exact List.mem_append_right _ (covered _ _ inNodes _ hashed)
-        · exact later i v (by simp [member]) message hashed
+      cases rec : foldLevelNodes depth nodes rest <;>
+        simp [rec, Bind.bind, Except.bind, pure, Except.pure] at folded
+      rcases folded with ⟨rfl, rfl⟩
+      intro i v member message hashed
+      simp only [List.mem_append, List.mem_cons] at member
+      rcases member with member | same | member
+      · exact later rec i v (by simp [member]) message hashed
+      · cases same
+        exact List.mem_append_right _ (covered _ _ inNodes _ hashed)
+      · exact later rec i v (by simp [member]) message hashed
     · rename_i atDepth
-      have atDepth : levelOf index = depth := by simpa using atDepth
+      replace atDepth : levelOf index = depth := by simpa using atDepth
       split at folded
       · rename_i even
-        have even : index % 2 = 0 := by simpa using even
-        cases sibling : nodeAt nodes (index + 1) with
-        | none => simp [sibling, throw] at folded
-        | some siblingValue =>
-          cases rec : foldLevelNodes depth nodes rest with
-          | error fault => simp [sibling, rec, Bind.bind, Except.bind] at folded
-          | ok result =>
-            rcases result with ⟨ps, ks⟩
-            simp [sibling, rec, Bind.bind, Except.bind, Pure.pure, Except.pure] at folded
-            rcases folded with ⟨rfl, rfl⟩
-            have later := ih remaining tailParents rec
-            intro i v member message hashed
-            simp only [List.mem_append, List.mem_cons] at member
-            rcases member with (same | member) | member
-            · cases same
-              -- The parent message is newly executed.
-              -- Both child message sets were already covered.
-              rw [parents index value List.mem_cons_self atDepth even] at hashed
-              simp only [CommitmentTree.messages, List.mem_cons, List.mem_append] at hashed
-              rcases hashed with rfl | left | right
-              · have headRoot : value = (trees index).root := agree index value inNodes
-                have siblingRoot : siblingValue = (trees (index + 1)).root := nodeAt_agrees agree sibling
-                rw [← headRoot, ← siblingRoot]
-                exact List.mem_append_left _ (levelMessages_member inNodes atDepth even sibling)
-              · exact List.mem_append_right _ (covered _ _ inNodes _ left)
-              · exact List.mem_append_right _ (covered _ _ (nodeAt_member sibling) _ right)
-            · exact later i v (by simp [member]) message hashed
-            · exact later i v (by simp [member]) message hashed
+        replace even : index % 2 = 0 := by simpa using even
+        cases sibling : nodeAt nodes (index + 1) <;> cases rec : foldLevelNodes depth nodes rest <;>
+          simp [sibling, rec, throw, Bind.bind, Except.bind, pure, Except.pure] at folded
+        rename_i siblingValue _
+        rcases folded with ⟨rfl, rfl⟩
+        intro i v member message hashed
+        simp only [List.mem_append, List.mem_cons] at member
+        rcases member with (same | member) | member
+        · -- The parent message is newly executed.
+          -- Both child message sets were already covered.
+          cases same
+          rw [parents index value List.mem_cons_self atDepth even] at hashed
+          simp only [CommitmentTree.messages, List.mem_cons, List.mem_append] at hashed
+          rcases hashed with rfl | left | right
+          · simp only [← agree index value inNodes, ← nodeAt_agrees agree sibling]
+            exact List.mem_append_left _ (levelMessages_member inNodes atDepth even sibling)
+          · exact List.mem_append_right _ (covered _ _ inNodes _ left)
+          · exact List.mem_append_right _ (covered _ _ (nodeAt_member sibling) _ right)
+        all_goals exact later rec i v (by simp [member]) message hashed
       · split at folded
         · simp [throw] at folded
-        · exact ih remaining tailParents folded
+        · exact later folded
 
 private theorem foldLevel_covered {source nodes result : List (Nat × Bytes)}
     {height depth : Nat} {trace : List Bytes}
@@ -127,18 +111,15 @@ private theorem foldLevel_covered {source nodes result : List (Nat × Bytes)}
       (levelMessages depth nodes ++ trace) := by
   -- The same absent-parent equation used for roots also identifies the complete hash subtrees.
   unfold foldLevel at folded
-  cases rec : foldLevelNodes depth nodes nodes with
-  | error fault => simp [rec, Bind.bind, Except.bind] at folded
-  | ok pair =>
-    rcases pair with ⟨parents, kept⟩
-    simp [rec, Bind.bind, Except.bind, Pure.pure, Except.pure] at folded
-    subst result
-    apply foldLevelNodes_covered (trees := fun i => proofTree source (height - levelOf i) i)
-      (fun _ member => member) _ agree covered rec
-    intro index value member atDepth even
-    have low := two_le_of_level_positive atDepth positive
-    exact proofTree_parent low (by omega) even (source_parent_absent separated
-      (supported index (List.mem_map.mpr ⟨_, member, rfl⟩)) low)
+  cases rec : foldLevelNodes depth nodes nodes <;>
+    simp [rec, Bind.bind, Except.bind, pure, Except.pure] at folded
+  subst result
+  apply foldLevelNodes_covered (trees := fun i => proofTree source (height - levelOf i) i)
+    (fun _ member => member) _ agree covered rec
+  intro index value member atDepth even
+  have low := two_le_of_level_positive atDepth positive
+  exact proofTree_parent low (by omega) even (source_parent_absent separated
+    (supported index (List.mem_map.mpr ⟨_, member, rfl⟩)) low)
 
 private theorem foldToRoot_covered {source : List (Nat × Bytes)} {height : Nat}
     (separated : ProofAntichain source) :
@@ -154,23 +135,19 @@ private theorem foldToRoot_covered {source : List (Nat × Bytes)} {height : Nat}
   | zero =>
     intro _ nodes trace _ _ covered root built message member
     simp only [foldToRoot] at built
-    cases found : nodeAt nodes 1 with
-    | none => simp [found] at built
-    | some value =>
-      have has := covered 1 value (nodeAt_member found) message
-      simpa [show levelOf 1 = 0 from rfl, multiproofMessages] using has member
+    cases found : nodeAt nodes 1 <;> simp [found] at built
+    simpa [show levelOf 1 = 0 from rfl, multiproofMessages] using
+      covered 1 _ (nodeAt_member found) message member
   | succ depth ih =>
     intro bounded nodes trace supported agree covered root built message member
     simp only [foldToRoot] at built
-    cases folded : foldLevel (depth + 1) nodes with
-    | error fault => simp [folded, Bind.bind, Except.bind] at built
-    | ok result =>
-      simp only [folded, Bind.bind, Except.bind] at built
-      have later := ih (by omega) result (levelMessages (depth + 1) nodes ++ trace)
-        (supported.fold folded) (foldLevel_proofTree separated supported (by omega) bounded agree folded)
-        (foldLevel_covered separated supported (by omega) bounded agree covered folded)
-        root built message member
-      simpa [multiproofMessages, folded, List.mem_append, or_assoc, or_left_comm, or_comm] using later
+    cases folded : foldLevel (depth + 1) nodes <;> simp [folded, Bind.bind, Except.bind] at built
+    rename_i result
+    have later := ih (by omega) result (levelMessages (depth + 1) nodes ++ trace)
+      (supported.fold folded) (foldLevel_proofTree separated supported (by omega) bounded agree folded)
+      (foldLevel_covered separated supported (by omega) bounded agree covered folded)
+      root built message member
+    simpa [multiproofMessages, folded, List.mem_append, or_assoc, or_left_comm, or_comm] using later
 
 /-- Every hash in the reconstruction tree occurs in the executable multiproof fold. -/
 theorem proofTree_messages_executed {nodes : List (Nat × Bytes)} {height : Nat}

@@ -38,15 +38,7 @@ def merkleizeUpward (chunks : Array Bytes) (limit : Option Nat) : Except Err Byt
 /-- Folding upward and reading downward give the same root, and refuse the same inputs. -/
 theorem merkleizeUpward_eq (chunks : Array Bytes) (limit : Option Nat) :
     merkleizeUpward chunks limit = merkleizeBounded chunks limit := by
-  cases limit with
-  | none =>
-    -- With no declared capacity the data sets the width, and both sides use that width.
-    simp [merkleizeUpward, merkleizeBounded, merkleizeFlat_eq_subtreeAt chunks]
-  | some capacity =>
-    simp only [merkleizeUpward, merkleizeBounded]
-    -- Either both refuse the capacity, or neither does and both fold the same tree.
-    split
-    · rfl
-    · rw [merkleizeFlat_eq_subtreeAt chunks]
+  -- Either both refuse the capacity, or both fold the same tree at the same width.
+  cases limit <;> simp [merkleizeUpward, merkleizeBounded, merkleizeFlat_eq_subtreeAt chunks]
 
 end Ssz

@@ -33,9 +33,7 @@ private theorem mixed_leaf_concat (capacity ordinal : Nat) (inside : ordinal < c
     gindexConcat 2 (nextPow2 capacity + ordinal) = .ok (2 * nextPow2 capacity + ordinal) := by
   -- Prefixing the contents' left turn doubles the leading tree width without moving the leaf.
   have positive : 1 ≤ nextPow2 capacity + ordinal := by
-    have := Nat.two_pow_pos (depthFor capacity)
-    unfold nextPow2
-    omega
+    have := Nat.two_pow_pos (depthFor capacity); unfold nextPow2; omega
   rw [gindexConcat_eq (by decide) positive, bounded_leaf_depth inside]
   simp only [nextPow2, Nat.add_sub_cancel_left]
 
@@ -68,8 +66,7 @@ theorem PathSelects.byteList (limit : Nat) (data : Bytes)
       (layout := .packing (packBytes data) (some (chunksForBytes limit)) (lengthWord data.size))
       ?_ (packing_materialized _ _ _ _) rfl rfl rfl ?_ chunkInside ?_
     · simp [merkleLayout, Nat.not_lt.mpr within, Pure.pure, Except.pure]
-    · simp only [packBytes_size, chunksForBytes, bytesPerChunk]
-      omega
+    · simp only [packBytes_size, chunksForBytes, bytesPerChunk]; omega
     -- The list’s length word adds one left turn before the packed chunk’s own path.
     · have joined := mixed_leaf_concat _ _ chunkInside
       simp only [chunksForBytes] at joined ⊢
@@ -104,8 +101,7 @@ theorem PathSelects.bitList (limit : Nat) (data : Array Bool)
       (layout := .packing (packedBits data) (some (chunksForBits limit)) (lengthWord data.size))
       ?_ (packing_materialized _ _ _ _) rfl rfl rfl ?_ chunkInside ?_
     · simp [merkleLayout, Nat.not_lt.mpr within, Pure.pure, Except.pure]
-    · simp only [packedBits_size, chunksForBits, bytesPerChunk]
-      omega
+    · simp only [packedBits_size, chunksForBits, bytesPerChunk]; omega
     -- The list’s length word adds one left turn before the packed chunk’s own path.
     · have joined := mixed_leaf_concat _ _ chunkInside
       simp only [chunksForBits] at joined ⊢
@@ -121,18 +117,14 @@ theorem PathSelects.progressiveBitList {limit : Option Nat} (data : Array Bool)
   refine PathSelects.packedProgressive
     (layout := .packing (packedBits data) none (lengthWord data.size))
     rfl (packing_materialized _ _ _ _) rfl rfl rfl ?_ (resolveStep_progressiveBitList ordinal)
-  rw [packedBits_size]
-  exact bit_position_inside data.size ordinal inside
+  exact packedBits_size data ▸ bit_position_inside data.size ordinal inside
 
 private theorem basic_width_positive (element : Desc) (basic : element.isBasic = true)
     (sound : element.wellFormed = .ok ()) : 0 < element.itemLength := by
   -- Booleans occupy one byte, and the permitted unsigned widths are all positive.
   cases element <;> simp only [Desc.isBasic, Bool.false_eq_true] at basic
   case bool => decide
-  case uint width =>
-    cases width with
-    | zero => simp [Desc.wellFormed] at sound
-    | succ width => simp [Desc.itemLength]
+  case uint width => cases width <;> simp_all [Desc.wellFormed, Desc.itemLength]
 
 /-- A basic vector element selects the chunk containing its serialized bytes. -/
 theorem PathSelects.vector_basic (element : Desc) (count : Nat) (values : List Value)

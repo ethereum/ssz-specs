@@ -23,11 +23,8 @@ private theorem overflow_assemble (inline : List Bool) (parts : List Bytes) :
   intro fault failed
   simp only [assemble] at failed
   split at failed
-  · rename_i large
-    -- A failing assembly records exactly the offending header-plus-body size.
-    have same : Err.offsetOverflow (headWidth (inline.zip parts) + bodyWidth (inline.zip parts)) =
-        fault := Except.error.inj failed
-    exact ⟨_, same.symm, large⟩
+  · -- A failing assembly records exactly the offending header-plus-body size.
+    exact ⟨_, (Except.error.inj failed).symm, ‹_›⟩
   -- Below 2^32 bytes, assembly returns bytes, contradicting the alleged failure.
   · cases failed
 
@@ -56,9 +53,7 @@ private theorem overflow_sequence {element : Desc} {values : List Value}
   -- Element failures propagate.
   -- Assembly adds only its own offset-range check.
   rw [serializeSequence]
-  apply overflow_bind (overflow_each values each)
-  intro parts _
-  exact overflow_assemble _ parts
+  exact overflow_bind (overflow_each values each) fun parts _ => overflow_assemble _ parts
 
 private theorem overflow_fields : ∀ fields values,
     fields.length = values.length →
@@ -68,12 +63,9 @@ private theorem overflow_fields : ∀ fields values,
   -- Field declarations and values advance together, preserving their equal counts.
   induction fields with
   | nil =>
-    intro values paired _
+    intro values paired _ fault failed
     -- No declarations means no values, so there is nothing left that could fail.
-    have empty : values = [] := List.eq_nil_of_length_eq_zero paired.symm
-    subst values
-    intro fault failed
-    simp [serializeFields] at failed
+    simp [List.eq_nil_of_length_eq_zero paired.symm, serializeFields] at failed
   | cons field fields ih =>
     intro values paired each
     cases values with
@@ -96,10 +88,9 @@ private theorem overflow_struct {fields : List Desc} {values : List Value}
     OnlyOverflow (serializeStruct fields values) := by
   -- A container first encodes its fields, then assembles their fixed entries and offset table.
   rw [serializeStruct]
-  apply overflow_bind (overflow_fields fields values paired each)
-  intro parts _
   -- Once every field succeeds, only the total composite size can prevent assembly.
-  exact overflow_assemble _ parts
+  exact overflow_bind (overflow_fields fields values paired each) fun parts _ =>
+    overflow_assemble _ parts
 
 private theorem overflow_of_fits {shape : Desc} {value : Value} (fits : Fits shape value) :
     OnlyOverflow (serialize shape value) := by

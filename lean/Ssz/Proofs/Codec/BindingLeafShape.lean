@@ -15,10 +15,8 @@ def Leaves.shapes : Leaves → Sum Nat (List (Option Desc))
 theorem Leaves.count_of_shapes {left right : Leaves} (same : left.shapes = right.shapes) :
     left.count = right.count := by
   -- Packed shapes state their count directly, while nested shapes retain one entry per position.
-  cases left <;> cases right <;> simp only [shapes, Sum.inl.injEq, Sum.inr.injEq,
-    reduceCtorEq] at same
+  cases left <;> cases right <;> simp [shapes, Leaves.count] at same ⊢
   · exact same
-  · have lengths := congrArg List.length same
-    simpa [Leaves.count] using lengths
+  · simpa using congrArg List.length same
 
 end Ssz

@@ -25,11 +25,8 @@ namespace Ssz
 theorem padded_size (chunks : Array Bytes) (complete : ∀ chunk ∈ chunks, chunk.size = bytesPerChunk)
     (position : Nat) : (padded zeroChunk chunks position).size = bytesPerChunk := by
   -- A position either names a supplied leaf or the fixed-width zero node.
-  by_cases inside : position < chunks.size
-  · simp only [padded, Array.getElem?_eq_getElem inside, Option.getD_some]
-    exact complete _ (Array.getElem_mem inside)
-  · have absent : chunks[position]? = none := Array.getElem?_eq_none (by omega)
-    simp [padded, absent]
+  cases found : chunks[position]? <;> simp [padded, found]
+  exact complete _ (Array.mem_of_getElem? found)
 
 /-- A bounded subtree preserves complete-node width, including its padding. -/
 theorem subtreeAt_size (chunks : Array Bytes)
@@ -49,17 +46,8 @@ theorem merkleizeBounded_size {chunks : Array Bytes} {limit : Option Nat} {root 
     (complete : ∀ chunk ∈ chunks, chunk.size = bytesPerChunk)
     (made : merkleizeBounded chunks limit = .ok root) : root.size = bytesPerChunk := by
   -- A successful capacity check leaves a bounded subtree whose leaves already have valid widths.
-  cases limit with
-  | none =>
-    simp [merkleizeBounded, pure, Except.pure] at made
-    subst root
-    exact subtreeAt_size chunks complete _ _
-  | some capacity =>
-    by_cases over : capacity < chunks.size
-    · simp [merkleizeBounded, over, throw, throwThe, MonadExceptOf.throw, Functor.map, Except.map] at made
-    · simp [merkleizeBounded, over, pure, Except.pure] at made
-      subst root
-      exact subtreeAt_size chunks complete _ _
+  cases limit <;> simp only [merkleizeBounded] at made <;> (try split at made) <;> cases made
+  all_goals exact subtreeAt_size chunks complete _ _
 
 /-- A progressive root is either a zero node or a digest, regardless of its leaf widths. -/
 @[simp] theorem merkleizeProgressive_size (chunks : List Bytes) (level : Nat) :

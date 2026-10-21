@@ -21,10 +21,7 @@ theorem foldLevelNodes_reads {read : Nat → Except Err Bytes} (closed : WalkerC
     ReadNodes read (parents ++ kept) := by
   -- Only the parent of a genuinely readable pair needs a hash equation.
   induction pending generalizing parents kept with
-  | nil =>
-    simp [foldLevelNodes] at folded
-    rcases folded with ⟨rfl, rfl⟩
-    simp [ReadNodes]
+  | nil => simp_all [foldLevelNodes, ReadNodes]
   | cons pair rest ih =>
     rcases pair with ⟨index, node⟩
     have head := pendingRead index node (by simp)
@@ -32,19 +29,12 @@ theorem foldLevelNodes_reads {read : Nat → Except Err Bytes} (closed : WalkerC
     have tail : ReadNodes read rest := fun i v member => pendingRead i v (by simp [member])
     simp only [foldLevelNodes] at folded
     split at folded
-    · cases rec : foldLevelNodes depth nodes rest with
-      | error error => simp [rec, Bind.bind, Except.bind] at folded
-      | ok result =>
-        rcases result with ⟨ps, ks⟩
+    · cases rec : foldLevelNodes depth nodes rest <;>
         simp [rec, Bind.bind, Except.bind, Pure.pure, Except.pure] at folded
-        rcases folded with ⟨rfl, rfl⟩
-        have reads := ih tail rec
-        intro i v member
-        simp only [List.mem_append, List.mem_cons] at member
-        rcases member with member | same | member
-        · exact reads i v (by simp [member])
-        · cases same; exact head
-        · exact reads i v (by simp [member])
+      rcases folded with ⟨rfl, rfl⟩
+      have reads := ih tail rec
+      simp only [ReadNodes, List.mem_append, List.mem_cons] at reads ⊢
+      grind
     · rename_i atDepth
       have atDepth : levelOf index = depth := by simpa using atDepth
       split at folded
@@ -64,21 +54,13 @@ theorem foldLevelNodes_reads {read : Nat → Except Err Bytes} (closed : WalkerC
           -- The stored parent is the ordered hash of this readable child and its supplied sibling.
           have parentAgrees : read (gindexParent index) = .ok (combine node siblingValue) := by
             rw [if_pos even] at equation
-            rw [← equation]
-            exact parentRead
-          cases rec : foldLevelNodes depth nodes rest with
-          | error error => simp [sibling, rec, Bind.bind, Except.bind] at folded
-          | ok result =>
-            rcases result with ⟨ps, ks⟩
+            rwa [← equation]
+          cases rec : foldLevelNodes depth nodes rest <;>
             simp [sibling, rec, Bind.bind, Except.bind, Pure.pure, Except.pure] at folded
-            rcases folded with ⟨rfl, rfl⟩
-            have reads := ih tail rec
-            intro i v member
-            simp only [List.mem_append, List.mem_cons] at member
-            rcases member with (same | member) | member
-            · cases same; exact parentAgrees
-            · exact reads i v (by simp [member])
-            · exact reads i v (by simp [member])
+          rcases folded with ⟨rfl, rfl⟩
+          have reads := ih tail rec
+          simp only [ReadNodes, List.mem_append, List.mem_cons] at reads ⊢
+          grind
       · split at folded
         · simp [throw] at folded
         · exact ih tail folded
@@ -92,13 +74,9 @@ theorem foldToRoot_reads {read : Nat → Except Err Bytes} (closed : WalkerClose
   induction depth with
   | zero =>
     intro nodes reads root built
-    simp only [foldToRoot] at built
-    cases found : nodeAt nodes 1 with
-    | none => simp [found] at built
-    | some value =>
-      simp [found] at built
-      subst root
-      exact reads 1 value (nodeAt_member found)
+    cases found : nodeAt nodes 1 <;> simp [foldToRoot, found] at built
+    subst root
+    exact reads 1 _ (nodeAt_member found)
   | succ depth ih =>
     intro nodes reads root built
     cases level : foldLevel (depth + 1) nodes with
@@ -107,13 +85,10 @@ theorem foldToRoot_reads {read : Nat → Except Err Bytes} (closed : WalkerClose
       -- One complete level reduction preserves genuine reads for both newly computed parents and retained nodes.
       have resultReads : ReadNodes read result := by
         unfold foldLevel at level
-        cases rec : foldLevelNodes (depth + 1) nodes nodes with
-        | error error => simp [rec, Bind.bind, Except.bind] at level
-        | ok groups =>
-          rcases groups with ⟨parents, kept⟩
+        cases rec : foldLevelNodes (depth + 1) nodes nodes <;>
           simp [rec, Bind.bind, Except.bind, Pure.pure, Except.pure] at level
-          subst result
-          exact foldLevelNodes_reads closed (by omega) reads reads rec
+        subst result
+        exact foldLevelNodes_reads closed (by omega) reads reads rec
       exact ih result resultReads root (by simpa [foldToRoot, level, Bind.bind, Except.bind] using built)
 
 /-- Reading a list preserves both its length and the value read at each paired index. -/
@@ -122,26 +97,14 @@ theorem mapM_readNodes {read : Nat → Except Err Bytes} {indices : List Nat} {v
     values.length = indices.length ∧ ReadNodes read (indices.zip values) := by
   -- Each successful head read contributes exactly one indexed output before the remaining reads.
   induction indices generalizing values with
-  | nil =>
-    simp [Pure.pure, Except.pure] at built
-    subst values
-    simp [ReadNodes]
+  | nil => simp_all [Pure.pure, Except.pure, ReadNodes]
   | cons index rest ih =>
-    cases first : read index with
-    | error error => simp [List.mapM_cons, first, Bind.bind, Except.bind] at built
-    | ok value =>
-      cases tail : rest.mapM read with
-      | error error => simp [List.mapM_cons, first, tail, Bind.bind, Except.bind] at built
-      | ok remaining =>
-        simp [List.mapM_cons, first, tail, Bind.bind, Except.bind, Pure.pure, Except.pure] at built
-        subst values
-        obtain ⟨count, reads⟩ := ih tail
-        refine ⟨by simpa using count, ?_⟩
-        intro i node member
-        simp only [List.zip_cons_cons, List.mem_cons] at member
-        rcases member with same | member
-        · cases same; exact first
-        · exact reads i node member
+    cases first : read index <;> cases tail : rest.mapM read <;>
+      simp [List.mapM_cons, first, tail, Bind.bind, Except.bind, Pure.pure, Except.pure] at built
+    subst values
+    obtain ⟨count, reads⟩ := ih tail
+    simp only [ReadNodes, List.zip_cons_cons, List.mem_cons] at reads ⊢
+    grind
 
 /-- Valid helper positions and genuine node reads always reconstruct the same finite tree's root. -/
 theorem closed_multiproof_rebuilds_root {read : Nat → Except Err Bytes} (closed : WalkerClosed read)
@@ -154,11 +117,8 @@ theorem closed_multiproof_rebuilds_root {read : Nat → Except Err Bytes} (close
   obtain ⟨proofCount, proofRead⟩ := mapM_readNodes helperReads
   -- Helper-frontier completeness guarantees that reconstruction succeeds before read preservation identifies its result.
   obtain ⟨root, reconstructed⟩ := calculateMultiMerkleRoot_complete indexed leafCount proofCount
-  have reads : ReadNodes read (indices.zip leaves ++ helpers.zip proof) := by
-    intro i node member
-    rcases List.mem_append.mp member with member | member
-    · exact leavesRead i node member
-    · exact proofRead i node member
+  have reads : ReadNodes read (indices.zip leaves ++ helpers.zip proof) := fun i node member =>
+    (List.mem_append.mp member).elim (leavesRead i node) (proofRead i node)
   refine ⟨root, reconstructed, ?_⟩
   have folded := reconstructed
   simp [calculateMultiMerkleRoot, indexed, leafCount, proofCount, Bind.bind, Except.bind] at folded

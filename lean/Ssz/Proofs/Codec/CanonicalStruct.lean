@@ -31,8 +31,7 @@ private theorem readSlots_preserves (data : Bytes) :
   induction fields with
   | nil =>
     intro position slots ending bounded read
-    simp [readSlots] at read
-    obtain ⟨rfl, rfl⟩ := read
+    obtain ⟨rfl, rfl⟩ := by simpa [readSlots] using read
     simp [slotFlags, slotEncoding, bounded]
   | cons field fields ih =>
     intro position slots ending bounded read
@@ -42,38 +41,26 @@ private theorem readSlots_preserves (data : Bytes) :
       simp only [readSlots, fixed] at read
       split at read
       · simp [throw_error, Bind.bind, Except.bind] at read
-      · rename_i room
-        cases tail : readSlots fields data (position + width) with
-        | error fault => simp [tail, Bind.bind, Except.bind] at read
-        | ok result =>
-          obtain ⟨rest, finish⟩ := result
+      · cases tail : readSlots fields data (position + width) <;>
           simp [tail, Bind.bind, Except.bind, pure, Except.pure] at read
-          obtain ⟨rfl, rfl⟩ := read
-          -- The remaining fields reconstruct the adjacent suffix of the header.
-          obtain ⟨onward, finalBound, flags, bytes⟩ :=
-            ih (position + width) rest finish (by omega) tail
-          refine ⟨by omega, finalBound, ?_, ?_⟩
-          · simp [slotFlags, Desc.isFixed, fixed, flags]
-          · simp only [slotEncoding, bytes]
-            exact extract_join data (by omega) onward finalBound
+        obtain ⟨rfl, rfl⟩ := read
+        -- The remaining fields reconstruct the adjacent suffix of the header.
+        obtain ⟨onward, finalBound, flags, bytes⟩ := ih _ _ _ (by omega) tail
+        refine ⟨by omega, finalBound, by simp [slotFlags, Desc.isFixed, fixed, flags], ?_⟩
+        simp only [slotEncoding, bytes]
+        exact extract_join data (by omega) onward
     -- A variable-size field contributes only its four-byte body offset.
     | none =>
       simp only [readSlots, fixed] at read
       split at read
       · simp [throw_error, Bind.bind, Except.bind] at read
-      · rename_i room
-        cases tail : readSlots fields data (position + bytesPerOffset) with
-        | error fault => simp [tail, Bind.bind, Except.bind] at read
-        | ok result =>
-          obtain ⟨rest, finish⟩ := result
+      · cases tail : readSlots fields data (position + bytesPerOffset) <;>
           simp [tail, Bind.bind, Except.bind, pure, Except.pure] at read
-          obtain ⟨rfl, rfl⟩ := read
-          obtain ⟨onward, finalBound, flags, bytes⟩ :=
-            ih (position + bytesPerOffset) rest finish (by omega) tail
-          refine ⟨by omega, finalBound, ?_, ?_⟩
-          · simp [slotFlags, Desc.isFixed, fixed, flags]
-          · rw [slotEncoding, uintBytes_readUint_slice data position bytesPerOffset (by omega), bytes]
-            exact extract_join data (by omega) onward finalBound
+        obtain ⟨rfl, rfl⟩ := read
+        obtain ⟨onward, finalBound, flags, bytes⟩ := ih _ _ _ (by omega) tail
+        refine ⟨by omega, finalBound, by simp [slotFlags, Desc.isFixed, fixed, flags], ?_⟩
+        rw [slotEncoding, uintBytes_readUint_slice data position bytesPerOffset (by omega), bytes]
+        exact extract_join data (by omega) onward
 
 /-- A successful span list names the next boundary and leaves a valid tail. -/
 private theorem offsetSpans_cons (data : Bytes) (scope start : Nat) (rest spans : List Nat)
@@ -87,22 +74,18 @@ private theorem offsetSpans_cons (data : Bytes) (scope start : Nat) (rest spans 
     simp only [offsetSpans] at read
     split at read
     · cases read
-    · simp at read
-      subst spans
+    · obtain rfl := by simpa using read
       refine ⟨scope - start, [], rfl, ?_, by simp, ?_, rfl⟩ <;> simp <;> omega
   | cons next rest =>
     simp only [offsetSpans] at read
     split at read
     · cases read
-    · rename_i ordered
-      cases tail : offsetSpans (next :: rest) scope with
-      | error fault => simp [tail, Bind.bind, Except.bind] at read
-      | ok widths =>
+    · cases tail : offsetSpans (next :: rest) scope <;>
         simp [tail, Bind.bind, Except.bind, pure, Except.pure] at read
-        subst spans
-        -- The recursively accepted offsets keep the next boundary inside the message scope.
-        have within := (offsetSpans_partition data next rest scope widths tail bounded).1
-        refine ⟨next - start, widths, rfl, ?_, ?_, ?_, rfl⟩ <;> simp <;> omega
+      subst spans
+      -- The recursively accepted offsets keep the next boundary inside the message scope.
+      have within := (offsetSpans_partition data next rest scope _ tail bounded).1
+      refine ⟨next - start, _, rfl, ?_, ?_, ?_, rfl⟩ <;> simp <;> omega
 
 /-- Filling body slots preserves the header and concatenates all bodies without gaps. -/
 private theorem takeSlots_reassembles (data : Bytes) (scope : Nat) (bounded : scope ≤ data.size) :
@@ -117,8 +100,7 @@ private theorem takeSlots_reassembles (data : Bytes) (scope : Nat) (bounded : sc
   induction slots with
   | nil =>
     intro spans parts read taken
-    simp [takeSlots] at taken
-    subst parts
+    obtain rfl := by simpa [takeSlots] using taken
     simp [bodyStarts, slotFlags, slotEncoding, headOf, bodiesOf]
     omega
   | cons slot slots ih =>
@@ -126,32 +108,27 @@ private theorem takeSlots_reassembles (data : Bytes) (scope : Nat) (bounded : sc
     cases slot with
     | inline bytes =>
       -- An inline slot consumes no body span and adds its bytes only to the header.
-      cases tail : takeSlots data slots spans with
-      | error fault => simp [takeSlots, tail, Bind.bind, Except.bind] at taken
-      | ok remaining =>
+      cases tail : takeSlots data slots spans <;>
         simp [takeSlots, tail, Bind.bind, Except.bind, pure, Except.pure] at taken
-        subst parts
-        obtain ⟨within, header, bodies⟩ := ih spans remaining read tail
-        simp only [bodyStarts, slotFlags, slotEncoding, List.zip_cons_cons, headOf, bodiesOf]
-        exact ⟨within, congrArg (bytes ++ ·) header, bodies⟩
+      subst parts
+      obtain ⟨within, header, bodies⟩ := ih spans _ read tail
+      simp only [bodyStarts, slotFlags, slotEncoding, List.zip_cons_cons, headOf, bodiesOf]
+      exact ⟨within, congrArg (bytes ++ ·) header, bodies⟩
     | body start =>
       -- A body ends at the next offset, or at the end of the whole message.
       obtain ⟨width, widths, rfl, ordered, nextBound, finish, tailRead⟩ :=
         offsetSpans_cons data scope start (bodyStarts slots) spans bounded read
-      cases tail : takeSlots data slots widths with
-      | error fault => simp [takeSlots, tail, Bind.bind, Except.bind] at taken
-      | ok remaining =>
+      cases tail : takeSlots data slots widths <;>
         simp [takeSlots, tail, Bind.bind, Except.bind, pure, Except.pure] at taken
-        subst parts
-        obtain ⟨within, header, bodies⟩ := ih widths remaining tailRead tail
-        have sliced : (data.extract start (start + width)).size = width := by
-          simp only [Array.size_extract]
-          omega
-        simp only [bodyStarts, List.headD_cons, slotFlags, List.zip_cons_cons,
-          headOf, bodiesOf, slotEncoding]
-        rw [sliced, finish, header, bodies]
-        refine ⟨by omega, rfl, ?_⟩
-        exact extract_join data ordered nextBound bounded
+      subst parts
+      obtain ⟨within, header, bodies⟩ := ih widths _ tailRead tail
+      have sliced : (data.extract start (start + width)).size = width := by
+        simp only [Array.size_extract]
+        omega
+      simp only [bodyStarts, List.headD_cons, slotFlags, List.zip_cons_cons,
+        headOf, bodiesOf, slotEncoding]
+      rw [sliced, finish, header, bodies]
+      exact ⟨by omega, rfl, extract_join data ordered nextBound⟩
 
 /-- Slots with no bodies are already their own field slices. -/
 private theorem takeSlots_no_bodies (data : Bytes) :
@@ -191,7 +168,7 @@ private theorem assemble_readSlots (fields : List Desc) (data : Bytes) (slots : 
   -- The reconstructed header and body cover the input and respect its size bound.
   apply assemble_of_parts (bounded := bounded)
   rw [← flags, width, header, encoded, bodies]
-  rw [extract_join data (by omega) leadingBound (by omega), Array.extract_size]
+  rw [extract_join data (by omega) leadingBound, Array.extract_size]
 
 /-- Every accepted container slicing reassembles to the exact original encoding. -/
 theorem structSlices_assemble_inverse (fields : List Desc) (data : Bytes) (parts : List Bytes)
@@ -201,45 +178,38 @@ theorem structSlices_assemble_inverse (fields : List Desc) (data : Bytes) (parts
   simp only [structSlices] at read
   split at read
   · simp [throw_error, Bind.bind, Except.bind] at read
-  · rename_i nameable
-    -- The budget is settled before the slots, so what the reader got past says nothing more.
-    cases budget : structBudget fields data.size with
-    | error fault => simp [budget, Bind.bind, Except.bind] at read
-    | ok _ =>
-      simp only [budget, Bind.bind, Except.bind] at read
-      cases slotsRead : readSlots fields data 0 with
-      | error fault => simp [slotsRead] at read
-      | ok result =>
-        obtain ⟨slots, leading⟩ := result
-        simp only [slotsRead] at read
-        split at read
-        -- Without variable fields, the consumed header must be the entire input.
-        · rename_i noBodies
-          have absent : bodyStarts slots = [] := by simpa using noBodies
-          split at read
-          · simp [throw_error] at read
-          · rename_i sized
-            simp only [pure, Except.pure, Except.ok.injEq] at read
-            subst parts
-            apply assemble_readSlots fields data slots leading [] (slots.map Slot.held) slotsRead
-            · simp [absent, offsetSpans]
-            · exact takeSlots_no_bodies data slots absent
-            · simp only [absent, List.headD_nil]
-              simpa using sized
-            · omega
-        -- With variable fields, the first offset must begin exactly where the header ends.
-        · rename_i hasBodies
-          split at read
-          · simp [throw_error] at read
-          · rename_i begins
-            cases spansRead : offsetSpans (bodyStarts slots) data.size with
-            | error fault => simp [spansRead] at read
-            | ok spans =>
-              simp only [spansRead] at read
-              apply assemble_readSlots fields data slots leading spans parts slotsRead spansRead read
-              · cases offsets : bodyStarts slots with
-                | nil => simp [offsets] at hasBodies
-                | cons start rest => simpa [offsets] using begins
-              · omega
+  -- The budget is settled before the slots, so what the reader got past says nothing more.
+  · cases budget : structBudget fields data.size <;> simp only [budget, Bind.bind, Except.bind] at read
+    · simp at read
+    rcases slotsRead : readSlots fields data 0 with _ | ⟨slots, leading⟩ <;>
+      simp only [slotsRead] at read
+    · simp at read
+    split at read
+    -- Without variable fields, the consumed header must be the entire input.
+    · rename_i noBodies
+      have absent : bodyStarts slots = [] := by simpa using noBodies
+      split at read
+      · simp [throw_error] at read
+      · rename_i sized
+        simp only [pure, Except.pure, Except.ok.injEq] at read
+        subst parts
+        apply assemble_readSlots fields data slots leading [] (slots.map Slot.held) slotsRead
+        · simp [absent, offsetSpans]
+        · exact takeSlots_no_bodies data slots absent
+        · simp only [absent, List.headD_nil]
+          simpa using sized
+        · omega
+    -- With variable fields, the first offset must begin exactly where the header ends.
+    · rename_i hasBodies
+      split at read
+      · simp [throw_error] at read
+      · rename_i begins
+        cases spansRead : offsetSpans (bodyStarts slots) data.size <;> simp only [spansRead] at read
+        · simp at read
+        apply assemble_readSlots fields data slots leading _ parts slotsRead spansRead read
+        · cases offsets : bodyStarts slots with
+          | nil => simp [offsets] at hasBodies
+          | cons start rest => simpa [offsets] using begins
+        · omega
 
 end Ssz
