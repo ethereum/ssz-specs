@@ -52,12 +52,17 @@ The number of cases the release says it holds.
 Comparing this with the number run catches a vector the walk never reached, which a
 passing count on its own would hide.
 -/
-def declaredCount (root : System.FilePath) : IO (Option Nat) := do
+def declaredCount (root : System.FilePath) : IO (Except String Nat) := do
   let manifest := root / "manifest.json"
-  if !(← manifest.pathExists) then return none
-  match Json.parse (← IO.FS.readFile manifest) with
-  | .error _ => return none
-  | .ok json => return (field? json "caseCount").bind fun count => count.getNat?.toOption
+  let source ← try IO.FS.readFile manifest catch error =>
+    return .error s!"cannot read {manifest}: {error}"
+  return do
+    let json ← (Json.parse source).mapError fun error => s!"{manifest}: invalid JSON: {error}"
+    let .obj _ := json | throw s!"{manifest}: expected a manifest object"
+    let some written := field? json "caseCount" | throw s!"{manifest}: missing caseCount"
+    let count ← written.getNat?.mapError fun _ => s!"{manifest}: caseCount must be a positive integer"
+    if count == 0 then throw s!"{manifest}: caseCount must be positive; empty releases are not checked"
+    return count
 
 /-- Run every vector below a directory. -/
 def run (root : System.FilePath) : IO Tally := do

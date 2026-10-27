@@ -82,13 +82,30 @@ def diffCompatible (entry : Json) : Except String Unit := do
 
 /-- Run a generated corpus. -/
 def runDiff (file : System.FilePath) : IO (Nat × Array String) := do
-  let json ← IO.ofExcept (Json.parse (← IO.FS.readFile file))
+  let json ← IO.ofExcept ((Json.parse (← IO.FS.readFile file)).mapError fun error =>
+    s!"{file}: {error}")
+  -- Missing sections are allowed, but malformed sections and empty batches are not evidence.
+  let sections : Except String (Array Json × Array Json) := do
+    let .obj object := json | throw "expected a differential corpus object"
+    for (key, _) in object.toList do
+      unless ["cases", "compatible"].contains key do throw s!"unknown corpus section: {key}"
+    let readSection (key : String) : Except String (Array Json) :=
+      match field? json key with
+      | none => .ok #[]
+      | some (.arr values) => .ok values
+      | some _ => .error s!"corpus section {key} must be an array"
+    let cases ← readSection "cases"
+    let compatible ← readSection "compatible"
+    if cases.isEmpty && compatible.isEmpty then
+      throw "corpus must contain at least one case or compatibility check"
+    return (cases, compatible)
+  let (cases, compatible) ← match sections with
+    | .ok values => pure values
+    | .error message => return (0, #[s!"{file}: {message}"])
   let mut passed := 0
   let mut failures : Array String := #[]
-  for (label, key, check) in
-      [("case", "cases", diffCase), ("compatibility", "compatible", diffCompatible)] do
-    -- An absent section contributes no cases, so a batch may carry either kind alone.
-    let drawn := (field? json key).bind (·.getArr?.toOption) |>.getD #[]
+  for (label, drawn, check) in
+      [("case", cases, diffCase), ("compatibility", compatible, diffCompatible)] do
     for entry in drawn do
       match check entry with
       | .ok _ => passed := passed + 1

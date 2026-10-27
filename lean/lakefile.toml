@@ -33,3 +33,8 @@ root = "Main"
 [[lean_exe]]
 name = "regressions"
 root = "Tests"
+
+# Parse headers without loading their imports; used by the audited source-closure gate.
+[[lean_exe]]
+name = "importHeaders"
+root = "scripts.ParseImports"
