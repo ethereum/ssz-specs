@@ -1,4 +1,5 @@
 import Ssz.Proofs.Codec.RoundTripSlices
+import Ssz.Proofs.Codec.StructOrder
 
 /-! Round trips, widths, and encoder injectivity for every well-formed type. -/
 
@@ -215,7 +216,7 @@ theorem recovered {shape : Desc} (covered : Recovers shape) :
     refine ⟨fun bytes wrote => ?_, fun width bytes fixed wrote => widths width bytes
       (by simpa only [Desc.fixedSize] using fixed) (by simpa only [serialize] using wrote)⟩
     obtain ⟨parts, sliced, decoded⟩ := reads bytes (by simpa only [serialize] using wrote)
-    simp only [deserialize, sliced, decoded, Bind.bind, Except.bind]
+    simp only [deserialize, deserializeStruct_of sliced decoded, Bind.bind, Except.bind]
     rfl
   | compatibleUnion _ ih =>
     intro _ admits

@@ -1,5 +1,6 @@
 import Ssz.Proofs.Codec.CanonicalComposite
 import Ssz.Proofs.Codec.CanonicalStruct
+import Ssz.Proofs.Codec.StructOrder
 
 /-! Decoding accepts exactly the canonical encodings of well-formed types. -/
 
@@ -37,12 +38,12 @@ theorem serialize_of_deserialize (shape : Desc) :
     have fieldsLegal : Desc.allWellFormed fields = .ok () := by
       first | exact wellFormed_container legal | exact wellFormed_progressiveContainer legal
     -- Each field re-encodes its own slice, and the offset layout reconstructs the whole input.
-    cases parts : structSlices fields data with
-    | error fault => simp [deserialize, parts, Bind.bind, Except.bind] at read
-    | ok slices =>
-      cases decoded : deserializeFields fields slices <;>
-        simp [deserialize, parts, decoded, Bind.bind, Except.bind, pure, Except.pure] at read
+    cases struct : deserializeStruct fields data with
+    | error fault => simp [deserialize, struct, Bind.bind, Except.bind] at read
+    | ok values =>
+      simp [deserialize, struct, Bind.bind, Except.bind, pure, Except.pure] at read
       subst value
+      obtain ⟨slices, parts, decoded⟩ := deserializeStruct_ok struct
       have encoded := serializeFields_of_deserializeFields fields slices _
         (fun field member => ih field member (allWellFormed_mem fields fieldsLegal field member))
         decoded

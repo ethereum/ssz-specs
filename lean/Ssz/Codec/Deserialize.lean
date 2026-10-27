@@ -122,15 +122,18 @@ def structBudget (fields : List Desc) (scope : Nat) : Except Err Unit :=
     if scope < front then .error (.scopeTooSmall front scope) else .ok ()
 
 /--
-Each field's own bytes, cut out of a struct encoding.
+The slots of a struct's fixed part, and where that part ends.
 
-Fixed fields are read in place, and each variable one is reached through its offset.
+The budget is settled first, so no slot is read past the input.
 -/
-def structSlices (fields : List Desc) (data : Bytes) : Except Err (List Bytes) := do
+def structSlots (fields : List Desc) (data : Bytes) : Except Err (List Slot × Nat) := do
   -- A composite encoding faces the same four-byte offset bound as serialization.
   if data.size ≥ 2 ^ (8 * bytesPerOffset) then throw (.offsetOverflow data.size)
   structBudget fields data.size
-  let (slots, leading) ← readSlots fields data 0
+  readSlots fields data 0
+
+/-- Each field's own bytes, once the offsets in the fixed part are checked against the input. -/
+def structBodies (data : Bytes) (slots : List Slot) (leading : Nat) : Except Err (List Bytes) := do
   let offsets := bodyStarts slots
   -- With no bodies, the slots just read are the whole encoding.
   if offsets.isEmpty then
@@ -141,6 +144,15 @@ def structSlices (fields : List Desc) (data : Bytes) : Except Err (List Bytes) :
   -- Validate the complete offset order before extracting any variable payload.
   let spans ← offsetSpans offsets data.size
   takeSlots data slots spans
+
+/--
+Each field's own bytes, cut out of a struct encoding.
+
+Fixed fields are read in place, and each variable one is reached through its offset.
+-/
+def structSlices (fields : List Desc) (data : Bytes) : Except Err (List Bytes) := do
+  let (slots, leading) ← structSlots fields data
+  structBodies data slots leading
 
 /-- Byte ranges of a fixed-count sequence, with offsets only for variable-size elements. -/
 def vectorSlices (element : Desc) (length : Nat) (data : Bytes) :
@@ -251,12 +263,8 @@ def deserialize : Desc → Bytes → Except Err Value
   | .progressiveList element limit, data => do
     let slices ← listSlices element limit data
     return .seq (← deserializeEach element slices)
-  | .container _ fields, data => do
-    let slices ← structSlices fields data
-    return .seq (← deserializeFields fields slices)
-  | .progressiveContainer _ _ fields, data => do
-    let slices ← structSlices fields data
-    return .seq (← deserializeFields fields slices)
+  | .container _ fields, data => return .seq (← deserializeStruct fields data)
+  | .progressiveContainer _ _ fields, data => return .seq (← deserializeStruct fields data)
   | .compatibleUnion selectors options, data => do
     if data.size < 1 then throw .noSelector
     deserializeOption selectors options (data[0]!).toNat (data.extract 1 data.size)
@@ -270,6 +278,35 @@ def deserializeEach (element : Desc) : List Bytes → Except Err (List Value)
     let tail ← deserializeEach element rest
     return head :: tail
 termination_by slices => (sizeOf element, slices.length + 1)
+
+/--
+Each field of a struct, decoded in the order the specification reads them.
+
+    budget        the input against the width of the fixed part
+    fixed part    each fixed field, read in place
+    table         the offsets, as a whole
+    bodies        each variable field, in declaration order
+
+An input breaking several rules is refused for the first one met in that order.
+-/
+def deserializeStruct (fields : List Desc) (data : Bytes) : Except Err (List Value) := do
+  let (slots, leading) ← structSlots fields data
+  -- Fixed fields are checked before any offset is trusted.
+  -- Without offsets, declaration order is already reading order, so nothing is checked ahead.
+  if !(bodyStarts slots).isEmpty then checkInline fields slots
+  let slices ← structBodies data slots leading
+  -- A fixed field checked above decodes the same way here, so only a body can refuse now.
+  deserializeFields fields slices
+termination_by (sizeOf fields, 1)
+
+/-- Each field written in place decoded on its own, a field behind an offset skipped. -/
+def checkInline : List Desc → List Slot → Except Err Unit
+  | [], _ | _ :: _, [] => .ok ()
+  | field :: fields, .inline bytes :: slots => do
+    let _ ← deserialize field bytes
+    checkInline fields slots
+  | _ :: fields, .body _ :: slots => checkInline fields slots
+termination_by fields => (sizeOf fields, 0)
 
 /-- Each field of a struct decoded on its own, against the type it was declared as. -/
 def deserializeFields : List Desc → List Bytes → Except Err (List Value)

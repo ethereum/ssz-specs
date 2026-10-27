@@ -260,6 +260,9 @@ Read that field before calling one of them a failure: it marks "this repository 
 
 The name of a `ValueFault` member in `src/ssz/exceptions.py`. The catalogue is closed, so fail loudly on a name you do not know rather than skipping the case.
 The name is stable; the sentence rendered from it is not, and is never emitted.
+A conformant decoder accepts exactly the inputs the specification accepts, and refuses the rest under the name it gives.
+Where an input breaks several rules, that name is the first fault the specification meets in reading order.
+A struct is read budget first, then each fixed field in place, then the offset table, then each body.
 Requiring the name, and not merely a failure, is load-bearing: a decoder skipping an offset or budget rule mostly still fails, on the bytes that rule left unread, under `TRAILING_BYTES` or `TRUNCATED` rather than under the name the case gives.
 
 | Name | The input |

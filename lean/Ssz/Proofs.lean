@@ -63,6 +63,7 @@ import Ssz.Proofs.Codec.RoundTripComposite
 import Ssz.Proofs.Codec.RoundTripScalar
 import Ssz.Proofs.Codec.RoundTripSlices
 import Ssz.Proofs.Codec.Size
+import Ssz.Proofs.Codec.StructOrder
 import Ssz.Proofs.Codec.Summary
 import Ssz.Proofs.Codec.Table
 import Ssz.Proofs.Codec.Totality
