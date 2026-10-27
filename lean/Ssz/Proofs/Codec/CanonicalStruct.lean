@@ -172,7 +172,7 @@ theorem structSlices_assemble_inverse (fields : List Desc) (data : Bytes) (parts
     (read : structSlices fields data = .ok parts) :
     assemble (fields.map Desc.isFixed) parts = .ok data := by
   -- The decoder checks the same total-width bound as the encoder before reading slots.
-  simp only [structSlices] at read
+  simp only [structSlices, structSlots, structBodies] at read
   split at read
   · simp [throw_error, Bind.bind, Except.bind] at read
   -- The budget is settled before the slots, so what the reader got past says nothing more.

@@ -1,4 +1,5 @@
 import Ssz.Proofs.Codec.Admits
+import Ssz.Proofs.Codec.StructOrder
 import Ssz.Codec.Deserialize
 
 /-! Successful decoding establishes the value's declared bounds and shape. -/
@@ -279,8 +280,8 @@ theorem fits_of_deserialize (shape : Desc) :
   | container names fields ih | progressiveContainer active names fields ih =>
     intro data value read
     rw [deserialize] at read
-    obtain ⟨slices, -, read⟩ := checksPassed read
-    obtain ⟨values, decoded, ⟨⟩⟩ := checksPassed read
+    obtain ⟨values, struct, ⟨⟩⟩ := checksPassed read
+    obtain ⟨slices, -, decoded⟩ := deserializeStruct_ok struct
     obtain ⟨sized, each⟩ := deserializeFields_fits fields slices values ih decoded
     first | exact .container sized each | exact .progressiveContainer sized each
   -- The first byte supplies a bounded selector, and the matching option supplies payload admissibility.
@@ -306,7 +307,7 @@ theorem structSlices_overflow (fields : List Desc) (data : Bytes)
     (large : data.size ≥ 2 ^ (8 * bytesPerOffset)) :
     structSlices fields data = .error (.offsetOverflow data.size) := by
   -- The total composite byte count is checked before any offsets or field payloads are interpreted.
-  simp [structSlices, large, throw_error, Bind.bind, Except.bind]
+  simp [structSlices, structSlots, large, throw_error, Bind.bind, Except.bind]
 
 /-- A vector budget outside the offset range is rejected even for fixed-size elements. -/
 theorem vectorSlices_overflow (element : Desc) (count : Nat) (data : Bytes)

@@ -204,6 +204,24 @@ def main : IO Unit := do
   -- A first offset of five leaves one unused byte after a four-byte header and must be rejected.
   expect "offset gap" ((deserialize (.container ["items"] [.byteList 2])
     #[5, 0, 0, 0, 0]).isOk == false)
+  -- An input breaking several rules is refused for the first one the specification reads.
+  -- The budget comes first, then each fixed field, then the offsets, then each body.
+  let flagThenBytes := Desc.container ["flag", "data"] [.bool, .byteList 1]
+  refusedWith "budget before a fixed field" (deserialize flagThenBytes #[2, 0, 0, 0])
+    "SCOPE_TOO_SMALL"
+  refusedWith "fixed field before the first offset" (deserialize flagThenBytes #[2, 0, 0, 0, 0])
+    "NOT_A_BIT"
+  refusedWith "fixed field before a progressive first offset"
+    (deserialize (.progressiveContainer [true, true] ["flag", "data"] [.bool, .byteList 1])
+      #[2, 0, 0, 0, 0]) "NOT_A_BIT"
+  -- A fixed field declared after a body is still read before that body.
+  refusedWith "fixed field before an earlier body"
+    (deserialize (.container ["data", "flag"] [.byteList 1, .bool]) #[5, 0, 0, 0, 2, 9, 9])
+    "NOT_A_BIT"
+  -- A broken table is still refused ahead of a broken body.
+  refusedWith "offsets before a body"
+    (deserialize (.container ["flag", "data"] [.bool, .byteList 1]) #[1, 4, 0, 0, 0, 9, 9])
+    "FIRST_OFFSET"
   -- Only the digits the mapping writes are an integer, with no padding or separator.
   refusedWith "integer with a separator" (valueOf .uint64 .opaque (.str "1_000")) "WRONG_TYPE"
   refusedWith "integer with a leading zero" (valueOf .uint64 .opaque (.str "007")) "WRONG_TYPE"

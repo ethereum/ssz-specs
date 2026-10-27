@@ -360,8 +360,8 @@ theorem structSlices_assemble :
       = headWidth (slotsOf fields parts) + bodyWidth (slotsOf fields parts) := by
     simp [headOf_size, bodiesOf_size]
   have settled := structBudget_of_written fields parts paired widths
-  simp only [structSlices, read, bodyStarts_expectedSlots, widthIs, settled,
-    if_neg (Nat.not_le.mpr nameable), Bind.bind, Except.bind]
+  simp only [structSlices, structSlots, structBodies, read, bodyStarts_expectedSlots, widthIs,
+    settled, if_neg (Nat.not_le.mpr nameable), Bind.bind, Except.bind]
   -- Either the layout opened no body at all, or the first one starts where the slots end.
   cases named : bodyOffsets (headWidth (slotsOf fields parts)) fields parts with
   | nil =>
