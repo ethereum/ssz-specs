@@ -58,6 +58,8 @@ def packBytes (data : Bytes) : Array Bytes :=
 Root of the perfect tree of a given depth, over nodes starting at a position.
 
 Positions past the data are zero, and a subtree wholly past it is read from the table.
+
+Every node is trusted to be 32 bytes wide.
 -/
 def subtreeAt (chunks : Array Bytes) (depth start : Nat) : Bytes :=
   if start ≥ chunks.size then zeroSubtree depth
@@ -66,20 +68,44 @@ def subtreeAt (chunks : Array Bytes) (depth start : Nat) : Bytes :=
     | 0 => padded zeroChunk chunks start
     | d + 1 => combine (subtreeAt chunks d start) (subtreeAt chunks d (start + 2 ^ d))
 
+/-- Refuse a hash operand that is not one complete 32-byte SSZ node. -/
+def checkChunk (node : Bytes) : Except Err Unit :=
+  -- Fixed-width children make the boundary between the two hash operands unambiguous.
+  if node.size = bytesPerChunk then .ok () else .error (.count bytesPerChunk node.size)
+
+/-- Refuse a node sequence containing a node of the wrong width. -/
+def checkChunks : List Bytes → Except Err Unit
+  | [] => .ok ()
+  | node :: rest => do
+    checkChunk node
+    checkChunks rest
+
 /--
-Root of the bounded tree over a node sequence.
+Root of the bounded tree over a node sequence, trusting every node to be 32 bytes wide.
 
 The capacity is a count of nodes, which the type fixes from its declared length or limit.
 
 With no capacity given, the tree is just wide enough for the nodes it holds.
+
+A node of another width is hashed or returned as it is, so the caller checks widths first.
 -/
-def merkleizeBounded (chunks : Array Bytes) (limit : Option Nat) : Except Err Bytes := do
+def merkleizeBoundedUnchecked (chunks : Array Bytes) (limit : Option Nat) : Except Err Bytes := do
   match limit with
   | some capacity =>
     -- A capacity under the data would silently drop nodes.
     if capacity < chunks.size then throw (.merkleizeLimit chunks.size capacity)
     return subtreeAt chunks (depthFor capacity) 0
   | none => return subtreeAt chunks (depthFor chunks.size) 0
+
+/--
+Root of the bounded tree over a node sequence.
+
+Every node is checked to be 32 bytes wide, before the capacity is.
+-/
+def merkleizeBounded (chunks : Array Bytes) (limit : Option Nat) : Except Err Bytes := do
+  -- A lone short leaf would pass as a root, and a 31-byte node beside a 33-byte one as a pair.
+  checkChunks chunks.toList
+  merkleizeBoundedUnchecked chunks limit
 
 /--
 Root of the progressive tree over a node sequence, per EIP-7916.
@@ -99,14 +125,16 @@ Successive levels hold 1, 4, 16, then 64 nodes, so the capacity grows with the d
 A node keeps its index as later ones are appended.
 
 Its branch still has to be rebuilt to authenticate the new root.
+
+Every node is trusted to be 32 bytes wide.
 -/
-def merkleizeProgressive (chunks : List Bytes) (level : Nat := 0) : Bytes :=
+def merkleizeProgressiveUnchecked (chunks : List Bytes) (level : Nat := 0) : Bytes :=
   -- An exhausted input closes the spine with a plain zero node, not a zero subtree.
   if chunks.isEmpty then zeroChunk
   else
     let width := 4 ^ level
     let here := subtreeAt (chunks.take width).toArray (depthFor width) 0
-    combine here (merkleizeProgressive (chunks.drop width) (level + 1))
+    combine here (merkleizeProgressiveUnchecked (chunks.drop width) (level + 1))
 termination_by chunks.length
 decreasing_by
   have : 0 < 4 ^ level := Nat.pos_of_neZero (4 ^ level)
@@ -118,13 +146,25 @@ decreasing_by
   omega
 
 /--
+Root of the progressive tree over a node sequence, per EIP-7916.
+
+Every node is checked to be 32 bytes wide first.
+-/
+def merkleizeProgressive (chunks : List Bytes) (level : Nat := 0) : Except Err Bytes := do
+  -- A node of another width would move the boundary between two hashed operands.
+  checkChunks chunks
+  return merkleizeProgressiveUnchecked chunks level
+
+/--
 Root of the progressive tree, starting from a level of a given width.
 
 The width is a power of four: the capacity of whichever level the caller reached.
+
+Every node is trusted to be 32 bytes wide.
 -/
 def merkleizeProgressiveFrom (chunks : Array Bytes) (width : Nat) : Bytes :=
   -- A power-of-four width has twice its progressive level as its binary logarithm.
-  merkleizeProgressive chunks.toList (Nat.log2 width / 2)
+  merkleizeProgressiveUnchecked chunks.toList (Nat.log2 width / 2)
 
 /-- Hashing a subtree root against the word its shape mixes in, as the right child. -/
 def mixIn (root word : Bytes) : Bytes :=

@@ -18,43 +18,39 @@ def climbBranch (index : Nat) : (level : Nat) → (node : Bytes) → List Bytes 
     climbBranch index (level + 1) parent rest
 
 /--
-A root rebuilt from one leaf and its branch.
+A root rebuilt from one leaf and its branch, trusting every node to be 32 bytes wide.
 
 Each bit of the index, read from the leaf upward, says which side the branch node joins on.
 
-Node widths are checked by the verifier, once this has checked the counts.
+Only the index and the branch length are checked.
 -/
-def calculateMerkleRoot (leaf : Bytes) (proof : List Bytes) (index : Nat) :
+def calculateMerkleRootUnchecked (leaf : Bytes) (proof : List Bytes) (index : Nat) :
     Except Err Bytes := do
   let depth ← gindexLength index
   if proof.length != depth then throw (.branchLength depth proof.length)
   return climbBranch index 0 leaf proof
 
-/-- Refuse a hash operand that is not one complete 32-byte SSZ node. -/
-def checkChunk (node : Bytes) : Except Err Unit :=
-  -- Fixed-width children make the boundary between the two hash operands unambiguous.
-  if node.size = bytesPerChunk then .ok () else .error (.count bytesPerChunk node.size)
+/--
+A root rebuilt from one leaf and its branch.
 
-/-- Refuse a proof containing a node of the wrong width. -/
-def checkChunks : List Bytes → Except Err Unit
-  | [] => .ok ()
-  | node :: rest => do
-    checkChunk node
-    checkChunks rest
+The index and the branch length are checked first, then the width of every node hashed.
+-/
+def calculateMerkleRoot (leaf : Bytes) (proof : List Bytes) (index : Nat) :
+    Except Err Bytes := do
+  let rebuilt ← calculateMerkleRootUnchecked leaf proof index
+  -- A 31-byte child and a 33-byte sibling must not impersonate two 32-byte nodes.
+  checkChunk leaf
+  checkChunks proof
+  return rebuilt
 
 /--
 Whether one leaf and its branch rebuild the expected root.
-
-The index and the branch length are checked first, then the width of every node hashed.
 
 The root is only compared, so a root of the wrong width is answered false rather than refused.
 -/
 def verifyMerkleProof (leaf : Bytes) (proof : List Bytes) (index : Nat) (root : Bytes) :
     Except Err Bool := do
   let rebuilt ← calculateMerkleRoot leaf proof index
-  -- A 31-byte child and a 33-byte sibling must not impersonate two 32-byte nodes.
-  checkChunk leaf
-  checkChunks proof
   return rebuilt == root
 
 /-- The node held at an index, where one is held. -/
@@ -108,13 +104,13 @@ def foldToRoot : Nat → List (Nat × Bytes) → Except Err Bytes
   | depth + 1, nodes => do foldToRoot depth (← foldLevel (depth + 1) nodes)
 
 /--
-A root rebuilt from several leaves and the nodes they share.
+A root rebuilt from several leaves and the nodes they share, trusting each to be 32 bytes wide.
 
 Pairs combine from the deepest level upward, each parent built once.
 
-Node widths are checked by the verifier, once this has checked the counts.
+Only the counts and the indices are checked.
 -/
-def calculateMultiMerkleRoot (leaves proof : List Bytes) (indices : List Nat) :
+def calculateMultiMerkleRootUnchecked (leaves proof : List Bytes) (indices : List Nat) :
     Except Err Bytes := do
   if leaves.length != indices.length then throw (.leafCount indices.length leaves.length)
   let helpers ← getHelperIndices indices
@@ -125,17 +121,26 @@ def calculateMultiMerkleRoot (leaves proof : List Bytes) (indices : List Nat) :
   foldToRoot deepest nodes
 
 /--
-Whether several leaves and their nodes rebuild the expected root.
+A root rebuilt from several leaves and the nodes they share.
 
 The counts and the indices are checked first, then the width of every node hashed.
+-/
+def calculateMultiMerkleRoot (leaves proof : List Bytes) (indices : List Nat) :
+    Except Err Bytes := do
+  let rebuilt ← calculateMultiMerkleRootUnchecked leaves proof indices
+  -- A node of another width would move the boundary between two hashed operands.
+  checkChunks leaves
+  checkChunks proof
+  return rebuilt
+
+/--
+Whether several leaves and their nodes rebuild the expected root.
 
 The root is only compared, so a root of the wrong width is answered false rather than refused.
 -/
 def verifyMerkleMultiproof (leaves proof : List Bytes) (indices : List Nat) (root : Bytes) :
     Except Err Bool := do
   let rebuilt ← calculateMultiMerkleRoot leaves proof indices
-  checkChunks leaves
-  checkChunks proof
   return rebuilt == root
 
 /--

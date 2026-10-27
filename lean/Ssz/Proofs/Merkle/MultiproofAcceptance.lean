@@ -10,22 +10,22 @@ theorem verifyMerkleMultiproof_eq_true_iff (leaves proof : List Bytes)
     verifyMerkleMultiproof leaves proof indices root = .ok true ↔
       (∀ node ∈ leaves, node.size = bytesPerChunk) ∧
       (∀ node ∈ proof, node.size = bytesPerChunk) ∧
-      calculateMultiMerkleRoot leaves proof indices = .ok root := by
+      calculateMultiMerkleRootUnchecked leaves proof indices = .ok root := by
   -- Reconstruction runs first, then the claimed and helper widths, then the comparison.
-  simp only [verifyMerkleMultiproof, ← checkChunks_ok_iff]
-  cases calculateMultiMerkleRoot leaves proof indices <;> cases checkChunks leaves <;>
+  simp only [verifyMerkleMultiproof, calculateMultiMerkleRoot, ← checkChunks_ok_iff]
+  cases calculateMultiMerkleRootUnchecked leaves proof indices <;> cases checkChunks leaves <;>
     cases checkChunks proof <;>
     simp_all [Bind.bind, Except.bind, pure, Except.pure]
 
 /-- Successful reconstruction fixes the counts, helper indices, and exact level fold. -/
-theorem calculateMultiMerkleRoot_shape {leaves proof : List Bytes} {indices : List Nat}
-    {root : Bytes} (built : calculateMultiMerkleRoot leaves proof indices = .ok root) :
+theorem calculateMultiMerkleRootUnchecked_shape {leaves proof : List Bytes} {indices : List Nat}
+    {root : Bytes} (built : calculateMultiMerkleRootUnchecked leaves proof indices = .ok root) :
     ∃ helpers, getHelperIndices indices = .ok helpers ∧ leaves.length = indices.length ∧
       proof.length = helpers.length ∧
       foldToRoot (multiproofHeight indices helpers)
         (indices.zip leaves ++ helpers.zip proof) = .ok root := by
   -- Accepted counts make both zipped sequences retain every position in the canonical frontier.
-  unfold calculateMultiMerkleRoot at built
+  unfold calculateMultiMerkleRootUnchecked at built
   split at built
   · simp [throw, Bind.bind, Except.bind] at built
   · rename_i lengths

@@ -112,18 +112,18 @@ theorem checkChunks_ok_iff (nodes : List Bytes) :
 theorem verifyMerkleProof_eq_true_iff (leaf : Bytes) (proof : List Bytes) (index : Nat) (root : Bytes) :
     verifyMerkleProof leaf proof index root = .ok true ↔
       leaf.size = bytesPerChunk ∧
-      (∀ node ∈ proof, node.size = bytesPerChunk) ∧ calculateMerkleRoot leaf proof index = .ok root := by
+      (∀ node ∈ proof, node.size = bytesPerChunk) ∧ calculateMerkleRootUnchecked leaf proof index = .ok root := by
   -- A successful answer requires all width checks and equality with the reconstructed root.
-  simp only [verifyMerkleProof, ← checkChunks_ok_iff]
-  cases checkChunks proof <;> cases calculateMerkleRoot leaf proof index <;>
+  simp only [verifyMerkleProof, calculateMerkleRoot, ← checkChunks_ok_iff]
+  cases checkChunks proof <;> cases calculateMerkleRootUnchecked leaf proof index <;>
     by_cases leafWidth : leaf.size = bytesPerChunk <;>
     simp_all [checkChunk, Bind.bind, Except.bind, pure, Except.pure]
 
-private theorem calculateMerkleRoot_shape {leaf root : Bytes} {proof : List Bytes} {index : Nat}
-    (built : calculateMerkleRoot leaf proof index = .ok root) :
+private theorem calculateMerkleRootUnchecked_shape {leaf root : Bytes} {proof : List Bytes} {index : Nat}
+    (built : calculateMerkleRootUnchecked leaf proof index = .ok root) :
     proof.length = Nat.log2 index ∧ climbBranch index 0 leaf proof = root := by
   -- The validated index fixes the branch length before reconstruction can return a root.
-  unfold calculateMerkleRoot at built
+  unfold calculateMerkleRootUnchecked at built
   cases measured : gindexLength index with
   | error fault => simp [measured, Bind.bind, Except.bind] at built
   | ok depth =>
@@ -149,8 +149,8 @@ theorem verifyMerkleProof_binding {left right root : Bytes} {leftProof rightProo
   obtain ⟨leftWidth, leftWidths, leftBuilt⟩ := (verifyMerkleProof_eq_true_iff ..).mp first
   obtain ⟨rightWidth, rightWidths, rightBuilt⟩ := (verifyMerkleProof_eq_true_iff ..).mp second
   -- A shared generalized index gives equal branch depths even when sibling bytes differ.
-  obtain ⟨leftLength, leftRoot⟩ := calculateMerkleRoot_shape leftBuilt
-  obtain ⟨rightLength, rightRoot⟩ := calculateMerkleRoot_shape rightBuilt
+  obtain ⟨leftLength, leftRoot⟩ := calculateMerkleRootUnchecked_shape leftBuilt
+  obtain ⟨rightLength, rightRoot⟩ := calculateMerkleRootUnchecked_shape rightBuilt
   -- Compare the two actual upward computations without assuming hash injectivity.
   have compared := climbBranch_binding index 0 left leftProof right rightProof leftWidth rightWidth
     leftWidths rightWidths (leftLength.trans rightLength.symm) (leftRoot.trans rightRoot.symm)

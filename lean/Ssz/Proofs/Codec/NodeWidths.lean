@@ -187,9 +187,9 @@ theorem hashTreeRootAt_size (budget : Nat) (shape : Desc) (value : Value) (root 
             simp [limit, mixed, Pure.pure, Except.pure] at success
           all_goals subst root; simp
         | some capacity =>
-          cases made : merkleizeBounded chunks (some capacity) <;> cases mixed : layout.mixin <;>
+          cases made : merkleizeBoundedUnchecked chunks (some capacity) <;> cases mixed : layout.mixin <;>
             simp [limit, made, mixed, Pure.pure, Except.pure] at success <;> subst root
-          · exact merkleizeBounded_size complete made
+          · exact merkleizeBoundedUnchecked_size complete made
           · exact mixIn_size _ _
 
 /-- Every successfully computed SSZ root occupies exactly 32 bytes. -/
@@ -214,7 +214,7 @@ private theorem boundedNode_size (budget : Nat) (layout : MerkleLayout)
         (some (start + gindexBelow index depth * (nextPow2 capacity >>> depth) +
           (nextPow2 capacity >>> depth))) <;>
       simp only [materialized, Bind.bind, Except.bind, reduceCtorEq] at read
-    exact merkleizeBounded_size
+    exact merkleizeBoundedUnchecked_size
       (layoutChunksAt_width budget layout layoutWidth (hashTreeRootAt_size budget) _ _ _ materialized) read
   · cases leaves : layout.leaves <;> simp only [leaves] at read <;> (try split at read) <;>
       first | exact nestedWidth _ _ _ node read | simp [throw, throwThe, MonadExceptOf.throw] at read
@@ -236,7 +236,7 @@ private theorem progressiveNode_size (budget : Nat) (layout : MerkleLayout)
   · cases materialized : layoutChunksAt budget layout stop.leavesFrom <;>
       simp [materialized, Pure.pure, Except.pure] at read
     subst node
-    exact merkleizeProgressive_size _ _
+    exact merkleizeProgressiveUnchecked_size _ _
 
 /-- Every successful value-tree walk returns a complete hash node. -/
 theorem nodeRootAt_size (budget : Nat) (shape : Desc) (value : Value) (index : Nat) (node : Bytes)

@@ -200,17 +200,17 @@ theorem NodesAgree.append {tree : Nat → Bytes} {left right : List (Nat × Byte
   exact fun i value member => (List.mem_append.mp member).elim (leftAgree i value) (rightAgree i value)
 
 /-- A successful multiproof reconstruction agrees with the finite tree supplying its nodes. -/
-theorem calculateMultiMerkleRoot_agrees {tree : Nat → Bytes}
+theorem calculateMultiMerkleRootUnchecked_agrees {tree : Nat → Bytes}
     {leaves proof : List Bytes} {indices helpers : List Nat}
     (helperIndices : getHelperIndices indices = .ok helpers)
     (leafValues : NodesAgree tree (indices.zip leaves))
     (proofValues : NodesAgree tree (helpers.zip proof))
     (parents : ParentsAgree tree
       (((indices.zip leaves ++ helpers.zip proof).map fun pair => levelOf pair.1).foldl max 0))
-    {root : Bytes} (built : calculateMultiMerkleRoot leaves proof indices = .ok root) :
+    {root : Bytes} (built : calculateMultiMerkleRootUnchecked leaves proof indices = .ok root) :
     root = tree 1 := by
   -- Length and helper checks precede the same level fold whose invariant was proved above.
-  unfold calculateMultiMerkleRoot at built
+  unfold calculateMultiMerkleRootUnchecked at built
   split at built
   · simp [throw, Bind.bind, Except.bind] at built
   · simp only [helperIndices, Bind.bind, Except.bind] at built
@@ -229,13 +229,13 @@ theorem verifyMerkleMultiproof_agrees {tree : Nat → Bytes}
     {root : Bytes} (accepted : verifyMerkleMultiproof leaves proof indices root = .ok true) :
     root = tree 1 := by
   -- Width checks can reject a proof, but only reconstruction can accept its root.
-  unfold verifyMerkleMultiproof at accepted
-  cases reconstructed : calculateMultiMerkleRoot leaves proof indices <;>
+  unfold verifyMerkleMultiproof calculateMultiMerkleRoot at accepted
+  cases reconstructed : calculateMultiMerkleRootUnchecked leaves proof indices <;>
     cases leafWidths : checkChunks leaves <;> cases proofWidths : checkChunks proof <;>
     simp [leafWidths, proofWidths, reconstructed, Bind.bind, Except.bind, Pure.pure,
       Except.pure] at accepted
   subst root
-  exact calculateMultiMerkleRoot_agrees helperIndices leafValues proofValues parents reconstructed
+  exact calculateMultiMerkleRootUnchecked_agrees helperIndices leafValues proofValues parents reconstructed
 
 /-- The position retained or created when a node is visited at one level. -/
 def FoldedIndex (depth child index : Nat) : Prop :=
@@ -434,10 +434,10 @@ theorem member_le_foldl_max {values : List Nat} {value : Nat} (member : value �
     · exact ih member (max initial head)
 
 /-- Correct counts and helper positions are sufficient for multiproof reconstruction to finish. -/
-theorem calculateMultiMerkleRoot_complete {leaves proof : List Bytes} {indices helpers : List Nat}
+theorem calculateMultiMerkleRootUnchecked_complete {leaves proof : List Bytes} {indices helpers : List Nat}
     (built : getHelperIndices indices = .ok helpers)
     (leafCount : leaves.length = indices.length) (proofCount : proof.length = helpers.length) :
-    ∃ root, calculateMultiMerkleRoot leaves proof indices = .ok root := by
+    ∃ root, calculateMultiMerkleRootUnchecked leaves proof indices = .ok root := by
   -- The initial node positions are exactly the validated claims followed by their helpers.
   let nodes := indices.zip leaves ++ helpers.zip proof
   have positions : nodes.map Prod.fst = indices ++ helpers := by
@@ -453,7 +453,7 @@ theorem calculateMultiMerkleRoot_complete {leaves proof : List Bytes} {indices h
   -- The complete frontier supplies every sibling until only the root remains.
   obtain ⟨root, reconstructed⟩ :=
     (frontierAt_initial built positions bounded).complete built
-  exact ⟨root, by simpa [calculateMultiMerkleRoot, leafCount, proofCount, built, nodes, depth,
+  exact ⟨root, by simpa [calculateMultiMerkleRootUnchecked, leafCount, proofCount, built, nodes, depth,
     Bind.bind, Except.bind] using reconstructed⟩
 
 /-- Every valid multiproof read from a finite tree reconstructs that tree's root. -/
@@ -462,11 +462,11 @@ theorem multiproof_rebuilds_root {tree : Nat → Bytes} {indices helpers : List 
     (parents : ParentsAgree tree
       ((((indices.zip (indices.map tree)) ++ helpers.zip (helpers.map tree)).map
         fun pair => levelOf pair.1).foldl max 0)) :
-    calculateMultiMerkleRoot (indices.map tree) (helpers.map tree) indices = .ok (tree 1) := by
+    calculateMultiMerkleRootUnchecked (indices.map tree) (helpers.map tree) indices = .ok (tree 1) := by
   -- Frontier completeness supplies termination, and parent preservation identifies the root.
-  obtain ⟨root, reconstructed⟩ := calculateMultiMerkleRoot_complete built
+  obtain ⟨root, reconstructed⟩ := calculateMultiMerkleRootUnchecked_complete built
     (List.length_map ..) (List.length_map ..)
-  have same := calculateMultiMerkleRoot_agrees built (nodesAgree_zip_map tree indices)
+  have same := calculateMultiMerkleRootUnchecked_agrees built (nodesAgree_zip_map tree indices)
     (nodesAgree_zip_map tree helpers) parents reconstructed
   exact same ▸ reconstructed
 
@@ -491,18 +491,18 @@ theorem multiproof_verifies {tree : Nat → Bytes} {indices helpers : List Nat}
   -- Width checks admit the nodes, and full reconstruction produces the expected root.
   have leafWidths := checkChunks_map (fun i member => widths i (List.mem_append.mpr (Or.inl member)))
   have proofWidths := checkChunks_map (fun i member => widths i (List.mem_append.mpr (Or.inr member)))
-  simp [verifyMerkleMultiproof, leafWidths, proofWidths,
+  simp [verifyMerkleMultiproof, calculateMultiMerkleRoot, leafWidths, proofWidths,
     multiproof_rebuilds_root built parents, Bind.bind, Except.bind, Pure.pure, Except.pure]
 
 /-- Two sibling claims immediately below the root require no auxiliary nodes. -/
-theorem calculateMultiMerkleRoot_two_children (left right : Bytes) :
-    calculateMultiMerkleRoot [left, right] [] [2, 3] = .ok (combine left right) := by
+theorem calculateMultiMerkleRootUnchecked_two_children (left right : Bytes) :
+    calculateMultiMerkleRootUnchecked [left, right] [] [2, 3] = .ok (combine left right) := by
   -- Both children are already present, so their ordered hash is the complete root.
   have helpers : getHelperIndices [2, 3] = .ok [] := by
     with_unfolding_all rfl
   have two : Nat.log2 2 = 1 := by rfl
   have three : Nat.log2 3 = 1 := by rfl
-  simp [calculateMultiMerkleRoot, helpers, foldToRoot, foldLevel, foldLevelNodes,
+  simp [calculateMultiMerkleRootUnchecked, helpers, foldToRoot, foldLevel, foldLevelNodes,
     nodeAt, levelOf, two, three, gindexParent, Bind.bind, Except.bind, Pure.pure, Except.pure]
 
 end Ssz

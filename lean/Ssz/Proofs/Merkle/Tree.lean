@@ -167,16 +167,16 @@ Merkleizing one window of the leaves gives the subtree standing over that window
 
 A proof reads a run of leaves rather than the whole tree, and this is why doing so is sound.
 -/
-theorem merkleizeBounded_window (chunks : Array Bytes) {depth : Nat}
+theorem merkleizeBoundedUnchecked_window (chunks : Array Bytes) {depth : Nat}
     (start : Nat) :
-    merkleizeBounded (chunks.extract start (start + 2 ^ depth)) (some (2 ^ depth))
+    merkleizeBoundedUnchecked (chunks.extract start (start + 2 ^ depth)) (some (2 ^ depth))
       = .ok (subtreeAt chunks depth start) := by
   -- A window is no wider than it was asked to be, so the capacity check passes.
   have span : (chunks.extract start (start + 2 ^ depth)).size ≤ 2 ^ depth := by
     rw [Array.size_extract]
     generalize 2 ^ depth = width
     omega
-  simp only [merkleizeBounded, if_neg (Nat.not_lt.mpr span), depthFor_pow, pure, Except.pure,
+  simp only [merkleizeBoundedUnchecked, if_neg (Nat.not_lt.mpr span), depthFor_pow, pure, Except.pure,
     Except.ok.injEq]
   -- Both sides are the specification's tree, over leaf supplies that have yet to be compared.
   rw [subtreeAt_zero_eq _, subtreeAt_eq_subtreeRoot chunks depth start]
@@ -194,36 +194,36 @@ Merkleizing a short buffer gives the root of one filled out with zeros.
 
 This is the shortcut every implementation takes, stated about the code that takes it.
 -/
-theorem merkleizeBounded_append_zeros (chunks : Array Bytes)
+theorem merkleizeBoundedUnchecked_append_zeros (chunks : Array Bytes)
     {count capacity : Nat}
     (room : chunks.size + count ≤ capacity) :
-    merkleizeBounded (chunks ++ Array.replicate count zeroChunk) (some capacity)
-      = merkleizeBounded chunks (some capacity) := by
+    merkleizeBoundedUnchecked (chunks ++ Array.replicate count zeroChunk) (some capacity)
+      = merkleizeBoundedUnchecked chunks (some capacity) := by
   -- The padded buffer is longer, but still inside the capacity, so neither side refuses.
-  simp only [merkleizeBounded, Array.size_append, Array.size_replicate, if_neg (by omega : ¬ capacity < chunks.size + count),
+  simp only [merkleizeBoundedUnchecked, Array.size_append, Array.size_replicate, if_neg (by omega : ¬ capacity < chunks.size + count),
     if_neg (by omega : ¬ capacity < chunks.size)]
   -- Both roots are then the specification's, over leaf supplies already known equal.
   rw [subtreeAt_zero_eq _, subtreeAt_zero_eq _, padded_append_zeros]
 
 /-- An empty buffer merkleizes to the zero subtree of the width it was given. -/
-theorem merkleizeBounded_empty {capacity : Nat} :
-    merkleizeBounded #[] (some capacity)
+theorem merkleizeBoundedUnchecked_empty {capacity : Nat} :
+    merkleizeBoundedUnchecked #[] (some capacity)
       = .ok (zeroRoot combine zeroChunk (depthFor capacity)) := by
   -- An empty buffer is under any capacity, so the merkleizer answers rather than refusing.
-  simp only [merkleizeBounded, Array.size_empty, if_neg (by omega : ¬ capacity < 0)]
+  simp only [merkleizeBoundedUnchecked, Array.size_empty, if_neg (by omega : ¬ capacity < 0)]
   -- Every leaf then reads as zero, which is the constant supply the table entry stands for.
   rw [subtreeAt_zero_eq _, ← subtreeRoot_const_zero combine zeroChunk]
   rfl
 
 /-- The executable progressive tree agrees with the hash-independent definition. -/
-theorem merkleizeProgressive_eq (chunks : List Bytes) (level : Nat) :
-    merkleizeProgressive chunks level = progressiveRoot combine zeroChunk chunks level := by
+theorem merkleizeProgressiveUnchecked_eq (chunks : List Bytes) (level : Nat) :
+    merkleizeProgressiveUnchecked chunks level = progressiveRoot combine zeroChunk chunks level := by
   -- Both definitions consume one level's leaves before continuing down the spine.
-  induction chunks, level using merkleizeProgressive.induct with
+  induction chunks, level using merkleizeProgressiveUnchecked.induct with
   | case1 chunks level empty =>
-    simp [merkleizeProgressive, progressiveRoot, empty]
+    simp [merkleizeProgressiveUnchecked, progressiveRoot, empty]
   | case2 chunks level nonempty width ih =>
-    rw [merkleizeProgressive, progressiveRoot, if_neg nonempty, if_neg nonempty]
+    rw [merkleizeProgressiveUnchecked, progressiveRoot, if_neg nonempty, if_neg nonempty]
     -- The bounded subtree equivalence is valid at every depth.
     dsimp only
     rw [subtreeAt_zero_eq, ih]

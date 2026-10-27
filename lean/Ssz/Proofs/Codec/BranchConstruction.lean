@@ -50,7 +50,7 @@ theorem closed_branch_rebuilds_root {read : Nat → Except Err Bytes} (closed : 
     {index : Nat} {indices : List Nat} {node : Bytes}
     (indexed : getBranchIndices index = .ok indices) (readable : read index = .ok node) :
     ∃ proof root, indices.mapM read = .ok proof ∧ read 1 = .ok root ∧
-      calculateMerkleRoot node proof index = .ok root := by
+      calculateMerkleRootUnchecked node proof index = .ok root := by
   -- The generalized index fixes exactly how many parent steps reach position one.
   obtain ⟨shape, named, nonzero⟩ := getBranchIndices_eq indexed
   have reaches := shiftRight_depth named
@@ -77,6 +77,6 @@ theorem closed_branch_rebuilds_root {read : Nat → Except Err Bytes} (closed : 
   have measured : gindexLength index = .ok (Nat.log2 index) := by
     simp [gindexLength, gindexDepth, show ¬index < 1 by omega, nonzero, Bind.bind, Except.bind]
   refine ⟨proof, root, by simpa only [shape] using proofRead, rootRead, ?_⟩
-  simp [calculateMerkleRoot, measured, length, climbed, Bind.bind, Except.bind, Pure.pure, Except.pure]
+  simp [calculateMerkleRootUnchecked, measured, length, climbed, Bind.bind, Except.bind, Pure.pure, Except.pure]
 
 end Ssz

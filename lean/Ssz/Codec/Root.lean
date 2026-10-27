@@ -22,8 +22,8 @@ def hashTreeRootAt : Nat → Desc → Value → Except Err Bytes
     let layout ← merkleLayout shape value
     let chunks ← layoutChunksAt budget layout
     let root ← match layout.limit with
-      | none => .ok (merkleizeProgressive chunks.toList)
-      | some capacity => merkleizeBounded chunks (some capacity)
+      | none => .ok (merkleizeProgressiveUnchecked chunks.toList)
+      | some capacity => merkleizeBoundedUnchecked chunks (some capacity)
     -- A shape mixing a word in puts its contents on the left and the word on the right.
     return match layout.mixin with
       | none => root

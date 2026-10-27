@@ -294,15 +294,15 @@ theorem hashTreeRootAt_total (budget : Nat) (shape : Desc) (value : Value)
         exact ih child inner (by omega) childSound childFits)
     -- The declared capacity holds all materialized leaves, so no tree truncates data.
     have contents : ∃ root, (match layout.limit with
-        | none => Except.ok (ε := Err) (merkleizeProgressive chunks.toList)
-        | some capacity => merkleizeBounded chunks (some capacity)) = .ok root ∧
+        | none => Except.ok (ε := Err) (merkleizeProgressiveUnchecked chunks.toList)
+        | some capacity => merkleizeBoundedUnchecked chunks (some capacity)) = .ok root ∧
         root.size = bytesPerChunk := by
       cases capacity : layout.limit with
-      | none => exact ⟨_, rfl, merkleizeProgressive_size _ _⟩
+      | none => exact ⟨_, rfl, merkleizeProgressiveUnchecked_size _ _⟩
       | some limit =>
         have within := bounded limit capacity
         refine ⟨subtreeAt chunks (depthFor limit) 0, ?_, subtreeAt_size chunks widths _ _⟩
-        simp [merkleizeBounded, Nat.not_lt.mpr within, pure, Except.pure]
+        simp [merkleizeBoundedUnchecked, Nat.not_lt.mpr within, pure, Except.pure]
     -- An optional count, layout, or selector is hashed with the contents root.
     obtain ⟨contents, rooted, sized⟩ := contents
     refine ⟨match layout.mixin with | none => contents | some word => mixIn contents word, ?_, ?_⟩

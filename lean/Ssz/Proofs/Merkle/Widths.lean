@@ -42,18 +42,18 @@ theorem subtreeAt_size (chunks : Array Bytes)
     | succ depth => exact combine_size _ _
 
 /-- Every successful bounded root over complete leaves has the SSZ node width. -/
-theorem merkleizeBounded_size {chunks : Array Bytes} {limit : Option Nat} {root : Bytes}
+theorem merkleizeBoundedUnchecked_size {chunks : Array Bytes} {limit : Option Nat} {root : Bytes}
     (complete : ∀ chunk ∈ chunks, chunk.size = bytesPerChunk)
-    (made : merkleizeBounded chunks limit = .ok root) : root.size = bytesPerChunk := by
+    (made : merkleizeBoundedUnchecked chunks limit = .ok root) : root.size = bytesPerChunk := by
   -- A successful capacity check leaves a bounded subtree whose leaves already have valid widths.
-  cases limit <;> simp only [merkleizeBounded] at made <;> (try split at made) <;> cases made
+  cases limit <;> simp only [merkleizeBoundedUnchecked] at made <;> (try split at made) <;> cases made
   all_goals exact subtreeAt_size chunks complete _ _
 
 /-- A progressive root is either a zero node or a digest, regardless of its leaf widths. -/
-@[simp] theorem merkleizeProgressive_size (chunks : List Bytes) (level : Nat) :
-    (merkleizeProgressive chunks level).size = bytesPerChunk := by
+@[simp] theorem merkleizeProgressiveUnchecked_size (chunks : List Bytes) (level : Nat) :
+    (merkleizeProgressiveUnchecked chunks level).size = bytesPerChunk := by
   -- An empty spine returns a complete zero node, and a nonempty spine returns a digest.
-  rw [merkleizeProgressive]
+  rw [merkleizeProgressiveUnchecked]
   split <;> simp
 
 /-- A count is written into one full node, including its high zero bytes. -/

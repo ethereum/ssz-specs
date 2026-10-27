@@ -24,7 +24,7 @@ theorem boundedNode_window {budget : Nat} {layout : MerkleLayout} {chunks : Arra
   simp only [boundedNode, nextPow2, Nat.log2_two_pow, if_pos inside]
   rw [show 2 ^ depthFor capacity >>> depth = 2 ^ (depthFor capacity - depth) from width]
   simp only [windows, Bind.bind, Except.bind]
-  exact merkleizeBounded_window chunks _
+  exact merkleizeBoundedUnchecked_window chunks _
 
 /-- Appending a left or right turn doubles the old position and adds that turn. -/
 theorem gindexBelow_children (index depth : Nat) :

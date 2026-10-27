@@ -21,7 +21,7 @@ theorem hashTreeRoot_progressiveContainer_mixin {active : List Bool} {names : Li
   · cases laid
     simp [MerkleLayout.nesting] at merkleized mixed
     subst merkleized
-    exact ⟨_, merkleizeProgressive_size _ _, mixed⟩
+    exact ⟨_, merkleizeProgressiveUnchecked_size _ _, mixed⟩
 
 /--
 Two legal progressive containers with different layouts and one root expose a SHA-256 collision.

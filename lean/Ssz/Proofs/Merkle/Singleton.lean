@@ -105,11 +105,11 @@ private theorem climbBranch_append (index : Nat) : ∀ (level : Nat) (node last 
     simp [Nat.add_assoc, Nat.add_comm 1]
 
 /-- With one claim, the multiproof fold rebuilds the root the single-item climb reaches. -/
-theorem calculateMultiMerkleRoot_singleton {leaf root : Bytes} {proof : List Bytes}
-    {index : Nat} (single : calculateMerkleRoot leaf proof index = .ok root) :
-    calculateMultiMerkleRoot [leaf] proof [index] = .ok root := by
+theorem calculateMultiMerkleRootUnchecked_singleton {leaf root : Bytes} {proof : List Bytes}
+    {index : Nat} (single : calculateMerkleRootUnchecked leaf proof index = .ok root) :
+    calculateMultiMerkleRootUnchecked [leaf] proof [index] = .ok root := by
   -- The single-item check fixes the branch length and the root the climb reaches.
-  unfold calculateMerkleRoot at single
+  unfold calculateMerkleRootUnchecked at single
   cases measured : gindexLength index with
   | error fault => simp [measured, Bind.bind, Except.bind] at single
   | ok depth =>
@@ -125,9 +125,9 @@ theorem calculateMultiMerkleRoot_singleton {leaf root : Bytes} {proof : List Byt
   have built : getHelperIndices [index] = .ok branch := by
     simp [getHelperIndices_singleton, getBranchIndices, getPathIndices, measured, branch,
       List.map_map, Function.comp_def, Bind.bind, Except.bind, pure, Except.pure]
-  obtain ⟨rebuiltRoot, rebuilt⟩ := calculateMultiMerkleRoot_complete (leaves := [leaf]) (proof := proof) built rfl
+  obtain ⟨rebuiltRoot, rebuilt⟩ := calculateMultiMerkleRootUnchecked_complete (leaves := [leaf]) (proof := proof) built rfl
     (by simp [branch, count])
-  obtain ⟨helpers, again, _, _, folded⟩ := calculateMultiMerkleRoot_shape rebuilt
+  obtain ⟨helpers, again, _, _, folded⟩ := calculateMultiMerkleRootUnchecked_shape rebuilt
   rw [built] at again
   cases again
   -- The fold computes the root of the tree cut at the supplied nodes.
@@ -199,12 +199,12 @@ theorem verifyMerkleMultiproof_singleton {leaf root : Bytes} {proof : List Bytes
     {verdict : Bool} (single : verifyMerkleProof leaf proof index root = .ok verdict) :
     verifyMerkleMultiproof [leaf] proof [index] root = .ok verdict := by
   -- Both verifiers rebuild the root, then run the same width checks before comparing it.
-  unfold verifyMerkleProof at single
-  cases rebuilt : calculateMerkleRoot leaf proof index <;> cases leafWidth : checkChunk leaf <;>
+  unfold verifyMerkleProof calculateMerkleRoot at single
+  cases rebuilt : calculateMerkleRootUnchecked leaf proof index <;> cases leafWidth : checkChunk leaf <;>
     cases proofWidths : checkChunks proof <;>
     simp [leafWidth, proofWidths, rebuilt, Bind.bind, Except.bind, pure,
       Except.pure] at single
-  simp [verifyMerkleMultiproof, checkChunks, leafWidth, proofWidths,
-    calculateMultiMerkleRoot_singleton rebuilt, single, Bind.bind, Except.bind, pure, Except.pure]
+  simp [verifyMerkleMultiproof, calculateMultiMerkleRoot, checkChunks, leafWidth, proofWidths,
+    calculateMultiMerkleRootUnchecked_singleton rebuilt, single, Bind.bind, Except.bind, pure, Except.pure]
 
 end Ssz

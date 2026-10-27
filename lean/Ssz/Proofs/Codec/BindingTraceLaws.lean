@@ -169,13 +169,13 @@ theorem valueTreeAt_of_hashTreeRootAt (budget : Nat) (shape : Desc) (value : Val
         -- A bounded root can succeed only when its capacity covers every materialized child.
         | some capacity =>
           by_cases over : capacity < chunks.size
-          · simp [hashTreeRootAt, laid, materialized, limited, merkleizeBounded, over,
+          · simp [hashTreeRootAt, laid, materialized, limited, merkleizeBoundedUnchecked, over,
               Bind.bind, Except.bind] at success
           · have bounded := CommitmentTree.bounded_complete trees capacity complete
             -- Expanding zero padding and nested children leaves the perfect-tree root and final metadata hash unchanged.
             have eqRoot : ((CommitmentTree.bounded trees capacity).withMixin layout.mixin).root = root := by
               cases mixed : layout.mixin <;>
-                simpa [mixed, hashTreeRootAt, laid, materialized, limited, merkleizeBounded, over,
+                simpa [mixed, hashTreeRootAt, laid, materialized, limited, merkleizeBoundedUnchecked, over,
                 Bind.bind, Except.bind, pure, Except.pure, CommitmentTree.withMixin_root,
                 CommitmentTree.bounded_root, rooted] using success
             refine ⟨(CommitmentTree.bounded trees capacity).withMixin layout.mixin,

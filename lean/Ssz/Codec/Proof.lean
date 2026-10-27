@@ -91,7 +91,8 @@ def boundedNode (budget : Nat) (layout : MerkleLayout)
     -- Each turn halves the run of leaves a node spans, so the turns left give its width.
     let span := width >>> depth
     let start := leavesFrom + gindexBelow index depth * span
-    merkleizeBounded (← layoutChunksAt budget layout start (some (start + span))) (some span)
+    let chunks ← layoutChunksAt budget layout start (some (start + span))
+    merkleizeBoundedUnchecked chunks (some span)
   else
     -- Past the bottom of this subtree, the remaining turns are read inside one leaf.
     let below := depth - treeDepth

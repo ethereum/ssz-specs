@@ -37,7 +37,7 @@ theorem four_pow_eq (level : Nat) : 4 ^ level = 2 ^ (2 * level) := by
 
 /-- A power-of-four capacity starts the progressive root at its corresponding level. -/
 theorem merkleizeProgressiveFrom_power (chunks : Array Bytes) (level : Nat) :
-    merkleizeProgressiveFrom chunks (4 ^ level) = merkleizeProgressive chunks.toList level := by
+    merkleizeProgressiveFrom chunks (4 ^ level) = merkleizeProgressiveUnchecked chunks.toList level := by
   -- The executable conversion divides the binary depth by two.
   simp [merkleizeProgressiveFrom, four_pow_eq, Nat.log2_two_pow]
 
@@ -58,27 +58,27 @@ theorem extract_interval_list (chunks : Array Bytes) (start width : Nat) :
 /-- The first progressive level is its bounded subtree, followed by a four-times-wider suffix. -/
 theorem progressive_suffix_split (chunks : Array Bytes) (start level : Nat)
     (occupied : start < chunks.size) :
-    merkleizeProgressive (chunks.toList.drop start) level =
+    merkleizeProgressiveUnchecked (chunks.toList.drop start) level =
       combine (subtreeAt chunks (2 * level) start)
-        (merkleizeProgressive (chunks.toList.drop (start + 4 ^ level)) (level + 1)) := by
+        (merkleizeProgressiveUnchecked (chunks.toList.drop (start + 4 ^ level)) (level + 1)) := by
   -- A nonempty suffix opens one level, and the next level starts after its capacity.
-  rw [merkleizeProgressive, if_neg (by simp; omega)]
+  rw [merkleizeProgressiveUnchecked, if_neg (by simp; omega)]
   simp only [List.drop_drop]
   -- The current bounded segment is the prefix of the same suffix used by progressive merkleization.
   have interval := congrArg List.toArray (extract_interval_list chunks start (4 ^ level))
   simp only [Array.toArray_toList] at interval
   rw [← interval]
-  have window := merkleizeBounded_window chunks (depth := 2 * level) start
+  have window := merkleizeBoundedUnchecked_window chunks (depth := 2 * level) start
   -- Extracting a segment cannot exceed its power-of-two capacity, including a partially filled final segment.
   have span : (chunks.extract start (start + 2 ^ (2 * level))).size ≤ 2 ^ (2 * level) := by
     simp only [Array.size_extract]
     generalize 2 ^ (2 * level) = width
     omega
-  simp only [merkleizeBounded, if_neg (Nat.not_lt.mpr span), depthFor_pow,
+  simp only [merkleizeBoundedUnchecked, if_neg (Nat.not_lt.mpr span), depthFor_pow,
     Pure.pure, Except.pure, Except.ok.injEq] at window
   simpa only [four_pow_eq, depthFor_pow] using congrArg
     (fun left => combine left
-      (merkleizeProgressive (chunks.toList.drop (start + 4 ^ level)) (level + 1))) window
+      (merkleizeProgressiveUnchecked (chunks.toList.drop (start + 4 ^ level)) (level + 1))) window
 
 /-- Positions within a progressive spine and its bounded levels, including their leaves. -/
 def ProgressivePosition (count index : Nat) : Nat → Nat → Nat → Prop
@@ -99,7 +99,7 @@ def ProgressiveInterior (count index : Nat) : Nat → Nat → Nat → Prop
 /-- The root at a position in a progressive spine, expressed in terms of its leaf array. -/
 def progressiveReading (chunks : Array Bytes) (index : Nat) : Nat → Nat → Nat → Bytes
   -- Stopping on the spine commits to the complete remaining suffix.
-  | 0, start, level => merkleizeProgressive (chunks.toList.drop start) level
+  | 0, start, level => merkleizeProgressiveUnchecked (chunks.toList.drop start) level
   | depth + 1, start, level =>
     -- A left turn selects the current bounded segment, while a right turn skips its full capacity.
     if !gindexBit index depth then boundedTreeNode chunks (2 * level) index depth start
