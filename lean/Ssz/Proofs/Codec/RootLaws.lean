@@ -82,8 +82,8 @@ theorem hashTreeRoot_materializes (shape : Desc) (value : Value) (root : Bytes)
       merkleLayout shape value = .ok layout ∧
       layoutChunksAt (shape.nesting - 1) layout = .ok chunks ∧
       (match layout.limit with
-        | none => Except.ok (merkleizeProgressive chunks.toList)
-        | some capacity => merkleizeBounded chunks (some capacity)) = .ok contents ∧
+        | none => Except.ok (merkleizeProgressiveUnchecked chunks.toList)
+        | some capacity => merkleizeBoundedUnchecked chunks (some capacity)) = .ok contents ∧
       root = (match layout.mixin with
         | none => contents
         | some word => mixIn contents word) := by
@@ -100,8 +100,8 @@ theorem hashTreeRoot_materializes (shape : Desc) (value : Value) (root : Bytes)
       | error e => simp [depth, hashTreeRootAt, laid, materialized, Bind.bind, Except.bind] at success
       | ok chunks =>
         cases contents : (match layout.limit with
-          | none => Except.ok (merkleizeProgressive chunks.toList)
-          | some capacity => merkleizeBounded chunks (some capacity)) with
+          | none => Except.ok (merkleizeProgressiveUnchecked chunks.toList)
+          | some capacity => merkleizeBoundedUnchecked chunks (some capacity)) with
         | error e =>
           simp only [depth, hashTreeRootAt, laid, materialized, Bind.bind, Except.bind] at success
           cases limit : layout.limit <;> simp_all

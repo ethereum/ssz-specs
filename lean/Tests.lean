@@ -95,6 +95,23 @@ def main : IO Unit := do
   expect "depth 65 zero root" ((merkleizeBounded #[] (some (2 ^ 65))).toOption == some #[
     0x30, 0x3c, 0xe3, 0x88, 0x09, 0xba, 0x7a, 0x77, 0xb6, 0x60, 0xad, 0x0b, 0x07, 0x4a, 0xf9, 0xc6,
     0xbc, 0xd5, 0xc0, 0x2b, 0xbf, 0xf2, 0xf3, 0xb0, 0x24, 0x86, 0x33, 0xb0, 0xb8, 0x76, 0xe4, 0x49])
+  -- Invariant: every node a tree or a branch takes in is exactly 32 bytes wide.
+  -- Fixture state: a one-leaf tree hashes nothing, so its lone leaf would be the root itself.
+  refusedWith "empty lone leaf" (merkleizeBounded #[#[]] none) "COUNT"
+  refusedWith "31-byte lone leaf" (merkleizeBounded #[Array.replicate 31 0] (some 1)) "COUNT"
+  refusedWith "31-byte progressive leaf" (merkleizeProgressive [Array.replicate 31 0]) "COUNT"
+  -- Mutation: move one byte from the sibling onto the leaf.
+  --
+  --     leaf 31 bytes ++ sibling 33 bytes = 64 bytes = leaf 32 bytes ++ sibling 32 bytes
+  --
+  -- Both pairs hash the same message, so the split itself is what gets refused.
+  refusedWith "31 and 33 byte branch"
+    (calculateMerkleRoot (Array.replicate 31 0) [Array.replicate 33 0] 2) "COUNT"
+  refusedWith "31 and 33 byte multiproof"
+    (calculateMultiMerkleRoot [Array.replicate 31 0] [Array.replicate 33 0] [2]) "COUNT"
+  -- The honest 32 and 32 split rebuilds its parent.
+  expect "32 and 32 byte branch"
+    ((calculateMerkleRoot zeroChunk [zeroChunk] 2).toOption == some (combine zeroChunk zeroChunk))
   -- SHA-256 padding changes block count at 56 bytes and crosses a block at 64.
   -- An empty message still hashes one padding block with an explicit zero bit length.
   expect "SHA-256 0 bytes" ((Sha256.hash ⟨(Array.range 0).map UInt8.ofNat⟩).data == #[

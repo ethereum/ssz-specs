@@ -111,17 +111,17 @@ theorem closed_multiproof_rebuilds_root {read : Nat → Except Err Bytes} (close
     {indices helpers : List Nat} {leaves proof : List Bytes}
     (indexed : getHelperIndices indices = .ok helpers)
     (leafReads : indices.mapM read = .ok leaves) (helperReads : helpers.mapM read = .ok proof) :
-    ∃ root, calculateMultiMerkleRoot leaves proof indices = .ok root ∧ read 1 = .ok root := by
+    ∃ root, calculateMultiMerkleRootUnchecked leaves proof indices = .ok root ∧ read 1 = .ok root := by
   -- Helper-frontier completeness supplies a result, and preserved reads identify it as the root.
   obtain ⟨leafCount, leavesRead⟩ := mapM_readNodes leafReads
   obtain ⟨proofCount, proofRead⟩ := mapM_readNodes helperReads
   -- Helper-frontier completeness guarantees that reconstruction succeeds before read preservation identifies its result.
-  obtain ⟨root, reconstructed⟩ := calculateMultiMerkleRoot_complete indexed leafCount proofCount
+  obtain ⟨root, reconstructed⟩ := calculateMultiMerkleRootUnchecked_complete indexed leafCount proofCount
   have reads : ReadNodes read (indices.zip leaves ++ helpers.zip proof) := fun i node member =>
     (List.mem_append.mp member).elim (leavesRead i node) (proofRead i node)
   refine ⟨root, reconstructed, ?_⟩
   have folded := reconstructed
-  simp only [calculateMultiMerkleRoot, leafCount, bne_self_eq_false, Bool.false_eq_true, ↓reduceIte, bind,
+  simp only [calculateMultiMerkleRootUnchecked, leafCount, bne_self_eq_false, Bool.false_eq_true, ↓reduceIte, bind,
     Except.bind, indexed, proofCount, List.map_append, List.foldl_append] at folded
   exact foldToRoot_reads closed _ _ reads _ folded
 
@@ -131,7 +131,7 @@ theorem buildMultiproof_rebuilds_value_root (shape : Desc) (value : Value) (root
     (indexed : getHelperIndices indices = .ok helpers) (leaves : List Bytes)
     (leafReads : indices.mapM (nodeRoot shape value) = .ok leaves)
     (proof : List Bytes) (built : buildMultiproof shape value indices = .ok proof) :
-    calculateMultiMerkleRoot leaves proof indices = .ok root := by
+    calculateMultiMerkleRootUnchecked leaves proof indices = .ok root := by
   -- The finite value walker supplies the parent equations only at positions actually reconstructed.
   have helperReads : helpers.mapM (nodeRoot shape value) = .ok proof := by
     simpa only [buildMultiproof, indexed, Bind.bind, Except.bind] using built
@@ -198,7 +198,7 @@ theorem buildMultiproof_correct (shape : Desc) (value : Value) (root : Bytes)
     (indexed : getHelperIndices indices = .ok helpers) (leaves : List Bytes)
     (leafReads : indices.mapM (nodeRoot shape value) = .ok leaves) :
     ∃ proof, buildMultiproof shape value indices = .ok proof ∧
-      calculateMultiMerkleRoot leaves proof indices = .ok root := by
+      calculateMultiMerkleRootUnchecked leaves proof indices = .ok root := by
   -- Branch closure provides all helpers, and reconstruction preserves their actual value reads.
   have closed := nodeRoot_closed shape value root rooted
   obtain ⟨proof, helperReads⟩ := closed_helper_reads closed indexed leafReads
@@ -236,7 +236,7 @@ theorem buildMultiproof_verifies (shape : Desc) (value : Value) (root : Bytes)
   have leafWidths := (checkChunks_ok_iff leaves).mpr (value_reads_width shape value indices leaves leafReads)
   have proofWidths := (checkChunks_ok_iff proof).mpr (value_reads_width shape value helpers proof helperReads)
   refine ⟨proof, built, ?_⟩
-  simp [verifyMerkleMultiproof, leafWidths, proofWidths, rebuilt, Bind.bind, Except.bind, Pure.pure, Except.pure]
+  simp [verifyMerkleMultiproof, calculateMultiMerkleRoot, leafWidths, proofWidths, rebuilt, Bind.bind, Except.bind, Pure.pure, Except.pure]
 
 /-- An admissible value has a root and an accepted multiproof for every valid readable request. -/
 theorem buildMultiproof_fits_verifies (shape : Desc) (value : Value)

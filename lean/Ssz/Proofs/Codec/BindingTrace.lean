@@ -62,14 +62,14 @@ decreasing_by
 
 /-- Executing the expanded progressive spine preserves the executable root. -/
 @[simp] theorem progressive_root (trees : List CommitmentTree) (level : Nat) :
-    (progressive trees level).root = merkleizeProgressive (trees.map root) level := by
+    (progressive trees level).root = merkleizeProgressiveUnchecked (trees.map root) level := by
   -- Both computations consume the same prefix before continuing down the right spine.
   induction trees, level using progressive.induct with
-  | case1 trees level empty => simp [progressive, merkleizeProgressive, empty, root]
+  | case1 trees level empty => simp [progressive, merkleizeProgressiveUnchecked, empty, root]
   | case2 trees level nonempty ih =>
     -- The current level separates into a bounded prefix and the remaining progressive suffix.
     -- The suffix has the same root by recursion, and taking prefixes commutes with reading child roots.
-    rw [progressive, if_neg nonempty, merkleizeProgressive]
+    rw [progressive, if_neg nonempty, merkleizeProgressiveUnchecked]
     simp only [List.isEmpty_map, nonempty, Bool.false_eq_true, if_false, root,
       bounded_root, ih, List.map_toArray, List.map_take, List.map_drop]
 

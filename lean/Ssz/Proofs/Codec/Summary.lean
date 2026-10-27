@@ -30,7 +30,7 @@ theorem hashTreeRoot_chunk {data : Bytes} (width : data.size = bytesPerChunk) :
   simp only [hashTreeRoot, Desc.nesting, hashTreeRootAt, merkleLayout, width, bne_self_eq_false,
     Bool.false_eq_true, if_false, Bind.bind, Except.bind, pure, Except.pure,
     MerkleLayout.packing, packBytes_chunk width, layoutChunksAt, Leaves.count]
-  simp only [merkleizeBounded, flat, subtreeAt, padded, Array.size_singleton,
+  simp only [merkleizeBoundedUnchecked, flat, subtreeAt, padded, Array.size_singleton,
     Bind.bind, Except.bind, pure, Except.pure]
   rfl
 

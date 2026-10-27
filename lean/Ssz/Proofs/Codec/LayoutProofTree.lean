@@ -22,7 +22,7 @@ theorem hashTreeRoot_bounded_layout {shape : Desc} {value : Value} {layout : Mer
   | succ budget =>
     -- The enclosing type consumes one recursion level, matching the budget used for its materialized leaves.
     simp only [nesting, Nat.add_sub_cancel] at materialized
-    simp [hashTreeRootAt, laid, materialized, bounded, merkleizeBounded, Nat.not_lt.mpr fits,
+    simp [hashTreeRootAt, laid, materialized, bounded, merkleizeBoundedUnchecked, Nat.not_lt.mpr fits,
       mixIn, Bind.bind, Except.bind, Pure.pure, Except.pure]
     rfl
 

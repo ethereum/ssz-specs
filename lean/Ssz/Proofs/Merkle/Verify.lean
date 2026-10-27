@@ -125,7 +125,7 @@ theorem climbBranch_folds_on_path (node : Nat → Bytes) (index : Nat) :
 theorem branch_rebuilds_root_on_path {node : Nat → Bytes} {index : Nat}
     (parents : BranchConsistent node index) {branch : List Nat}
     (built : getBranchIndices index = .ok branch) :
-    calculateMerkleRoot (node index) (branch.map node) index = .ok (node 1) := by
+    calculateMerkleRootUnchecked (node index) (branch.map node) index = .ok (node 1) := by
   -- The index determines both the branch length and the sibling order.
   obtain ⟨spelled, named, deep⟩ := getBranchIndices_eq built
   subst spelled
@@ -137,7 +137,7 @@ theorem branch_rebuilds_root_on_path {node : Nat → Bytes} {index : Nat}
     (fun step _ upper => parents step (by omega))
   simp only [Nat.zero_add, Nat.shiftRight_zero] at climbed
   rw [shiftRight_depth named] at climbed
-  simp [calculateMerkleRoot, measured, Bind.bind, Except.bind, List.map_map,
+  simp [calculateMerkleRootUnchecked, measured, Bind.bind, Except.bind, List.map_map,
     Function.comp_def, climbed, pure, Except.pure]
 
 /--
@@ -147,7 +147,7 @@ Nothing about the leaves is assumed, only that each node is the two below it com
 -/
 theorem branch_rebuilds_root {node : Nat → Bytes} (tree : MerkleTree node) {index : Nat}
     {branch : List Nat} (built : getBranchIndices index = .ok branch) :
-    calculateMerkleRoot (node index) (branch.map node) index = .ok (node 1) := by
+    calculateMerkleRootUnchecked (node index) (branch.map node) index = .ok (node 1) := by
   obtain ⟨spelled, named, deep⟩ := getBranchIndices_eq built
   subst spelled
   -- The branch is as long as the index is deep, so the verifier accepts its length.
@@ -158,7 +158,7 @@ theorem branch_rebuilds_root {node : Nat → Bytes} (tree : MerkleTree node) {in
   have climbed := climbBranch_folds tree (Nat.log2 index) index 0
   simp only [Nat.zero_add, Nat.shiftRight_zero] at climbed
   rw [shiftRight_depth named] at climbed
-  simp [calculateMerkleRoot, measured, Bind.bind, Except.bind, List.map_map, Function.comp_def,
+  simp [calculateMerkleRootUnchecked, measured, Bind.bind, Except.bind, List.map_map, Function.comp_def,
     climbed, pure, Except.pure]
 
 end Ssz

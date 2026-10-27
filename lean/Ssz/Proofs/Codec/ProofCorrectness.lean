@@ -13,7 +13,7 @@ theorem buildProof_rebuilds_value_root (shape : Desc) (value : Value) (root : By
     (readLeaf : nodeRoot shape value index = .ok leaf) (indices : List Nat)
     (indexed : getBranchIndices index = .ok indices) :
     ∃ branch, buildProof shape value index = .ok branch ∧
-      calculateMerkleRoot leaf branch index = .ok root := by
+      calculateMerkleRootUnchecked leaf branch index = .ok root := by
   -- Closure supplies all siblings, including transitions between nested value trees.
   obtain ⟨branch, rebuilt, built, readRoot, correct⟩ :=
     closed_branch_rebuilds_root (nodeRoot_closed shape value root rooted) indexed readLeaf

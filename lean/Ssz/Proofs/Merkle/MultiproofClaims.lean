@@ -64,7 +64,7 @@ theorem multiproof_claim_verifies {tree : Nat → Bytes}
   have sameRoot := verifyMerkleMultiproof_agrees helperIndices leafValues proofValues parents accepted
   have checks := (verifyMerkleMultiproof_eq_true_iff ..).mp accepted
   have count : leaves.length = indices.length := by
-    unfold calculateMultiMerkleRoot at checks
+    unfold calculateMultiMerkleRootUnchecked at checks
     split at checks
     · simp [throw, Bind.bind, Except.bind] at checks
     · next count => simpa using count
