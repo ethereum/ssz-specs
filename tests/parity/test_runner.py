@@ -17,6 +17,7 @@ CASE = {
     "serialized": "0x01",
     "root": ROOT,
     "paths": [],
+    "corruptions": [{"serialized": "0x02", "reason": "NOT_A_BIT"}, {"serialized": "0x00"}],
 }
 PAIR = {
     "name": "boolean-self",

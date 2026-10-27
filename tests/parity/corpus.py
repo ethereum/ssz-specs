@@ -16,6 +16,12 @@ from parity.wire import Json, Step, descriptor, json_value
 PATHS_PER_CASE = 4
 """Paths drawn into each generated value."""
 
+CORRUPTIONS_PER_CASE = 4
+"""Damaged encodings drawn from each generated value."""
+
+MAX_EDITS = 3
+"""Most edits made to one encoding, so a damaged one often breaks several rules at once."""
+
 
 @dataclass(frozen=True, slots=True)
 class PathClaim:
@@ -68,6 +74,44 @@ class PathClaim:
 
 
 @dataclass(frozen=True, slots=True)
+class Corruption:
+    """A damaged encoding, and the refusal the specification gives it."""
+
+    serialized: bytes
+    """The encoding after its edits."""
+
+    reason: str | None = None
+    """Name of the first fault the specification meets, or nothing where it accepts the bytes."""
+
+    @classmethod
+    def drawn(cls, draw: Draw, ssz_type: type[ssz.SSZType], encoding: bytes) -> Self:
+        """A few random edits to an encoding, and how the specification answers the result."""
+        data = bytearray(encoding)
+        for _ in range(draw.between(1, MAX_EDITS)):
+            # Overwrite, cut or insert, so values, offsets and budgets all get broken.
+            edit = draw.below(3)
+            if edit == 0 and data:
+                data[draw.below(len(data))] = draw.below(256)
+            elif edit == 1:
+                del data[draw.below(len(data) + 1) :]
+            else:
+                data.insert(draw.below(len(data) + 1), draw.below(256))
+        try:
+            ssz_type.decode_bytes(bytes(data))
+        except ssz.SSZValueError as error:
+            # Every implementation names the same fault, the first one met in reading order.
+            return cls(serialized=bytes(data), reason=error.fault.name)
+        return cls(serialized=bytes(data))
+
+    def to_json(self) -> Json:
+        """The claim as the corpus writes it, omitting the reason where nothing is refused."""
+        written: Json = {"serialized": "0x" + self.serialized.hex()}
+        if self.reason is not None:
+            written["reason"] = self.reason
+        return written
+
+
+@dataclass(frozen=True, slots=True)
 class Multiproof:
     """Several nodes claimed at once, and what a verifier cannot rebuild for itself."""
 
@@ -113,6 +157,9 @@ class Case:
     paths: list[PathClaim]
     """Claims about nodes of the value's own tree."""
 
+    corruptions: list[Corruption]
+    """Damaged encodings of the value, and how each is answered."""
+
     default: ssz.SSZType | None = None
     """The type's default value, where it has one."""
 
@@ -131,11 +178,15 @@ class Case:
             default = None
         drawn = (PathClaim.drawn(draw, ssz_type, value) for _ in range(PATHS_PER_CASE))
         claims = [claim for claim in drawn if claim is not None]
+        encoding = value.encode_bytes()
         return cls(
             name=name,
             ssz_type=ssz_type,
             value=value,
             paths=claims,
+            corruptions=[
+                Corruption.drawn(draw, ssz_type, encoding) for _ in range(CORRUPTIONS_PER_CASE)
+            ],
             default=default,
             multiproof=Multiproof.over(value, claims),
         )
@@ -151,6 +202,7 @@ class Case:
             # Every type here is declared through this implementation, so all are well formed.
             "wellFormed": True,
             "paths": [claim.to_json() for claim in self.paths],
+            "corruptions": [corruption.to_json() for corruption in self.corruptions],
         }
         if self.default is not None:
             written["default"] = json_value(self.default)

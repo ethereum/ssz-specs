@@ -43,6 +43,20 @@ def diffMultiproof (shape : Desc) (value : Value) (root : Bytes) (claim : Json) 
   unless (← orFail "verification" (verifyMerkleMultiproof leaves supplied indices root)) do
     .error "the multiproof does not rebuild the root"
 
+/--
+A damaged encoding, refused for the fault the specification names, or accepted as it is.
+
+Where several rules are broken, the fault named is the first one met in reading order.
+-/
+def diffCorruption (shape : Desc) (claim : Json) : Except String Unit := do
+  let data ← bytes (← field claim "serialized")
+  match field? claim "reason" with
+  | some name => refusedWith (← text name) "damaged encoding" (deserialize shape data)
+  | none =>
+    -- Accepted bytes are canonical, so they are what the value they hold encodes to.
+    let value ← orFail "damaged encoding" (deserialize shape data)
+    sameBytes "re-encoded" (← orFail "encoding" (serialize shape value)) data
+
 /-- Check one generated case. -/
 def diffCase (entry : Json) : Except String Unit := do
   let (shape, spelling) ← declaration entry
@@ -67,6 +81,8 @@ def diffCase (entry : Json) : Except String Unit := do
     if (← orFail "default" shape.default) != expected then .error "the default disagrees"
   for claim in ← entries (← field entry "paths") do
     diffPath shape value root claim
+  for claim in ← entries (← field entry "corruptions") do
+    diffCorruption shape claim
   if let some claim := field? entry "multiproof" then
     diffMultiproof shape value root claim
 
