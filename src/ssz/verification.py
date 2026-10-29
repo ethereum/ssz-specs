@@ -1,8 +1,8 @@
 """Rebuilding a root from chunks and the indices they sit at, reading no declaration."""
 
 from collections.abc import Sequence
-from hashlib import sha256
 
+from ssz import backend
 from ssz.chunks import Chunk, Root
 from ssz.exceptions import SSZValueError, ValueFault
 from ssz.gindex import (
@@ -19,7 +19,7 @@ def _hash_pair(left: bytes, right: bytes) -> Root:
     # Each node must be 32 bytes: a 31 + 33 split would hash like a different 32 + 32 pair.
     left, right = Chunk(left), Chunk(right)
     # Invariant: a digest is exactly the chunk width.
-    return Root._trusted(sha256(left + right).digest())
+    return Root._trusted(backend.hash_pair(left, right))
 
 
 def calculate_merkle_root(leaf: bytes, proof: Sequence[bytes], index: int) -> Root:
@@ -47,6 +47,12 @@ def calculate_merkle_root(leaf: bytes, proof: Sequence[bytes], index: int) -> Ro
 
 def verify_merkle_proof(leaf: bytes, proof: Sequence[bytes], index: int, root: bytes) -> bool:
     """Whether one leaf and its branch rebuild the expected root, raising if it is malformed."""
+    # A backend that is on answers well-formed requests; None leaves refusals to the code below.
+    if (
+        backend.verify_proof is not None
+        and (verdict := backend.verify_proof(leaf, proof, index, root)) is not None
+    ):
+        return verdict
     # Comparing as plain bytes lets a wrong root of any spelling answer false rather than raise.
     return bytes(calculate_merkle_root(leaf, proof, index)) == bytes(root)
 
@@ -93,5 +99,10 @@ def verify_merkle_multiproof(
     leaves: Sequence[bytes], proof: Sequence[bytes], indices: Sequence[int], root: bytes
 ) -> bool:
     """Whether several leaves and their nodes rebuild the expected root, raising if malformed."""
+    # A backend that is on answers well-formed requests; None leaves refusals to the code below.
+    if backend.verify_multiproof is not None:
+        verdict = backend.verify_multiproof(leaves, proof, indices, root)
+        if verdict is not None:
+            return verdict
     # Comparing as plain bytes lets a wrong root of any spelling answer false rather than raise.
     return bytes(calculate_multi_merkle_root(leaves, proof, indices)) == bytes(root)
