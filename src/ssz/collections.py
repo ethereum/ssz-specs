@@ -43,6 +43,7 @@ from ssz.exceptions import (
     ValueFault,
     document_refusals,
 )
+from ssz.lazy import LazyElements
 from ssz.offsets import BYTES_PER_LENGTH_OFFSET, check_composite_size, offset_table_spans
 from ssz.ssz_base import (
     SSZCollection,
@@ -312,6 +313,17 @@ class _SSZSequence[T: SSZType](SSZCollection[T, Sequence[T]], ABC):
         """Return the number of elements in the sequence."""
         return len(self.data)
 
+    @override
+    def encode_bytes(self) -> bytes:
+        """Encode to SSZ bytes, handing back the very input of an untouched native decode."""
+        data = self.data
+        if type(data) is LazyElements and data.pristine():
+            encoded = data.encoding[data.start : data.stop]
+            # The size rule is asked as the writer asks it.
+            check_composite_size(len(encoded))
+            return encoded
+        return super().encode_bytes()
+
     @property
     def elements(self) -> list[T]:
         """A fresh list of the elements, which writing to never reaches this value."""
@@ -423,6 +435,9 @@ class Vector[T: SSZType](_SSZSequence[T]):
     @override
     def serialize(self, stream: IO[bytes]) -> int:
         """Write the SSZ encoding to a binary stream, and return the byte count."""
+        # Elements the native backend has yet to decode write their own bytes.
+        if type(self.data) is LazyElements:
+            return self.data.serialize(stream, self.ELEMENT_TYPE.is_fixed_size())
         if self.ELEMENT_TYPE.is_fixed_size():
             total = sum(element.serialize(stream) for element in self.data)
             # Fixed-size composites obey the same total-size rule as offset tables.
@@ -496,7 +511,7 @@ class _SSZList[T: SSZType](_SSZSequence[T]):
         Raises:
             SSZValueError: When the resulting count exceeds a declared capacity.
         """
-        self._begin_mutation()
+        self._begin_mutation(len(self.data))
 
         # Coerced before the count is checked, so a bad value is reported as one.
         element = self._validate_element(value)
@@ -510,7 +525,8 @@ class _SSZList[T: SSZType](_SSZSequence[T]):
         Raises:
             IndexError: When the sequence is empty.
         """
-        self._begin_mutation()
+        # The last position empties, and an empty sequence writes nothing.
+        self._begin_mutation(len(self.data) - 1 if self.data else None)
         return self._mutable_data.pop()
 
     @overload
@@ -553,6 +569,9 @@ class _SSZList[T: SSZType](_SSZSequence[T]):
         """Write the SSZ encoding to a binary stream, and return the byte count."""
         # No length prefix either way.
         # The count is recovered on decode from the budget, or from the table.
+        # Elements the native backend has yet to decode write their own bytes.
+        if type(self.data) is LazyElements:
+            return self.data.serialize(stream, self.ELEMENT_TYPE.is_fixed_size())
         if self.ELEMENT_TYPE.is_fixed_size():
             total = sum(element.serialize(stream) for element in self.data)
             # Fixed-size composites obey the same total-size rule as offset tables.

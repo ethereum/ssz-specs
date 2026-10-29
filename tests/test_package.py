@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import ast
+import importlib
 import importlib.metadata
 import pathlib
 import re
@@ -112,6 +113,38 @@ UNPUBLISHED = {
     "offset_table_spans",
     "progressive_container_plan",
     "wrapping_schema",
+    "root_of_layout",
+}
+
+
+# The optional native backend's names and its hooks, published through their own modules.
+# A client reaches for them only after asking whether the backend is available here.
+NATIVE = {
+    "available",
+    "hash_level",
+    "hash_pair",
+    "python_hash_level",
+    "python_hash_pair",
+    "reset",
+    "verify_proof",
+    "verify_multiproof",
+    "disable",
+    "enable",
+    "enabled",
+    "hash_tree_root_of_accepted",
+    "plan",
+    "plan_words",
+    "verify_branch",
+    "validate",
+    "model_root",
+    "model_copied",
+    "decode",
+    "element_read",
+    "element_roots",
+    "read_hook",
+    "LAZY_ELEMENTS",
+    "LazyElements",
+    "UNREAD",
 }
 
 
@@ -133,7 +166,7 @@ def module_level_public_names() -> set[str]:
 
 def test_every_public_name_is_published_or_listed_as_unpublished() -> None:
     """A name left in neither set is a decision nobody made, which is how a surface drifts."""
-    assert module_level_public_names() - set(ssz.__all__) == UNPUBLISHED
+    assert module_level_public_names() - set(ssz.__all__) == UNPUBLISHED | NATIVE
 
 
 def test_nothing_listed_as_unpublished_is_also_published() -> None:
@@ -144,3 +177,22 @@ def test_nothing_listed_as_unpublished_is_also_published() -> None:
 def test_the_version_matches_the_distribution() -> None:
     """A version read from anywhere but the distribution is one that can disagree with it."""
     assert ssz.__version__ == importlib.metadata.version("eth-ssz-specs")
+
+
+def test_a_run_requiring_the_native_routines_refuses_to_import_without_them(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A run that asks for the native routines must not pass on the Python alone."""
+    from ssz import native
+
+    # The package is imported again, here with routines that cannot run.
+    monkeypatch.setenv("SSZ_BACKEND", "native")
+    monkeypatch.setattr(native, "available", lambda: False)
+    monkeypatch.setenv("SSZ_REQUIRE_NATIVE", "1")
+    with pytest.raises(RuntimeError, match="SSZ_REQUIRE_NATIVE"):
+        importlib.reload(ssz)
+    # Asked for without being required, the backend stays as it was.
+    monkeypatch.delenv("SSZ_REQUIRE_NATIVE")
+    was = native.enabled()
+    importlib.reload(ssz)
+    assert native.enabled() == was

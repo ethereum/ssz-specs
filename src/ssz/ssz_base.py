@@ -1,6 +1,7 @@
 """Abstract bases for the SSZ type system."""
 
 import io
+import weakref
 from abc import ABC, abstractmethod
 from collections.abc import Iterator, Mapping, Sequence
 from copy import copy as shallow_copy
@@ -10,8 +11,10 @@ from pydantic import ConfigDict, Field, model_validator
 from pydantic.annotated_handlers import GetCoreSchemaHandler
 from pydantic_core import core_schema
 
+from ssz import backend
 from ssz.base import StrictBaseModel
 from ssz.exceptions import SSZTypeError, SSZValueError, TypeFault, ValueFault
+from ssz.lazy import LazyElements
 
 if TYPE_CHECKING:
     # Wanted for one annotation, which is never evaluated.
@@ -23,7 +26,13 @@ _CAPACITY_NAMES: Final = ("LENGTH", "LIMIT")
 _TYPE_PARAMETERS: Final = (*_CAPACITY_NAMES, "ELEMENT_TYPE", "ACTIVE_FIELDS", "OPTIONS")
 """Everything a declaration fixes its tree with, which a subclass may restate but not change."""
 
-_COLD_CACHE: Final = {"_version": 0, "_root_memo": None}
+_COLD_CACHE: Final = {
+    "_version": 0,
+    "_root_memo": None,
+    "_kept": None,
+    "_links": None,
+    "_tree": None,
+}
 """What each cache slot holds before anything has touched it."""
 
 
@@ -327,6 +336,9 @@ class SSZType(ABC):
         Raises:
             SSZValueError: If the input carries bytes past the decoded value.
         """
+        # A backend may decode the input itself, answering None to leave it to the specification.
+        if backend.decode is not None and (decoded := backend.decode(cls, data)) is not None:
+            return cast("Self", decoded)
         stream = io.BytesIO(data)
         instance = cls.deserialize(stream, len(data))
 
@@ -360,9 +372,11 @@ class SSZModel(StrictBaseModel, SSZType, ABC):
     A collection wraps its contents in one field; a container names one per struct field.
     """
 
-    __slots__ = ("_root_memo", "_version")
+    __slots__ = ("_kept", "_links", "_root_memo", "_tree", "_version")
     """
-    The mutation counter and the remembered root, one pair per value.
+    The mutation counter and the remembered root, then what the native backend keeps.
+
+    The native backend keeps a root, the parents that rely on it, and for a sequence its tree.
 
     Slots, because a field would serialize and a private attribute would join equality.
     """
@@ -372,6 +386,9 @@ class SSZModel(StrictBaseModel, SSZType, ABC):
         # A real annotation here would become a Pydantic private attribute, not a slot.
         _version: ClassVar[int]
         _root_memo: ClassVar["tuple[object, Root] | None"]
+        _kept: ClassVar[bytes | None]
+        _links: ClassVar[Any]
+        _tree: ClassVar[Any]
 
     MUTABLE: ClassVar[bool] = True
     """Whether instances accept mutation, and False on a subclass freezes it."""
@@ -384,11 +401,13 @@ class SSZModel(StrictBaseModel, SSZType, ABC):
         """
         return hash(self.hash_tree_root())
 
-    def _begin_mutation(self) -> None:
+    def _begin_mutation(self, position: int | None = None) -> None:
         """
         Admit one mutation, refusing it outright on an immutable type.
 
         Every mutator passes here, so invalidation is one name to grep for.
+
+        A mutator of a sequence names the position it writes, and None stands for any position.
 
         Raises:
             SSZTypeError: When the type declares itself immutable.
@@ -397,6 +416,30 @@ class SSZModel(StrictBaseModel, SSZType, ABC):
             raise SSZTypeError(TypeFault.IMMUTABLE, type=type(self).__name__)
         # Written past this class's own __setattr__, which is the door itself.
         object.__setattr__(self, "_version", self._version + 1)
+        self._forget_kept(position)
+
+    def _forget_kept(self, position: int | None) -> None:
+        """
+        Drop the root the native backend kept, and tell every parent that relied on it.
+
+        A kept tree records the position, so its next root rehashes that path alone.
+        A value whose root is already dropped told its parents then, so the walk stops there.
+        The specification never keeps such a root, and this costs it two reads.
+        """
+        tree = self._tree
+        if tree is not None:
+            tree.touch(position)
+        if self._kept is None:
+            return
+        object.__setattr__(self, "_kept", None)
+        links = self._links
+        if links is None:
+            return
+        # One parent is a pair; a value placed in several keeps a list of pairs.
+        for parent_ref, parent_position in (links,) if type(links) is tuple else links:
+            parent = parent_ref()
+            if parent is not None:
+                parent._forget_kept(parent_position)
 
     # Hidden from type checkers, which would otherwise stop checking field assignments.
     # A visible __getattr__ would also make every misspelled attribute resolve.
@@ -439,6 +482,12 @@ class SSZModel(StrictBaseModel, SSZType, ABC):
                     element.copy() if isinstance(element, SSZModel) else element
                     for element in value
                 ]
+            # Elements the native backend has yet to decode are shared bytes, and copy as such.
+            elif type(value) is LazyElements:
+                stored[name] = value.copy_for(weakref.ref(duplicate))
+        # A backend keeping roots current hands its kept root and tree on to the duplicate.
+        if backend.model_copied is not None:
+            backend.model_copied(self, duplicate)
         return duplicate
 
     def __len__(self) -> int:
@@ -531,7 +580,13 @@ class SSZCollection[T, S: Sequence[Any]](SSZModel, Sequence[T], ABC):
 
     def __setitem__(self, index: int | slice, value: T | Sequence[T]) -> None:
         """Replace the element(s) at the index, validating each new element."""
-        self._begin_mutation()
+        # A slice may move every later element, and a position past the end writes nothing.
+        held = len(self.data)
+        position = int(index) if isinstance(index, int) else None
+        if position is not None and -held <= position < held:
+            self._begin_mutation(position % held)
+        else:
+            self._begin_mutation()
         if isinstance(index, slice):
             elements = [self._validate_element(v) for v in cast("Sequence[T]", value)]
             # A step of anything but one resizes nothing, so the held count stands.
