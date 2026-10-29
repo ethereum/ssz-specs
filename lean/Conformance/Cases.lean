@@ -4,7 +4,7 @@ import Conformance.Reader
 
 namespace Conformance
 
-open Ssz Lean
+open EthLib.Consensus.Ssz Lean
 
 /-- Compare two byte strings. -/
 def sameBytes (what : String) (got expected : Bytes) : Except String Unit :=

@@ -4,7 +4,7 @@ import Conformance.Cases
 
 namespace Conformance
 
-open Ssz Lean
+open EthLib.Consensus.Ssz Lean
 
 /-- Whether a vector must be accepted or refused. -/
 def verdict (vector : Json) : Except String Bool :=

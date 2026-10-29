@@ -125,7 +125,7 @@ jobs:
         run: just test-cov-gate
 
   lean:
-    name: Lean specification and proofs
+    name: Lean specification conformance
     runs-on: ubuntu-latest
     steps:
       - name: Checkout ssz-specs
@@ -147,13 +147,12 @@ jobs:
         with:
           tool: just
 
-      - name: Build the Lean specification and audit its axioms
+      - name: Build the Lean conformance harness and the EthLib specification it pins
         uses: leanprover/lean-action@24581d74d674803a25a81b10b059c5c0cdd344c6 # v1
         with:
           lake-package-directory: lean
           auto-config: false
           build: true
-          # Recheck the proofs from source on every run.
           use-github-cache: false
 
       - name: Generate SSZ conformance test vectors

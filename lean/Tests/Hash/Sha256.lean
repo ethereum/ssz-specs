@@ -1,4 +1,4 @@
-import Ssz.Hash.Sha256
+import EthLib.Cryptography.Hash.Sha256
 import Lean
 
 /-! Published SHA-256 examples and NIST byte-oriented validation vectors. -/
@@ -29,7 +29,7 @@ private def hex (text : String) : IO ByteArray := do
 private def checkDigest (label : String) (message : ByteArray) (expected : String) : IO Unit := do
   -- Compare all 32 bytes against an independently published answer.
   let answer ← hex expected
-  expect label (answer.size == 32 && Ssz.Sha256.hash message == answer)
+  expect label (answer.size == 32 && EthLib.Cryptography.Hash.Sha256.hash message == answer)
 
 private def knownAnswers (label text : String) (expectedCount : Nat) : IO Unit := do
   -- Response files encode bit lengths even for byte-oriented messages.
@@ -71,7 +71,7 @@ private def monteCarlo (text : String) : IO Unit := do
       let mut c := seed
       for _ in [0:1000] do
         -- The oldest digest leaves the window after hashing the concatenated 96 bytes.
-        let next := Ssz.Sha256.hash (a ++ b ++ c)
+        let next := EthLib.Cryptography.Hash.Sha256.hash (a ++ b ++ c)
         a := b
         b := c
         c := next
@@ -89,14 +89,6 @@ def run : IO Unit := do
     "248d6a61d20638b8e5c026930c3e6039a33ce45964ff2167f6ecedd419db06c1"
   checkDigest "FIPS million a" ⟨Array.replicate 1000000 0x61⟩
     "cdc76e5c9914fb9281a1c7e284d73e67f1809a48a497200e046d39ccc7112cd0"
-
-  -- NIST's worked abc example gives the first round and first expanded schedule word.
-  let block := Ssz.Sha256.pad "abc".toUTF8
-  expect "NIST abc schedule word 16" ((Ssz.Sha256.schedule block 0).toArray[16]! == 0x61626380)
-  expect "NIST abc first round"
-    ((Ssz.Sha256.round Ssz.Sha256.initialState Ssz.Sha256.roundConstants.toArray[0]! 0x61626380).toArray ==
-      #[0x5d6aebcd, 0x6a09e667, 0xbb67ae85, 0x3c6ef372,
-        0xfa2a4622, 0x510e527f, 0x9b05688c, 0x1f83d9ab])
 
   -- Embed the original response files so regression runs need no downloads or working directory.
   knownAnswers "NIST short" (include_str "SHA256ShortMsg.rsp") 65

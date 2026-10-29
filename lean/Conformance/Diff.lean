@@ -4,7 +4,7 @@ import Conformance.Cases
 
 namespace Conformance
 
-open Ssz Lean
+open EthLib.Consensus.Ssz Lean
 
 /--
 Every node of a branch, and the claim it authenticates, agreeing with the corpus.

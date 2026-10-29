@@ -1,23 +1,19 @@
 name = "ssz"
-defaultTargets = ["Ssz", "SszProofs", "conformance", "regressions"]
+defaultTargets = ["conformance", "regressions"]
 
-# No third-party dependencies: proofs use Lean's standard logical axioms.
+# The Lean specification of SSZ, and its proofs, live in EthLib as `EthLib.Consensus.Ssz`.
+# This package only checks it against the Python specification and the reference tests.
+[[require]]
+name = "EthLib"
+git = "https://github.com/tcoratger/ethlib"
+rev = "4b13b15c0eb2c7b69c73f566d29636a61153ec0e"
 
 [leanOptions]
-# An unfinished proof is a warning by default, which would let one ship silently.
+# A warning in the test code fails the build.
 warningAsError = true
 # An undeclared identifier becomes a silent new variable by default.
 autoImplicit = false
 relaxedAutoImplicit = false
-
-# The executable specification, which is what an implementer reads.
-[[lean_lib]]
-name = "Ssz"
-
-# The machine-checked properties of it, which nothing else depends on.
-[[lean_lib]]
-name = "SszProofs"
-roots = ["Ssz.Proofs"]
 
 [[lean_lib]]
 name = "Conformance"
@@ -33,8 +29,3 @@ root = "Main"
 [[lean_exe]]
 name = "regressions"
 root = "Tests"
-
-# Parse headers without loading their imports; used by the audited source-closure gate.
-[[lean_exe]]
-name = "importHeaders"
-root = "scripts.ParseImports"
