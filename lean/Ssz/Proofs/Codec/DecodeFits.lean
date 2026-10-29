@@ -33,13 +33,13 @@ theorem offsetSpans_length {offsets spans : List Nat} {scope : Nat}
   | case1 => cases read; rfl
   | case2 start scope bad => simp [offsetSpans, bad] at read
   | case3 start scope good =>
-    simp only [offsetSpans, good, if_false] at read
+    simp only [offsetSpans, good, ite_false] at read
     cases read
     rfl
   | case4 start next rest scope bad => simp [offsetSpans, bad] at read
   | case5 start next rest scope good ih =>
     -- A rejected suffix cannot occur inside a successfully decoded table.
-    simp only [offsetSpans, good, if_false] at read
+    simp only [offsetSpans, good, ite_false] at read
     obtain ⟨more, tail, ⟨⟩⟩ := checksPassed read
     -- Prepending the current span increases both counts by one.
     simp [ih tail]
@@ -52,7 +52,7 @@ theorem vectorSlices_length {element : Desc} {count : Nat} {data : Bytes}
   by_cases huge : data.size ≥ 2 ^ (8 * bytesPerOffset)
   · cases fixed : element.fixedSize <;>
       simp [vectorSlices, huge, throw_error, Bind.bind, Except.bind] at read
-  · simp only [vectorSlices, if_neg huge] at read
+  · simp only [vectorSlices, ite_eq_right huge] at read
     cases fixed : element.fixedSize with
     -- Fixed-size slicing creates one equal-width interval for each declared element.
     | some width =>
@@ -189,7 +189,7 @@ private theorem deserializeOption_fits : ∀ selectors options selector data val
     | cons option options =>
       -- A matching selector provides both a successful lookup and an admissible decoded payload.
       by_cases same : chosen == selector
-      · simp only [deserializeOption, same, if_true] at read
+      · simp only [deserializeOption, same, ite_true] at read
         obtain ⟨_, ranged, read⟩ := checksPassed read
         obtain ⟨held, body, ⟨⟩⟩ := checksPassed read
         exact ⟨option, held, rfl, range_of_checkSelector ranged, by simp [lookupOption, same],

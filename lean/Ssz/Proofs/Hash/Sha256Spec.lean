@@ -209,7 +209,7 @@ theorem schedule_refines (block : ByteArray) (start : Nat) :
       simp only [UInt32.toBitVec_add, sigma0_refines, sigma1_refines]
       rw [ih (position - 16) (by omega) (by omega), ih (position - 15) (by omega) (by omega),
         ih (position - 7) (by omega) (by omega), ih (position - 2) (by omega) (by omega)]
-      rw [Spec.messageWord.eq_def (Spec.inputWords block start) position, dif_neg early]
+      rw [Spec.messageWord.eq_def (Spec.inputWords block start) position, dite_eq_right early]
 
 /-- The executable round loop follows the model after every prefix of the sixty-four rounds. -/
 private theorem rounds_refines (block : ByteArray) (start : Nat) (state : Vector UInt32 8) :

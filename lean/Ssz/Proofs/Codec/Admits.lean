@@ -186,7 +186,7 @@ theorem fits_of_serialize : ∀ (shape : Desc) (value : Value),
   -- A failed range, count, or capacity check cannot have produced bytes.
   | case3 _ _ bad | case9 _ _ bad | case11 _ _ bad | case14 _ _ _ bad | case16 _ _ _ bad =>
     intro _ ⟨_, wrote⟩
-    rw [serialize, if_neg bad] at wrote
+    rw [serialize, ite_eq_right bad] at wrote
     simp at wrote
   | case4 _ _ bad | case6 _ _ bad =>
     intro _ ⟨_, wrote⟩
@@ -199,12 +199,12 @@ theorem fits_of_serialize : ∀ (shape : Desc) (value : Value),
   -- A vector needs both the exact element count and admissibility of every element.
   | case13 _ _ _ count ih =>
     intro sound ⟨bytes, wrote⟩
-    rw [serialize, if_pos count] at wrote
+    rw [serialize, ite_eq_left count] at wrote
     exact .vector (by simpa using count) (ih (wellFormed_vector sound) ⟨bytes, wrote⟩)
   -- A bounded list combines its accepted count with the element induction.
   | case15 _ _ _ within ih =>
     intro sound ⟨bytes, wrote⟩
-    rw [serialize, if_pos within] at wrote
+    rw [serialize, ite_eq_left within] at wrote
     exact .list within (ih (wellFormed_list sound) ⟨bytes, wrote⟩)
   -- A progressive list inherits admissibility from all of its elements.
   | case17 _ limit elements ih =>

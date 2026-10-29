@@ -86,7 +86,7 @@ theorem canonical_option : ∀ selectors options selector data value,
     | cons option options =>
       -- A matching selector fixes which type decodes and re-encodes the payload.
       by_cases same : chosen == selector
-      · simp only [deserializeOption, same, if_true] at read
+      · simp only [deserializeOption, same, ite_true] at read
         obtain ⟨_, ranged, read⟩ := checksPassed read
         obtain ⟨held, body, ⟨⟩⟩ := checksPassed read
         exact ⟨option, held, rfl, ranged, by simp [lookupOption, same],

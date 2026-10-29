@@ -73,10 +73,10 @@ theorem climbBranch_binding (index : Nat) : ∀ level left leftProof right right
           intro equal
           cases direction : gindexBit index level with
           | false =>
-            simp only [first, second, direction, Bool.false_eq_true, if_false] at equal
+            simp only [first, second, direction, Bool.false_eq_true, ite_false] at equal
             exact leaves (Array.append_inj equal (leftWidth.trans rightWidth.symm)).1
           | true =>
-            simp only [first, second, direction, if_true] at equal
+            simp only [first, second, direction, ite_true] at equal
             exact leaves (Array.append_inj equal
               ((leftWidths sibling List.mem_cons_self).trans
                 (rightWidths other List.mem_cons_self).symm)).2

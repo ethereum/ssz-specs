@@ -93,7 +93,7 @@ theorem roundTrip_uint {width value : Nat} (bound : value < 2 ^ (8 * width)) :
     serialize (.uint width) (.uint value) >>= deserialize (.uint width)
       = .ok (.uint value) := by
   -- The value fits its width, so the encoder writes rather than refusing.
-  simp only [serialize, if_pos bound]
+  simp only [serialize, ite_eq_left bound]
   show deserialize (.uint width) (uintBytes width value) = _
   -- The decoder's width check passes because the encoding is exactly that wide.
   simp [deserialize, uintBytes_size, readUint_uintBytes width value bound, Pure.pure, Except.pure]
@@ -198,26 +198,26 @@ theorem unpackDelimited_packBitsDelimited (limit : Option Nat) (data : Array Boo
   have recovered : unpackBits (packBits (data.push true) ((data.size + 8) / 8)) data.size
       = data := unpackBits_packBits_push data _ (by omega)
   simp only [unpackDelimited, widthIs, beq_iff_eq,
-    show ¬ (data.size + 8) / 8 = 0 by omega, if_neg, not_false_eq_true,
-    show (data.size + 8) / 8 - 1 = data.size / 8 by omega, finalIs, if_neg notZero]
+    show ¬ (data.size + 8) / 8 = 0 by omega, ite_eq_right, not_false_eq_true,
+    show (data.size + 8) / 8 - 1 = data.size / 8 by omega, finalIs, ite_eq_right notZero]
   rw [show (data.size + 8) / 8 - 1 = data.size / 8 by omega, finalIs] at counted
   -- The declared capacity, where there is one, holds the count that came back.
   cases limit with
   | none => simp only [counted, recovered, Pure.pure, Except.pure]
   | some cap =>
     simp only [counted, recovered, Pure.pure, Except.pure,
-      if_neg (show ¬ data.size > cap by have := within cap rfl; omega)]
+      ite_eq_right (show ¬ data.size > cap by have := within cap rfl; omega)]
 
 /-- A fixed bit sequence survives being written and read back. -/
 theorem roundTrip_bitVector {length : Nat} {data : Array Bool} (fits : data.size = length) :
     serialize (.bitVector length) (.bits data) >>= deserialize (.bitVector length)
       = .ok (.bits data) := by
   -- The count is the declared one, so the encoder writes rather than refusing.
-  simp only [serialize, fits, beq_self_eq_true, if_pos]
+  simp only [serialize, fits, beq_self_eq_true, ite_eq_left]
   show deserialize (.bitVector length) (packBits data ((length + 7) / 8)) = _
   -- The encoding is exactly as many bytes as the declared count needs.
   have width : (packBits data ((length + 7) / 8)).size = (length + 7) / 8 := by simp [packBits]
-  simp only [deserialize, width, bne_self_eq_false, if_neg, Bool.false_eq_true, not_false_eq_true]
+  simp only [deserialize, width, bne_self_eq_false, ite_eq_right, Bool.false_eq_true, not_false_eq_true]
   -- Nothing is set above the last declared bit, so the padding check passes.
   have padded : ∀ h : length % 8 != 0 ∧ (length + 7) / 8 > 0,
       (packBits data ((length + 7) / 8))[(length + 7) / 8 - 1]! >>> UInt8.ofNat (length % 8)
@@ -238,7 +238,7 @@ theorem roundTrip_bitVector {length : Nat} {data : Array Bool} (fits : data.size
   split
   · rename_i checked
     simp only [Bool.and_eq_true, decide_eq_true_eq] at checked
-    rw [if_neg (by simp [padded checked])]
+    rw [ite_eq_right (by simp [padded checked])]
     simp [unpacked, Pure.pure, Except.pure]
   · simp [unpacked, Pure.pure, Except.pure]
 
@@ -247,7 +247,7 @@ theorem roundTrip_bitList {limit : Nat} {data : Array Bool} (fits : data.size �
     serialize (.bitList limit) (.bits data) >>= deserialize (.bitList limit)
       = .ok (.bits data) := by
   -- The count is under the capacity, so neither side refuses it.
-  simp only [serialize, if_pos fits]
+  simp only [serialize, ite_eq_left fits]
   show deserialize (.bitList limit) (packBitsDelimited data) = _
   simp only [deserialize,
     unpackDelimited_packBitsDelimited (some limit) data (fun _ named => by cases named; exact fits)]

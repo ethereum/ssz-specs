@@ -15,10 +15,10 @@ theorem combine_sibling {node : Nat → Bytes} (tree : MerkleTree node) (index :
   rcases Nat.mod_two_eq_zero_or_one index with even | odd
   · -- An even node is the left child, so the sibling joins on the right.
     obtain ⟨whole, pair⟩ := gindexSibling_even even
-    rw [if_neg (by omega), ← pair, ← whole]
+    rw [ite_eq_right (by omega), ← pair, ← whole]
   · -- An odd node is the right child, so the sibling joins on the left.
     obtain ⟨whole, pair⟩ := gindexSibling_odd odd
-    rw [if_pos odd, ← whole, ← pair]
+    rw [ite_eq_left odd, ← whole, ← pair]
 
 /-- One level of the climb joins a node with its sibling, giving the node above them. -/
 theorem climbBranch_step {node : Nat → Bytes} (tree : MerkleTree node) (index level : Nat)

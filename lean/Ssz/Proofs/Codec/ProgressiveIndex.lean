@@ -45,7 +45,7 @@ private theorem progressive_selection : ∀ chunk depth spine start count,
     -- Otherwise it skips that capacity and follows the right spine.
     by_cases fits : chunk < 2 ^ depth
     · have index : progressiveChunkGindex chunk depth spine = spine * 2 * 2 ^ depth + chunk := by
-        rw [progressiveChunkGindex, if_pos fits]
+        rw [progressiveChunkGindex, ite_eq_left fits]
       -- Removing the bounded segment’s low turns leaves the spine node followed by its left turn.
       have parent : (spine * 2 * 2 ^ depth + chunk) / 2 ^ depth = spine * 2 := by
         simp [Nat.add_div width, Nat.div_eq_of_lt fits, Nat.mod_eq_of_lt fits, Nat.two_pow_pos]
@@ -66,14 +66,14 @@ private theorem progressive_selection : ∀ chunk depth spine start count,
           count (by omega) (by omega)
       have index : progressiveChunkGindex chunk depth spine =
           progressiveChunkGindex (chunk - 2 ^ depth) (depth + 2) (spine * 2 + 1) := by
-        rw [progressiveChunkGindex, if_neg fits]
+        rw [progressiveChunkGindex, ite_eq_right fits]
       have turn : gindexBit (progressiveChunkGindex chunk depth spine) turns = true := by
         rw [gindexBit_parity, index, ancestor]; simp
       refine ⟨turns + 1, stop, by omega, ?_, ?_, left, capacity, ?_, reached⟩
       · rw [index, shiftRight_succ, ancestor]
         omega
       · rw [spineWalk]
-        simp only [show ¬start ≥ count by omega, if_false, turn, Bool.not_true, Bool.false_eq_true]
+        simp only [show ¬start ≥ count by omega, ite_false, turn, Bool.not_true, Bool.false_eq_true]
         simpa only [index, Nat.pow_add, show 2 ^ 2 = 4 by decide] using walked
       · rw [index]
         omega

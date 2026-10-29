@@ -26,23 +26,23 @@ theorem wellFormed_progressiveContainer_iff (active : List Bool) (names : List S
   simp only [Desc.wellFormed]
   by_cases e : active.isEmpty = true
   · simp_all [throw, throwThe, MonadExceptOf.throw, Bind.bind, Except.bind]
-  simp only [e, Bool.false_eq_true, if_false]
+  simp only [e, Bool.false_eq_true, ite_false]
   by_cases g : (active.getLast! == false) = true
   · simp_all [throw, throwThe, MonadExceptOf.throw, Bind.bind, Except.bind]
-  simp only [g, Bool.false_eq_true, if_false]
+  simp only [g, Bool.false_eq_true, ite_false]
   by_cases w : active.length > maxActiveFields
   · simp_all [throw, throwThe, MonadExceptOf.throw, Bind.bind, Except.bind]
     omega
-  simp only [w, if_false]
+  simp only [w, ite_false]
   by_cases f : fields.isEmpty = true
   · simp_all [throw, throwThe, MonadExceptOf.throw, Bind.bind, Except.bind]
-  simp only [f, Bool.false_eq_true, if_false]
+  simp only [f, Bool.false_eq_true, ite_false]
   by_cases c : (active.countP (· == true) != fields.length) = true
   · simp_all [throw, throwThe, MonadExceptOf.throw, Bind.bind, Except.bind]
-  simp only [c, Bool.false_eq_true, if_false]
+  simp only [c, Bool.false_eq_true, ite_false]
   by_cases l : (names.length != fields.length) = true
   · simp_all [throw, throwThe, MonadExceptOf.throw, Bind.bind, Except.bind]
-  simp only [l, Bool.false_eq_true, if_false]
+  simp only [l, Bool.false_eq_true, ite_false]
   cases d : firstDuplicate names
   · simp_all
   · simp_all [throw, throwThe, MonadExceptOf.throw, Bind.bind, Except.bind]
@@ -58,10 +58,10 @@ theorem wellFormed_compatibleUnion_iff (selectors : List Nat) (options : List De
   by_cases e : (selectors.isEmpty || options.isEmpty) = true
   · have : selectors = [] ∨ options = [] := by simpa using e
     rcases this with h | h <;> simp [h, throw, throwThe, MonadExceptOf.throw, Bind.bind, Except.bind]
-  simp only [e, Bool.false_eq_true, if_false]
+  simp only [e, Bool.false_eq_true, ite_false]
   by_cases l : (selectors.length != options.length) = true
   · simp_all [throw, throwThe, MonadExceptOf.throw, Bind.bind, Except.bind]
-  simp only [l, Bool.false_eq_true, if_false]
+  simp only [l, Bool.false_eq_true, ite_false]
   cases d : firstDuplicate selectors
   · cases f : selectors.find? (fun s => s < minSelector || s > maxSelector)
     · simp_all [Bind.bind, Except.bind]

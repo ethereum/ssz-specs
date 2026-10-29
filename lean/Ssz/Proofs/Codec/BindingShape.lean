@@ -31,7 +31,7 @@ theorem sequenceLayout_shapes {element : Desc} {left right : List Value}
   -- Composite elements contribute one typed position each, while basic elements share packed nodes.
   cases basic : element.isBasic with
   | false =>
-    simp only [sequenceLayout, basic, Bool.false_eq_true, if_false, pure, Except.pure,
+    simp only [sequenceLayout, basic, Bool.false_eq_true, ite_false, pure, Except.pure,
       Except.ok.injEq] at laid otherLaid
     subst first second
     -- Equal element counts give the same repeated child-type sequence.
@@ -39,7 +39,7 @@ theorem sequenceLayout_shapes {element : Desc} {left right : List Value}
       List.map_const', lengths]
   | true =>
     cases a : serializeEach element left <;> cases b : serializeEach element right <;>
-      simp only [sequenceLayout, basic, if_true, a, b, Bind.bind, Except.bind,
+      simp only [sequenceLayout, basic, ite_true, a, b, Bind.bind, Except.bind,
         pure, Except.pure, Except.ok.injEq, reduceCtorEq] at laid otherLaid
     subst first second
     -- Equal element counts and byte widths produce equal packed-node counts and capacities.
@@ -150,7 +150,7 @@ theorem merkleLayout_shapes {shape : Desc} {left right : Value} {first second : 
     match leftFits, rightFits with
     | .byteVector count, .byteVector otherCount =>
       simp only [merkleLayout, count, otherCount, bne_self_eq_false, Bool.false_eq_true,
-        if_false, Bind.bind, Except.bind, pure, Except.pure, Except.ok.injEq] at laid other
+        ite_false, Bind.bind, Except.bind, pure, Except.pure, Except.ok.injEq] at laid other
       subst first second
       simp [MerkleLayout.packing, Leaves.shapes, packBytes_size, count, otherCount]
   -- Exact 256-bit length words recover the byte counts needed to align packed nodes.
@@ -158,7 +158,7 @@ theorem merkleLayout_shapes {shape : Desc} {left right : Value} {first second : 
     match leftFits, rightFits, leftSized, rightSized with
     | .byteList within, .byteList otherWithin, .byteList count, .byteList otherCount =>
       simp only [merkleLayout, Nat.not_lt.mpr within, Nat.not_lt.mpr otherWithin,
-        if_false, pure, Except.pure, Except.ok.injEq] at laid other
+        ite_false, pure, Except.pure, Except.ok.injEq] at laid other
       subst first second
       -- The count bounds exclude truncation when the equal 256-bit words are decoded.
       have sizes := lengthWord_injective count otherCount (Option.some.inj mixed)
@@ -168,7 +168,7 @@ theorem merkleLayout_shapes {shape : Desc} {left right : Value} {first second : 
     match leftFits, rightFits with
     | .bitVector count, .bitVector otherCount =>
       simp only [merkleLayout, count, otherCount, bne_self_eq_false, Bool.false_eq_true,
-        if_false, pure, Except.pure, Except.ok.injEq] at laid other
+        ite_false, pure, Except.pure, Except.ok.injEq] at laid other
       subst first second
       simp [MerkleLayout.packing, Leaves.shapes, packedBits, packBytes_size, packBits, count, otherCount]
   -- The mixing word authenticates the bit count, including trailing zero bits.
@@ -176,7 +176,7 @@ theorem merkleLayout_shapes {shape : Desc} {left right : Value} {first second : 
     match leftFits, rightFits, leftSized, rightSized with
     | .bitList within, .bitList otherWithin, .bitList count, .bitList otherCount =>
       simp only [merkleLayout, Nat.not_lt.mpr within, Nat.not_lt.mpr otherWithin,
-        if_false, pure, Except.pure, Except.ok.injEq] at laid other
+        ite_false, pure, Except.pure, Except.ok.injEq] at laid other
       subst first second
       -- The count bounds exclude truncation when the equal 256-bit words are decoded.
       have sizes := lengthWord_injective count otherCount (Option.some.inj mixed)
@@ -198,13 +198,13 @@ theorem merkleLayout_shapes {shape : Desc} {left right : Value} {first second : 
     match leftFits, rightFits with
     | .vector count each, .vector otherCount otherEach =>
       simp only [merkleLayout, count, otherCount, bne_self_eq_false, Bool.false_eq_true,
-        if_false] at laid other
+        ite_false] at laid other
       exact sequenceLayout_shapes (count.trans otherCount.symm) each otherEach laid other
   -- An exact element count determines the packing or typed positions beneath the list root.
   | list element limit =>
     match leftFits, rightFits, leftSized, rightSized with
     | .list within each, .list otherWithin otherEach, .list count _, .list otherCount _ =>
-      simp only [merkleLayout, Nat.not_lt.mpr within, Nat.not_lt.mpr otherWithin, if_false] at laid other
+      simp only [merkleLayout, Nat.not_lt.mpr within, Nat.not_lt.mpr otherWithin, ite_false] at laid other
       -- The sequence layout keeps the supplied length word unchanged in its metadata.
       have words : lengthWord _ = lengthWord _ := Option.some.inj
         ((sequenceLayout_mixin laid).symm.trans (mixed.trans (sequenceLayout_mixin other)))
@@ -227,9 +227,9 @@ theorem merkleLayout_shapes {shape : Desc} {left right : Value} {first second : 
     match leftFits, rightFits with
     | .container paired _, .container otherPaired _ =>
       simp only [merkleLayout, paired, bne_self_eq_false, Bool.false_eq_true,
-        if_false, pure, Except.pure, Except.ok.injEq] at laid
+        ite_false, pure, Except.pure, Except.ok.injEq] at laid
       simp only [merkleLayout, otherPaired, bne_self_eq_false, Bool.false_eq_true,
-        if_false, pure, Except.pure, Except.ok.injEq] at other
+        ite_false, pure, Except.pure, Except.ok.injEq] at other
       subst first second
       -- Projecting paired fields back to their types removes the values without losing positions.
       exact ⟨congrArg some (paired.symm.trans otherPaired), congrArg Sum.inr (by

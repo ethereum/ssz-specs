@@ -129,7 +129,7 @@ theorem compatibleAt_progressiveContainer {budget : Nat}
     layoutsAgree budget leftActive leftNames leftFields
       rightActive rightNames rightFields = true := by
   -- Neither shape spells a byte array, so the comparison reaches the layout rule.
-  rw [compatibleAt, if_neg (by simpa using distinct)] at compatible
+  rw [compatibleAt, ite_eq_right (by simpa using distinct)] at compatible
   simpa [Desc.byteSequence] using compatible
 
 /-- Every spine node a chunk lands on is a node, so an index built from one names something. -/

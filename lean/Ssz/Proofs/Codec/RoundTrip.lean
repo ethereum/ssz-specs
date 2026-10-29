@@ -70,7 +70,7 @@ theorem recovered {shape : Desc} (covered : Recovers shape) :
       have prepared := recovered_sequence element elements width fixed facts
       refine ⟨?_, ?_⟩
       · intro bytes wrote
-        simp only [serialize, count, beq_self_eq_true, if_pos] at wrote
+        simp only [serialize, count, beq_self_eq_true, ite_eq_left] at wrote
         obtain ⟨parts, lengths, widths, bytesIs, decoded⟩ := prepared bytes wrote
         subst bytesIs
         have counted : parts.length = length := by omega
@@ -79,12 +79,12 @@ theorem recovered {shape : Desc} (covered : Recovers shape) :
         have nameable := serializeSequence_size_lt wrote
         rw [sizeIs, ← counted] at nameable
         simp only [deserialize, vectorSlices, fixed, sizeIs,
-          if_neg (Nat.not_le.mpr nameable), bne_self_eq_false, if_neg,
+          ite_eq_right (Nat.not_le.mpr nameable), bne_self_eq_false, ite_eq_right,
           Bool.false_eq_true, not_false_eq_true, ← counted]
         rw [map_extract_concatParts width parts widths]
         simp only [Bind.bind, Except.bind, Pure.pure, Except.pure, decoded]
       · intro size bytes fixedSize wrote
-        simp only [serialize, count, beq_self_eq_true, if_pos] at wrote
+        simp only [serialize, count, beq_self_eq_true, ite_eq_left] at wrote
         obtain ⟨parts, lengths, widths, bytesIs, _⟩ := prepared bytes wrote
         subst bytesIs
         simp only [Desc.fixedSize, fixed, Option.map_some, Option.some.injEq] at fixedSize
@@ -99,7 +99,7 @@ theorem recovered {shape : Desc} (covered : Recovers shape) :
         ih (each value member)
       refine ⟨?_, by simp [Desc.fixedSize]⟩
       intro bytes wrote
-      simp only [serialize, if_pos within] at wrote
+      simp only [serialize, ite_eq_left within] at wrote
       obtain ⟨parts, lengths, widths, bytesIs, decoded⟩ :=
         recovered_sequence element elements width fixed facts bytes wrote
       subst bytesIs
@@ -137,7 +137,7 @@ theorem recovered {shape : Desc} (covered : Recovers shape) :
         ih (each value member)
       refine ⟨?_, by simp [Desc.fixedSize, varying]⟩
       intro bytes wrote
-      simp only [serialize, count, beq_self_eq_true, if_pos] at wrote
+      simp only [serialize, count, beq_self_eq_true, ite_eq_left] at wrote
       obtain ⟨parts, lengths, bytesIs, nameable, decoded⟩ :=
         recovered_sequence_offset element elements varying facts bytes wrote
       subst bytesIs
@@ -155,14 +155,14 @@ theorem recovered {shape : Desc} (covered : Recovers shape) :
         rfl
       | part :: rest, lengths, nameable, decoded, sizeIs, frontIs =>
         simp only [deserialize, vectorSlices, varying, sizeIs,
-          if_neg (Nat.not_le.mpr nameable),
-          if_neg (show ¬ ((part :: rest).length * bytesPerOffset
+          ite_eq_right (Nat.not_le.mpr nameable),
+          ite_eq_right (show ¬ ((part :: rest).length * bytesPerOffset
             + bodyWidth (offsetSlots (part :: rest))
             < (part :: rest).length * bytesPerOffset) by omega),
           show ¬ ((part :: rest).length == 0) = true by simp,
           readOffsets_headOf (part :: rest) _ _ nameable,
           runningOffsets_head, bne_self_eq_false,
-          offsetSpans_runningOffsets, Bool.false_eq_true, if_false,
+          offsetSpans_runningOffsets, Bool.false_eq_true, ite_false,
           Bind.bind, Except.bind, Pure.pure, Except.pure]
         have extracted := map_extract_offsets (part :: rest)
           (headOf ((part :: rest).length * bytesPerOffset) (offsetSlots (part :: rest)))
@@ -178,7 +178,7 @@ theorem recovered {shape : Desc} (covered : Recovers shape) :
         ih (each value member)
       refine ⟨?_, by simp [Desc.fixedSize]⟩
       intro bytes wrote
-      simp only [serialize, if_pos within] at wrote
+      simp only [serialize, ite_eq_left within] at wrote
       obtain ⟨parts, lengths, bytesIs, nameable, decoded⟩ :=
         recovered_sequence_offset element elements varying facts bytes wrote
       subst bytesIs

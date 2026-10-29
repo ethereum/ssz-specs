@@ -101,7 +101,7 @@ private theorem overflow_of_fits {shape : Desc} {value : Value} (fits : Fits sha
   -- A byte array can fail only the size bound it shares with every sequence.
   | byteVector sized | byteList sized =>
     intro fault failed
-    simp only [serialize, sized, bne_self_eq_false, Bool.false_eq_true, if_false] at failed
+    simp only [serialize, sized, bne_self_eq_false, Bool.false_eq_true, ite_false] at failed
     repeat' split at failed
     -- The count checks pass on an admissible value, leaving the size bound or success.
     all_goals first
@@ -116,9 +116,9 @@ private theorem overflow_of_fits {shape : Desc} {value : Value} (fits : Fits sha
       Pure.pure, Except.pure] at failed
   -- Composite values inherit element failures and the final assembly size restriction.
   | vector sized _ ih =>
-    simpa only [serialize, sized, beq_self_eq_true, if_pos] using overflow_sequence ih
+    simpa only [serialize, sized, beq_self_eq_true, ite_eq_left] using overflow_sequence ih
   | list within _ ih =>
-    simpa only [serialize, if_pos within] using overflow_sequence ih
+    simpa only [serialize, ite_eq_left within] using overflow_sequence ih
   | @progressiveList _ limit _ within _ ih =>
     simpa only [serialize, boundCheck_of_withinBound limit _ within, Bind.bind, Except.bind]
       using overflow_sequence ih

@@ -83,7 +83,7 @@ theorem compatibleAt_symm (budget : Nat) :
       conv => rhs; rw [compatibleAt.eq_def]
       dsimp only
       simp only [show (left == right) = false by simp [same],
-        show (right == left) = false by simp [Ne.symm same], Bool.false_eq_true, if_false]
+        show (right == left) = false by simp [Ne.symm same], Bool.false_eq_true, ite_false]
       -- Byte-array aliases normalize before the remaining constructors are compared.
       cases leftBytes : left.byteSequence <;> cases rightBytes : right.byteSequence
       all_goals dsimp only

@@ -62,7 +62,7 @@ theorem progressive_suffix_split (chunks : Array Bytes) (start level : Nat)
       combine (subtreeAt chunks (2 * level) start)
         (merkleizeProgressiveUnchecked (chunks.toList.drop (start + 4 ^ level)) (level + 1)) := by
   -- A nonempty suffix opens one level, and the next level starts after its capacity.
-  rw [merkleizeProgressiveUnchecked, if_neg (by simp; omega)]
+  rw [merkleizeProgressiveUnchecked, ite_eq_right (by simp; omega)]
   simp only [List.drop_drop]
   -- The current bounded segment is the prefix of the same suffix used by progressive merkleization.
   have interval := congrArg List.toArray (extract_interval_list chunks start (4 ^ level))
@@ -74,7 +74,7 @@ theorem progressive_suffix_split (chunks : Array Bytes) (start level : Nat)
     simp only [Array.size_extract]
     generalize 2 ^ (2 * level) = width
     omega
-  simp only [merkleizeBoundedUnchecked, if_neg (Nat.not_lt.mpr span), depthFor_pow,
+  simp only [merkleizeBoundedUnchecked, ite_eq_right (Nat.not_lt.mpr span), depthFor_pow,
     Pure.pure, Except.pure, Except.ok.injEq] at window
   simpa only [four_pow_eq, depthFor_pow] using congrArg
     (fun left => combine left
@@ -124,17 +124,17 @@ theorem progressiveNode_read {budget : Nat} {layout : MerkleLayout} {chunks : Ar
     obtain ⟨occupied, position⟩ := position
     -- The materialized array and the layout agree on where the finite spine ends.
     have count := layoutChunksAt_size budget layout chunks materialized
-    rw [progressiveNode_step, if_neg (by omega)]
+    rw [progressiveNode_step, ite_eq_right (by omega)]
     by_cases left : (!gindexBit index depth) = true
-    · simp only [if_pos left] at position ⊢
+    · simp only [ite_eq_left left] at position ⊢
       have inside : depth ≤ depthFor (4 ^ level) := by
         simpa only [four_pow_eq, depthFor_pow] using position
       rw [boundedNode_window (layoutChunksAt_window budget layout chunks materialized)
         index depth start (4 ^ level) inside]
-      simp only [four_pow_eq, depthFor_pow, progressiveReading, if_pos left]
-    · simp only [if_neg left] at position ⊢
+      simp only [four_pow_eq, depthFor_pow, progressiveReading, ite_eq_left left]
+    · simp only [ite_eq_right left] at position ⊢
       rw [← Nat.pow_succ]
-      simpa only [progressiveReading, if_neg left] using ih _ _ position
+      simpa only [progressiveReading, ite_eq_right left] using ih _ _ position
 
 /-- An internal progressive position hashes the two positions immediately below it. -/
 theorem progressiveReading_split (chunks : Array Bytes) (index : Nat) :
@@ -149,7 +149,7 @@ theorem progressiveReading_split (chunks : Array Bytes) (index : Nat) :
     intro start level occupied
     have left : gindexBit (2 * index) 0 = false := by simp [gindexBit, Nat.testBit_zero]
     have right : gindexBit (2 * index + 1) 0 = true := by simp [gindexBit, Nat.testBit_zero]
-    simp only [progressiveReading, left, right, Bool.not_false, Bool.not_true, Bool.false_eq_true, if_true, if_false]
+    simp only [progressiveReading, left, right, Bool.not_false, Bool.not_true, Bool.false_eq_true, ite_true, ite_false]
     simp only [boundedTreeNode, gindexBelow, Nat.sub_zero, Nat.pow_zero, Nat.mod_one,
       Nat.zero_mul, Nat.add_zero]
     exact progressive_suffix_split chunks start level occupied
@@ -160,9 +160,9 @@ theorem progressiveReading_split (chunks : Array Bytes) (index : Nat) :
     obtain ⟨leftChild, rightChild⟩ := gindexBit_children index depth
     simp only [progressiveReading, leftChild, rightChild]
     by_cases left : (!gindexBit index depth) = true
-    · simp only [if_pos left] at interior ⊢
+    · simp only [ite_eq_left left] at interior ⊢
       exact boundedTreeNode_split chunks (2 * level) index depth start interior
-    · simp only [if_neg left] at interior ⊢
+    · simp only [ite_eq_right left] at interior ⊢
       exact ih _ _ interior
 
 end Ssz
