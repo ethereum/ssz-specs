@@ -175,16 +175,10 @@ shell-completions:
     echo ""
     echo "For more details, see https://just.systems/man/en/shell-completion-scripts.html"
 
-# Build the Lean package, which checks every proof in it
+# Build the Lean conformance harness, against the EthLib specification it pins
 [group('lean')]
 lean *args:
-    python3 lean/scripts/check-imports.py
     cd lean && lake build "$@"
-
-# Build the executable Lean specification alone, without waiting on its proofs
-[group('lean')]
-lean-spec:
-    cd lean && lake build Ssz
 
 # Rebuild the Lean package from scratch, ignoring what was already checked
 [group('lean')]

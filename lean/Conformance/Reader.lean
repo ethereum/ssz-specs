@@ -1,11 +1,11 @@
-import Ssz
+import EthLib.Consensus.Ssz
 import Lean.Data.Json
 
 /-! Reading the declaration, the value, and the path one conformance vector carries. -/
 
 namespace Conformance
 
-open Ssz Lean
+open EthLib.Consensus.Ssz Lean
 
 /-- A refusal, printed. -/
 def describe (fault : Err) : String := toString (repr fault)
