@@ -29,7 +29,10 @@ def benchmark() -> Path:
 def evaluate(benchmark: Path, tmp_path: Path, body: str) -> subprocess.CompletedProcess[str]:
     """Import Bench itself; never copy its definitions into the control."""
     probe = tmp_path / "BenchmarkControl.lean"
-    probe.write_text(f"import Bench\nopen EthLib.Consensus.Ssz EthLib.Consensus.Ssz.Native\n\n#eval ({body} : IO Unit)\n")
+    probe.write_text(
+        "import Bench\nopen EthLib.Consensus.Ssz EthLib.Consensus.Ssz.Native\n\n"
+        f"#eval ({body} : IO Unit)\n"
+    )
     return subprocess.run(
         ["lake", "env", "lean", str(probe)],
         cwd=benchmark,
