@@ -162,6 +162,42 @@ theorem subtreeAt_zero_eq (chunks : Array Bytes) {depth : Nat} :
   -- Starting at position zero, the shift the walk applies is no shift at all.
   simp only [subtreeAt_eq_subtreeRoot chunks depth 0, Nat.zero_add]
 
+/-- A subtree of height zero is the node at its position, or the zero node past the data. -/
+theorem subtreeAt_leaf (chunks : Array Bytes) (start : Nat) :
+    subtreeAt chunks 0 start = chunks[start]?.getD zeroChunk := by
+  unfold subtreeAt
+  split
+  · -- Past the data, the cached zero tree of height zero is the zero node.
+    rw [zeroSubtree_eq, Array.getElem?_eq_none (by omega)]
+    rfl
+  · rfl
+
+/-- A subtree wholly past the data is the zero tree of its height. -/
+theorem subtreeAt_past (chunks : Array Bytes) (depth start : Nat) (past : chunks.size ≤ start) :
+    subtreeAt chunks depth start = zeroSubtree depth := by
+  -- The walk checks for this case first and answers from the zero tree.
+  unfold subtreeAt
+  rw [if_pos past]
+
+/-- A subtree reads only the leaves under it. -/
+theorem subtreeAt_congr (left right : Array Bytes) (depth leftStart rightStart : Nat)
+    (same : ∀ i < 2 ^ depth, left[leftStart + i]? = right[rightStart + i]?) :
+    subtreeAt left depth leftStart = subtreeAt right depth rightStart := by
+  induction depth generalizing leftStart rightStart with
+  | zero =>
+    rw [subtreeAt_leaf, subtreeAt_leaf]
+    have := same 0 (by simp)
+    simp only [Nat.add_zero] at this
+    rw [this]
+  | succ depth ih =>
+    -- Each half of the tree reads its own half of the leaves.
+    rw [subtreeAt_split, subtreeAt_split]
+    congr 1
+    · exact ih leftStart rightStart fun i lt => same i (by rw [Nat.pow_succ]; omega)
+    · exact ih _ _ fun i lt => by
+        have := same (2 ^ depth + i) (by rw [Nat.pow_succ]; omega)
+        rwa [← Nat.add_assoc, ← Nat.add_assoc] at this
+
 /--
 Merkleizing one window of the leaves gives the subtree standing over that window.
 

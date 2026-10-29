@@ -324,4 +324,141 @@ theorem listSlices_overflow (element : Desc) (limit : Option Nat) (data : Bytes)
   -- No declared element capacity enlarges the composite byte-offset range.
   simp [listSlices, large, throw_error, Bind.bind, Except.bind]
 
+/-- Decoding a delimited bit list finds a nonzero last byte, and the bits below its highest set bit. -/
+theorem unpackDelimited_ok {limit : Option Nat} {data : Bytes} {bits : Array Bool}
+    (read : unpackDelimited limit data = .ok bits) :
+    data.size ≠ 0 ∧ data[data.size - 1]! ≠ 0 ∧
+      bits = unpackBits data (8 * (data.size - 1) + highestBit data[data.size - 1]!) := by
+  -- Decoding refuses an empty encoding and a zero last byte, and then counts the bits below the closing one.
+  simp only [unpackDelimited, throw, throwThe, MonadExceptOf.throw, Bind.bind, Except.bind, pure,
+    Except.pure] at read
+  split at read
+  · cases read
+  rename_i nonempty
+  split at read
+  · split at read <;> cases read
+  rename_i nonzero
+  refine ⟨by simpa using nonempty, by simpa using nonzero, ?_⟩
+  split at read
+  · split at read
+    · cases read
+    · cases read; rfl
+  · cases read; rfl
+
+/-- An accepted byte list is at most its limit long. -/
+theorem deserialize_byteList_size {limit : Nat} {data : Bytes} {value : Value}
+    (read : deserialize (.byteList limit) data = .ok value) : data.size ≤ limit := by
+  -- Decoding compares the length against the limit before it accepts anything.
+  simp only [deserialize, throw, throwThe, MonadExceptOf.throw, Bind.bind, Except.bind, pure, Except.pure] at read
+  split at read
+  · cases read
+  split at read
+  · cases read
+  rename_i bound
+  omega
+
+/-- A vector of variable-size elements opens with one offset per element. -/
+theorem vectorSlices_offsets {element : Desc} {length : Nat} {data : Bytes} {slices : List Bytes}
+    (varies : element.fixedSize = none) (read : vectorSlices element length data = .ok slices) :
+    length * bytesPerOffset ≤ data.size := by
+  -- Cutting refuses an encoding too short to hold the offset table.
+  simp only [vectorSlices, varies, throw, throwThe, MonadExceptOf.throw, Bind.bind, Except.bind, pure,
+    Except.pure] at read
+  split at read
+  · cases read
+  split at read
+  · cases read
+  · omega
+
+/--
+What cutting a list establishes about its slices.
+
+The limit bounds their count.
+Fixed-size elements tile the data exactly, and a zero width admits no element.
+Variable-size elements are counted by the first offset, unless the data is empty.
+-/
+theorem listSlices_facts {element : Desc} {limit : Option Nat} {data : Bytes} {slices : List Bytes}
+    (read : listSlices element limit data = .ok slices) :
+    (∀ bound, limit = some bound → slices.length ≤ bound) ∧
+    (∀ width, element.fixedSize = some width → slices.length * width = data.size ∧
+      (width = 0 → slices.length = 0)) ∧
+    (element.fixedSize = none → (data.size = 0 ∧ slices.length = 0) ∨
+      (4 ≤ data.size ∧ slices.length = readUint data 0 bytesPerOffset / 4 ∧ 4 * slices.length ≤ data.size)) := by
+  simp only [listSlices, throw, throwThe, MonadExceptOf.throw, Bind.bind, Except.bind, pure,
+    Except.pure] at read
+  split at read
+  · cases read
+  split at read
+  · -- An empty range holds no elements.
+    cases read
+    rename_i empty
+    simp only [beq_iff_eq] at empty
+    refine ⟨fun _ _ => Nat.zero_le _, fun width _ => by simp [empty], fun _ => .inl ⟨empty, rfl⟩⟩
+  rename_i nonempty
+  split at read
+  · -- Fixed-size elements, counted by width.
+    rename_i width fixed
+    split at read
+    · cases read
+    rename_i nonzero
+    split at read
+    · cases read
+    rename_i divides
+    simp only [beq_iff_eq, bne_iff_ne, ne_eq, Decidable.not_not] at nonzero divides
+    split at read
+    · split at read
+      · cases read
+      · cases read
+        rename_i cap _ within
+        simp only [List.length_map, List.length_range]
+        refine ⟨fun l h => by cases h; omega, fun w h => ?_, fun h => by rw [fixed] at h; cases h⟩
+        rw [fixed] at h; cases h
+        refine ⟨Nat.div_mul_cancel (Nat.dvd_of_mod_eq_zero divides), fun z => absurd z nonzero⟩
+    · cases read
+      simp only [List.length_map, List.length_range]
+      refine ⟨fun l h => by simp_all, fun w h => ?_, fun h => by rw [fixed] at h; cases h⟩
+      rw [fixed] at h; cases h
+      refine ⟨Nat.div_mul_cancel (Nat.dvd_of_mod_eq_zero divides), fun z => absurd z nonzero⟩
+  · -- Elements found through offsets, counted by the first.
+    rename_i fixed
+    split at read
+    · cases read
+    rename_i enough
+    split at read
+    · cases read
+    split at read
+    · cases read
+    split at read
+    · cases read
+    rename_i notPast
+    have count : ∀ spans, offsetSpans (readOffsets data (readUint data 0 bytesPerOffset / bytesPerOffset))
+        data.size = .ok spans → (List.map (fun (x : Nat × Nat) => data.extract x.1 (x.1 + x.2))
+          ((readOffsets data (readUint data 0 bytesPerOffset / bytesPerOffset)).zip spans)).length =
+          readUint data 0 bytesPerOffset / 4 := by
+      intro spans h
+      have := offsetSpans_length h
+      simp [List.length_zip, this, readOffsets, bytesPerOffset]
+    split at read
+    · split at read
+      · cases read
+      · cases spans : offsetSpans (readOffsets data (readUint data 0 bytesPerOffset / bytesPerOffset)) data.size with
+        | error e => simp [spans] at read
+        | ok spans' =>
+          simp only [spans] at read
+          cases read
+          rw [count spans' spans]
+          rename_i cap _ within
+          simp only [bytesPerOffset] at *
+          refine ⟨fun l h => (by cases h; omega), fun w h => (by rw [fixed] at h; cases h),
+            fun _ => .inr ⟨by omega, trivial, by omega⟩⟩
+    · cases spans : offsetSpans (readOffsets data (readUint data 0 bytesPerOffset / bytesPerOffset)) data.size with
+      | error e => simp [spans] at read
+      | ok spans' =>
+        simp only [spans] at read
+        cases read
+        rw [count spans' spans]
+        simp only [bytesPerOffset] at *
+        refine ⟨fun l h => (by simp_all), fun w h => (by rw [fixed] at h; cases h),
+          fun _ => .inr ⟨by omega, trivial, by omega⟩⟩
+
 end Ssz

@@ -11,13 +11,15 @@ private theorem fieldsCompatible_symm {budget : Nat}
   intro left
   induction left <;> intro right <;> cases right <;> simp [fieldsCompatible, *]
 
-private theorem optionAgainstAll_iff (budget : Nat) (option : Desc) (options : List Desc) :
+/-- Checking one option against a list checks it against each. -/
+theorem optionAgainstAll_iff (budget : Nat) (option : Desc) (options : List Desc) :
     optionAgainstAll budget option options = true ↔
       ∀ other ∈ options, compatibleAt budget option other = true := by
   -- Checking one option against a list means checking every member of that list.
   induction options <;> simp [optionAgainstAll, *]
 
-private theorem unionOptionsAgree_iff (budget : Nat) (left right : List Desc) :
+/-- Two unions' options agree when each of one is compatible with each of the other. -/
+theorem unionOptionsAgree_iff (budget : Nat) (left right : List Desc) :
     unionOptionsAgree budget left right = true ↔
       ∀ one ∈ left, ∀ other ∈ right, compatibleAt budget one other = true := by
   -- Each option on the left must agree with every option on the right.

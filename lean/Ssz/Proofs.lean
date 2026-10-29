@@ -3,9 +3,11 @@ import Ssz.Proofs.Audit
 import Ssz.Proofs.Type.Compatibility
 import Ssz.Proofs.Type.CompatibilityIndices
 import Ssz.Proofs.Type.CompatibilitySymmetry
+import Ssz.Proofs.Type.CompatibilityBudget
 import Ssz.Proofs.Type.DefaultLaws
 import Ssz.Proofs.Type.Equality
 import Ssz.Proofs.Type.FitsLaws
+import Ssz.Proofs.Type.Legality
 import Ssz.Proofs.Type.PathLaws
 import Ssz.Proofs.Type.PathSteps
 import Ssz.Proofs.Codec.Admits
@@ -58,6 +60,7 @@ import Ssz.Proofs.Codec.ProofCorrectness
 import Ssz.Proofs.Codec.ProofTree
 import Ssz.Proofs.Codec.RootDomain
 import Ssz.Proofs.Codec.RootLaws
+import Ssz.Proofs.Codec.RootUnfold
 import Ssz.Proofs.Codec.RoundTrip
 import Ssz.Proofs.Codec.RoundTripComposite
 import Ssz.Proofs.Codec.RoundTripScalar
@@ -71,6 +74,7 @@ import Ssz.Proofs.Codec.WalkerClosure
 import Ssz.Proofs.Codec.WalkerLaws
 import Ssz.Proofs.Merkle.Authentication
 import Ssz.Proofs.Merkle.CommitmentTree
+import Ssz.Proofs.Merkle.ClaimChecks
 import Ssz.Proofs.Merkle.Gindex
 import Ssz.Proofs.Merkle.HelperAntichain
 import Ssz.Proofs.Merkle.HelperFrontier
