@@ -5,8 +5,8 @@ defaultTargets = ["conformance", "regressions"]
 # This package only checks it against the Python specification and the reference tests.
 [[require]]
 name = "EthLib"
-git = "https://github.com/tcoratger/ethlib"
-rev = "4b13b15c0eb2c7b69c73f566d29636a61153ec0e"
+git = "https://github.com/ethereum/EthLib"
+rev = "6b87b0d4951766864af432455c44344fd12b5cdc"
 
 [leanOptions]
 # A warning in the test code fails the build.
