@@ -5,9 +5,9 @@ import SszNative.Proofs.Ir.Leaf
 Linking compiled functions and routines into one image, checked once, places every function where calls find it.
 -/
 
-namespace Ssz.Native.Ir
+namespace EthLib.Consensus.Ssz.Native.Ir
 
-open Ssz.Native.Asm
+open EthLib.Consensus.Ssz.Native.Asm
 
 /-- In a list whose names are distinct, the first entry under an entry's name is that entry. -/
 theorem findIdx_of_nodup {α : Type} (l : List (String × α)) (nodup : (l.map (·.1)).Nodup) (i : Nat)
@@ -106,4 +106,4 @@ example : linkCheck
     #[("leaf", #[.ret])] = true := by
   decide +kernel
 
-end Ssz.Native.Ir
+end EthLib.Consensus.Ssz.Native.Ir

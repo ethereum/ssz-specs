@@ -10,9 +10,9 @@ An encoding sits in memory as bytes, a part of it named by absolute addresses.
 A refusal is four words written at one place, the only memory the check ever writes.
 -/
 
-namespace Ssz.Native.Driver.Validate
+namespace EthLib.Consensus.Ssz.Native.Driver.Validate
 
-open Ssz Ssz.Native Ssz.Native.Ir Ssz.Native.Asm
+open EthLib.Consensus.Ssz EthLib.Consensus.Ssz.Native EthLib.Consensus.Ssz.Native.Ir EthLib.Consensus.Ssz.Native.Asm
 
 /-- The module holds every function of the check under its exported name. -/
 def Loaded (m : Module) : Prop :=
@@ -738,8 +738,8 @@ macro "wonly" "[" args:Lean.Parser.Tactic.simpLemma,* "]" : tactic =>
       ofNat_mul_ofNat, lit_mul_ofNat, ofNat_mul_lit, ofNat_sub_ofNat, ofNat_sub_lit, ofNat_div_ofNat, ofNat_div_lit,
       ofNat_mod_ofNat, ofNat_mod_lit, toNat_ofNat_lt, ofNat_eq_ofNat, ofNat_eq_lit, lit_eq_ofNat, ofNat_lt_ofNat,
       ofNat_lt_lit, lit_lt_ofNat, ofNat_le_ofNat, ofNat_le_lit, lit_le_ofNat, ite_and_ite, ite_or_ite, ite_band, band_ite, ite_bor, bor_ite, zero_band, band_zero, one_band_one, zero_bor,
-      bor_zero, one_bor_one, if_true,
-      if_false, ite_not, Ssz.Native.Driver.Validate.word, Ssz.Native.Driver.Validate.both,
+      bor_zero, one_bor_one, ite_true,
+      ite_false, ite_not, Ssz.Native.Driver.Validate.word, Ssz.Native.Driver.Validate.both,
       Ssz.Native.Driver.Validate.either, Ssz.Native.Driver.Validate.code, Ssz.Native.Driver.Validate.none_,
       Ssz.Native.Driver.Validate.bound32, Var.idx, UInt64.toNat_zero, UInt64.toNat_one, Width.bytes, true_and, and_true, ite_self, beq_iff_eq, List.cons_append, List.nil_append, List.append_nil,
       List.take_succ_cons, List.take_zero, List.take_nil,
@@ -789,5 +789,5 @@ macro "wfin" "[" args:Lean.Parser.Tactic.simpLemma,* "]" : tactic =>
   `(tactic| (wonly [Option.some.injEq, and_true, List.length_append, List.length_cons, List.length_nil,
       List.length_map, $args,*]) <;> (try omega) <;> (try simp))
 
-end Ssz.Native.Driver.Validate
+end EthLib.Consensus.Ssz.Native.Driver.Validate
 

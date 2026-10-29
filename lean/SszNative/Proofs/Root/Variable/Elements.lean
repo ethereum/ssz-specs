@@ -1,14 +1,14 @@
 import SszNative.Proofs.Root.Variable.Vector
-import Ssz.Proofs.Codec.BindingPacking
-import Ssz.Proofs.Codec.CanonicalTable
-import Ssz.Proofs.Codec.CanonicalComposite
-import Ssz.Proofs.Codec.Canonicality
+import EthLib.Consensus.Proofs.Ssz.Codec.BindingPacking
+import EthLib.Consensus.Proofs.Ssz.Codec.CanonicalTable
+import EthLib.Consensus.Proofs.Ssz.Codec.CanonicalComposite
+import EthLib.Consensus.Proofs.Ssz.Codec.Canonicality
 
 /-! The leaves of a counted sequence, three ways: packed bytes, columns of fixed-size roots, or one root per element. -/
 
-namespace Ssz.Native.RootProof
+namespace EthLib.Consensus.Ssz.Native.RootProof
 
-open Ssz Ssz.Native
+open EthLib.Consensus.Ssz EthLib.Consensus.Ssz.Native
 
 /-- The nodes of a buffer from an offset: the first, then the rest from one node further. -/
 theorem nodesFrom_succ (buf : ByteArray) (offset count : Nat) :
@@ -115,4 +115,4 @@ theorem basic_packing (element : Desc) (basic : element.isBasic = true) (sound :
     · rename_i _ _ _ md _ _
       exact fixed_slices_pack data _ (by simpa using md)
 
-end Ssz.Native.RootProof
+end EthLib.Consensus.Ssz.Native.RootProof

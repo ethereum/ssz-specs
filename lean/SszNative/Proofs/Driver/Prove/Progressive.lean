@@ -10,11 +10,11 @@ A node on the spine is the progressive root of every leaf from the level reached
 The calls rooting values under the leaves, and the walk to a node of one value, are taken as contracts.
 -/
 
-namespace Ssz.Native.Driver.ProveProof
+namespace EthLib.Consensus.Ssz.Native.Driver.ProveProof
 
 set_option maxRecDepth 20000
 
-open Ssz Ssz.Native Ssz.Native.Ir Ssz.Native.Asm Ssz.Native.Ir.Stmt Ssz.Native.Ir.Expr Ssz.Native.Plan
+open EthLib.Consensus.Ssz EthLib.Consensus.Ssz.Native EthLib.Consensus.Ssz.Native.Ir EthLib.Consensus.Ssz.Native.Asm EthLib.Consensus.Ssz.Native.Ir.Stmt EthLib.Consensus.Ssz.Native.Ir.Expr EthLib.Consensus.Ssz.Native.Plan
 
 /-! ### The Lean walk, step by step -/
 
@@ -285,7 +285,7 @@ theorem progressive_calls {m : Module} {w : World} (linked : HasCodec m) (gmod :
     simp only [List.append_nil]
     cases ht : st.turnedLeft
     · -- The walk stops on the spine: the progressive root of the leaves from the level reached.
-      simp only [ht, Bool.false_eq_true, if_false] at m24 hX'
+      simp only [ht, Bool.false_eq_true, ite_false] at m24 hX'
       rw [lf, cp] at hX'
       refine Wp.ifElse_f (by wev [m24, f24]) ?_
       simp only [List.append_nil]
@@ -338,7 +338,7 @@ theorem progressive_calls {m : Module} {w : World} (linked : HasCodec m) (gmod :
       · intro a h1 h2 h3
         rw [sframe a h1 (fun h => h2 ⟨by omega, by omega⟩) h3, keep2 a h2 h3]
     · -- The walk turns into a level's subtree: the bounded walk roots the node.
-      simp only [ht, if_true] at m24 hX'
+      simp only [ht, ite_true] at m24 hX'
       refine Wp.ifElse_t (v := 1) (by wev [m24, f24]) (by decide) ?_
       simp only [List.append_nil]
       obtain ⟨rb, mb, bcall, brc, bnode, bframe⟩ := bounded_calls linked gmod hash hbd hd hp hsh hl hs sBound
@@ -355,4 +355,4 @@ theorem progressive_calls {m : Module} {w : World} (linked : HasCodec m) (gmod :
       · intro node h; subst hX'; exact bnode node h
       · intro a h1 h2 h3; rw [bframe a h1 h2 h3, same1 a h2]
 
-end Ssz.Native.Driver.ProveProof
+end EthLib.Consensus.Ssz.Native.Driver.ProveProof

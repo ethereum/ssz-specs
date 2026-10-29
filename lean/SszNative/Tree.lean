@@ -1,5 +1,5 @@
 import SszNative.Hash
-import Ssz.Merkle.Merkleize
+import EthLib.Consensus.Ssz.Merkle.Merkleize
 
 /-!
 Merkle trees over buffers of 32-byte nodes.
@@ -9,7 +9,7 @@ A wide tree is split into subtrees, one task each.
 Tasks are pure, so a parallel tree is the sequential tree by definition.
 -/
 
-namespace Ssz.Native
+namespace EthLib.Consensus.Ssz.Native
 
 /-- The all-zero node. -/
 def zeroNode : ByteArray :=
@@ -123,4 +123,4 @@ def activeFieldsNode (active : List Bool) : ByteArray :=
     (List.range 8).foldl (fun acc bit =>
       if active.getD (8 * byte + bit) false then acc ||| ((1 : UInt8) <<< UInt8.ofNat bit) else acc) 0⟩
 
-end Ssz.Native
+end EthLib.Consensus.Ssz.Native

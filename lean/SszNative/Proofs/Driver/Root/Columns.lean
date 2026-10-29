@@ -10,9 +10,9 @@ It then climbs the one column left against the zero trees, up to the depth asked
 The proof keeps, at each level, every record's subtree roots in memory, read node by node.
 -/
 
-namespace Ssz.Native.Driver
+namespace EthLib.Consensus.Ssz.Native.Driver
 
-open Ssz.Native.Ir Ssz.Native.Ir.Expr Ssz.Native.Ir.Stmt Ssz.Native.Asm
+open EthLib.Consensus.Ssz.Native.Ir EthLib.Consensus.Ssz.Native.Ir.Expr EthLib.Consensus.Ssz.Native.Ir.Stmt EthLib.Consensus.Ssz.Native.Asm
 
 /-! ### Leaves and kept variables -/
 
@@ -175,11 +175,11 @@ theorem colStart_runs {m : Module} {w : World} (hd : m.fns.lookup "ssz_depth_for
       (eval_var (show E4 14 = UInt64.ofNat (depthFor n) from assign_eq))
       (eval_var (show E4 3 = UInt64.ofNat depth from rfl)) (by omega) hdepth
     by_cases lt : depthFor n < depth
-    · rw [if_pos lt] at c
+    · rw [ite_eq_left lt] at c
       exact Runs.ifElse_true 1 c (by decide) (Runs.block_cons (Runs.set' (eval_sub
         (eval_var (show E4 3 = UInt64.ofNat depth from rfl))
         (eval_var (show E4 14 = UInt64.ofNat (depthFor n) from assign_eq)) (by omega))) (Runs.block_nil _ _ _ _ _))
-    · rw [if_neg lt] at c
+    · rw [ite_eq_right lt] at c
       rw [show depth - depthFor n = 0 by omega]
       exact Runs.ifElse_false c (Runs.block_cons (Runs.set' (eval_lit 0)) (Runs.block_nil _ _ _ _ _))
   let E5 := Asm.assign E4 15 (UInt64.ofNat (depth - depthFor n))
@@ -258,7 +258,7 @@ theorem colPairs_ends {m : Module} {w : World} (hash : HashCalls m w .columns) {
       have more : k < half := by
         by_cases lt : k < half
         · exact lt
-        · rw [if_neg lt] at hc'; cases hc'; exact absurd rfl nz
+        · rw [ite_eq_right lt] at hc'; cases hc'; exact absurd rfl nz
       -- The products this pass needs, as facts about atoms.
       have e1 : 2 * k * (32 * count) = 2 * (k * (32 * count)) := Nat.mul_assoc _ _ _
       have e2 : (2 * k + 1) * (32 * count) = 2 * (k * (32 * count)) + (32 * count) := by rw [Nat.add_mul, Nat.one_mul, Nat.mul_assoc]
@@ -318,7 +318,7 @@ theorem colPairs_ends {m : Module} {w : World} (hash : HashCalls m w .columns) {
   rw [exit] at stop
   have kh : k = half := by
     by_cases lt : k < half
-    · rw [if_pos lt] at stop; cases stop
+    · rw [ite_eq_left lt] at stop; cases stop
     · omega
   subst kh
   exact ⟨e, mm, run, keep, done, frame⟩
@@ -327,7 +327,7 @@ theorem colPairs_ends {m : Module} {w : World} (hash : HashCalls m w .columns) {
 
 /-- A depth step: more than one column takes one level more than half of them, rounded up. -/
 private theorem colDepth_step {n : Nat} (big : 1 < n) : depthFor n = depthFor (n / 2 + n % 2) + 1 := by
-  rw [depthFor, if_neg (by omega), show (n + 1) / 2 = n / 2 + n % 2 by omega]
+  rw [depthFor, ite_eq_right (by omega), show (n + 1) / 2 = n / 2 + n % 2 by omega]
 
 /--
 The column tree driver's state at a level: where the level lies, how many columns it has, and what they hold.
@@ -435,15 +435,15 @@ theorem colPass_ends {m : Module} {w : World} (hash : HashingOk m w) {sp : Nat} 
       (eval_eq_nat (w := w) (env := E1) (mem := mem) (a := RootColumns.climbs) (b := 0)
         (eval_var (by simp only [E1]; rw [assign_ne (by decide)]; exact v.climbsV)) (eval_lit 0) (by omega) (by decide))
     by_cases last : W / 2 + W % 2 = 1 ∧ depth - depthFor n = 0
-    · rw [if_pos last.1, if_pos last.2] at c
-      rw [hD, if_pos last]
+    · rw [ite_eq_left last.1, ite_eq_left last.2] at c
+      rw [hD, ite_eq_left last]
       exact Runs.ifElse_true 1 c (by decide) (Runs.block_cons (Runs.set' (eval_var
         (by simp only [E1]; rw [assign_ne (by decide)]; exact v.outV))) (Runs.block_nil _ _ _ _ _))
-    · rw [hD, if_neg last]
+    · rw [hD, ite_eq_right last]
       have c0 : ((if W / 2 + W % 2 = 1 then (1 : UInt64) else 0) &&& if depth - depthFor n = 0 then 1 else 0) = 0 := by
         by_cases a : W / 2 + W % 2 = 1
-        · rw [if_pos a, if_neg fun b => last ⟨a, b⟩]; decide
-        · rw [if_neg a]; split <;> decide
+        · rw [ite_eq_left a, ite_eq_right fun b => last ⟨a, b⟩]; decide
+        · rw [ite_eq_right a]; split <;> decide
       rw [c0] at c
       exact Runs.ifElse_false c (Runs.block_cons (Runs.set' (eval_var
         (by simp only [E1]; rw [assign_ne (by decide)]; exact st.nextV))) (Runs.block_nil _ _ _ _ _))
@@ -454,8 +454,8 @@ theorem colPass_ends {m : Module} {w : World} (hash : HashingOk m w) {sp : Nat} 
   have dPlace : (D = out ∧ W = 2 ∧ depth - depthFor n = 0) ∨ D = L + W * (32 * count) := by
     rw [hD]
     by_cases last : W / 2 + W % 2 = 1 ∧ depth - depthFor n = 0
-    · rw [if_pos last]; exact .inl ⟨rfl, by omega, last.2⟩
-    · rw [if_neg last]; exact .inr rfl
+    · rw [ite_eq_left last]; exact .inl ⟨rfl, by omega, last.2⟩
+    · rw [ite_eq_right last]; exact .inr rfl
   have halfLe : W / 2 * (32 * count) ≤ W * (32 * count) := Nat.mul_le_mul_right _ (by omega)
   have twoLe : 2 * (32 * count) ≤ W * (32 * count) := Nat.mul_le_mul_right _ big
   have dIn : out ≤ D ∧ D + W / 2 * (32 * count) ≤ out + span := by
@@ -642,7 +642,7 @@ theorem colPairing_ends {m : Module} {w : World} (hash : HashingOk m w) {sp : Na
       have big : 2 ≤ W := by
         by_cases b : 1 < W
         · exact b
-        · rw [if_neg b] at c'; cases c'; exact absurd rfl nz
+        · rw [ite_eq_right b] at c'; cases c'; exact absurd rfl nz
       exact (colPass_ends hash room size hz nSmall deep hspan acc rPad rCtx rTable rZeros s p big wn).mono
         fun e' mm' ⟨L', s', p'⟩ => ⟨⟨h + 1, W / 2 + W % 2, L', s', p', by omega⟩, by
           rw [s'.widthV, s.widthV, ofNat_toNat (by omega), ofNat_toNat (by omega)]; omega⟩)
@@ -653,7 +653,7 @@ theorem colPairing_ends {m : Module} {w : World} (hash : HashingOk m w) {sp : Na
   rw [exit] at c'
   have one : W = 1 := by
     by_cases b : 1 < W
-    · rw [if_pos b] at c'; cases c'
+    · rw [ite_eq_left b] at c'; cases c'
     · have := s.wide; omega
   subst one
   have d1 : depthFor 1 = 0 := by rw [depthFor]; simp
@@ -764,11 +764,11 @@ theorem colClimb_ends {m : Module} {w : World} (hash : HashingOk m w) {sp : Nat}
     have c := eval_eq_nat (w := w) (env := env) (mem := mem) (a := RootColumns.j + 1) (b := RootColumns.climbs)
       (eval_add (eval_var st.jV) (eval_lit 1)) (eval_var v.climbsV) (by omega) (by omega)
     by_cases last : j + 1 = depth - depthFor n
-    · rw [if_pos last] at c
-      rw [hD, if_pos last]
+    · rw [ite_eq_left last] at c
+      rw [hD, ite_eq_left last]
       exact Runs.ifElse_true 1 c (by decide) (Runs.block_cons (Runs.set' (eval_var v.outV)) (Runs.block_nil _ _ _ _ _))
-    · rw [if_neg last] at c
-      rw [hD, if_neg last]
+    · rw [ite_eq_right last] at c
+      rw [hD, ite_eq_right last]
       exact Runs.ifElse_false c (Runs.block_cons (Runs.set' (eval_var st.nextV)) (Runs.block_nil _ _ _ _ _))
   have dIn : out ≤ D ∧ D + 32 * count ≤ out + span ∧ (D + 32 * count ≤ L ∨ L + 32 * count ≤ D) := by
     rw [hD]; split <;> omega
@@ -826,8 +826,8 @@ theorem colClimb_ends {m : Module} {w : World} (hash : HashingOk m w) {sp : Nat}
   · -- The last climb lands in the output; any other right after the old column, with room for the rest.
     rw [hD]
     by_cases last : j + 1 = depth - depthFor n
-    · rw [if_pos last]; exact .inr ⟨rfl, last⟩
-    · rw [if_neg last]; exact .inl ⟨by omega, by rw [succ]; omega⟩
+    · rw [ite_eq_left last]; exact .inr ⟨rfl, last⟩
+    · rw [ite_eq_right last]; exact .inl ⟨by omega, by rw [succ]; omega⟩
   · -- The new node: the old one against the zero tree.
     have zero : nodeAt mem (zeros + 32 * (depthFor n + j)) = zeroSubtree (depthFor n + j) :=
       nodeAt_zeros st.ready.zeroRoots _ (by omega)
@@ -880,7 +880,7 @@ theorem colClimbing_ends {m : Module} {w : World} (hash : HashingOk m w) {sp : N
       have more : j < depth - depthFor n := by
         by_cases b : j < depth - depthFor n
         · exact b
-        · rw [if_neg b] at c'; cases c'; exact absurd rfl nz
+        · rw [ite_eq_right b] at c'; cases c'; exact absurd rfl nz
       exact (colClimb_ends hash room size hz hspan acc rPad rCtx rTable rZeros s more).mono
         fun e' mm' ⟨L', s'⟩ => ⟨⟨j + 1, L', s'⟩, by
           rw [s'.jV, s.jV, ofNat_toNat (by omega), ofNat_toNat (by omega)]; omega⟩)
@@ -891,7 +891,7 @@ theorem colClimbing_ends {m : Module} {w : World} (hash : HashingOk m w) {sp : N
   rw [exit] at c'
   have done : j = depth - depthFor n := by
     by_cases b : j < depth - depthFor n
-    · rw [if_pos b] at c'; cases c'
+    · rw [ite_eq_left b] at c'; cases c'
     · have := s.le; omega
   subst done
   exact ⟨e, mm, run, L, s⟩
@@ -924,10 +924,10 @@ theorem colEnd_ends {m : Module} {w : World} (gmod : GatherModule m) {sp : Nat} 
   by_cases same : L = out
   · -- The column already is the output.
     subst same
-    rw [if_pos rfl] at c
+    rw [ite_eq_left rfl] at c
     exact ⟨env, mem, Runs.when_false c, roots, st.ready, st.frame⟩
   · -- The column lies after the columns: copy it into the output.
-    rw [if_neg fun h => same ((ofNat_inj lSmall (by omega)).mp h)] at c
+    rw [ite_eq_right fun h => same ((ofNat_inj lSmall (by omega)).mp h)] at c
     have place : out + 32 * count ≤ L ∧ L + 3 * (32 * count) ≤
         out + 32 * count + (3 * n + (depth - depthFor n)) * (32 * count) := by
       rcases st.place with p | p
@@ -956,7 +956,7 @@ theorem colEnd_ends {m : Module} {w : World} (gmod : GatherModule m) {sp : Nat} 
         gathered mem out L (UInt64.toNat 1) (32 * count) (UInt64.toNat 0) (UInt64.toNat 0) a = mem a := by
       intro a o
       simp only [gathered]
-      rw [if_neg (by simp; omega)]
+      rw [ite_eq_right (by simp; omega)]
     refine ⟨_, _, Runs.when_true 1 c (by decide) (Runs.block_cons callRuns (Runs.block_nil _ _ _ _ _)),
       fun i hi => ?_, st.ready.region rCtx rTable rZeros fun a o p => frame1 a (by omega), fun a o p => ?_⟩
     · -- Node i of the output is node i of the column.
@@ -966,7 +966,7 @@ theorem colEnd_ends {m : Module} {w : World} (gmod : GatherModule m) {sp : Nat} 
       simp only [Nat.add_zero, Nat.mul_zero] at rb
       simp only [gathered, show UInt64.toNat 1 = 1 from rfl, show UInt64.toNat 0 = 0 from rfl, Nat.add_zero,
         Nat.mul_one]
-      rw [if_pos ⟨by omega, by omega⟩, Nat.add_assoc, rb, if_pos (by omega), Nat.add_assoc]
+      rw [ite_eq_left ⟨by omega, by omega⟩, Nat.add_assoc, rb, ite_eq_left (by omega), Nat.add_assoc]
     · rw [frame1 a (by omega)]; exact st.frame a o p
 
 /-! ### The driver -/
@@ -1065,4 +1065,4 @@ theorem rootColumns_calls {m : Module} {w : World} (hash : HashingOk m w) (gmod 
   have spec := columnTreeTo_spec columns count depth _ small (fun _ _ => colLeaves_size _ _ _ _ _) n1 tableEntry deep
   exact ⟨mem', call, holds_of_nodes spec.1 fun i hi => by rw [roots i hi, spec.2 i hi], ready, keep⟩
 
-end Ssz.Native.Driver
+end EthLib.Consensus.Ssz.Native.Driver

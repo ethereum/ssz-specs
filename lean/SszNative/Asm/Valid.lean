@@ -18,7 +18,7 @@ Inside these bounds, every printed line is the instruction the model runs:
 - branch targets are instructions of the program, so each one prints a label that exists.
 -/
 
-namespace Ssz.Native.Asm
+namespace EthLib.Consensus.Ssz.Native.Asm
 
 /-- Whether a displacement fits the signed 32-bit field, as a non-negative number. -/
 def Mem.valid (m : Mem) : Bool :=
@@ -65,4 +65,4 @@ def valid (program : Array Instr) : Bool :=
   -- The list form keeps the check cheap for the kernel to evaluate.
   program.toList.all (·.valid program.toList.length)
 
-end Ssz.Native.Asm
+end EthLib.Consensus.Ssz.Native.Asm

@@ -10,9 +10,9 @@ The proof follows the specification's tree level by level:
 node j of the level at height h is the root of the subtree over leaves j 2^h onward.
 -/
 
-namespace Ssz.Native.Driver
+namespace EthLib.Consensus.Ssz.Native.Driver
 
-open Ssz Ssz.Native.Asm Ssz.Native.Ir
+open EthLib.Consensus.Ssz EthLib.Consensus.Ssz.Native.Asm EthLib.Consensus.Ssz.Native.Ir
 
 /-! ## Nodes in memory -/
 
@@ -73,7 +73,7 @@ theorem nodeOf_bytesAt (mem : Memory) (a count j : Nat) (hj : j < count) :
 
 /-- The table of zero-tree roots, as the fold its loop runs. -/
 private theorem zeroRootsTable_fold : zeroRootsTable = (List.foldl (fun (b : ByteArray × ByteArray) (_ : Nat) =>
-    (b.1 ++ Sha256.hash (b.2 ++ b.2), Sha256.hash (b.2 ++ b.2)))
+    (b.1 ++ Cryptography.Hash.Sha256.hash (b.2 ++ b.2), Cryptography.Hash.Sha256.hash (b.2 ++ b.2)))
     (⟨Array.replicate 32 0⟩, ⟨Array.replicate 32 0⟩) (List.range zeroHeights)).1 := by
   -- The counted loop is a fold over the heights.
   unfold zeroRootsTable
@@ -83,7 +83,7 @@ private theorem zeroRootsTable_fold : zeroRootsTable = (List.foldl (fun (b : Byt
 /-- After some heights, the loop holds the top root, and the table of roots up to it. -/
 private theorem zeroFold_spec (n : Nat) :
     let F := List.foldl (fun (b : ByteArray × ByteArray) (_ : Nat) =>
-      (b.1 ++ Sha256.hash (b.2 ++ b.2), Sha256.hash (b.2 ++ b.2)))
+      (b.1 ++ Cryptography.Hash.Sha256.hash (b.2 ++ b.2), Cryptography.Hash.Sha256.hash (b.2 ++ b.2)))
       (⟨Array.replicate 32 0⟩, ⟨Array.replicate 32 0⟩) (List.range n)
     F.2.size = 32 ∧ F.2.data = Ssz.zeroRoot combine zeroChunk n ∧ F.1.size = 32 * (n + 1) ∧
       ∀ j ≤ n, nodeOf F.1 0 j = Ssz.zeroRoot combine zeroChunk j := by
@@ -98,14 +98,14 @@ private theorem zeroFold_spec (n : Nat) :
     obtain ⟨T, N⟩ := F
     obtain ⟨nodeSize, nodeData, tableSize, nodes⟩ := ih
     -- The next root hashes the top one with itself, and joins the table.
-    have next : (Sha256.hash (N ++ N)).data = Ssz.zeroRoot combine zeroChunk (n + 1) := by
+    have next : (Cryptography.Hash.Sha256.hash (N ++ N)).data = Ssz.zeroRoot combine zeroChunk (n + 1) := by
       simp only [Ssz.zeroRoot, ← nodeData, combine, ← ByteArray.data_append]
-    refine ⟨Sha256.hash_size _, next, by rw [ByteArray.size_append, tableSize, Sha256.hash_size]; omega,
+    refine ⟨Cryptography.Hash.Sha256.hash_size _, next, by rw [ByteArray.size_append, tableSize, Cryptography.Hash.Sha256.hash_size]; omega,
       fun j hj => ?_⟩
     by_cases old : j ≤ n
     · rw [nodeOf_append_left _ _ _ (by rw [tableSize]; omega), nodes j old]
     · rw [show j = n + 1 by omega, nodeOf_append_right _ _ _ (by rw [tableSize]),
-        nodeOf_single _ (Sha256.hash_size _), next]
+        nodeOf_single _ (Cryptography.Hash.Sha256.hash_size _), next]
 
 /-- The table the drivers read holds the zero tree of every height it covers, 32 bytes each. -/
 theorem zeroRootsTable_spec : zeroRootsTable.size = 32 * (zeroHeights + 1) ∧
@@ -189,7 +189,7 @@ theorem eval_mod {a b : Expr} {p q : Nat} (ha : eval w env mem a = some (UInt64.
     intro z
     exact nz ((ofNat_inj bq (by decide)).mp z)
   simp only [eval, ha, hb, Option.bind_eq_bind, Option.bind, this]
-  rw [if_neg (by decide)]
+  rw [ite_eq_right (by decide)]
   show some _ = some _
   congr 1
   apply UInt64.toNat_inj.mp
@@ -464,7 +464,7 @@ theorem level_step {m : Module} {w : World} {sp : Nat} {mem : Memory}
     have w1 : W = 1 := by
       by_cases hw : W ≤ 1
       · omega
-      · rw [if_neg hw] at v; exact absurd rfl v
+      · rw [ite_eq_right hw] at v; exact absurd rfl v
     subst w1
     obtain ⟨mm1, r1, h1⟩ := hash_call (name := "ssz_hash_fixed") (ls := 32) (rs := 0) okF rfl rfl rfl
       (pre.runPre lv.frame (by omega) (fun p hp => ⟨by
@@ -476,7 +476,7 @@ theorem level_step {m : Module} {w : World} {sp : Nat} {mem : Memory}
         (eval_lit 1) (eval_var (x := 5) lv.ctxV))
     refine Ends.step r1 (Ends.of_runs
       (Runs.set _ _ _ _ _ _ _ _ (eval_or (eval_var (x := 12) lv.status) (eval_var assign_eq)))
-      ⟨fun y _ _ c d => by simp only [assign, if_neg c, if_neg d], rfl, lv.widthV, fun j hj => ?_, fun a ha hp => ?_⟩)
+      ⟨fun y _ _ c d => by simp only [assign, ite_eq_right c, ite_eq_right d], rfl, lv.widthV, fun j hj => ?_, fun a ha hp => ?_⟩)
     · have j0 : j = 0 := by omega
       subst j0
       have up := parent_last leaves h 1 rfl (by rw [size]; simpa using lv.covers)
@@ -490,7 +490,7 @@ theorem level_step {m : Module} {w : World} {sp : Nat} {mem : Memory}
   · -- A wider level: its pairs, then an odd last node against the zero tree.
     have w2 : 2 ≤ W := by
       by_cases hw : W ≤ 1
-      · rw [if_pos hw] at v; exact absurd v (by decide)
+      · rw [ite_eq_left hw] at v; exact absurd v (by decide)
       · omega
     refine Ends.step (Runs.set _ _ _ _ _ _ _ _
       (eval_div (eval_var (x := 8) lv.widthV) (eval_lit 2) (by omega) (by decide) (by decide))) ?_
@@ -543,7 +543,7 @@ theorem level_step {m : Module} {w : World} {sp : Nat} {mem : Memory}
           (eval_add (eval_var (x := 6) lv.zerosV) (eval_mul (eval_lit 32) (eval_var (x := 9) lv.heightV))) (eval_lit 1)
           (eval_var (x := 5) lv.ctxV))
       refine Ends.step r2 (Ends.of_runs (Runs.set _ _ _ _ _ _ _ _ (eval_or (eval_var (x := 12) (v := 0) rfl)
-        (eval_var assign_eq))) ⟨fun y a b c => by simp only [assign, if_neg a, if_neg b, if_neg c], rfl,
+        (eval_var assign_eq))) ⟨fun y a b c => by simp only [assign, ite_eq_right a, ite_eq_right b, ite_eq_right c], rfl,
           fun j hj => ?_, fun a ha hp => ?_⟩)
       · by_cases last : j < W / 2
         · rw [nodeAt_congr (m₂ := mm1) fun i hi => by rw [h2 _ (by omega), hashed_outside (by omega)], pairs j last]
@@ -562,7 +562,7 @@ theorem level_step {m : Module} {w : World} {sp : Nat} {mem : Memory}
       have even : W % 2 = 0 := by
         have := (ofNat_inj (show W % 2 < 2 ^ 64 by omega) (show 0 < 2 ^ 64 by decide)).mp (ite_eq_zero v)
         omega
-      exact ⟨fun y a b c => by simp only [assign, if_neg a, if_neg b, if_neg c], rfl,
+      exact ⟨fun y a b c => by simp only [assign, ite_eq_right a, ite_eq_right b, ite_eq_right c], rfl,
         fun j hj => pairs j (by omega), fun a ha hp => by rw [h1 a hp, hashed_outside (by omega)]⟩
     · -- The next level's width.
       rintro e' mm' ⟨fr, st, roots, mf⟩
@@ -625,7 +625,7 @@ theorem merkleize_ends {m : Module} {w : World} {sp : Nat} {mem : Memory}
   -- The leaves are the nodes read from memory at the start.
   have leaf : ∀ j < count, nodeAt mem (nodes + 32 * j) =
       subtreeAt (nodesFrom (bytesAt mem nodes (32 * count)) 0 count) 0 (j * 2 ^ 0) := fun j hj => by
-    rw [Nat.pow_zero, Nat.mul_one, subtreeAt_leaf, nodesFrom_get?, if_pos hj, Option.getD_some, nodeOf_bytesAt _ _ _ _ hj]
+    rw [Nat.pow_zero, Nat.mul_one, subtreeAt_leaf, nodesFrom_get?, ite_eq_left hj, Option.getD_some, nodeOf_bytesAt _ _ _ _ hj]
   have size : (nodesFrom (bytesAt mem nodes (32 * count)) 0 count).size = count := nodesFrom_size _ _ _
   generalize nodesFrom (bytesAt mem nodes (32 * count)) 0 count = leaves at leaf size
   simp only [merkleize]
@@ -640,7 +640,7 @@ theorem merkleize_ends {m : Module} {w : World} {sp : Nat} {mem : Memory}
     have c0 : count = 0 := by
       by_cases hc : count = 0
       · exact hc
-      · rw [if_neg hc] at v; exact absurd rfl v
+      · rw [ite_eq_right hc] at v; exact absurd rfl v
     subst c0
     exact Ends.of_runs (copy32_runs (fun _ => eval_var (x := 3) (v := UInt64.ofNat out) rfl)
       (fun _ => eval_add (eval_var (x := 6) (v := UInt64.ofNat zeros) rfl)
@@ -650,7 +650,7 @@ theorem merkleize_ends {m : Module} {w : World} {sp : Nat} {mem : Memory}
         fun a _ _ ho => copied_out ho⟩
   · have c0 : count ≠ 0 := by
       intro hc
-      rw [if_pos hc] at v; exact absurd v (by decide)
+      rw [ite_eq_left hc] at v; exact absurd v (by decide)
     refine Ends.append (Q := fun e mm => e 3 = UInt64.ofNat out ∧ e 12 = 0 ∧ ∃ L, e 7 = UInt64.ofNat L ∧
         ((L = nodes) ∨ (scratch ≤ L ∧ L + 32 ≤ scratch + 32 * (count + depth))) ∧
         nodeAt mm L = subtreeAt leaves depth 0 ∧
@@ -677,7 +677,7 @@ theorem merkleize_ends {m : Module} {w : World} {sp : Nat} {mem : Memory}
         have below : h < depth := by
           by_cases hb : h < depth
           · exact hb
-          · rw [if_neg hb] at hv; exact absurd hv nz
+          · rw [ite_eq_right hb] at hv; exact absurd hv nz
         refine Ends.mono (level_step okP okF pre kernels room size lv below) fun e' mm' lv' =>
           ⟨⟨_, _, _, _, lv'⟩, ?_⟩
         rw [lv'.heightV, lv.heightV, ofNat_toNat (by omega), ofNat_toNat (by omega)]
@@ -688,7 +688,7 @@ theorem merkleize_ends {m : Module} {w : World} {sp : Nat} {mem : Memory}
           (eval_lt (eval_var lv.heightV) (eval_var lv.depthV) (by omega) (by omega)))
         have top : h = depth := by
           by_cases hb : h < depth
-          · rw [if_pos hb] at done; exact absurd done (by decide)
+          · rw [ite_eq_left hb] at done; exact absurd done (by decide)
           · omega
         subst top
         -- At the top, one node is left: the root.
@@ -859,4 +859,4 @@ theorem hashingOk_append (w : World) (fns : List (String × Fn)) (ext : List (St
   · rw [lookup_append, fresh layout "baseline" (by simp)]; cases layout <;> rfl
   · rw [lookup_append]; cases layout <;> rfl
 
-end Ssz.Native.Driver
+end EthLib.Consensus.Ssz.Native.Driver

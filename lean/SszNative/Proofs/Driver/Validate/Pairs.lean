@@ -9,11 +9,11 @@ changes the answer.
 So the options of a legal union pass, and the options of a union whose options clash do not.
 -/
 
-namespace Ssz.Native.Driver.Validate
+namespace EthLib.Consensus.Ssz.Native.Driver.Validate
 
 set_option maxRecDepth 20000
 
-open Ssz Ssz.Native Ssz.Native.Ir Ssz.Native.Asm Ssz.Native.Ir.Stmt Ssz.Native.Ir.Expr
+open EthLib.Consensus.Ssz EthLib.Consensus.Ssz.Native EthLib.Consensus.Ssz.Native.Ir EthLib.Consensus.Ssz.Native.Asm EthLib.Consensus.Ssz.Native.Ir.Stmt EthLib.Consensus.Ssz.Native.Ir.Expr
 
 /-- What the native check assumes of a type it compares: legal, named as a plan names it, fitting its sizes. -/
 structure Sound (d : Desc) : Prop where
@@ -70,7 +70,7 @@ theorem eq_calls {m : Module} {w : World} (hm : Loaded m) {a b : Desc} (sa : Sou
     rintro env mem' ⟨hmem, i, hi, h6, h2, h0, h1, h5⟩
     subst mem'
     by_cases agree : (Plan.words a).take i = (Plan.words b).take i
-    · rw [if_pos agree] at h2
+    · rw [ite_eq_left agree] at h2
       refine ⟨_, by wev [h6, h5, h2], fun nz => ?_, fun z => ?_⟩
       · have hia : i < (Plan.words a).length := by
           rcases Nat.lt_or_ge i (Plan.words a).length with h | h
@@ -104,7 +104,7 @@ theorem eq_calls {m : Module} {w : World} (hm : Loaded m) {a b : Desc} (sa : Sou
         have := eq_of_words sa.named sb.named sa.fits sb.fits agree
         subst this
         exact Wp.done ⟨by wfin [h2], rfl⟩
-    · rw [if_neg agree] at h2
+    · rw [ite_eq_right agree] at h2
       -- A word disagreed, so the types differ.
       have differ : (a == b) = false := by
         simp only [beq_eq_false_iff_ne]
@@ -221,12 +221,12 @@ theorem compatibleAt_head (k : Nat) (a b : Desc) :
       else if byteCode a ≠ 0 ∨ byteCode b ≠ 0 then a.byteSequence == b.byteSequence
       else compatibleAt (k + 1) a b := by
   by_cases e : (a == b) = true
-  · simp only [e, if_true]; rw [compatibleAt.eq_def]; simp [e]
-  · simp only [e, Bool.false_eq_true, if_false]
+  · simp only [e, ite_true]; rw [compatibleAt.eq_def]; simp [e]
+  · simp only [e, Bool.false_eq_true, ite_false]
     split
     · rename_i some_
       rw [compatibleAt.eq_def]
-      simp only [e, Bool.false_eq_true, if_false]
+      simp only [e, Bool.false_eq_true, ite_false]
       unfold byteCode at some_
       cases ha : a.byteSequence <;> cases hb : b.byteSequence <;> simp_all
     · rfl
@@ -266,17 +266,17 @@ theorem compat_of_shape {m : Module} {w : World} (hm : Loaded m) (a : Desc) (sha
   rw [nesting_succ a, compatibleAt_head]
   wcall e []
   by_cases same : (a == b) = true
-  · simp only [same, if_true]
+  · simp only [same, ite_true]
     wsteps []
     wfin []
   have ne : (a == b) = false := by simpa using same
-  simp only [ne, Bool.false_eq_true, if_false]
+  simp only [ne, Bool.false_eq_true, ite_false]
   wsteps []
   wcall ca []
   wcall cb []
   by_cases codes : byteCode a ≠ 0 ∨ byteCode b ≠ 0
   · -- One spells a byte array: the spellings must match, size and all.
-    simp only [codes, if_true]
+    simp only [codes, ite_true]
     rw [byteSequence_beq codes]
     have ca' : byteCode a < 2 ^ 64 := by unfold byteCode; split <;> omega
     have cb' : byteCode b < 2 ^ 64 := by unfold byteCode; split <;> omega
@@ -294,7 +294,7 @@ theorem compat_of_shape {m : Module} {w : World} (hm : Loaded m) (a : Desc) (sha
       wsteps [nz, nzb, kk, ra, aa, rb, ab, xa, xb, ca', cb']
       wfin [kk, one]
     · rcases codes with c | c <;> wsteps [c, kk, ca', cb'] <;> wfin [kk] <;> exact fun h => absurd h kk
-  · simp only [codes, if_false]
+  · simp only [codes, ite_false]
     rw [← nesting_succ a]
     simp only [not_or, Decidable.not_not] at codes
     wsteps [codes.1, codes.2]
@@ -340,7 +340,7 @@ theorem compatAll_calls {m : Module} {w : World} (hm : Loaded m) (fs gs : List D
   have hja := wordsAll_take_le fs j
   have hjb := wordsAll_take_le gs j
   by_cases ok : fieldsCompatible B (fs.take j) (gs.take j) = true
-  · rw [if_pos ok] at h3
+  · rw [ite_eq_left ok] at h3
     refine ⟨_, by wev [h2, h3], fun nz => ?_, fun z => ?_⟩
     · have hjf : j < fs.length := by
         rcases Nat.lt_or_ge j fs.length with h | h
@@ -380,7 +380,7 @@ theorem compatAll_calls {m : Module} {w : World} (hm : Loaded m) (fs gs : List D
       subst hjk
       rw [List.take_length, len, List.take_length] at ok
       exact Wp.done ⟨by wfin [h3, ok], rfl⟩
-  · rw [if_neg ok] at h3
+  · rw [ite_eq_right ok] at h3
     -- Some pair among the first j clashes, so the whole lists do.
     have bad : fieldsCompatible B fs gs = false := by
       rw [← List.take_append_drop j fs, ← List.take_append_drop j gs,
@@ -431,7 +431,7 @@ theorem optionsAgree_calls {m : Module} {w : World} (hm : Loaded m) (os qs : Lis
   subst mem'
   have hia := wordsAll_take_le os i
   by_cases ok : unionOptionsAgree B (os.take i) qs = true
-  · rw [if_pos ok] at h4
+  · rw [ite_eq_left ok] at h4
     refine ⟨_, by wev [h1, h4], fun nz => ?_, fun z => ?_⟩
     · have hio : i < os.length := by
         rcases Nat.lt_or_ge i os.length with h | h
@@ -458,7 +458,7 @@ theorem optionsAgree_calls {m : Module} {w : World} (hm : Loaded m) (os qs : Lis
       subst mem'
       have hkb := wordsAll_take_le qs k
       by_cases fits : optionAgainstAll B os[i] (qs.take k) = true
-      · rw [if_pos fits] at g4
+      · rw [ite_eq_left fits] at g4
         refine ⟨_, by wev [g6, g4], fun nz' => ?_, fun z' => ?_⟩
         · have hkq : k < qs.length := by
             rcases Nat.lt_or_ge k qs.length with h | h
@@ -497,7 +497,7 @@ theorem optionsAgree_calls {m : Module} {w : World} (hm : Loaded m) (os qs : Lis
           refine ⟨⟨trivial, i + 1, by omega, ?_, by wfin [g1], by wfin [g2], by wfin [g3], by wfin [g4, step]⟩,
             by wfin [g1, h1]⟩
           wfin [wordsAll_take_succ os i hio]
-      · rw [if_neg fits] at g4
+      · rw [ite_eq_right fits] at g4
         -- The option clashes with one of the second union's, so the options do not agree.
         have bad0 : optionAgainstAll B os[i] qs = false := by
           have e := optionAgainstAll_append B os[i] (qs.drop k) (qs.take k)
@@ -520,7 +520,7 @@ theorem optionsAgree_calls {m : Module} {w : World} (hm : Loaded m) (os qs : Lis
       subst hio
       rw [List.take_length] at ok
       exact Wp.done ⟨by wfin [h4, ok], rfl⟩
-  · rw [if_neg ok] at h4
+  · rw [ite_eq_right ok] at h4
     -- Some option among the first i clashes, so the unions' options do not agree.
     have bad : unionOptionsAgree B os qs = false := by
       rw [← List.take_append_drop i os, unionOptionsAgree_append]
@@ -542,7 +542,7 @@ theorem setBefore_lt (active : List Bool) (i : Nat) (hi : i < active.length) (se
     setBefore active i < active.countP (· == true) := by
   have := setBefore_succ active i hi
   have le : setBefore active (i + 1) ≤ active.countP (· == true) := (List.take_sublist _ _).countP_le
-  simp only [set, if_true] at this
+  simp only [set, ite_true] at this
   omega
 
 /-- What a sound progressive container's plan holds: its width, its bits, then its fields. -/
@@ -661,7 +661,7 @@ theorem layouts_calls {m : Module} {w : World} (hm : Loaded m) (la lb : List Boo
   have sb_le : setBefore lb i ≤ i := by
     have := List.countP_le_length (p := (· == true)) (l := lb.take i); simp only [setBefore]; simp at this ⊢; omega
   by_cases ok : sharedUpTo B la lb fa fb i = true
-  · rw [if_pos ok] at h2
+  · rw [ite_eq_left ok] at h2
     refine ⟨_, by wev [h3, h0, h1, ra, aa, rb, ab, h2], fun nz => ?_, fun z => ?_⟩
     · have hi : i < la.length ∧ i < lb.length := by
         by_cases x : i < la.length
@@ -677,7 +677,7 @@ theorem layouts_calls {m : Module} {w : World} (hm : Loaded m) (la lb : List Boo
       rw [ok, Bool.true_and] at step
       cases ea : la[i]! <;> cases eb : lb[i]!
       all_goals simp only [ea, eb, Bool.false_and, Bool.and_false, Bool.not_false, Bool.true_or, Bool.not_true,
-        Bool.false_or, Bool.true_and, if_true] at rai rbi sa1 sb1 step
+        Bool.false_or, Bool.true_and, ite_true] at rai rbi sa1 sb1 step
       · wsteps [h0, h1, h3, h4, h5, rai, aai, rbi, abi]
         exact ⟨⟨trivial, i + 1, by omega, by omega, by wfin [], by wfin [sa1], by wfin [sb1], by wfin [step],
           by wfin [h0], by wfin [h1]⟩, by wfin [h3]⟩
@@ -722,7 +722,7 @@ theorem layouts_calls {m : Module} {w : World} (hm : Loaded m) (la lb : List Boo
         all_goals omega
       subst hi
       exact Wp.done ⟨by wfin [h2, ok], rfl⟩
-  · rw [if_neg ok] at h2
+  · rw [ite_eq_right ok] at h2
     -- A shared position already clashed, and positions further on change nothing.
     have bad : sharedUpTo B la lb fa fb (min la.length lb.length) = false := by
       have e : min la.length lb.length = i + (min la.length lb.length - i) := by omega
@@ -749,7 +749,7 @@ theorem byteSequence_none {d : Desc} (h : byteCode d = 0) : d.byteSequence = non
 theorem compatibleAt_tags (k : Nat) (a b : Desc) (ne : (a == b) = false) (ca : byteCode a = 0) (cb : byteCode b = 0)
     (t : Plan.tag b ≠ Plan.tag a) : compatibleAt (k + 1) a b = false := by
   rw [compatibleAt.eq_def]
-  simp only [ne, Bool.false_eq_true, if_false, byteSequence_none ca, byteSequence_none cb]
+  simp only [ne, Bool.false_eq_true, ite_false, byteSequence_none ca, byteSequence_none cb]
   cases a <;> cases b <;> simp_all [Plan.tag]
 
 set_option maxHeartbeats 4000000 in
@@ -802,7 +802,7 @@ macro "shape_open" : tactic => `(tactic| (
   simp only [compatShape, compatFn_result]
   generalize hspec : compatibleAt _ _ b = spec
   rw [nesting_succ, compatibleAt.eq_def] at hspec
-  simp only [ne, Bool.false_eq_true, if_false, byteSequence_none ca, byteSequence_none cb] at hspec
+  simp only [ne, Bool.false_eq_true, ite_false, byteSequence_none ca, byteSequence_none cb] at hspec
   cases b <;> (try simp [Plan.tag] at tb)
   all_goals simp only [Plan.tag] at r0 s0
   all_goals simp only [Desc.nesting, Nat.add_sub_cancel] at hspec
@@ -1021,7 +1021,7 @@ theorem pairs_calls {m : Module} {w : World} (hm : Loaded m) (os : List Desc) (s
   subst mem'
   have hia := wordsAll_take_le os i
   by_cases ok : pairsUpTo os i = true
-  · rw [if_pos ok] at h2
+  · rw [ite_eq_left ok] at h2
     refine ⟨_, by wev [h1, h2], fun nz => ?_, fun z => ?_⟩
     · have hio : i < os.length := by
         rcases Nat.lt_or_ge i os.length with h | h
@@ -1051,7 +1051,7 @@ theorem pairs_calls {m : Module} {w : World} (hm : Loaded m) (os : List Desc) (s
       subst mem'
       have hkb := wordsAll_take_le os (i + 1 + k)
       by_cases fits : ((os.drop (i + 1)).take k).all (compatibleAt os[i].nesting os[i]) = true
-      · rw [if_pos fits] at g2
+      · rw [ite_eq_left fits] at g2
         refine ⟨_, by wev [g4, g2], fun nz' => ?_, fun z' => ?_⟩
         · have hko : i + 1 + k < os.length := by
             rcases Nat.lt_or_ge (i + 1 + k) os.length with h | h
@@ -1087,7 +1087,7 @@ theorem pairs_calls {m : Module} {w : World} (hm : Loaded m) (os : List Desc) (s
             simpa using fits
           wsteps [g1, hl1]
           refine ⟨⟨trivial, i + 1, by omega, by wfin [g5], by wfin [g1], by wfin [g2, step]⟩, by wfin [g1, h1]⟩
-      · rw [if_neg fits] at g2
+      · rw [ite_eq_right fits] at g2
         -- This option clashes with a later one.
         have bad : pairsUpTo os (i + 1) = false := by
           rw [pairsUpTo_succ, ok, getElem!_pos os i hio, Bool.true_and]
@@ -1104,7 +1104,7 @@ theorem pairs_calls {m : Module} {w : World} (hm : Loaded m) (os : List Desc) (s
         · omega
       subst hio
       exact Wp.done ⟨by wfin [h2, ok], rfl⟩
-  · rw [if_neg ok] at h2
+  · rw [ite_eq_right ok] at h2
     -- Some option among the first i clashes with a later one.
     have bad : pairsUpTo os os.length = false := by
       have e : os.length = i + (os.length - i) := by omega
@@ -1121,6 +1121,6 @@ theorem pairs_calls {m : Module} {w : World} (hm : Loaded m) (os : List Desc) (s
 theorem pairsOk {m : Module} {w : World} (hm : Loaded m) : PairsOk m w := by
   intro sels opts p sp mem comp fit nm wf hp room
   have := pairs_calls hm opts (sound_mem wf nm fit) p sp mem hp room
-  rwa [(optionsCompatible_iff sels opts).mp comp, if_pos rfl] at this
+  rwa [(optionsCompatible_iff sels opts).mp comp, ite_eq_left rfl] at this
 
-end Ssz.Native.Driver.Validate
+end EthLib.Consensus.Ssz.Native.Driver.Validate

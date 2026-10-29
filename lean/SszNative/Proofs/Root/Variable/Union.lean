@@ -2,9 +2,9 @@ import SszNative.Proofs.Root.Variable.Struct
 
 /-! Roots of compatible unions: the chosen option's root, with the selector mixed in. -/
 
-namespace Ssz.Native.RootProof
+namespace EthLib.Consensus.Ssz.Native.RootProof
 
-open Ssz Ssz.Native
+open EthLib.Consensus.Ssz EthLib.Consensus.Ssz.Native
 
 variable (facts : Facts)
 
@@ -88,4 +88,4 @@ theorem union_root (selectors : List Nat) (options : List Desc) (ih : ∀ option
   simp only [root, bounded_single]
   rw [hashPair_mixIn rfl (facts.lengthNode _) (hashTreeRoot_size _ _ _ rooted) (by simp)]
 
-end Ssz.Native.RootProof
+end EthLib.Consensus.Ssz.Native.RootProof

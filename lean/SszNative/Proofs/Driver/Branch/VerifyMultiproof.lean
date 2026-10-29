@@ -8,9 +8,9 @@ It checks the counts, computes the helper indices, writes the node set, finds th
 and compares the node at the root's index with the expected root.
 -/
 
-namespace Ssz.Native.Driver.BranchProof
+namespace EthLib.Consensus.Ssz.Native.Driver.BranchProof
 
-open Ssz.Native.Ir Ssz.Native.Asm
+open EthLib.Consensus.Ssz.Native.Ir EthLib.Consensus.Ssz.Native.Asm
 
 /-- Memories agreeing on some nodes' bytes read the same nodes. -/
 theorem nodesAt_congr {mem mem' : Memory} {a n : Nat} (h : ∀ k < 32 * n, mem' (a + k) = mem (a + k)) :
@@ -177,12 +177,12 @@ theorem verify_multiproof_calls {m : Module} {w : World} {ctx : UInt64} {ready :
       intro h; simp only [e3, e7, h] at differ; exact differ (by simp)
     refine Wp.cons (Wp.set rfl (Wp.nil (Wp.nil ⟨_, rfl, ?_, rd, fun _ _ _ => rfl⟩)))
     simp only [verdict, verifyMerkleMultiproof_eq _ _ _ _ sizes, nodesAt_length, wordsAt_length]
-    rw [if_pos (fun h => ne (UInt64.toNat_inj.mp h))]
+    rw [ite_eq_left (fun h => ne (UInt64.toNat_inj.mp h))]
     simp [assign, answerCode]
   have eqc : leafCount = count := by
     by_cases h : leafCount = count
     · exact h
-    · simp only [e3, e7, if_neg h] at same; exact absurd same (by decide)
+    · simp only [e3, e7, ite_eq_right h] at same; exact absurd same (by decide)
   -- The helper indices, into the scratch area.
   let L := wordsAt mem indices.toNat count.toNat
   have bI := access_bound j.indicesOk
@@ -225,10 +225,10 @@ theorem verify_multiproof_calls {m : Module} {w : World} {ctx : UInt64} {ready :
     -- Refused indices are answered as they are.
     refine Wp.ite (eval_eq rfl rfl) (fun z => ?_) (fun _ => Wp.skip (Wp.nil ⟨_, rfl, ?_, rd1,
       fun a _ ha => frame1 a ha⟩))
-    · simp only [assign, ↓reduceIte, helperCode, if_neg (answerCode_error_ne_zero e)] at z
+    · simp only [assign, ↓reduceIte, helperCode, ite_eq_right (answerCode_error_ne_zero e)] at z
       exact absurd rfl z
     · simp only [assign, ↓reduceIte, verdict]
-      rw [verifyMerkleMultiproof_eq _ _ _ _ sizes, nodesAt_length, wordsAt_length, eqc, if_neg (by simp),
+      rw [verifyMerkleMultiproof_eq _ _ _ _ sizes, nodesAt_length, wordsAt_length, eqc, ite_eq_right (by simp),
         show getHelperIndices (wordsAt mem indices.toNat count.toNat) = .error e from hG]
       rfl
   | ok hs =>
@@ -251,19 +251,19 @@ theorem verify_multiproof_calls {m : Module} {w : World} {ctx : UInt64} {ready :
       have ne : hs.length ≠ proofCount.toNat := by
         intro h
         simp only [assign, ↓reduceIte, Nat.reduceEqDiff, e5] at differ
-        rw [if_pos (UInt64.toNat_inj.mp (by rw [hsTo, h]))] at differ
+        rw [ite_eq_left (UInt64.toNat_inj.mp (by rw [hsTo, h]))] at differ
         exact differ rfl
       refine Wp.cons (Wp.set rfl (Wp.nil (Wp.nil ⟨_, rfl, ?_, rd1, fun a _ ha => frame1 a ha⟩)))
       simp only [assign, ↓reduceIte, verdict]
-      rw [verifyMerkleMultiproof_eq _ _ _ _ sizes, nodesAt_length, wordsAt_length, eqc, if_neg (by simp),
+      rw [verifyMerkleMultiproof_eq _ _ _ _ sizes, nodesAt_length, wordsAt_length, eqc, ite_eq_right (by simp),
         show getHelperIndices (wordsAt mem indices.toNat count.toNat) = .ok hs from hG]
       simp only [nodesAt_length]
-      rw [if_pos (Ne.symm ne)]
+      rw [ite_eq_left (Ne.symm ne)]
       rfl
     have pc : hs.length = proofCount.toNat := by
       by_cases h : hs.length.toUInt64 = proofCount
       · rw [← hsTo, h]
-      · simp only [assign, ↓reduceIte, Nat.reduceEqDiff, e5, if_neg h] at same'
+      · simp only [assign, ↓reduceIte, Nat.reduceEqDiff, e5, ite_eq_right h] at same'
         exact absurd same' (by decide)
     -- The two node-set areas, after the helper indices.
     have m15 : (1536 * count).toNat = 1536 * count.toNat := by rw [toNat_mul_of_lt _ _ (by simp; omega)]; simp
@@ -312,7 +312,7 @@ theorem verify_multiproof_calls {m : Module} {w : World} {ctx : UInt64} {ready :
       rwa [show scratch.toNat + (8 + 1024 * count.toNat) = scratch.toNat + 8 + 1024 * count.toNat by omega] at this
     have b5 : (assign env2 14 0) 5 = proofCount := by simp [assign, same2 5 (by decide), a5]
     have keep2 : ∀ k, k ≠ 14 → assign env2 14 0 k = envA k := fun k hk => by
-      simp only [assign, if_neg hk]; exact same2 k hk
+      simp only [assign, ite_eq_right hk]; exact same2 k hk
     refine Wp.cons (Wp.set rfl (Wp.cons (build_loop 5 (by decide) (assign env2 14 0) proofCount b5
       (scratch.toNat + 8 + 1536 * count.toNat) (scratch.toNat + 8 + 1024 * count.toNat) proof.toNat count.toNat
       (fun env' same' lt => ⟨env' 11 + 40 * (env' 7 + env' 14), fun _ => eval_add rfl (eval_mul rfl (eval_add rfl rfl)),
@@ -380,7 +380,7 @@ theorem verify_multiproof_calls {m : Module} {w : World} {ctx : UInt64} {ready :
       (by simp [assign]) (by simp [assign]) ac (fun env5 keep5 deep5 => ?_))))))
     rw [aAddr, mTo, nodesEq] at deep5
     have k5 : ∀ k, k ≠ 14 → k ≠ 15 → k ≠ 16 → env5 k = envA k := fun k h14 h15 h16 => by
-      rw [keep5 k h14 h15 h16]; simp only [assign, if_neg h14, if_neg h15]; exact keep3 k h14
+      rw [keep5 k h14 h15 h16]; simp only [assign, ite_eq_right h14, ite_eq_right h15]; exact keep3 k h14
     -- The fold, between the two areas.
     let F := foldToRoot (deepestOf NODES) NODES
     have xOk : w.access (scratch + 8 + 1536 * count).toNat (80 * (count.toNat + proofCount.toNat)) = true := by
@@ -429,10 +429,10 @@ theorem verify_multiproof_calls {m : Module} {w : World} {ctx : UInt64} {ready :
     -- The verdict, in terms of the fold.
     have verdictF : verdict = answerCode (F.map fun rebuilt => decide (rebuilt = readNode mem root.toNat)) := by
       simp only [verdict]
-      rw [verifyMerkleMultiproof_eq _ _ _ _ sizes, nodesAt_length, wordsAt_length, eqc, if_neg (by simp),
+      rw [verifyMerkleMultiproof_eq _ _ _ _ sizes, nodesAt_length, wordsAt_length, eqc, ite_eq_right (by simp),
         show getHelperIndices (wordsAt mem indices.toNat count.toNat) = .ok hs from hG]
       simp only [nodesAt_length]
-      rw [if_neg (by omega)]
+      rw [ite_eq_right (by omega)]
     rcases state6 with ⟨s9, fold6⟩ | ⟨s9, _, e, Fe⟩
     · -- The fold reached the root's level: the root's entry is looked up and compared.
       rw [show (env6 15).toNat = 0 by rw [z6]; rfl] at fold6
@@ -448,7 +448,7 @@ theorem verify_multiproof_calls {m : Module} {w : World} {ctx : UInt64} {ready :
       simp only [UInt64.reduceToNat] at call
       have look := nodeAt_entriesAt mem6 (env6 11).toNat 1 (env6 13).toNat
       simp only [UInt64.reduceToNat] at look
-      generalize hJ : firstAt (wordAt mem6 (env6 11).toNat 40) 1 (env6 13).toNat = J at call look
+      generalize hJ : firstAt (big32 mem6 (env6 11).toNat 40) 1 (env6 13).toNat = J at call look
       have jle : J ≤ (env6 13).toNat := by rw [← hJ]; exact firstAt_le _ _ _
       simp only [foldToRoot, look] at fold6
       refine Wp.ite (eval_eq rfl rfl) (fun _ => ?_) (fun z => ?_)
@@ -461,9 +461,9 @@ theorem verify_multiproof_calls {m : Module} {w : World} {ctx : UInt64} {ready :
         have none_ : ¬ J < (env6 13).toNat := by
           intro h
           simp only [assign, ↓reduceIte, Nat.reduceEqDiff] at missing
-          rw [if_neg (fun e => by rw [← e, jTo] at h; omega)] at missing
+          rw [ite_eq_right (fun e => by rw [← e, jTo] at h; omega)] at missing
           exact missing rfl
-        rw [if_neg none_] at fold6
+        rw [ite_eq_right none_] at fold6
         refine Wp.cons (Wp.set rfl (Wp.nil (Wp.nil ⟨_, rfl, ?_, rd6, frame6'⟩)))
         simp only [assign, ↓reduceIte]
         rw [verdictF, ← fold6]; rfl
@@ -472,9 +472,9 @@ theorem verify_multiproof_calls {m : Module} {w : World} {ctx : UInt64} {ready :
           rcases Nat.lt_or_eq_of_le jle with h | h
           · exact h
           · simp only [assign, ↓reduceIte, Nat.reduceEqDiff] at found
-            rw [if_pos (by rw [h]; exact UInt64.ofNat_toNat)] at found
+            rw [ite_eq_left (by rw [h]; exact UInt64.ofNat_toNat)] at found
             exact absurd found (by decide)
-        rw [if_pos some_] at fold6
+        rw [ite_eq_left some_] at fold6
         -- The expected root's address, read from the job, which nothing wrote.
         have bj' := access_bound j.words
         have rootWord : eval w (assign env6 14 J.toUInt64) mem6 (Ir.Expr.ld (Ir.Expr.var 0 + 48)) = some root := by
@@ -526,4 +526,4 @@ theorem verify_multiproof_hashing {m : Module} {w : World} (hash : HashingOk m w
         ¬ (scratch.toNat ≤ a ∧ a < scratch.toNat + multiScratch count.toNat proofCount.toNat) → mem' a = mem a :=
   verify_multiproof_calls fns (pairHashing_of hash ctx table pad mask) deep rd j
 
-end Ssz.Native.Driver.BranchProof
+end EthLib.Consensus.Ssz.Native.Driver.BranchProof

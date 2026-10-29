@@ -2,9 +2,10 @@ import SszNative.Proofs.Kernel.ShaNi.Rounds
 
 /-! One pass of the SHA-NI kernel's loop: the parent of one pair of nodes, written to the output. -/
 
-namespace Ssz.Native.Kernel.ShaNi
+namespace EthLib.Consensus.Ssz.Native.Kernel.ShaNi
 
-open Ssz.Native.Asm Ssz.Sha256
+open EthLib.Consensus.Ssz.Native.Asm
+open EthLib.Cryptography.Hash.Sha256 hiding K IV
 
 /-- A pair is always a 64-byte message. -/
 theorem pairMessage_size (mem : Nat → UInt8) (l r : Nat) : (pairMessage mem l r).size = 64 := by
@@ -51,7 +52,7 @@ theorem load_lanes (s : State) (d : Vreg) (m : Mem) (hd : d ≠ bswap) (mask : M
   generalize e : exec1 (.movdqu d m) s = t
   have keep : t.vec bswap = s.vec bswap := by rw [← e]; simp [exec1, assign, hd.symm]
   have word : t.vec d l = readWord s.mem (s.addr m + 4 * l.val) := by rw [← e]; simp [exec1, assign, low, hl]
-  simp only [exec1, assign, if_true, low, hl]
+  simp only [exec1, assign, ite_true, low, hl]
   rw [shuffle_reverse (t.vec d) (t.vec bswap) (by rw [keep]; exact mask 0 (by decide))
     (by rw [keep]; exact mask 1 (by decide)) (by rw [keep]; exact mask 2 (by decide))
     (by rw [keep]; exact mask 3 (by decide)) l hl, word, bswap32_readWord]
@@ -67,19 +68,19 @@ theorem source_word (s : State) (r l : Nat) (hr : r < 4) (hl : l < 4) :
       Wm (pairMessage s.mem (s.gpr left).toNat (s.gpr right).toNat) (4 * r + l) := by
   -- A schedule word below 16 is the message's big-endian word at four times its index.
   simp only [Wm]
-  rw [getElem!_pos _ _ (by omega), schedule_input _ _ _ (by omega), wordAt]
-  simp only [Nat.zero_add]
+  rw [getElem!_pos _ _ (by omega), schedule_input _ _ _ (by omega), big32]
+  simp only [Nat.zero_add, getElem!_eq_get!]
   rw [pairMessage_get _ _ _ _ (by omega), pairMessage_get _ _ _ _ (by omega), pairMessage_get _ _ _ _ (by omega),
     pairMessage_get _ _ _ _ (by omega)]
   unfold source
   -- The first two vectors read the left node, the last two the right node.
   split
   · simp only [State.addr]
-    simp (disch := omega) only [if_pos]
+    simp (disch := omega) only [ite_eq_left]
     rw [show (s.gpr left).toNat + 16 * r + 4 * l = (s.gpr left).toNat + 4 * (4 * r + l) by omega]
     simp only [Nat.add_assoc]
   · simp only [State.addr]
-    simp (disch := omega) only [if_neg]
+    simp (disch := omega) only [ite_eq_right]
     rw [show 4 * (4 * r + l) - 32 = 16 * (r - 2) + 4 * l by omega,
       show 4 * (4 * r + l) + 1 - 32 = 16 * (r - 2) + 4 * l + 1 by omega,
       show 4 * (4 * r + l) + 2 - 32 = 16 * (r - 2) + 4 * l + 2 by omega,
@@ -198,16 +199,16 @@ theorem quad_of_eq (v f : Lanes) (h : ∀ l : Fin 16, l.val < 4 → v l = f l) (
 
 /-- The initial state's loads give the initial state, in the SHA instructions' order. -/
 theorem ivLoads_spec (s : State) (table : TableAt s.mem (s.gpr tbl).toNat) :
-    Packed ((exec ivLoads s).vec abef) ((exec ivLoads s).vec cdgh) initialState := by
+    Packed ((exec ivLoads s).vec abef) ((exec ivLoads s).vec cdgh) Cryptography.Hash.Sha256.IV := by
   -- The table holds the initial state in the order the SHA instructions read it.
   obtain ⟨qa, qc⟩ := tableWord_iv
   refine ⟨quad_of_eq _ _ (fun l hl => ?_) _ _ _ _ qa, quad_of_eq _ _ (fun l hl => ?_) _ _ _ _ qc⟩
   · simp only [ivLoads, exec_cons, exec_nil, exec1, assign]
-    rw [if_neg (by decide)]
-    simp only [low, hl, if_true]
+    rw [ite_eq_right (by decide)]
+    simp only [low, hl, ite_true]
     exact read_table s table ivAbef l.val (by decide) (by simp [ivAbef, tableSize]; omega)
-  · simp only [ivLoads, exec_cons, exec_nil, exec1, assign, if_true]
-    simp only [low, hl, if_true]
+  · simp only [ivLoads, exec_cons, exec_nil, exec1, assign, ite_true]
+    simp only [low, hl, ite_true]
     exact read_table _ table ivCdgh l.val (by decide) (by simp [ivCdgh, tableSize]; omega)
 
 /-- Lanes that add two others' words hold the sums. -/
@@ -232,8 +233,8 @@ theorem packed_add (x y u v p q : Lanes) (st r : Vector UInt32 8)
 /-- The first feed-forward adds the initial state, and a copy of the result is kept aside. -/
 theorem middle_spec (s : State) (table : TableAt s.mem (s.gpr tbl).toNat) (r : Vector UInt32 8)
     (h : Packed (s.vec abef) (s.vec cdgh) r) :
-    Packed ((exec middle s).vec abef) ((exec middle s).vec cdgh) (initialState.zipWith (· + ·) r) ∧
-    Packed ((exec middle s).vec midAbef) ((exec middle s).vec midCdgh) (initialState.zipWith (· + ·) r) := by
+    Packed ((exec middle s).vec abef) ((exec middle s).vec cdgh) (Cryptography.Hash.Sha256.IV.zipWith (· + ·) r) ∧
+    Packed ((exec middle s).vec midAbef) ((exec middle s).vec midCdgh) (Cryptography.Hash.Sha256.IV.zipWith (· + ·) r) := by
   -- The four instructions, one at a time.
   have e : exec middle s = exec1 (.movdqa midCdgh cdgh) (exec1 (.movdqa midAbef abef)
       (exec1 (.padddMem cdgh (tableEntry ivCdgh)) (exec1 (.padddMem abef (tableEntry ivAbef)) s))) := rfl
@@ -269,4 +270,4 @@ theorem middle_spec (s : State) (table : TableAt s.mem (s.gpr tbl).toNat) (r : V
   obtain ⟨p1, p2⟩ := p
   exact ⟨quad_of_eq _ _ ma _ _ _ _ p1, quad_of_eq _ _ mc _ _ _ _ p2⟩
 
-end Ssz.Native.Kernel.ShaNi
+end EthLib.Consensus.Ssz.Native.Kernel.ShaNi

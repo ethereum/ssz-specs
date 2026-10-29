@@ -7,9 +7,9 @@ The prover's scratch bound, computed by its drivers, is the Lean bound.
 The path's bound walks the type's plan like the root's scratch bound does, one child after another.
 -/
 
-namespace Ssz.Native.Driver
+namespace EthLib.Consensus.Ssz.Native.Driver
 
-open Ssz Ssz.Native.Ir Ssz.Native.Ir.Expr Ssz.Native.Ir.Stmt Ssz.Native.Asm
+open EthLib.Consensus.Ssz EthLib.Consensus.Ssz.Native.Ir EthLib.Consensus.Ssz.Native.Ir.Expr EthLib.Consensus.Ssz.Native.Ir.Stmt EthLib.Consensus.Ssz.Native.Asm
 
 variable {m : Module} {w : World}
 
@@ -359,4 +359,4 @@ theorem prove_scratch_calls (hf : PlanFns m) (hd : m.fns.lookup "ssz_prove_deep"
     (Runs.block_cons c5 (Runs.block_cons c6 (Runs.block_nil _ _ _ _ _)))) c7) c8) ?_
   simp [ProveScratch.fn, eval, Asm.assign, proveScratch, M]
 
-end Ssz.Native.Driver
+end EthLib.Consensus.Ssz.Native.Driver

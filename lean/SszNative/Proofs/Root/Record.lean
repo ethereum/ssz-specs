@@ -1,12 +1,12 @@
 import SszNative.Proofs.Validate.Plan
 import SszNative.Root
-import Ssz.Proofs.Codec.Admits
-import Ssz.Codec.Root
-import Ssz.Proofs.Codec.Canonicality
-import Ssz.Proofs.Codec.CanonicalComposite
-import Ssz.Proofs.Codec.DecodeFits
-import Ssz.Proofs.Codec.RootLaws
-import Ssz.Proofs.Merkle.Tree
+import EthLib.Consensus.Proofs.Ssz.Codec.Admits
+import EthLib.Consensus.Ssz.Codec.Root
+import EthLib.Consensus.Proofs.Ssz.Codec.Canonicality
+import EthLib.Consensus.Proofs.Ssz.Codec.CanonicalComposite
+import EthLib.Consensus.Proofs.Ssz.Codec.DecodeFits
+import EthLib.Consensus.Proofs.Ssz.Codec.RootLaws
+import EthLib.Consensus.Proofs.Ssz.Merkle.Tree
 
 /-!
 The root of a fixed-size value, read straight from its bytes.
@@ -16,9 +16,9 @@ The specification's root of a value of such a type depends only on the value's e
 This file states that function of the bytes and proves it is the specification's root.
 -/
 
-namespace Ssz.Native
+namespace EthLib.Consensus.Ssz.Native
 
-open Ssz
+open EthLib.Consensus.Ssz
 
 /-- The root of bytes packed into nodes and merkleized at the capacity their width needs. -/
 def packedRoot (data : Bytes) : Bytes :=
@@ -51,7 +51,7 @@ theorem rootAt_of_layout (budget : Nat) (shape : Desc) (value : Value) (leaves :
     (read : layoutChunksAt budget ⟨leaves, some cap, none⟩ = .ok chunks) (fits : chunks.size ≤ cap) :
     hashTreeRootAt (budget + 1) shape value = .ok (subtreeAt chunks (depthFor cap) 0) := by
   -- The layout's leaves fit its capacity, so the bounded tree is the perfect tree of that depth.
-  simp only [hashTreeRootAt, laid, read, merkleizeBoundedUnchecked, if_neg (Nat.not_lt.mpr fits), Bind.bind, Except.bind,
+  simp only [hashTreeRootAt, laid, read, merkleizeBoundedUnchecked, ite_eq_right (Nat.not_lt.mpr fits), Bind.bind, Except.bind,
     pure, Except.pure]
 
 /-- Packed leaves are read back whole. -/
@@ -310,7 +310,7 @@ theorem recordRoot_spec (d : Desc) : RootsFromBytes d := by
     simp only [Desc.nesting] at deep
     have elementSound := wellFormed_vector sound
     have elementSize : element.fixedSize = some (fixedWidth element) := by
-      rw [fixedSize_eq, if_pos (plain_hasWidth element p)]
+      rw [fixedSize_eq, ite_eq_left (plain_hasWidth element p)]
     -- Decoding cuts the encoding into one slice per element.
     let slices := (List.range length).map fun i =>
       data.extract (i * fixedWidth element) ((i + 1) * fixedWidth element)
@@ -428,4 +428,4 @@ theorem recordRoot_spec (d : Desc) : RootsFromBytes d := by
     · exact here ▸ ihHead
     · exact ihTail held later
 
-end Ssz.Native
+end EthLib.Consensus.Ssz.Native

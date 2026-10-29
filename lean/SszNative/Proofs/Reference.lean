@@ -8,9 +8,9 @@ The Lean references of the native kernels, byte by byte, in the terms the kernel
 Each reference appends one fixed-size piece per index, so byte w * i + k of its output is byte k of piece i.
 -/
 
-namespace Ssz.Native
+namespace EthLib.Consensus.Ssz.Native
 
-open Ssz.Native.Asm Ssz.Native.Kernel
+open EthLib.Consensus.Ssz.Native.Asm EthLib.Consensus.Ssz.Native.Kernel
 
 /-- The bytes of pieces of one width, appended in index order. -/
 theorem concat_size (f : Nat → ByteArray) (w : Nat) (init : ByteArray) (n : Nat)
@@ -52,7 +52,7 @@ macro "unfold_loop" : tactic => `(tactic| simp only [Std.Legacy.Range.forIn_eq_f
 /-- The pairs reference, as a fold appending one digest per pair. -/
 private theorem hashPairsReference_fold (src : ByteArray) (offset pairs : USize) :
     hashPairsReference src offset pairs = (List.range pairs.toNat).foldl (fun out i =>
-      out ++ Sha256.hash (src.extract (offset.toNat + 64 * i) (offset.toNat + 64 * i + 64)))
+      out ++ Cryptography.Hash.Sha256.hash (src.extract (offset.toNat + 64 * i) (offset.toNat + 64 * i + 64)))
       (ByteArray.emptyWithCapacity (32 * pairs.toNat)) := by
   -- The counted loop is a fold over the indices.
   simp only [hashPairsReference]
@@ -62,7 +62,7 @@ private theorem hashPairsReference_fold (src : ByteArray) (offset pairs : USize)
 private theorem hashColumnsReference_fold (left : ByteArray) (leftOffset : USize) (right : ByteArray)
     (rightOffset count : USize) :
     hashColumnsReference left leftOffset right rightOffset count = (List.range count.toNat).foldl (fun out i =>
-      out ++ Sha256.hash (left.extract (leftOffset.toNat + 32 * i) (leftOffset.toNat + 32 * i + 32) ++
+      out ++ Cryptography.Hash.Sha256.hash (left.extract (leftOffset.toNat + 32 * i) (leftOffset.toNat + 32 * i + 32) ++
         right.extract (rightOffset.toNat + 32 * i) (rightOffset.toNat + 32 * i + 32)))
       (ByteArray.emptyWithCapacity (32 * count.toNat)) := by
   -- The counted loop is a fold over the indices.
@@ -72,7 +72,7 @@ private theorem hashColumnsReference_fold (left : ByteArray) (leftOffset : USize
 /-- The fixed-node reference, as a fold appending one digest per node. -/
 private theorem hashFixedReference_fold (left : ByteArray) (leftOffset : USize) (node : ByteArray) (count : USize) :
     hashFixedReference left leftOffset node count = (List.range count.toNat).foldl (fun out i =>
-      out ++ Sha256.hash (left.extract (leftOffset.toNat + 32 * i) (leftOffset.toNat + 32 * i + 32) ++
+      out ++ Cryptography.Hash.Sha256.hash (left.extract (leftOffset.toNat + 32 * i) (leftOffset.toNat + 32 * i + 32) ++
         node.extract 0 32))
       (ByteArray.emptyWithCapacity (32 * count.toNat)) := by
   -- The counted loop is a fold over the indices.
@@ -99,17 +99,17 @@ theorem hashPairsReference_size (src : ByteArray) (offset pairs : USize) :
     (hashPairsReference src offset pairs).size = 32 * pairs.toNat := by
   -- Each digest is 32 bytes, appended to an empty array.
   rw [hashPairsReference_fold]
-  rw [concat_size _ 32 _ _ fun _ _ => Sha256.hash_size _, size_reserved, Nat.zero_add]
+  rw [concat_size _ 32 _ _ fun _ _ => Cryptography.Hash.Sha256.hash_size _, size_reserved, Nat.zero_add]
 
 /-- Byte k of parent p is byte k of the digest of the 64 bytes of pair p. -/
 theorem hashPairsReference_get (src : ByteArray) (offset pairs : USize) (p k : Nat) (pair : p < pairs.toNat)
     (within : k < 32) :
     (hashPairsReference src offset pairs).get! (32 * p + k) =
-      (Sha256.hash (src.extract (offset.toNat + 64 * p) (offset.toNat + 64 * p + 64))).get! k := by
+      (Cryptography.Hash.Sha256.hash (src.extract (offset.toNat + 64 * p) (offset.toNat + 64 * p + 64))).get! k := by
   -- Parent p is the p-th digest appended.
   rw [hashPairsReference_fold]
-  have := concat_get (fun i => Sha256.hash (src.extract (offset.toNat + 64 * i) (offset.toNat + 64 * i + 64))) 32
-    (ByteArray.emptyWithCapacity (32 * pairs.toNat)) pairs.toNat (fun _ _ => Sha256.hash_size _) p k pair within
+  have := concat_get (fun i => Cryptography.Hash.Sha256.hash (src.extract (offset.toNat + 64 * i) (offset.toNat + 64 * i + 64))) 32
+    (ByteArray.emptyWithCapacity (32 * pairs.toNat)) pairs.toNat (fun _ _ => Cryptography.Hash.Sha256.hash_size _) p k pair within
   rwa [size_reserved, Nat.zero_add] at this
 
 /-- The parents of two columns take 32 bytes each. -/
@@ -118,20 +118,20 @@ theorem hashColumnsReference_size (left : ByteArray) (leftOffset : USize) (right
     (hashColumnsReference left leftOffset right rightOffset count).size = 32 * count.toNat := by
   -- Each digest is 32 bytes, appended to an empty array.
   rw [hashColumnsReference_fold]
-  rw [concat_size _ 32 _ _ fun _ _ => Sha256.hash_size _, size_reserved, Nat.zero_add]
+  rw [concat_size _ 32 _ _ fun _ _ => Cryptography.Hash.Sha256.hash_size _, size_reserved, Nat.zero_add]
 
 /-- Byte k of parent p is byte k of the digest of left node p followed by right node p. -/
 theorem hashColumnsReference_get (left : ByteArray) (leftOffset : USize) (right : ByteArray)
     (rightOffset count : USize) (p k : Nat) (pair : p < count.toNat) (within : k < 32) :
     (hashColumnsReference left leftOffset right rightOffset count).get! (32 * p + k) =
-      (Sha256.hash (left.extract (leftOffset.toNat + 32 * p) (leftOffset.toNat + 32 * p + 32) ++
+      (Cryptography.Hash.Sha256.hash (left.extract (leftOffset.toNat + 32 * p) (leftOffset.toNat + 32 * p + 32) ++
         right.extract (rightOffset.toNat + 32 * p) (rightOffset.toNat + 32 * p + 32))).get! k := by
   -- Parent p is the p-th digest appended.
   rw [hashColumnsReference_fold]
-  have := concat_get (fun i => Sha256.hash
+  have := concat_get (fun i => Cryptography.Hash.Sha256.hash
       (left.extract (leftOffset.toNat + 32 * i) (leftOffset.toNat + 32 * i + 32) ++
         right.extract (rightOffset.toNat + 32 * i) (rightOffset.toNat + 32 * i + 32))) 32
-    (ByteArray.emptyWithCapacity (32 * count.toNat)) count.toNat (fun _ _ => Sha256.hash_size _) p k pair within
+    (ByteArray.emptyWithCapacity (32 * count.toNat)) count.toNat (fun _ _ => Cryptography.Hash.Sha256.hash_size _) p k pair within
   rwa [size_reserved, Nat.zero_add] at this
 
 /-- The parents of a column against one node take 32 bytes each. -/
@@ -139,19 +139,19 @@ theorem hashFixedReference_size (left : ByteArray) (leftOffset : USize) (node : 
     (hashFixedReference left leftOffset node count).size = 32 * count.toNat := by
   -- Each digest is 32 bytes, appended to an empty array.
   rw [hashFixedReference_fold]
-  rw [concat_size _ 32 _ _ fun _ _ => Sha256.hash_size _, size_reserved, Nat.zero_add]
+  rw [concat_size _ 32 _ _ fun _ _ => Cryptography.Hash.Sha256.hash_size _, size_reserved, Nat.zero_add]
 
 /-- Byte k of parent p is byte k of the digest of left node p followed by the fixed node. -/
 theorem hashFixedReference_get (left : ByteArray) (leftOffset : USize) (node : ByteArray) (count : USize)
     (p k : Nat) (pair : p < count.toNat) (within : k < 32) :
     (hashFixedReference left leftOffset node count).get! (32 * p + k) =
-      (Sha256.hash (left.extract (leftOffset.toNat + 32 * p) (leftOffset.toNat + 32 * p + 32) ++
+      (Cryptography.Hash.Sha256.hash (left.extract (leftOffset.toNat + 32 * p) (leftOffset.toNat + 32 * p + 32) ++
         node.extract 0 32)).get! k := by
   -- Parent p is the p-th digest appended.
   rw [hashFixedReference_fold]
-  have := concat_get (fun i => Sha256.hash
+  have := concat_get (fun i => Cryptography.Hash.Sha256.hash
       (left.extract (leftOffset.toNat + 32 * i) (leftOffset.toNat + 32 * i + 32) ++ node.extract 0 32)) 32
-    (ByteArray.emptyWithCapacity (32 * count.toNat)) count.toNat (fun _ _ => Sha256.hash_size _) p k pair within
+    (ByteArray.emptyWithCapacity (32 * count.toNat)) count.toNat (fun _ _ => Cryptography.Hash.Sha256.hash_size _) p k pair within
   rwa [size_reserved, Nat.zero_add] at this
 
 /-- One record's slot: its field, cut to the slot, then zeros up to the slot's size. -/
@@ -198,7 +198,7 @@ theorem gatherReference_get (src : ByteArray) (start stride width count slot : U
     omega
   by_cases early : k < width.toNat
   · -- A field byte, read through the cut.
-    rw [if_pos early, get!_append_left _ _ _ (by omega), get!_eq _ _ (by omega), get!_eq _ _ (by omega)]
+    rw [ite_eq_left early, get!_append_left _ _ _ (by omega), get!_eq _ _ (by omega), get!_eq _ _ (by omega)]
     simp only [field, ByteArray.getElem_extract]
   · -- A padding byte.
     have zeros : (⟨Array.replicate (slot.toNat - (field src start stride width slot i).size) 0⟩ : ByteArray).size =
@@ -206,7 +206,7 @@ theorem gatherReference_get (src : ByteArray) (start stride width count slot : U
       rw [size]
       exact Array.size_replicate
     have e : k = (field src start stride width slot i).size + (k - width.toNat) := by omega
-    rw [if_neg early, e, get!_append_right, get!_eq _ _ (by rw [zeros]; omega), ByteArray.getElem_eq_getElem_data]
+    rw [ite_eq_right early, e, get!_append_right, get!_eq _ _ (by rw [zeros]; omega), ByteArray.getElem_eq_getElem_data]
     exact Array.getElem_replicate _
 
 /-- Whether memory holds an array's bytes from an address. -/
@@ -232,10 +232,10 @@ theorem pairMessage_holds (mem : Nat → UInt8) (a b : Nat) (left right : ByteAr
     rw [← ByteArray.getElem_eq_getElem_data]
     by_cases first : i < 32
     · -- A byte of the left node.
-      rw [if_pos first, ByteArray.getElem_append_left (by omega), ByteArray.getElem_extract, Nat.add_assoc,
+      rw [ite_eq_left first, ByteArray.getElem_append_left (by omega), ByteArray.getElem_extract, Nat.add_assoc,
         holdsLeft _ (by omega), get!_eq _ _ (by omega)]
     · -- A byte of the right node.
-      rw [if_neg first, ByteArray.getElem_append_right (by omega), ByteArray.getElem_extract, Nat.add_assoc,
+      rw [ite_eq_right first, ByteArray.getElem_append_right (by omega), ByteArray.getElem_extract, Nat.add_assoc,
         holdsRight _ (by omega), get!_eq _ _ (by omega)]
       simp only [leftSize]
 
@@ -256,4 +256,4 @@ theorem pairMessage_fixed (mem : Nat → UInt8) (a b : Nat) (left node : ByteArr
   -- The fixed node is the first 32 bytes of its array.
   simpa using pairMessage_holds mem a b left node l 0 holdsLeft holdsNode leftInside (by omega)
 
-end Ssz.Native
+end EthLib.Consensus.Ssz.Native

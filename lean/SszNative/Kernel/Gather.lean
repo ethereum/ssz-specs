@@ -7,9 +7,9 @@ A list of records holds each field a record's width apart.
 Hashing a field across all records wants those fields one slot apart, padded to whole nodes.
 -/
 
-namespace Ssz.Native.Kernel
+namespace EthLib.Consensus.Ssz.Native.Kernel
 
-open Ssz.Native.Asm
+open EthLib.Consensus.Ssz.Native.Asm
 
 /--
 The routine: for each of a count of records, copy a field's bytes into a slot, then zero the rest of the slot.
@@ -55,4 +55,4 @@ def gatherKey : Array Instr :=
     .addReg .rsi .r8, .addImm .rsi 48, .addImm .rdi 64, .subImm .rdx 1, .jnz 2]
   (([.test .rdx, .jz (2 + body.length)] ++ body ++ [.vzeroupper, .zeroReg .rax, .ret]) : List Instr).toArray
 
-end Ssz.Native.Kernel
+end EthLib.Consensus.Ssz.Native.Kernel

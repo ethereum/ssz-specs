@@ -1,11 +1,11 @@
 import SszNative.Proofs.Root.Variable.Bits
-import Ssz.Proofs.Codec.DecodeFits
+import EthLib.Consensus.Proofs.Ssz.Codec.DecodeFits
 
 /-! Roots of byte lists and bit lists: packed bytes under a tree, with the count mixed in. -/
 
-namespace Ssz.Native.RootProof
+namespace EthLib.Consensus.Ssz.Native.RootProof
 
-open Ssz Ssz.Native
+open EthLib.Consensus.Ssz EthLib.Consensus.Ssz.Native
 
 variable (facts : Facts)
 
@@ -25,7 +25,7 @@ theorem byteList_root (limit : Nat) (b : ByteArray) (start stop : Nat) (v : Valu
   cases read
   have packed := packRange_nodes b start stop ordered inside (by unfold Small at small; omega)
   rw [hashTreeRoot_unfold]
-  simp only [merkleLayout, bound, if_false, MerkleLayout.packing, leafChunks, finishLayout, Bind.bind,
+  simp only [merkleLayout, bound, ite_false, MerkleLayout.packing, leafChunks, finishLayout, Bind.bind,
     Except.bind, pure, Except.pure, throw, throwThe, MonadExceptOf.throw]
   -- The packed range holds the slice's nodes, within the limit's capacity.
   have room : nodesFor (stop - start) ≤ chunksForBytes limit := by
@@ -59,7 +59,7 @@ theorem bitList_root (limit : Nat) (b : ByteArray) (start stop : Nat) (v : Value
     rw [slice_size b start stop inside] at nonempty
     rw [← counted]; simp only [bitCount]; have := highest_lt (b.get! (stop - 1)); omega
   rw [hashTreeRoot_unfold]
-  simp only [merkleLayout, show ¬ bits.size > limit by omega, if_false, MerkleLayout.packing, leafChunks,
+  simp only [merkleLayout, show ¬ bits.size > limit by omega, ite_false, MerkleLayout.packing, leafChunks,
     finishLayout, Bind.bind, Except.bind, pure, Except.pure]
   -- The packed bits, within the capacity the limit gives.
   have room : nodesFor ((bits.size + 7) / 8) ≤ chunksForBits limit := by
@@ -99,4 +99,4 @@ theorem progressiveBitList_root (limit : Option Nat) (b : ByteArray) (start stop
   simp only [counted]
   rw [hashPair_mixIn tree (facts.lengthNode _) (by simp) (by simp)]
 
-end Ssz.Native.RootProof
+end EthLib.Consensus.Ssz.Native.RootProof

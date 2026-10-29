@@ -1,4 +1,4 @@
-import Ssz.Proofs.Merkle.ClaimChecks
+import EthLib.Consensus.Proofs.Ssz.Merkle.ClaimChecks
 import SszNative.Driver.Branch
 import SszNative.Proofs.Ir.Logic
 import SszNative.Proofs.Verify
@@ -9,9 +9,9 @@ Facts every branch driver's proof leans on: words and nodes read from memory, su
 and the small search and comparison functions.
 -/
 
-namespace Ssz.Native.Driver.BranchProof
+namespace EthLib.Consensus.Ssz.Native.Driver.BranchProof
 
-open Ssz.Native.Ir Ssz.Native.Asm
+open EthLib.Consensus.Ssz.Native.Ir EthLib.Consensus.Ssz.Native.Asm
 
 /-- The 32 bytes from an address, as a node. -/
 def readNode (mem : Memory) (a : Nat) : ByteArray :=
@@ -43,14 +43,14 @@ theorem pairMessage_readNode (mem : Memory) (l r : Nat) :
     have bound : i < 64 := by simpa [pairMessage] using h₁
     simp only [pairMessage, Array.getElem_ofFn]
     by_cases first : i < 32
-    · rw [if_pos first, Array.getElem_append_left (by simp [readNode]; omega)]
+    · rw [ite_eq_left first, Array.getElem_append_left (by simp [readNode]; omega)]
       simp [readNode]
-    · rw [if_neg first, Array.getElem_append_right (by simp [readNode]; omega)]
+    · rw [ite_eq_right first, Array.getElem_append_right (by simp [readNode]; omega)]
       simp [readNode]
 
 /-- Two nodes read from memory join into the digest of the pair there. -/
 theorem combine_readNode (mem : Memory) (l r : Nat) :
-    combine (readNode mem l) (readNode mem r) = Sha256.hash (pairMessage mem l r) := by
+    combine (readNode mem l) (readNode mem r) = Cryptography.Hash.Sha256.hash (pairMessage mem l r) := by
   apply ByteArray.ext
   rw [combine_eq, pairMessage_readNode]
   rfl
@@ -398,8 +398,8 @@ theorem eval_lt {w : World} {env : Env} {mem : Memory} {a b : Ir.Expr} {x y : UI
     (ha : eval w env mem a = some x) (hb : eval w env mem b = some y) :
     eval w env mem (Ir.Expr.lt a b) = some (if x.toNat < y.toNat then 1 else 0) := by
   by_cases h : x.toNat < y.toNat
-  · rw [if_pos h]; exact eval_lt_true ha hb h
-  · rw [if_neg h]; exact eval_lt_false ha hb h
+  · rw [ite_eq_left h]; exact eval_lt_true ha hb h
+  · rw [ite_eq_right h]; exact eval_lt_false ha hb h
 
 /-- Two flags joined by a bitwise or are the flag of either holding. -/
 theorem or_flags (p q : Prop) [Decidable p] [Decidable q] :
@@ -420,4 +420,4 @@ theorem eval_ne {w : World} {env : Env} {mem : Memory} {a b : Ir.Expr} {x y : UI
   rw [Ir.Expr.ne, eval_cmp .ne ha hb]
   by_cases h : x = y <;> simp [Cond.holds, h]
 
-end Ssz.Native.Driver.BranchProof
+end EthLib.Consensus.Ssz.Native.Driver.BranchProof

@@ -12,10 +12,11 @@ The eight-lane kernel's data movement: loading and transposing messages, and tra
 The same transpose runs both ways: on the loaded nodes, and on the eight digest words.
 -/
 
-namespace Ssz.Native.Kernel.Avx2
+namespace EthLib.Consensus.Ssz.Native.Kernel.Avx2
 
-open Ssz.Sha256 Ssz.Native.Asm
-open Ssz.Native.Kernel.Avx512 (assign_apply)
+open EthLib.Cryptography.Hash.Sha256 hiding K IV
+open EthLib.Consensus.Ssz.Native.Asm
+open EthLib.Consensus.Ssz.Native.Kernel.Avx512 (assign_apply)
 
 /-- The mask load, the byte reversals, and the transpose of the loaded nodes. -/
 def loadMoves : List Instr :=
@@ -100,8 +101,8 @@ theorem viewRun_stores (G : Gpr → UInt64) (base : Gpr) (offset : Nat → Nat) 
     · -- The last store's row takes its register, and earlier rows sit at other offsets.
       by_cases last : t = n
       · subst last; simp [regs]
-      · rw [if_neg (fun e => last (inj t ht n (by omega) (by omega))), rows t (by omega)]
-    · rw [if_neg (ha n (by omega)), others a fun t ht => ha t (by omega)]
+      · rw [ite_eq_right (fun e => last (inj t ht n (by omega) (by omega))), rows t (by omega)]
+    · rw [ite_eq_right (ha n (by omega)), others a fun t ht => ha t (by omega)]
 
 /-- The rows of one transposed half of a batch's schedule words. -/
 abbrev wordStores (first : Nat) : List Instr := stores sp (fun t => wordSlot (first + t)) transposed 8
@@ -141,9 +142,9 @@ theorem loadWords_spec (base : Gpr) (stride first : Nat) (hf : first ≤ 8) (s :
   have row : ∀ t < 8, ∀ l : Fin 8, s2.vec (transposed t) (lane l) =
       bswap (readWord s.mem ((s.gpr base).toNat + stride * l.val + 4 * t)) := fun t ht l => by
     have src := loadMoves_sources ⟨t, ht⟩ (lane l)
-    rw [if_pos (show (lane l).val < 8 from l.isLt)] at src
+    rw [ite_eq_left (show (lane l).val < 8 from l.isLt)] at src
     rw [agree _ _ (by rw [src]; simp), src]
-    exact congrArg bswap ((loaded (lane l).val l.isLt ⟨t, by omega⟩).trans (if_pos ht))
+    exact congrArg bswap ((loaded (lane l).val l.isLt ⟨t, by omega⟩).trans (ite_eq_left ht))
   -- The stores, lane by lane.
   have whole : s' = exec (wordStores first) s2 := by
     simp only [s', s2, s1, loadWords_eq, exec_append]
@@ -197,7 +198,7 @@ theorem outStores_mem (s : State) (n : Nat) (hn : n ≤ 8) :
   | zero =>
     refine ⟨fun x => ?_, rfl, rfl, rfl, rfl⟩
     simp only [stores, List.range_zero, List.map_nil, exec_nil]
-    rw [if_neg (by omega)]
+    rw [ite_eq_right (by omega)]
   | succ n ih =>
     obtain ⟨mem, gpr, vec, zf, cf⟩ := ih (by omega)
     have split : stores out (fun p => 32 * p) transposed (n + 1) =
@@ -210,12 +211,12 @@ theorem outStores_mem (s : State) (n : Nat) (hn : n ≤ 8) :
     -- The new row, or an earlier one, or memory as it was.
     simp only [store]
     by_cases inside : (s.gpr out).toNat + 32 * n ≤ x ∧ x < (s.gpr out).toNat + 32 * n + 32
-    · rw [if_pos inside, if_pos (by omega), show (x - (s.gpr out).toNat) / 32 = n by omega,
+    · rw [ite_eq_left inside, ite_eq_left (by omega), show (x - (s.gpr out).toNat) / 32 = n by omega,
         show x - ((s.gpr out).toNat + 32 * n) = (x - (s.gpr out).toNat) % 32 by omega]
-    · rw [if_neg inside, mem x]
+    · rw [ite_eq_right inside, mem x]
       by_cases before : (s.gpr out).toNat ≤ x ∧ x < (s.gpr out).toNat + 32 * n
-      · rw [if_pos before, if_pos (by omega)]
-      · rw [if_neg before, if_neg (by omega)]
+      · rw [ite_eq_left before, ite_eq_left (by omega)]
+      · rw [ite_eq_right before, ite_eq_right (by omega)]
 
 /-- Byte m of a byte-reversed word, the least significant first, is byte m of the word, the most significant first. -/
 theorem bswap_byte (y : UInt32) (m : Nat) (hm : m < 4) :
@@ -248,16 +249,16 @@ theorem output_spec (s : State) (table : TableAt s.mem (s.gpr tbl).toNat) :
   have whole : s' = exec outStores (exec outMoves s) := exec_append _ _ _
   rw [← whole] at mem g2 v2 z2 c2
   refine ⟨fun p hp k hk => ?_, fun x hx => ?_, g2.trans g1, z2.trans z1, c2.trans c1⟩
-  · rw [mem, g1, if_pos (by omega), show ((s.gpr out).toNat + 32 * p + k - (s.gpr out).toNat) / 32 = p by omega,
+  · rw [mem, g1, ite_eq_left (by omega), show ((s.gpr out).toNat + 32 * p + k - (s.gpr out).toNat) / 32 = p by omega,
       show ((s.gpr out).toNat + 32 * p + k - (s.gpr out).toNat) % 32 = k by omega, digest_get _ _ hk,
       Vector.getElem_ofFn]
     -- Byte k of row p is byte k mod 4 of lane k / 4, which holds word k / 4 of pair p, byte-reversed.
     have src := outMoves_sources ⟨p, hp⟩ ⟨k / 4, by omega⟩
-    rw [if_pos (show k / 4 < 8 by omega)] at src
+    rw [ite_eq_left (show k / 4 < 8 by omega)] at src
     simp only [laneByte, laneOf, wordByte]
     rw [show (⟨k / 4 % 16, by omega⟩ : Fin 16) = ⟨k / 4, by omega⟩ by apply Fin.ext; simp; omega,
       agree _ _ (by rw [src]; simp), src]
     exact bswap_byte _ (k % 4) (by omega)
-  · rw [mem, g1, if_neg (by omega), m1]
+  · rw [mem, g1, ite_eq_right (by omega), m1]
 
-end Ssz.Native.Kernel.Avx2
+end EthLib.Consensus.Ssz.Native.Kernel.Avx2

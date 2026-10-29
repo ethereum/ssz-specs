@@ -13,10 +13,11 @@ Each copy reads four bytes and writes them, last first, somewhere else.
 A run of copies whose destinations are disjoint, and miss every source, leaves each destination its source reversed.
 -/
 
-namespace Ssz.Native.Kernel.Baseline
+namespace EthLib.Consensus.Ssz.Native.Kernel.Baseline
 
-open Ssz.Sha256 Ssz.Native.Asm
-open Ssz.Native.Kernel.Avx512 (assign_apply)
+open EthLib.Cryptography.Hash.Sha256 hiding K IV
+open EthLib.Consensus.Ssz.Native.Asm
+open EthLib.Consensus.Ssz.Native.Kernel.Avx512 (assign_apply)
 
 /-- Byte k of a reversed four-byte load is byte 3 - k of memory. -/
 theorem swapLow32_byte (mem : Nat → UInt8) (a k : Nat) (hk : k < 4) :
@@ -35,7 +36,7 @@ theorem swapCopy_exec (src dst : Mem) (hd : dst.base ≠ blocks) (s : State) :
         gpr := assign s.gpr blocks (swapLow32 (readLE s.mem (s.addr src) 4))
         mem := store s.mem (s.addr dst) 4 (qwordByte (swapLow32 (readLE s.mem (s.addr src) 4))) } := by
   -- The load and the reversal write only the general register, which the destination's address does not read.
-  simp only [swapCopy, exec, exec1, Width.bytes, State.addr, assign_apply, if_true, if_neg hd]
+  simp only [swapCopy, exec, exec1, Width.bytes, State.addr, assign_apply, ite_true, ite_eq_right hd]
   congr 1
   funext r
   simp only [assign]
@@ -78,16 +79,16 @@ theorem copies_spec (src dst : Nat → Mem) (n : Nat) (s : State)
       by_cases last : i = n
       · -- The last copy's destination: its source, which no earlier copy wrote.
         subst last
-        rw [if_pos (by omega), show s.addr (dst i) + k - s.addr (dst i) = k by omega, swapLow32_byte _ _ _ hk]
+        rw [ite_eq_left (by omega), show s.addr (dst i) + k - s.addr (dst i) = k by omega, swapLow32_byte _ _ _ hk]
         exact rest _ fun j hj => by have := apart i (by omega) j (by omega); omega
       · -- An earlier destination, which the last copy misses.
         have := disjoint i hi n (by omega) last
-        rw [if_neg (by omega)]
+        rw [ite_eq_right (by omega)]
         exact done i (by omega) k hk
     · simp only [store]
-      rw [if_neg (by have := hy n (by omega); omega)]
+      rw [ite_eq_right (by have := hy n (by omega); omega)]
       exact rest y fun i hi => hy i (by omega)
-    · simp only [assign_apply, if_neg hr]; exact gpr r hr
+    · simp only [assign_apply, ite_eq_right hr]; exact gpr r hr
 
 /-- Byte k of a reversed word is byte 3 - k of memory. -/
 theorem wordByte_bswap (mem : Nat → UInt8) (a k : Nat) (hk : k < 4) :
@@ -182,4 +183,4 @@ theorem outCopies_spec (s : State) (apart : Apart ((s.gpr sp).toNat, frame) ((s.
   congr 1
   omega
 
-end Ssz.Native.Kernel.Baseline
+end EthLib.Consensus.Ssz.Native.Kernel.Baseline

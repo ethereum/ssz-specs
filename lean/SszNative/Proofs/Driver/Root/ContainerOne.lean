@@ -14,9 +14,9 @@ The proof follows the fields one at a time, with memory holding the nodes writte
 What a call on a field's type does is taken as a hypothesis, so the proof is one step of an induction on the type.
 -/
 
-namespace Ssz.Native.Driver
+namespace EthLib.Consensus.Ssz.Native.Driver
 
-open Ssz.Native.Ir Ssz.Native.Ir.Expr Ssz.Native.Ir.Stmt Ssz.Native.Asm
+open EthLib.Consensus.Ssz.Native.Ir EthLib.Consensus.Ssz.Native.Ir.Expr EthLib.Consensus.Ssz.Native.Ir.Stmt EthLib.Consensus.Ssz.Native.Asm
 
 /-! ### Copies as buffers -/
 
@@ -34,14 +34,14 @@ theorem holds_copied {mem : Memory} {sa da : Nat} {src dest : ByteArray} (hs : H
   simp only [copied, Asm.store]
   split
   · -- Inside the copied range, the byte comes from the source.
-    rw [if_pos (by omega), show sa + so + (da + x - (da + d)) = sa + (so + (x - d)) by omega]
+    rw [ite_eq_left (by omega), show sa + so + (da + x - (da + d)) = sa + (so + (x - d)) by omega]
     exact hs _ (by omega)
   · -- Elsewhere, the destination's byte stays.
-    rw [if_neg (by omega)]
+    rw [ite_eq_right (by omega)]
     exact hd x hx
 
 /-- Memory holding a buffer holds its first bytes. -/
-theorem _root_.Ssz.Native.Holds.take {mem : Memory} {a : Nat} {bytes : ByteArray} (h : Holds mem a bytes) (n : Nat) :
+theorem _root_.EthLib.Consensus.Ssz.Native.Holds.take {mem : Memory} {a : Nat} {bytes : ByteArray} (h : Holds mem a bytes) (n : Nat) :
     Holds mem a (bytes.extract 0 n) := by
   intro i hi
   rw [ByteArray.size_extract] at hi
@@ -107,9 +107,9 @@ theorem zero32_runs {m : Module} {w : World} {sp : Nat} {env : Env} {mem : Memor
     ofNat_toNat (show slot + 16 < 2 ^ 64 by omega), ofNat_toNat (show slot + 24 < 2 ^ 64 by omega), Width.bytes,
     qwordByte_of_zero]
   by_cases h0 : slot ≤ a ∧ a < slot + 32
-  · rw [if_pos h0]; repeat' split
+  · rw [ite_eq_left h0]; repeat' split
     all_goals first | rfl | omega
-  · rw [if_neg h0, if_neg (by omega), if_neg (by omega), if_neg (by omega), if_neg (by omega)]
+  · rw [ite_eq_right h0, ite_eq_right (by omega), ite_eq_right (by omega), ite_eq_right (by omega), ite_eq_right (by omega)]
 
 /-- One byte a program may use, loaded. -/
 theorem eval_ld1_of {w : World} {env : Env} {mem : Memory} {a : Expr} {n : Nat}
@@ -171,7 +171,7 @@ theorem copyLoops_runs {m : Module} {w : World} {sp : Nat} {env : Env} {mem : Me
       have more : k + 8 ≤ width := by
         by_cases h : k + 8 ≤ width
         · exact h
-        · rw [if_neg h] at c; cases c; exact absurd rfl nz
+        · rw [ite_eq_right h] at c; cases c; exact absurd rfl nz
       have stored := Runs.store m w sp (Asm.assign env 17 (UInt64.ofNat k)) (copied mem slot (a + o) k) .b8 _ _ _ _
         (dstAt k _) (eval_ld (srcAt k _) (access_sub sAcc (by omega) (by omega)))
         (by rw [ofNat_toNat (by omega)]; exact access_sub dAcc (by omega) (by simp only [Width.bytes]; omega))
@@ -188,7 +188,7 @@ theorem copyLoops_runs {m : Module} {w : World} {sp : Nat} {env : Env} {mem : Me
     have c := eval_le (w := w) (mem := copied mem slot (a + o) k₁) (eval_add (eval_var assign_eq) (eval_lit 8))
       (eval_var (wV k₁)) (show k₁ + 8 < 2 ^ 64 by omega) (show width < 2 ^ 64 by omega)
     rw [exit₁] at c
-    intro h; rw [if_pos h] at c; cases c
+    intro h; rw [ite_eq_left h] at c; cases c
   -- Then single bytes, while any are left.
   let inv₂ : Env → Memory → Prop := fun e mm =>
     ∃ k, k ≤ width ∧ e = Asm.assign env 17 (UInt64.ofNat k) ∧ mm = copied mem slot (a + o) k
@@ -205,7 +205,7 @@ theorem copyLoops_runs {m : Module} {w : World} {sp : Nat} {env : Env} {mem : Me
       have more : k < width := by
         by_cases h : k < width
         · exact h
-        · rw [if_neg h] at c; cases c; exact absurd rfl nz
+        · rw [ite_eq_right h] at c; cases c; exact absurd rfl nz
       have stored := Runs.store m w sp (Asm.assign env 17 (UInt64.ofNat k)) (copied mem slot (a + o) k) .b1 _ _ _ _
         (dstAt k _) (eval_ld1_of (srcAt k _) (access_sub sAcc (by omega) (by omega)))
         (by rw [ofNat_toNat (by omega)]; exact access_sub dAcc (by omega) (by simp only [Width.bytes]; omega))
@@ -222,7 +222,7 @@ theorem copyLoops_runs {m : Module} {w : World} {sp : Nat} {env : Env} {mem : Me
       (show k₂ < 2 ^ 64 by omega) (show width < 2 ^ 64 by omega)
     rw [exit₂] at c
     by_cases h : k₂ < width
-    · rw [if_pos h] at c; cases c
+    · rw [ite_eq_left h] at c; cases c
     · omega
   subst stop₂
   exact Runs.block_cons (Runs.set' (eval_lit 0)) (Runs.block_cons run₁ (Runs.block_cons run₂ (Runs.block_nil _ _ _ _ _)))
@@ -514,12 +514,12 @@ theorem leafBody_runs {m : Module} {w : World} (fns : RootsFns m) {sp : Nat} {me
       have run := copyLeaf_runs (m := m) (w := w) (sp := sp) (env := E3) (mem := mem) e3s ev3.args.src ev3.off e3w fw
         sAcc dAcc (by omega)
       have hl : leafNext f b start o leaves j = b.copySlice (start + o) leaves (32 * j) (fixedWidth f) := by
-        unfold leafNext; rw [if_pos packs]
+        unfold leafNext; rw [ite_eq_left packs]
       rw [hl]
       refine ⟨_, _, Runs.ite_true 1 (eval_var (by rw [e3e, packs]; rfl)) (by decide) run,
         ev3.write _ (by omega), by rw [assign_ne (by decide)]; exact e3w,
         copySlice_size _ _ _ _ _ (by omega) (by omega), fun x lo hx => ?_, ?_, fun a ha hp => ?_⟩
-      · rw [copySlice_get _ _ _ _ _ _ (by omega) (by omega) hx, if_neg (by omega)]
+      · rw [copySlice_get _ _ _ _ _ _ (by omega) (by omega) hx, ite_eq_right (by omega)]
         exact zero x (by omega) hx
       · -- The copy into the zeroed node is the Lean copy into the zero buffer's first nodes.
         rw [← copySlice_extract b leaves (start + o) (32 * j) (fixedWidth f) (32 * (j + 1)) (by omega) (by omega)
@@ -527,18 +527,18 @@ theorem leafBody_runs {m : Module} {w : World} (fns : RootsFns m) {sp : Nat} {me
         have hz : Holds (zeroed mem (out + 32 + 32 * j)) (out + 32) (leaves.extract 0 (32 * (j + 1))) :=
           holds_prefix (by omega) fun x hx => by
             by_cases lo : x < 32 * j
-            · simp only [zeroed, Asm.store]; rw [if_neg (by omega)]; exact Holds.prefix_get held (by omega) lo
-            · simp only [zeroed, Asm.store]; rw [if_pos (by omega), zero x (by omega) (by omega)]
+            · simp only [zeroed, Asm.store]; rw [ite_eq_right (by omega)]; exact Holds.prefix_get held (by omega) lo
+            · simp only [zeroed, Asm.store]; rw [ite_eq_left (by omega), zero x (by omega) (by omega)]
         have hb : Holds (zeroed mem (out + 32 + 32 * j)) base b := fun i hi => by
           simp only [zeroed, Asm.store]
-          rw [if_neg (by omega), keeps _ (by omega) (by omega)]
+          rw [ite_eq_right (by omega), keeps _ (by omega) (by omega)]
           exact pre.holds i hi
         have := holds_copied hb hz (so := start + o) (d := 32 * j) (len := fixedWidth f) (by omega)
           (by rw [ByteArray.size_extract]; omega)
         rwa [← Nat.add_assoc base start o] at this
       · -- The copy writes only inside the field's node.
         simp only [copied, zeroed, Asm.store]
-        rw [if_neg (by omega), if_neg (by omega)]
+        rw [ite_eq_right (by omega), ite_eq_right (by omega)]
         exact keeps a ha hp
     · -- Any other field: a call on its type writes its root at its node.
       have sz := sized (by simpa using packs)
@@ -559,13 +559,13 @@ theorem leafBody_runs {m : Module} {w : World} (fns : RootsFns m) {sp : Nat} {me
               eval_var ev3.args.ctx]; rfl) call
       have hl : leafNext f b start o leaves j =
           (rootsOf f b (start + o) (fixedWidth f) 1).copySlice 0 leaves (32 * j) 32 := by
-        unfold leafNext; rw [if_neg packs]
+        unfold leafNext; rw [ite_eq_right packs]
       rw [hl]
       refine ⟨_, _, Runs.ite_false (eval_var (by rw [e3e, show packsIntoNode f = false by simpa using packs]; rfl))
         (Runs.block_cons r (Runs.block_nil _ _ _ _ _)),
         ev3.write (x := 10) _ (Or.inr (Or.inl rfl)), by rw [assign_ne (by decide)]; exact e3w,
         copySlice_size _ _ _ _ _ (by omega) (by omega), fun x lo hx => ?_, ?_, fun a ha hp => ?_⟩
-      · rw [copySlice_get _ _ _ _ _ _ (by omega) (by omega) hx, if_neg (by omega)]
+      · rw [copySlice_get _ _ _ _ _ _ (by omega) (by omega) hx, ite_eq_right (by omega)]
         exact zero x (by omega) hx
       · -- The nodes before stay, and the field's node holds its root.
         refine holds_prefix (by rw [copySlice_size _ _ _ _ _ (by omega) (by omega)]; omega) fun x hx => ?_
@@ -637,7 +637,7 @@ theorem leafLoop_runs {m : Module} {w : World} (fns : RootsFns m) {sp : Nat} {me
     have hb := pre.below
     have capv := cap_eq
     have c := eval_lt (w := w) (mem := mem) (eval_var ev.i) (eval_var ev.len) (by omega) (by omega)
-    rw [if_neg (Nat.lt_irrefl _)] at c
+    rw [ite_eq_right (Nat.lt_irrefl _)] at c
     rw [fieldLeaves]
     exact ⟨env, mem, Runs.loop_exit _ _ _ _ _ _ _ c, ⟨q, o, ev⟩, rfl, held, keeps⟩
   | f :: rest, sub, q, o, j, leaves, env, mem, ev, count, plan, planIn, offIn, size, zero, held, keeps => by
@@ -659,7 +659,7 @@ theorem leafLoop_runs {m : Module} {w : World} (fns : RootsFns m) {sp : Nat} {me
     have hb := pre.below
     have capv := cap_eq
     have c := eval_lt (w := w) (mem := mem) (eval_var ev.i) (eval_var ev.len) (by omega) (by omega)
-    rw [if_pos (by omega)] at c
+    rw [ite_eq_left (by omega)] at c
     rw [fieldLeaves_cons]
     exact ⟨env₂, mem₂, Runs.loop_step 1 c (by decide) body loop, ev₂, by rw [size₂, size₁], held₂, keeps₂⟩
 
@@ -821,4 +821,4 @@ theorem containerOne_runs {m : Module} {w : World} (hash : HashingOk m w) (fns :
   refine holds_of_nodeAt ms ?_
   rw [root, md', nodes, md]
 
-end Ssz.Native.Driver
+end EthLib.Consensus.Ssz.Native.Driver

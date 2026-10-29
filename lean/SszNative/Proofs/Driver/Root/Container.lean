@@ -7,9 +7,9 @@ The container driver writes the Lean root of a container whose fields are rooted
 The fields driver writes the field roots into the scratch, and the tree driver folds them into the root.
 -/
 
-namespace Ssz.Native.Driver
+namespace EthLib.Consensus.Ssz.Native.Driver
 
-open Ssz Ssz.Native.Ir Ssz.Native.Ir.Expr Ssz.Native.Ir.Stmt Ssz.Native.Asm
+open EthLib.Consensus.Ssz EthLib.Consensus.Ssz.Native.Ir EthLib.Consensus.Ssz.Native.Ir.Expr EthLib.Consensus.Ssz.Native.Ir.Stmt EthLib.Consensus.Ssz.Native.Asm
 
 /-! ### Roots of fields -/
 
@@ -72,7 +72,7 @@ theorem varNeed_container {names : List String} {fields : List Desc} {size : Nat
     (notPlain : plain (.container names fields) = false) (below : varNeed (.container names fields) size < scratchCap) :
     varNeed (.container names fields) size = max (56 * fields.length + fieldsVarNeed fields size 0)
       (32 * fields.length + 32 + (2560 + 2048 + 32 * fields.length)) := by
-  simp only [varNeed, notPlain, Bool.false_eq_true, if_false, treeNeed, RootProgressive.spineBytes, zeroHeights,
+  simp only [varNeed, notPlain, Bool.false_eq_true, ite_false, treeNeed, RootProgressive.spineBytes, zeroHeights,
     sadd, smul, sat] at below ⊢
   have := cap_eq
   omega
@@ -236,8 +236,8 @@ theorem rootContainer_ok {m : Module} {w : World} (hash : HashingOk m w) (fns : 
       (joinNodes (fieldRoots fields b (rangesOf start (stop - start) (placesFrom fields b start 0))))
       fields.length (depthFor fields.length) := by
     rw [rootOf]
-    simp only [notPlain, Bool.false_eq_true, if_false, merkleizeCapacity, cut, Except.toOption, Option.getD_some]
+    simp only [notPlain, Bool.false_eq_true, ite_false, merkleizeCapacity, cut, Except.toOption, Option.getD_some]
   rw [root2, code]
   exact merkleizeDepth_of_nodes rlen sized nodes (le_two_pow_depthFor _) (by rw [usize]; omega)
 
-end Ssz.Native.Driver
+end EthLib.Consensus.Ssz.Native.Driver

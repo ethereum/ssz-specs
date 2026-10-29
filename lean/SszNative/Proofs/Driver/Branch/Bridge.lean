@@ -8,9 +8,9 @@ A filled context names a mask with a kernel the processor runs, the constant tab
 Free memory is everything off the context, the table, and the padding area.
 -/
 
-namespace Ssz.Native.Driver.BranchProof
+namespace EthLib.Consensus.Ssz.Native.Driver.BranchProof
 
-open Ssz.Native.Ir Ssz.Native.Asm
+open EthLib.Consensus.Ssz.Native.Ir EthLib.Consensus.Ssz.Native.Asm
 
 /-- A filled hashing context: its words, the table and padding area they name, and a mask with a kernel. -/
 structure CtxReady (w : World) (ctx table pad : Nat) (mask : UInt64) (mem : Memory) : Prop where
@@ -137,4 +137,4 @@ theorem verify_branch_hashing {m : Module} {w : World} (hash : HashingOk m w)
       ∀ a, CtxFree ctx.toNat table pad a → ¬ (scratch.toNat ≤ a ∧ a < scratch.toNat + 64) → mem' a = mem a :=
   verify_branch_calls hv hl hs (pairHashing_of hash ctx table pad mask) deep rd j
 
-end Ssz.Native.Driver.BranchProof
+end EthLib.Consensus.Ssz.Native.Driver.BranchProof

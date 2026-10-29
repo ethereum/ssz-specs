@@ -2,9 +2,9 @@ import SszNative.Proofs.Validate.Sound
 
 /-! Records of a fixed-size type, checked in one loop, refused exactly as deserializing each would. -/
 
-namespace Ssz.Native
+namespace EthLib.Consensus.Ssz.Native
 
-open Ssz
+open EthLib.Consensus.Ssz
 
 /-- Probes that all pass are refused nowhere. -/
 theorem probesPass_ok (b : ByteArray) (start : Nat) :
@@ -90,7 +90,7 @@ theorem recordsPass_append (b : ByteArray) (width : Nat) (probes : List Probe) :
     simp only [recordsPass] at first
     split at first
     · rename_i head
-      rw [Nat.add_right_comm, recordsPass, if_pos head]
+      rw [Nat.add_right_comm, recordsPass, ite_eq_left head]
       have shifted : start + width + width * m = start + width * (m + 1) := by rw [Nat.mul_succ]; omega
       exact recordsPass_append b width probes (start + width) m n first (by rw [shifted]; exact rest)
     · exact absurd first Bool.false_ne_true
@@ -211,4 +211,4 @@ theorem checkRuns_runs (d : Desc) : ∀ (b : ByteArray) (start : Nat),
     · rw [checkRuns_single]
       simp [repeatProbes, shiftAll_zero]
 
-end Ssz.Native
+end EthLib.Consensus.Ssz.Native

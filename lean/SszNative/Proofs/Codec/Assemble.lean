@@ -1,7 +1,7 @@
 import SszNative.Codec
-import Ssz.Proofs.Codec.RoundTrip
-import Ssz.Proofs.Codec.RoundTripComposite
-import Ssz.Proofs.Codec.RoundTripScalar
+import EthLib.Consensus.Proofs.Ssz.Codec.RoundTrip
+import EthLib.Consensus.Proofs.Ssz.Codec.RoundTripComposite
+import EthLib.Consensus.Proofs.Ssz.Codec.RoundTripScalar
 
 /-!
 Laying out the encodings of a value's parts gives the value's encoding.
@@ -11,9 +11,9 @@ Assembling those encodings is then serializing the value, refusals included.
 A fixed-size part must have its type's width, which serialization guarantees for every type of the specification.
 -/
 
-namespace Ssz.Native
+namespace EthLib.Consensus.Ssz.Native
 
-open Ssz
+open EthLib.Consensus.Ssz
 
 /-- Parts each of their type's width pass the check, so nothing is refused before the layout. -/
 theorem checkParts_ok : ∀ (fields : List Desc) (parts : List Bytes),
@@ -125,7 +125,7 @@ theorem assemble_struct (fields : List Desc) (sound : ∀ field ∈ fields, fiel
       else layOut fields (parts.map ByteArray.mk)) = (serializeStruct fields values).map ByteArray.mk := by
   -- A struct has one part per field, so the count always matches.
   have count := serializeFields_length fields values parts wrote
-  rw [List.length_map, count, bne_self_eq_false, if_neg (by decide),
+  rw [List.length_map, count, bne_self_eq_false, ite_eq_right (by decide),
     layOut_ok fields parts (struct_widths fields sound values parts wrote)]
   simp [serializeStruct, wrote, Bind.bind, Except.bind]
 
@@ -193,7 +193,7 @@ theorem assemble_byteList (limit : Nat) (parts : List ByteArray) :
 /-- Pushing a bit leaves every other position as it was. -/
 theorem push_other (bits : Array Bool) (bit : Bool) (i : Nat) (other : i ≠ bits.size) :
     (bits.push bit)[i]? = bits[i]? := by
-  rw [Array.getElem?_push, if_neg other]
+  rw [Array.getElem?_push, ite_eq_right other]
 
 /-- Pushing a bit puts it right after the last one. -/
 theorem push_at (bits : Array Bool) (bit : Bool) (i : Nat) (at_ : i = bits.size) :
@@ -311,4 +311,4 @@ theorem assemble_progressiveBitList (limit : Option Nat) (bits : Array Bool) :
   -- The one bound is checked alike.
   cases boundCheck limit bits.size <;> rfl
 
-end Ssz.Native
+end EthLib.Consensus.Ssz.Native

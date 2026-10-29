@@ -1,5 +1,5 @@
 import SszNative.Root
-import Ssz.Codec.Proof
+import EthLib.Consensus.Ssz.Codec.Proof
 
 /-!
 Nodes, branches, and multiproofs read from an encoding, and their verification.
@@ -8,9 +8,9 @@ Each walk is the specification's, with a range of the encoding in place of a val
 A node's subtree is rooted from its own bytes alone, so a branch costs about one root of the value.
 -/
 
-namespace Ssz.Native
+namespace EthLib.Consensus.Ssz.Native
 
-open Ssz
+open EthLib.Consensus.Ssz
 
 /-- The values under a tree: fixed-size elements back to back, or listed one by one with gaps. -/
 inductive Slots where
@@ -306,4 +306,4 @@ def verifyMerkleMultiproof (leaves proof : List ByteArray) (indices : List Nat) 
   checkNodes proof
   return rebuilt == root
 
-end Ssz.Native
+end EthLib.Consensus.Ssz.Native

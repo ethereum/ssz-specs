@@ -8,9 +8,9 @@ Memory holds the encoding as bytes from an address, and the output as words from
 The output is written word by word: the count, then each range's start and stop.
 -/
 
-namespace Ssz.Native.Driver
+namespace EthLib.Consensus.Ssz.Native.Driver
 
-open Ssz.Native.Ir Ssz.Native.Asm Ssz.Native.Plan
+open EthLib.Consensus.Ssz.Native.Ir EthLib.Consensus.Ssz.Native.Asm EthLib.Consensus.Ssz.Native.Plan
 
 /-- Memory with some of the words from an address replaced, those a test picks, by what a function gives. -/
 def wordsAt (a : Nat) (f : Nat → UInt64) (written : Nat → Bool) (mem : Memory) : Memory :=
@@ -30,7 +30,7 @@ theorem store_wordsAt (a : Nat) (f : Nat → UInt64) (written : Nat → Bool) (m
   · have word : (x - a) / 8 = k := by omega
     have byte : x - (a + 8 * k) = (x - a) % 8 := by omega
     simp [inside, word, byte, show a ≤ x by omega]
-  · rw [if_neg inside]
+  · rw [ite_eq_right inside]
     by_cases above : a ≤ x
     · have other : ((x - a) / 8 == k) = false := by simp; omega
       simp [above, other]
@@ -110,10 +110,10 @@ theorem viewWord_map (g : Nat → Nat × Nat) (n i : Nat) (small : i < n) :
       viewWord ((List.range n).map g) (2 + 2 * i) = (g i).2.toUInt64 := by
   constructor
   · simp only [viewWord]
-    rw [if_neg (by omega), if_pos (by omega), show (1 + 2 * i - 1) / 2 = i by omega]
+    rw [ite_eq_right (by omega), ite_eq_left (by omega), show (1 + 2 * i - 1) / 2 = i by omega]
     simp [List.getD_eq_getElem?_getD, small]
   · simp only [viewWord]
-    rw [if_neg (by omega), if_neg (by omega), show (2 + 2 * i - 1) / 2 = i by omega]
+    rw [ite_eq_right (by omega), ite_eq_right (by omega), show (2 + 2 * i - 1) / 2 = i by omega]
     simp [List.getD_eq_getElem?_getD, small]
 
 /-- The word of a view at a range's start or stop, for ranges one width apart. -/
@@ -122,10 +122,10 @@ theorem viewWord_stride (start width count i : Nat) (small : i < count) :
       viewWord (Ranges.stride start width count).toList (2 + 2 * i) = (start + (i + 1) * width).toUInt64 := by
   constructor
   · simp only [viewWord]
-    rw [if_neg (by omega), if_pos (by omega), show (1 + 2 * i - 1) / 2 = i by omega]
+    rw [ite_eq_right (by omega), ite_eq_left (by omega), show (1 + 2 * i - 1) / 2 = i by omega]
     simp [Ranges.toList, List.getD_eq_getElem?_getD, small]
   · simp only [viewWord]
-    rw [if_neg (by omega), if_neg (by omega), show (2 + 2 * i - 1) / 2 = i by omega]
+    rw [ite_eq_right (by omega), ite_eq_right (by omega), show (2 + 2 * i - 1) / 2 = i by omega]
     simp [Ranges.toList, List.getD_eq_getElem?_getD, small]
 
 set_option linter.unusedSimpArgs false in
@@ -147,7 +147,7 @@ theorem stride_ok (m : Module) (w : World) (linked : HasCodec m) (sp : Nat) (mem
   have readable : w.access out 8 := access_inside writable 0 8 (by omega)
   simp only [viewOutcome, lenEq]
   by_cases fits : count ≤ cap
-  · simp only [fits, if_true]
+  · simp only [fits, ite_true]
     let f := viewWord (Ranges.stride start width count).toList
     -- After i elements, the words of their ranges are written.
     let inv : Env → Memory → Prop := fun env cur =>
@@ -254,7 +254,7 @@ theorem stride_ok (m : Module) (w : World) (linked : HasCodec m) (sp : Nat) (mem
     refine Calls.fn (env' := assign env' 4 0) found room rfl ?_ (by simp [strideRanges, Stride.r, eval, assign])
     exact Runs.block_cons r2 (Runs.block_cons (Runs.ite_true 1 check (by decide)
       (Runs.block_cons i0 (Runs.block_cons runs (Runs.block_cons stored r0)))) (Runs.block_nil _ _ _ _ _))
-  · simp only [fits, if_false]
+  · simp only [fits, ite_false]
     have r2 := Runs.set m w inner (entryEnv args) mem 4 (.lit 2) 2 rfl
     have check : eval w (assign (entryEnv args) 4 2) mem (Expr.le (.var 2) (.load .b8 (.var 3))) = some 0 := by
       simp [args, eval, Expr.le, assign, entryEnv, Cond.holds, capacity, Width.bytes,
@@ -342,7 +342,7 @@ theorem readLE_offset (mem : Memory) (data : Nat) (b : ByteArray) (bytes : Bytes
 theorem wordsAt_far (a : Nat) (f : Nat → UInt64) (written : Nat → Bool) (mem : Memory) (n x : Nat)
     (bounded : ∀ k, written k = true → k < n) (far : x < a ∨ a + 8 * n ≤ x) : wordsAt a f written mem x = mem x := by
   simp only [wordsAt]
-  rw [if_neg]
+  rw [ite_eq_right]
   rintro ⟨above, holds⟩
   have := bounded _ holds
   omega
@@ -476,9 +476,9 @@ theorem offsets_ok (m : Module) (w : World) (linked : HasCodec m) (sp : Nat) (me
     intro i small
     simp only [nxt, nextOffset, List.getD_eq_getElem?_getD]
     by_cases more : i + 1 < count
-    · rw [if_pos more, List.getElem?_append_left (by simp [lenOffs]; omega)]
+    · rw [ite_eq_left more, List.getElem?_append_left (by simp [lenOffs]; omega)]
       simp [offsets, offs, more]
-    · rw [if_neg more, List.getElem?_append_right (by simp [lenOffs]; omega)]
+    · rw [ite_eq_right more, List.getElem?_append_right (by simp [lenOffs]; omega)]
       simp [lenOffs, show i + 1 - count = 0 by omega]
   have offsSmall : ∀ i, offs i < 2 ^ 32 := by
     intro i
@@ -511,13 +511,13 @@ theorem offsets_ok (m : Module) (w : World) (linked : HasCodec m) (sp : Nat) (me
     · refine Runs.ite_true 1 (by simp [eval, Expr.lt, assign, e6, e3, Cond.holds, aluResult,
         ofNat_succ_lt i count (by omega) smallCount, more]) (by decide) ?_
       refine Runs.set _ _ _ _ _ 9 _ _ ?_
-      rw [nxtEq i small, if_pos more]
+      rw [nxtEq i small, ite_eq_left more]
       exact readAt _ cur (i + 1) (by simp [Fixed, assign] at fixed ⊢; exact fixed) bytes more _
         (by simp [eval, assign, e6, aluResult])
     · refine Runs.ite_false (by simp [eval, Expr.lt, assign, e6, e3, Cond.holds, aluResult,
         ofNat_succ_lt i count (by omega) smallCount, more]) ?_
       refine Runs.set _ _ _ _ _ 9 _ _ ?_
-      rw [nxtEq i small, if_neg more]
+      rw [nxtEq i small, ite_eq_right more]
       simp [eval, assign, e10]
   -- After i offsets, the flag says whether every one so far ends no earlier than it starts.
   let inv₁ : Env → Memory → Prop := fun env cur =>
@@ -808,7 +808,7 @@ theorem vector_table (element : Desc) (length : Nat) (b : ByteArray) (start stop
   have nz : (length == 0) = false := by simpa using some_
   have head : ((List.range length).map fun i => offsetAt b (start + i * bytesPerOffset))[0]! = offsetAt b start := by
     rw [getElem!_pos _ 0 (by simp; omega)]; simp
-  simp only [vectorRanges, tableRanges, varies, show ¬ (stop - start ≥ offsetBound) by omega, if_false,
+  simp only [vectorRanges, tableRanges, varies, show ¬ (stop - start ≥ offsetBound) by omega, ite_false,
     show ¬ (stop - start < length * bytesPerOffset) by omega, nz, Bool.false_eq_true, head, first, bne_self_eq_false,
     throw, throwThe, MonadExceptOf.throw, Bind.bind, Except.bind, pure, Except.pure]
   cases offsetSpans ((List.range length).map fun i => offsetAt b (start + i * bytesPerOffset)) (stop - start) <;> rfl
@@ -964,7 +964,7 @@ theorem vector_ok (m : Module) (w : World) (linked : HasCodec m) (sp : Nat) (mem
       have differ : UInt64.ofNat size ≠ UInt64.ofNat (width * length) :=
         fun same => exact ((ofNat_eq_ofNat _ _ sizeSmall (by omega)).mp same)
       simp only [eval, Expr.eq, f7, f8, f4, word, aluResult, Nat.toUInt64_eq, product, Bind.bind, Option.bind]
-      simp only [pure, Cond.holds, beq_iff_eq, differ, decide_false, if_false]
+      simp only [pure, Cond.holds, beq_iff_eq, differ, decide_false, ite_false]
   | none =>
     have word : widthWord element = 18446744073709551615 := by simp [widthWord, fixed]
     have tableWord : UInt64.ofNat length * 4 = UInt64.ofNat (length * 4) := by simp
@@ -977,7 +977,7 @@ theorem vector_ok (m : Module) (w : World) (linked : HasCodec m) (sp : Nat) (mem
     by_cases fits : length * 4 ≤ size
     · have tableCheck : eval w env₂ mem (Expr.le (.var 4 * 4) (.var 7)) = some 1 := by
         simp only [eval, Expr.le, f4, f7, aluResult, tableWord, Bind.bind, Option.bind, pure, holds_be,
-          ofNat_le_iff _ _ (show length * 4 < 2 ^ 64 by omega) sizeSmall, fits, decide_true, if_true]
+          ofNat_le_iff _ _ (show length * 4 < 2 ^ 64 by omega) sizeSmall, fits, decide_true, ite_true]
       by_cases empty : length = 0
       · -- No elements: no ranges, written as such.
         subst empty
@@ -1040,7 +1040,7 @@ theorem vector_ok (m : Module) (w : World) (linked : HasCodec m) (sp : Nat) (mem
             (Runs.ite_false nonzero (Runs.ite_false ?_ (Runs.skip _ _ _ _ _))))))
             (by simp [viewOutcome, f6, Except.map])
           simp only [eval, Expr.eq, readFirst, f4, aluResult, tableWord, Bind.bind, Option.bind, pure, Cond.holds,
-            beq_iff_eq, Nat.toUInt64_eq, differ, decide_false, if_false]
+            beq_iff_eq, Nat.toUInt64_eq, differ, decide_false, ite_false]
 
     · -- Too small for the table: refused.
       have refused : ∃ err, vectorRanges element length b start stop = .error err :=
@@ -1053,7 +1053,7 @@ theorem vector_ok (m : Module) (w : World) (linked : HasCodec m) (sp : Nat) (mem
         (by simp [viewOutcome, f6, Except.map])
       simp only [eval, Expr.le, f4, f7, aluResult, tableWord, Bind.bind, Option.bind, pure, holds_be,
         ofNat_le_iff _ _ (show length * 4 < 2 ^ 64 by omega) sizeSmall, fits, decide_false, Bool.false_eq_true,
-        if_false]
+        ite_false]
 
 /-- An optional bound as the drivers read it: the bound, or the word for none. -/
 def limitWord : Option Nat → Nat
@@ -1424,14 +1424,14 @@ theorem list_ok (m : Module) (w : World) (linked : HasCodec m) (sp : Nat) (mem :
           cases limit with
           | none =>
             simp only [listRanges, notBig, nonEmpty, fixed, show ¬ stop - start < bytesPerOffset by
-              simp [bytesPerOffset]; omega, if_false, beq_iff_eq, bne_iff_ne, ne_eq, firstBits.1,
+              simp [bytesPerOffset]; omega, ite_false, beq_iff_eq, bne_iff_ne, ne_eq, firstBits.1,
               firstBits.2.1, firstBits.2.2, not_true, throw, throwThe, MonadExceptOf.throw, Bind.bind,
               Except.bind, pure, Except.pure, decide_false, Bool.false_eq_true, ite_false]
             exact shape _
           | some bound =>
             have := within bound rfl
             simp only [listRanges, notBig, nonEmpty, fixed, show ¬ stop - start < bytesPerOffset by
-              simp [bytesPerOffset]; omega, if_false, beq_iff_eq, bne_iff_ne, ne_eq, firstBits.1,
+              simp [bytesPerOffset]; omega, ite_false, beq_iff_eq, bne_iff_ne, ne_eq, firstBits.1,
               firstBits.2.1, firstBits.2.2, not_true, show ¬ offsetAt b start / bytesPerOffset > bound by
               simp only [bytesPerOffset, count, first] at this ⊢; omega, throw, throwThe, MonadExceptOf.throw, Bind.bind,
               Except.bind, pure, Except.pure, decide_false, Bool.false_eq_true, ite_false]
@@ -1478,4 +1478,4 @@ theorem list_ok (m : Module) (w : World) (linked : HasCodec m) (sp : Nat) (mem :
           simp [bytesPerOffset]; omega, show stop - start < offsetAt b start by
             simp only [size] at past; omega, throw, throwThe, MonadExceptOf.throw, Bind.bind, Except.bind] at h
 
-end Ssz.Native.Driver
+end EthLib.Consensus.Ssz.Native.Driver

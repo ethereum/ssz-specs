@@ -7,10 +7,11 @@ Each pass runs a block of rowwise code lane by lane, then moves its pointers and
 The lanes keep their invariants, because those read only registers, scratch rows, and table rows.
 -/
 
-namespace Ssz.Native.Kernel.Avx512x2
+namespace EthLib.Consensus.Ssz.Native.Kernel.Avx512x2
 
-open Ssz.Sha256 Ssz.Native.Asm
-open Ssz.Native.Kernel.Avx512 (tbl add_toNat roundsTo K W PW role)
+open EthLib.Cryptography.Hash.Sha256 hiding K IV
+open EthLib.Consensus.Ssz.Native.Asm
+open EthLib.Consensus.Ssz.Native.Kernel.Avx512 (tbl add_toNat roundsTo K W PW role)
 
 /-- The first-block invariant reads only registers, scratch rows, and table rows. -/
 theorem FirstInv.congr {S T : Nat} {l : Fin 16} {m : Nat → ByteArray} {t : Nat} {v v' : View}
@@ -207,4 +208,4 @@ theorem padLoop_step (S T : Nat) (mid : Fin 16 → Nat → Vector UInt32 8) (G0 
   · rw [zz, g1, inv.blocksLeft]
     exact down.2.trans ⟨fun h => by omega, fun h => by omega⟩
 
-end Ssz.Native.Kernel.Avx512x2
+end EthLib.Consensus.Ssz.Native.Kernel.Avx512x2

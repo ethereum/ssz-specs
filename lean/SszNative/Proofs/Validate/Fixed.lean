@@ -2,9 +2,9 @@ import SszNative.Proofs.Validate.Records
 
 /-! A fixed-size type's sizes and probes refuse a range exactly as deserialization refuses its slice. -/
 
-namespace Ssz.Native
+namespace EthLib.Consensus.Ssz.Native
 
-open Ssz
+open EthLib.Consensus.Ssz
 
 /-- The size checks deserialization makes of a fixed-size type, before reading any byte. -/
 theorem deserialize_head (d : Desc) (data : Bytes) (fixed : hasWidth d = true) :
@@ -32,7 +32,7 @@ theorem deserialize_head (d : Desc) (data : Bytes) (fixed : hasWidth d = true) :
   | vector element length =>
     -- A vector of fixed-size elements knows its element width before reading.
     simp only [hasWidth] at fixed
-    have sized : element.fixedSize = some (fixedWidth element) := by rw [fixedSize_eq, if_pos fixed]
+    have sized : element.fixedSize = some (fixedWidth element) := by rw [fixedSize_eq, ite_eq_left fixed]
     -- Too large for offsets, or not the declared width: either way the vector is refused before any element.
     refine ⟨fun h => ?_, fun small wrong => ?_⟩
     · simp [deserialize, vectorSlices, h.2, throw, throwThe, MonadExceptOf.throw, Bind.bind, Except.bind,
@@ -80,4 +80,4 @@ theorem validateFixed_sound (d : Desc) (fixed : hasWidth d = true) (b : ByteArra
     -- At any other width, both refuse with the same scope error.
     · simp [wrong, head.2 over wrong, throw, throwThe, MonadExceptOf.throw, Bind.bind, Except.bind]
 
-end Ssz.Native
+end EthLib.Consensus.Ssz.Native

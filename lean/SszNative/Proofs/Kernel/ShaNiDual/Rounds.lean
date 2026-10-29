@@ -2,9 +2,10 @@ import SszNative.Proofs.Kernel.ShaNiDual.Lane
 
 /-! The interleaved kernel's round groups, for either pair's registers. -/
 
-namespace Ssz.Native.Kernel.ShaNiDual
+namespace EthLib.Consensus.Ssz.Native.Kernel.ShaNiDual
 
-open Ssz.Native.Asm Ssz.Sha256
+open EthLib.Consensus.Ssz.Native.Asm
+open EthLib.Cryptography.Hash.Sha256 hiding K IV
 open ShaNi (writes VecOnly exec_frame exec_vec Quad Packed rounds2_packed schedule_step Recurs rounds rounds_four
   K P read_table tableWord_k tableWord_pad)
 
@@ -34,7 +35,7 @@ theorem loadWK (g : Lane) (r : Nat) (hr : r < 16) (s : State) (table : TableAt s
     (l : Fin 16) (hl : l.val < 4) :
     (exec [.movdqa wk (g.msg r), .padddMem wk (tableEntry (kShaNi r))] s).vec wk l =
       K (4 * r + l.val) + w (4 * r + l.val) := by
-  simp only [exec_cons, exec_nil, exec1, assign, low, hl, if_true]
+  simp only [exec_cons, exec_nil, exec1, assign, low, hl, ite_true]
   -- The constant's address is the table's register plus the group's offset.
   have addr : ({ s with vec := assign s.vec wk (low (s.vec wk) (s.vec (g.msg r))) } : State).addr
       (tableEntry (kShaNi r)) = s.addr ⟨tbl, kShaNi r⟩ := rfl
@@ -234,10 +235,10 @@ theorem paddingRounds_spec (g : Lane) (hg : Good g) (r : Nat) (hr : r < 16) (s :
     have lane : ∀ l : Fin 16, l.val < 4 →
         (exec1 (.movdqu wk (tableEntry (padShaNi r))) s).vec wk l = K (4 * r + l.val) + P (4 * r + l.val) := by
       intro l hl
-      simp only [exec1, assign, low, hl, if_true]
+      simp only [exec1, assign, low, hl, ite_true]
       rw [show s.addr (tableEntry (padShaNi r)) = s.addr ⟨tbl, padShaNi r⟩ from rfl,
         read_table s table _ _ (by simp [padShaNi]; omega) (by simp [padShaNi, tableSize]; omega),
         tableWord_pad r l hr hl, paddingWK, Nat.mod_eq_of_lt (by omega)]
     exact ⟨lane 0 (by decide), lane 1 (by decide), lane 2 (by decide), lane 3 (by decide)⟩
 
-end Ssz.Native.Kernel.ShaNiDual
+end EthLib.Consensus.Ssz.Native.Kernel.ShaNiDual

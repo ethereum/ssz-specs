@@ -7,9 +7,9 @@ What a call means, and what the code of a call must guarantee to the code around
 The guarantee is the same for compiled functions and for routines written by hand, so either can call either.
 -/
 
-namespace Ssz.Native.Ir
+namespace EthLib.Consensus.Ssz.Native.Ir
 
-open Ssz.Native.Asm
+open EthLib.Consensus.Ssz.Native.Asm
 
 /-- What calling a function or a routine of a module means, with some fuel, from a stack pointer. -/
 def callSpec (m : Module) (w : World) (fuel : Nat) (f : String) (sp : Nat) (values : List UInt64) (mem : Memory) :
@@ -55,4 +55,4 @@ def CallOk (image : Image) (w : World) (name : String)
       (∀ g ∈ keptRegs, s'.gpr g = s.gpr g) ∧ (∀ a, a < w.stackLo ∨ w.stackHi ≤ a → s'.mem a = ir' a) ∧
       (∀ a, sp ≤ a → a < w.stackHi → s'.mem a = s.mem a) ∧ s'.cpu = s.cpu ∧ s'.status = .running
 
-end Ssz.Native.Ir
+end EthLib.Consensus.Ssz.Native.Ir

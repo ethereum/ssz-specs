@@ -9,11 +9,11 @@ and the whole check returns zero exactly when the Lean check accepts the encodin
 with the refusal's four words written.
 -/
 
-namespace Ssz.Native.Driver.Validate
+namespace EthLib.Consensus.Ssz.Native.Driver.Validate
 
 set_option maxRecDepth 20000
 
-open Ssz Ssz.Native Ssz.Native.Ir Ssz.Native.Asm Ssz.Native.Ir.Stmt Ssz.Native.Ir.Expr
+open EthLib.Consensus.Ssz EthLib.Consensus.Ssz.Native EthLib.Consensus.Ssz.Native.Ir EthLib.Consensus.Ssz.Native.Asm EthLib.Consensus.Ssz.Native.Ir.Stmt EthLib.Consensus.Ssz.Native.Ir.Expr
 
 /-! The plan's bytes, read back as its words. -/
 
@@ -181,4 +181,4 @@ theorem validate_correct {m : Module} {w : World} (hm : Loaded m) (d : Desc)
   | ok u => left; exact ⟨rfl, rfl, rfl⟩
   | error e => right; exact ⟨e, rfl, rfl, fun i hi => wrote_read mem err e i hi⟩
 
-end Ssz.Native.Driver.Validate
+end EthLib.Consensus.Ssz.Native.Driver.Validate

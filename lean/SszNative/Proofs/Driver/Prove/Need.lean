@@ -11,9 +11,9 @@ of nesting.
 Each child's need, plus the record and the job, fits its parent's.
 -/
 
-namespace Ssz.Native.Driver.ProveProof
+namespace EthLib.Consensus.Ssz.Native.Driver.ProveProof
 
-open Ssz Ssz.Native Ssz.Native.Plan
+open EthLib.Consensus.Ssz EthLib.Consensus.Ssz.Native EthLib.Consensus.Ssz.Native.Plan
 
 set_option maxRecDepth 20000
 
@@ -112,7 +112,7 @@ theorem var_child {c d : Desc} (h : IsChild c d) (notPlain : plain c = false) (s
   cases d <;> simp only [IsChild] at h
   case vector e l =>
     subst h
-    simp only [varNeed, dNot, Bool.false_eq_true, if_false, recordBytes, layoutBytes, sadd, smul, sat] at below ⊢
+    simp only [varNeed, dNot, Bool.false_eq_true, ite_false, recordBytes, layoutBytes, sadd, smul, sat] at below ⊢
     omega
   case list e l | progressiveList e l =>
     subst h
@@ -120,12 +120,12 @@ theorem var_child {c d : Desc} (h : IsChild c d) (notPlain : plain c = false) (s
       cases hb : c.isBasic
       · rfl
       · rw [RootProof.plain_of_basic hb] at notPlain; cases notPlain
-    simp only [varNeed, nb, notPlain, Bool.false_eq_true, if_false, recordBytes, layoutBytes, sadd, smul, sat]
+    simp only [varNeed, nb, notPlain, Bool.false_eq_true, ite_false, recordBytes, layoutBytes, sadd, smul, sat]
       at below ⊢
     omega
   case container names fs =>
     have m := fieldsVarNeed_mem fs size 0 c h
-    simp only [varNeed, dNot, Bool.false_eq_true, if_false, recordBytes, layoutBytes, sadd, smul, sat] at below ⊢
+    simp only [varNeed, dNot, Bool.false_eq_true, ite_false, recordBytes, layoutBytes, sadd, smul, sat] at below ⊢
     omega
   case progressiveContainer active names fs =>
     have m := fieldsVarNeed_mem fs size 0 c h
@@ -188,24 +188,24 @@ theorem elementCount_le_nodes {element : Desc} {b : ByteArray} {start stop size 
     (table : element.fixedSize = none → start + 4 * elementCount element b start stop ≤ stop)
     (small : size < 2 ^ 62) : elementCount element b start stop ≤ nodesBound element size := by
   have cap : scratchCap = 2 ^ 62 := rfl
-  simp only [nodesBound, notBasic, Bool.false_eq_true, if_false]
+  simp only [nodesBound, notBasic, Bool.false_eq_true, ite_false]
   by_cases fx : hasWidth element = true
-  · have hs : element.fixedSize = some (fixedWidth element) := by rw [fixedSize_eq, if_pos fx]
-    simp only [elementCount, hs, if_pos fx]
+  · have hs : element.fixedSize = some (fixedWidth element) := by rw [fixedSize_eq, ite_eq_left fx]
+    simp only [elementCount, hs, ite_eq_left fx]
     have le := satWidth_le_width element
     by_cases z : fixedWidth element = 0
     · simp [z]
     · have nz : satWidth element ≠ 0 := fun h => z (width_zero_of_sat element h)
-      simp only [beq_iff_eq, z, if_false, nz, sat]
+      simp only [beq_iff_eq, z, ite_false, nz, sat]
       have a1 : (stop - start) / fixedWidth element ≤ size / fixedWidth element :=
         Nat.div_le_div_right (by omega)
       have a2 : size / fixedWidth element ≤ size / satWidth element :=
         Nat.div_le_div_left le (Nat.pos_of_ne_zero nz)
       have a3 : size / satWidth element ≤ size := Nat.div_le_self _ _
       omega
-  · have hs : element.fixedSize = none := by rw [fixedSize_eq, if_neg fx]
+  · have hs : element.fixedSize = none := by rw [fixedSize_eq, ite_eq_right fx]
     have t := table hs
-    simp only [elementCount, hs, if_neg fx, sat, bytesPerOffset]
+    simp only [elementCount, hs, ite_eq_right fx, sat, bytesPerOffset]
     split
     · omega
     · have : offsetAt b start / 4 = elementCount element b start stop := by
@@ -226,14 +226,14 @@ theorem vector_tree (el : Desc) (n size : Nat) (nb : el.isBasic = false)
   simp only [varNeed] at hv ⊢
   split at hv
   · rename_i pl
-    rw [if_pos pl]
-    simp only [rootsNeed, nb, Bool.false_eq_true, if_false, if_true] at hv ⊢
+    rw [ite_eq_left pl]
+    simp only [rootsNeed, nb, Bool.false_eq_true, ite_false, ite_true] at hv ⊢
     generalize (if sat n ≤ recordsPerChunk then rootsNeed el (sat n)
       else sadd (smul 32 (sat n)) (rootsNeed el recordsPerChunk)) = chunks at hv ⊢
     simp only [treeNeed, RootProgressive.spineBytes, zeroHeights, sadd, smul, sat] at hv ⊢
     omega
   · rename_i pl
-    rw [if_neg pl]
+    rw [ite_eq_right pl]
     generalize varNeed el size = v at hv ⊢
     simp only [treeNeed, RootProgressive.spineBytes, zeroHeights, sadd, smul, sat] at hv ⊢
     omega
@@ -245,13 +245,13 @@ theorem container_tree (names : List String) (fs : List Desc) (size : Nat)
   simp only [varNeed] at hv ⊢
   split at hv
   · rename_i pl
-    rw [if_pos pl]
-    simp only [rootsNeed, if_true] at hv ⊢
+    rw [ite_eq_left pl]
+    simp only [rootsNeed, ite_true] at hv ⊢
     generalize fieldsRootsNeed fs 1 0 = most at hv ⊢
     simp only [treeNeed, RootProgressive.spineBytes, zeroHeights, sadd, smul, sat] at hv ⊢
     omega
   · rename_i pl
-    rw [if_neg pl]
+    rw [ite_eq_right pl]
     generalize fieldsVarNeed fs size 0 = most at hv ⊢
     simp only [treeNeed, RootProgressive.spineBytes, zeroHeights, sadd, smul, sat] at hv ⊢
     omega
@@ -384,19 +384,19 @@ theorem chunk_need {d : Desc} {b : ByteArray} {s e : Nat} {layout : EncodedLayou
           Nat.lt_of_le_of_lt (Nat.le_max_left _ _) below
         have dpl : plain (.vector el n) = true := by simpa [plain] using pl
         have rest : rootsNeed el (min n recordsPerChunk) ≤ varNeed (.vector el n) b.size := by
-          simp only [varNeed, dpl, if_true] at hv ⊢
-          simp only [rootsNeed, nb, Bool.false_eq_true, if_false, if_true] at hv ⊢
+          simp only [varNeed, dpl, ite_true] at hv ⊢
+          simp only [rootsNeed, nb, Bool.false_eq_true, ite_false, ite_true] at hv ⊢
           have chunk : recordsPerChunk = 1024 := rfl
           by_cases hn : n ≤ scratchCap
           · have sn : sat n = n := by simp only [sat]; omega
             rw [sn] at hv ⊢
             by_cases small : n ≤ recordsPerChunk
-            · rw [if_pos small] at hv ⊢
+            · rw [ite_eq_left small] at hv ⊢
               rw [Nat.min_eq_left small]
               generalize rootsNeed el n = r at hv ⊢
               simp only [sadd, sat] at hv ⊢
               omega
-            · rw [if_neg small] at hv ⊢
+            · rw [ite_eq_right small] at hv ⊢
               rw [Nat.min_eq_right (by omega)]
               generalize rootsNeed el recordsPerChunk = r at hv ⊢
               generalize (if n = 0 then 0 else _) = x at hv ⊢
@@ -433,7 +433,7 @@ theorem chunk_need {d : Desc} {b : ByteArray} {s e : Nat} {layout : EncodedLayou
         have hv := Vd
         have lt := Nat.lt_of_le_of_lt hv below
         unfold chunkNeed at grow
-        simp only [varNeed, nb, pl, Bool.false_eq_true, if_false, if_true] at hv lt
+        simp only [varNeed, nb, pl, Bool.false_eq_true, ite_false, ite_true] at hv lt
         generalize max (rootsNeed el 1) (rootsNeed el (min (nodesBound el b.size) recordsPerChunk)) = E at hv lt grow
         generalize treeNeed (nodesBound el b.size) = t at hv lt
         generalize smul 32 (nodesBound el b.size) = u at hv lt
@@ -500,4 +500,4 @@ theorem layout_need {d : Desc} {b : ByteArray} {s e : Nat} {layout : EncodedLayo
     generalize scratchCap = C at below ⊢
     omega
 
-end Ssz.Native.Driver.ProveProof
+end EthLib.Consensus.Ssz.Native.Driver.ProveProof

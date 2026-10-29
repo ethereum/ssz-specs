@@ -2,9 +2,9 @@ import SszNative.Proofs.Validate.Plan
 
 /-! A fixed-size type's probes refuse a value of its width exactly as deserialization does. -/
 
-namespace Ssz.Native
+namespace EthLib.Consensus.Ssz.Native
 
-open Ssz
+open EthLib.Consensus.Ssz
 
 /-- Records one width apart, each refused as its probes refuse it. -/
 theorem records_sound (element : Desc) (b : ByteArray) (start width : Nat) :
@@ -101,7 +101,7 @@ theorem plan_sound (d : Desc) : ∀ (b : ByteArray) (start : Nat), hasWidth d = 
     -- A vector of fixed-size elements fits under the offset bound, so its size check passes.
     intro b start fixed bounded inside
     simp only [hasWidth] at fixed
-    have elementSize : element.fixedSize = some (fixedWidth element) := by rw [fixedSize_eq, if_pos fixed]
+    have elementSize : element.fixedSize = some (fixedWidth element) := by rw [fixedSize_eq, ite_eq_left fixed]
     have small := bounded rfl
     simp only [fixedWidth] at small inside ⊢
     have size := slice_size b start (start + fixedWidth element * length) inside
@@ -162,4 +162,4 @@ theorem plan_sound (d : Desc) : ∀ (b : ByteArray) (start : Nat), hasWidth d = 
     · subst held; exact ihHead b start fixed bounded inside
     · exact ihTail held later b start fixed bounded inside
 
-end Ssz.Native
+end EthLib.Consensus.Ssz.Native

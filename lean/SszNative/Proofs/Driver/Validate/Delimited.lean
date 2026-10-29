@@ -4,11 +4,11 @@ import SszNative.Proofs.Driver.Validate.Probe
 Checking a delimited bit encoding in place: not empty, closed by a set bit, and within its limit.
 -/
 
-namespace Ssz.Native.Driver.Validate
+namespace EthLib.Consensus.Ssz.Native.Driver.Validate
 
 set_option maxRecDepth 20000
 
-open Ssz Ssz.Native Ssz.Native.Ir Ssz.Native.Asm Ssz.Native.Ir.Stmt Ssz.Native.Ir.Expr
+open EthLib.Consensus.Ssz EthLib.Consensus.Ssz.Native EthLib.Consensus.Ssz.Native.Ir EthLib.Consensus.Ssz.Native.Asm EthLib.Consensus.Ssz.Native.Ir.Stmt EthLib.Consensus.Ssz.Native.Ir.Expr
 
 /-- The highest set bit of a byte, as the native check finds it: the last of seven shifts left nonzero. -/
 def highest (y : UInt64) : UInt64 :=
@@ -64,7 +64,7 @@ theorem discard_delimited (b : ByteArray) (start stop : Nat) (limit : Option Nat
   simp only [delimitedCount, Functor.discard]
   by_cases z : stop - start = 0
   · simp [z, throw, throwThe, MonadExceptOf.throw, Bind.bind, Except.bind, Functor.mapConst, Except.map]
-  · simp only [z, if_false, beq_iff_eq, hf, hall]
+  · simp only [z, ite_false, beq_iff_eq, hf, hall]
     by_cases f : (b.get! (stop - 1)).toNat = 0
     · by_cases a : AllZero b start (stop - start) <;>
         simp [f, a, throw, throwThe, MonadExceptOf.throw, Bind.bind, Except.bind, Functor.mapConst, Except.map]
@@ -153,7 +153,7 @@ theorem delimited_calls {m : Module} {w : World} (hm : Loaded m) (mem : Memory) 
     have hbyte := (b.get! (stop - 1)).toNat_lt
     wsteps [hsz, z, rf, af]
     by_cases f : (b.get! (stop - 1)).toNat = 0
-    · rw [if_neg z, if_pos f]
+    · rw [ite_eq_right z, ite_eq_left f]
       wsteps [f]
       refine Wp.loop (wp_loop (fun env mem' => mem' = mem ∧ ∃ i, i ≤ stop - start ∧ env 8 = UInt64.ofNat i ∧
           env 6 = UInt64.ofNat (stop - start) ∧ env 4 = UInt64.ofNat err ∧ env 5 = 0 ∧ env 0 = UInt64.ofNat (base + start) ∧
@@ -198,7 +198,7 @@ theorem delimited_calls {m : Module} {w : World} (hm : Loaded m) (mem : Memory) 
         wfail [h4]
         wsteps []
         wfin [res, after, wrote_eq, notall]
-    · rw [if_neg z, if_neg f]
+    · rw [ite_eq_right z, ite_eq_right f]
       wsteps [f]
       have hh := highest_eq (b.get! (stop - 1))
       generalize hy : (b.get! (stop - 1)).toNat = y at rf hbyte f hh
@@ -219,4 +219,4 @@ theorem delimited_calls {m : Module} {w : World} (hm : Loaded m) (mem : Memory) 
         · wsteps [hz, o]
           wfin [Plan.readBound, beq_iff_eq, hz, o, res, after]
 
-end Ssz.Native.Driver.Validate
+end EthLib.Consensus.Ssz.Native.Driver.Validate

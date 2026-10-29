@@ -11,9 +11,9 @@ selector matches.
 Decoding found that option the same way, so the walk never runs past the options.
 -/
 
-namespace Ssz.Native.Driver
+namespace EthLib.Consensus.Ssz.Native.Driver
 
-open Ssz Ssz.Native.Ir Ssz.Native.Ir.Expr Ssz.Native.Ir.Stmt Ssz.Native.Asm
+open EthLib.Consensus.Ssz EthLib.Consensus.Ssz.Native.Ir EthLib.Consensus.Ssz.Native.Ir.Expr EthLib.Consensus.Ssz.Native.Ir.Stmt EthLib.Consensus.Ssz.Native.Asm
 
 /-- A member of narrow types is narrow. -/
 theorem narrowAll_mem : ∀ (fs : List Desc), narrowAll fs = true → ∀ f ∈ fs, narrow f = true
@@ -278,11 +278,11 @@ theorem rootUnion_ok {m : Module} {w : World} (hash : HashingOk m w) (fns : Rang
           omega
         by_cases hcs : c = sel
         · -- The selected option: its root, into the scratch.
-          rw [if_pos hcs] at cmp
+          rw [ite_eq_left hcs] at cmp
           have dec' := dec
           obtain ⟨w', dec'⟩ := dec'
           rw [hs, ho] at dec'
-          simp only [deserializeOption, hcs, beq_self_eq_true, if_true] at dec'
+          simp only [deserializeOption, hcs, beq_self_eq_true, ite_true] at dec'
           obtain ⟨_, _, dec''⟩ := checksPassed dec'
           simp only [Bind.bind, Except.bind, pure, Except.pure] at dec''
           split at dec''
@@ -324,7 +324,7 @@ theorem rootUnion_ok {m : Module} {w : World} (hash : HashingOk m w) (fns : Rang
             rw [assign_ne (by decide), assign_ne (by decide), assign_eq, h9, h10, ofNat_toNat (by omega)]
             simp
         · -- Another option: its plan is skipped.
-          rw [if_neg hcs] at cmp
+          rw [ite_eq_right hcs] at cmp
           have next := next_ok m w fns.roots.plan.codec o soundO sp' mm (qa i) planO (room' o mo).2
           have r1 := Runs.call (m := m) (sp := sp') (env := e) (mem := mm) (dst := 8) (args := [RootUnion.q])
             (by simp only [List.mapM_cons, List.mapM_nil, eval_var h8]; rfl) next
@@ -349,7 +349,7 @@ theorem rootUnion_ok {m : Module} {w : World} (hash : HashingOk m w) (fns : Rang
           · rw [assign_ne (by decide), assign_ne (by decide)]; exact h10
           · obtain ⟨w', d'⟩ := dec
             rw [hs, ho] at d'
-            simp only [deserializeOption, beq_iff_eq, hcs, if_false] at d'
+            simp only [deserializeOption, beq_iff_eq, hcs, ite_false] at d'
             exact ⟨w', by rw [dropS selectors c sr hs, dropS options o or ho]; exact d'⟩
           · rw [req, hs, ho, dropS selectors c sr hs, dropS options o or ho, optionRoot.eq_def]
             simp [hcs]
@@ -379,7 +379,7 @@ theorem rootUnion_ok {m : Module} {w : World} (hash : HashingOk m w) (fns : Rang
     · exact h
   have c0 := eval_eq (w := w) (env := E6) (mem := mem6) (a := RootUnion.found) (b := 0) (eval_var h10) (eval_lit 0)
     (by decide) (by decide)
-  rw [if_neg (by decide)] at c0
+  rw [ite_eq_right (by decide)] at c0
   have ready6 := pre.ready.within (o := scratch) (n := 64 + F) sCtx sTable sZeros frame6
   obtain ⟨E7, mem7, run7, root7, ready7, keep7⟩ := mixin_ends hash (sp := sp') hashRoom
     ready6 k6.1.scratch k6.1.out k6.1.ctx (cnt := Expr.var 7) (n := sel) (fun _ => eval_var k6.2.2) (by omega)
@@ -404,4 +404,4 @@ theorem rootUnion_ok {m : Module} {w : World} (hash : HashingOk m w) (fns : Rang
     rw [keep7 a (fun h => s ⟨by omega, by omega⟩) o pd]
     exact frame6 a s pd
 
-end Ssz.Native.Driver
+end EthLib.Consensus.Ssz.Native.Driver

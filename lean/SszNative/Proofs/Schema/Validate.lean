@@ -4,9 +4,9 @@ import SszNative.Proofs.Root.Record
 
 /-! A compiled declaration refuses exactly what its declaration refuses. -/
 
-namespace Ssz.Native
+namespace EthLib.Consensus.Ssz.Native
 
-open Ssz
+open EthLib.Consensus.Ssz
 
 /-- The check of a fixed-size value over a whole encoding: the two size checks, then the probes. -/
 theorem validateFixed_whole (d : Desc) (width : Nat) (b : ByteArray) :
@@ -32,7 +32,7 @@ theorem Schema.validate_compile (d : Desc) (b : ByteArray) :
     · -- A struct of fixed-size fields: its sizes, then its probes.
       rename_i p
       simp only [Schema.validate, Native.validate]
-      rw [validateRange, if_pos (plain_hasWidth _ p), validateFixed_whole]
+      rw [validateRange, ite_eq_left (plain_hasWidth _ p), validateFixed_whole]
     · -- Any other struct takes the general check.
       rfl
   · -- Any other declaration takes the general check.
@@ -49,4 +49,4 @@ theorem Schema.validate_eq (s : Schema) (b : ByteArray) : s.validate b = Native.
   rw [s.eq_compile]
   exact Schema.validate_compile s.desc b
 
-end Ssz.Native
+end EthLib.Consensus.Ssz.Native

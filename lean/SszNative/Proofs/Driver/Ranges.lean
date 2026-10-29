@@ -7,9 +7,9 @@ It reads the type's tag from the plan and hands the composite to its own view.
 A union is cut here: the selector byte, then the rest.
 -/
 
-namespace Ssz.Native.Driver
+namespace EthLib.Consensus.Ssz.Native.Driver
 
-open Ssz.Native.Ir Ssz.Native.Asm Ssz.Native.Plan
+open EthLib.Consensus.Ssz.Native.Ir EthLib.Consensus.Ssz.Native.Asm EthLib.Consensus.Ssz.Native.Plan
 
 /-- The bounds the ranges driver needs beyond a narrow, well-formed type: the words it hands on fit. -/
 def viewSmall : Desc → Prop
@@ -118,11 +118,11 @@ theorem ranges_ok (m : Module) (w : World) (linked : HasCodec m) (sp : Nat) (mem
     by_cases h1 : start ≤ stop <;> by_cases h2 : stop ≤ b.size <;> simp [h1, h2]
   by_cases inb : start ≤ stop ∧ stop ≤ b.size
   case neg =>
-    rw [rangesOutcome, if_neg inb]
+    rw [rangesOutcome, ite_eq_right inb]
     refine finish _ _ _ ?_ (show assign (entryEnv args) 6 1 6 = 1 by simp [assign])
     rw [view_body]
     exact Runs.seq (Runs.set _ _ _ _ _ 6 _ _ rfl) (Runs.ite_false (by rw [bounds]; simp [inb]) (Runs.skip _ _ _ _ _))
-  rw [rangesOutcome, if_pos inb]
+  rw [rangesOutcome, ite_eq_left inb]
   have t := plan.2 0 (words_length_pos _)
   have tagWord : (words d)[0]'(words_length_pos _) = tag d := by cases d <;> rfl
   have t0 : w.access p 8 = true ∧ readLE mem p 8 = (tag d).toUInt64 := by simpa [tagWord] using t
@@ -144,7 +144,7 @@ theorem ranges_ok (m : Module) (w : World) (linked : HasCodec m) (sp : Nat) (mem
   have e6 : env₂ 6 = 3 := by simp [env₂, assign]
   cases d with
   | vector element length =>
-    rw [if_pos (by simp [tag])]
+    rw [ite_eq_left (by simp [tag])]
     simp only [narrow, Bool.and_eq_true] at thin
     have t1 := plan.2 1 (by simp [words])
     have elementPlan : PlanAt w mem (p + 16) (words element) := by
@@ -166,7 +166,7 @@ theorem ranges_ok (m : Module) (w : World) (linked : HasCodec m) (sp : Nat) (mem
     exact Runs.call (values := [(p + 16).toUInt64, data.toUInt64, start.toUInt64, stop.toUInt64, length.toUInt64,
       out.toUInt64]) (by evaluate [e0, e1, e3, e4, e5, a8, t1.1, t1.2]) callee
   | list element limit =>
-    rw [if_pos (by simp [tag])]
+    rw [ite_eq_left (by simp [tag])]
     simp only [narrow] at thin
     have t1 := plan.2 1 (by simp [words])
     have elementPlan : PlanAt w mem (p + 16) (words element) := by
@@ -188,7 +188,7 @@ theorem ranges_ok (m : Module) (w : World) (linked : HasCodec m) (sp : Nat) (mem
       (limitWord (some limit)).toUInt64, out.toUInt64]) (by evaluate [e0, e1, e3, e4, e5, a8, t1.1, t1.2, limitWord])
       callee
   | progressiveList element limit =>
-    rw [if_pos (by simp [tag])]
+    rw [ite_eq_left (by simp [tag])]
     simp only [narrow] at thin
     have t1 := plan.2 1 (by simp [words, bound_length]; omega)
     have t2 := plan.2 2 (by simp [words, bound_length]; omega)
@@ -221,7 +221,7 @@ theorem ranges_ok (m : Module) (w : World) (linked : HasCodec m) (sp : Nat) (mem
       exact Runs.ite_false (by evaluate [e0, a8, t1.1, t1.2])
         (Runs.set _ _ _ _ _ 8 _ _ (by evaluate [e0, a16, t2.1, t2.2, limitWord]))
   | container names fields =>
-    rw [if_pos (by simp [tag])]
+    rw [ite_eq_left (by simp [tag])]
     simp only [narrow, Bool.and_eq_true] at thin
     have t1 := plan.2 1 (by simp [words])
     have fieldsPlan : PlanAt w mem (p + 16) (wordsAll fields) := by
@@ -244,7 +244,7 @@ theorem ranges_ok (m : Module) (w : World) (linked : HasCodec m) (sp : Nat) (mem
     exact Runs.call (values := [(p + 16).toUInt64, data.toUInt64, start.toUInt64, stop.toUInt64,
       fields.length.toUInt64, out.toUInt64]) (by evaluate [e0, e1, e3, e4, e5, a8, t1.1, t1.2]) callee
   | progressiveContainer active names fields =>
-    rw [if_pos (by simp [tag])]
+    rw [ite_eq_left (by simp [tag])]
     simp only [narrow, Bool.and_eq_true] at thin
     let a := active.length
     let pre : List Nat := [11, a] ++ active.map (fun b => if b then 1 else 0) ++ [fields.length]
@@ -293,14 +293,14 @@ theorem ranges_ok (m : Module) (w : World) (linked : HasCodec m) (sp : Nat) (mem
       (Runs.call (values := [(p + 8 * (3 + a)).toUInt64, data.toUInt64, start.toUInt64, stop.toUInt64,
         fields.length.toUInt64, out.toUInt64]) (by evaluate [e0, e1, e3, e4, e5, q24, q16, tn.1, tn.2]) callee)
   | compatibleUnion selectors options =>
-    rw [if_pos (by simp [tag])]
+    rw [ite_eq_left (by simp [tag])]
     have less : eval w (assign env₂ 6 1) mem (Expr.lt (.var 3) (.var 4)) =
         some (if start < stop then 1 else 0) := by
       simp [Expr.lt, eval, assign, e3, e4, Cond.holds, ofNat_lt_ofNat start stop startSmall stopSmall]
     by_cases empty : stop - start < 1
     · -- No selector byte: refused.
       have none_ : ¬ start < stop := by omega
-      simp only [viewRanges, empty, if_true, viewOutcome]
+      simp only [viewRanges, empty, ite_true, viewOutcome]
       refine dispatch (assign env₂ 6 1) mem 1 ?_ (by simp [assign])
       unfold viewDispatch view
       dsimp only [Stmt.block, Stmt.ifElse, Stmt.assign, Stmt.callInto, Stmt.when, View.tag, View.plan, View.k,
@@ -308,7 +308,7 @@ theorem ranges_ok (m : Module) (w : World) (linked : HasCodec m) (sp : Nat) (mem
       branches [e7, tag]
       exact Runs.seq (Runs.set _ _ _ _ _ 6 _ _ rfl) (Runs.ite_false (by rw [less]; simp [none_]) (Runs.skip _ _ _ _ _))
     have some_ : start < stop := by omega
-    simp only [viewRanges, empty, if_false, viewOutcome, List.length]
+    simp only [viewRanges, empty, ite_false, viewOutcome, List.length]
     let env₃ := assign (assign env₂ 6 1) 6 2
     have capWord : eval w (assign (assign env₂ 6 1) 6 2) mem (Expr.le 2 (Expr.ld (.var 5))) =
         some (if 2 ≤ cap then 1 else 0) := by
@@ -317,7 +317,7 @@ theorem ranges_ok (m : Module) (w : World) (linked : HasCodec m) (sp : Nat) (mem
         at_.capacity, holds_be, le]
     by_cases fits : 0 + 1 + 1 ≤ cap
     · -- The selector byte and the rest are written, then the count.
-      simp only [fits, if_true]
+      simp only [fits, ite_true]
       rw [← union_written out start stop mem]
       have put : ∀ env cur (a v : Expr) (addr : Nat) (y : UInt64), eval w env cur a = some addr.toUInt64 →
           addr < 2 ^ 64 → eval w env cur v = some y → w.access addr 8 →
@@ -347,7 +347,7 @@ theorem ranges_ok (m : Module) (w : World) (linked : HasCodec m) (sp : Nat) (mem
       exact Runs.seq (put _ _ _ _ out 2 (by simp [eval, env₃, assign, e5, aluResult]) (by omega)
         (by simp [eval]) outReadable) (Runs.set _ _ _ _ _ 6 _ _ rfl)
     · -- No room for two ranges.
-      simp only [fits, if_false]
+      simp only [fits, ite_false]
       refine dispatch env₃ mem 2 ?_ (by simp [env₃, assign])
       unfold viewDispatch view
       dsimp only [Stmt.block, Stmt.ifElse, Stmt.assign, Stmt.callInto, Stmt.when, View.tag, View.plan, View.k,
@@ -357,7 +357,7 @@ theorem ranges_ok (m : Module) (w : World) (linked : HasCodec m) (sp : Nat) (mem
         (Runs.seq (Runs.set _ _ _ _ _ 6 _ _ rfl) (Runs.ite_false (by rw [capWord]; simp; omega)
           (Runs.skip _ _ _ _ _))))
   | _ =>
-    rw [if_neg (by simp [tag])]
+    rw [ite_eq_right (by simp [tag])]
     refine dispatch env₂ mem 3 ?_ e6
     unfold viewDispatch view
     dsimp only [Stmt.block, Stmt.ifElse, Stmt.assign, Stmt.callInto, Stmt.when, View.tag, View.plan, View.k,
@@ -365,4 +365,4 @@ theorem ranges_ok (m : Module) (w : World) (linked : HasCodec m) (sp : Nat) (mem
     branches [e7, tag]
     exact Runs.skip _ _ _ _ _
 
-end Ssz.Native.Driver
+end EthLib.Consensus.Ssz.Native.Driver

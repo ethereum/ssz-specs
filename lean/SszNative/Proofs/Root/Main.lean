@@ -3,9 +3,9 @@ import SszNative.Proofs.Root.Variable.Bridge
 
 /-! The native root of an encoding is the specification's root of the value it decodes to, or the same refusal. -/
 
-namespace Ssz.Native
+namespace EthLib.Consensus.Ssz.Native
 
-open Ssz
+open EthLib.Consensus.Ssz
 
 /--
 Given what the trees and the fixed-size roots compute, the native root agrees with the specification.
@@ -37,4 +37,4 @@ theorem hashTreeRoot_eq (d : Desc) (sound : d.wellFormed = .ok ()) (b : ByteArra
     (hashTreeRoot d b).map ByteArray.data = (do let v ← deserialize d b.data; Ssz.hashTreeRoot d v) :=
   hashTreeRoot_eq_of RootProof.facts_hold d sound b small
 
-end Ssz.Native
+end EthLib.Consensus.Ssz.Native

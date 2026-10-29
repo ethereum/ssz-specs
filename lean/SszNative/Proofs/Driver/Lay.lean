@@ -9,9 +9,9 @@ The driver checks every part against its type and sums the encoding's size, then
 variable parts as an offset, with their bytes after the fixed part.
 -/
 
-namespace Ssz.Native.Driver
+namespace EthLib.Consensus.Ssz.Native.Driver
 
-open Ssz.Native.Ir Ssz.Native.Asm Ssz.Native.Plan
+open EthLib.Consensus.Ssz.Native.Ir EthLib.Consensus.Ssz.Native.Asm EthLib.Consensus.Ssz.Native.Plan
 
 /-- The step to the next part's type: the same type, or the next field's. -/
 def layAdvance : Stmt := .ite (Expr.eq (.var 1) 0) (.call "ssz_plan_next" [.var 8] 8) .skip
@@ -147,7 +147,7 @@ theorem layOut_checked (ts : List Desc) (ps : List ByteArray) (passed : checkPar
 theorem lay_placed_outside (mem : Memory) (a : Nat) (A : ByteArray) (x : Nat) (far : x < a ∨ a + A.size ≤ x) :
     placed mem a A x = mem x := by
   simp only [placed, store]
-  rw [if_neg (by omega)]
+  rw [ite_eq_right (by omega)]
 
 /-- Bytes placed apart from each other may be placed in either order. -/
 theorem lay_placed_swap (mem : Memory) (a b : Nat) (A B : ByteArray) (apart : a + A.size ≤ b ∨ b + B.size ≤ a) :
@@ -155,8 +155,8 @@ theorem lay_placed_swap (mem : Memory) (a b : Nat) (A B : ByteArray) (apart : a 
   funext x
   simp only [placed, store]
   by_cases ha : a ≤ x ∧ x < a + A.size
-  · simp only [if_neg (show ¬ (b ≤ x ∧ x < b + B.size) by omega), if_pos ha]
-  · simp only [if_neg ha]
+  · simp only [ite_eq_right (show ¬ (b ≤ x ∧ x < b + B.size) by omega), ite_eq_left ha]
+  · simp only [ite_eq_right ha]
 
 /-- Bytes placed right after placed bytes extend them. -/
 theorem lay_placed_join (mem : Memory) (a : Nat) (A B : ByteArray) :
@@ -164,11 +164,11 @@ theorem lay_placed_join (mem : Memory) (a : Nat) (A B : ByteArray) :
   funext x
   simp only [placed, store, ByteArray.size_append]
   by_cases hb : a + A.size ≤ x ∧ x < a + A.size + B.size
-  · rw [if_pos hb, if_pos (by omega), show x - a = A.size + (x - (a + A.size)) by omega, Kernel.get!_append_right]
-  · rw [if_neg hb]
+  · rw [ite_eq_left hb, ite_eq_left (by omega), show x - a = A.size + (x - (a + A.size)) by omega, Kernel.get!_append_right]
+  · rw [ite_eq_right hb]
     by_cases ha : a ≤ x ∧ x < a + A.size
-    · rw [if_pos ha, if_pos (by omega), Kernel.get!_append_left _ _ _ (by omega)]
-    · rw [if_neg ha, if_neg (by omega)]
+    · rw [ite_eq_left ha, ite_eq_left (by omega), Kernel.get!_append_left _ _ _ (by omega)]
+    · rw [ite_eq_right ha, ite_eq_right (by omega)]
 
 /-- A store of bytes is placing them. -/
 theorem lay_store_placed (mem : Memory) (a n : Nat) (g : Nat → UInt8) (B : ByteArray) (size : B.size = n)
@@ -176,8 +176,8 @@ theorem lay_store_placed (mem : Memory) (a n : Nat) (g : Nat → UInt8) (B : Byt
   funext x
   simp only [placed, store, size]
   by_cases inside : a ≤ x ∧ x < a + n
-  · rw [if_pos inside, if_pos inside, each _ (by omega)]
-  · rw [if_neg inside, if_neg inside]
+  · rw [ite_eq_left inside, ite_eq_left inside, each _ (by omega)]
+  · rw [ite_eq_right inside, ite_eq_right inside]
 
 /-- Bytes in memory stay there when bytes are placed apart from them. -/
 theorem lay_bytes_placed {mem : Memory} {p : Nat} {b : ByteArray} (bytes : BytesAt mem p b) (a : Nat) (A : ByteArray)
@@ -283,7 +283,7 @@ theorem lay_advance (m : Module) (w : World) (linked : HasCodec m) (d : Desc) (s
       (Runs.call (values := [p.toUInt64]) (by simp [eval, e8]) walked)
   · have unchanged : assign env 8 p.toUInt64 = env := by
       funext x; by_cases h : x = 8 <;> simp [assign, h, e8]
-    simp only [if_true]
+    simp only [ite_true]
     rw [unchanged]
     exact Runs.ite_false (by simp [eval, Expr.eq, e1, Cond.holds]) (Runs.skip _ _ _ _ _)
 
@@ -324,7 +324,7 @@ theorem lay_grow (m : Module) (w : World) (inner : Nat) (env : Env) (cur : Memor
   refine ⟨assign (assign env₁ 13 wrap') 12 (T.toUInt64 + s.toUInt64), fun k h12 h13 h14 => ?_, ?_, ?_, ?_⟩
   · simp [assign, env₁, h12, h13, h14]
   · simp [assign, sumWord]
-  · simp only [assign, if_neg (show (13 : Nat) ≠ 12 by decide), if_pos rfl, wrap']
+  · simp only [assign, ite_eq_right (show (13 : Nat) ≠ 12 by decide), ite_eq_left rfl, wrap']
     rcases e13 with ⟨w0, lo⟩ | ⟨w1, hi⟩
     · by_cases over : 2 ^ 64 ≤ T % 2 ^ 64 + s
       · right; exact ⟨by simp [over], by omega⟩
@@ -345,4 +345,4 @@ theorem lay_cond_eval (w : World) (env : Env) (cur : Memory) (i N : Nat) (r : UI
     simp [layCheckCond, eval, Expr.lt, Expr.eq, e7, e3, e6, Cond.holds, aluResult, lt, z,
       ofNat_lt_ofNat i N hi hN]
 
-end Ssz.Native.Driver
+end EthLib.Consensus.Ssz.Native.Driver

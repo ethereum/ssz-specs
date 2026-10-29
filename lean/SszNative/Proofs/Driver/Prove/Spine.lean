@@ -8,9 +8,9 @@ The compiled spine driver writes the Lean progressive root of a run of nodes who
 It runs the same subtree loop and fold as the progressive tree driver, from a later first level.
 -/
 
-namespace Ssz.Native.Driver.ProveProof
+namespace EthLib.Consensus.Ssz.Native.Driver.ProveProof
 
-open Ssz Ssz.Native Ssz.Native.Ir Ssz.Native.Asm Ssz.Native.Ir.Stmt Ssz.Native.Ir.Expr
+open EthLib.Consensus.Ssz EthLib.Consensus.Ssz.Native EthLib.Consensus.Ssz.Native.Ir EthLib.Consensus.Ssz.Native.Asm EthLib.Consensus.Ssz.Native.Ir.Stmt EthLib.Consensus.Ssz.Native.Ir.Expr
 
 /-- Where the spine driver keeps each part of its state. -/
 def proveVars : SpineVars where
@@ -82,7 +82,7 @@ theorem spine_calls {m : Module} {w : World} (hash : HashingOk m w)
   by_cases empty : k = 0
   · -- No subtree: the root is the zero node.
     subst empty
-    rw [if_pos rfl] at c
+    rw [ite_eq_left rfl] at c
     have z := zero32_at (m := m) (sp := sp') (env := e1) (mem := mm1) (dst := ProveSpine.out)
       (fun _ => eval_var ev.out) pre.oAcc
     have body : Runs m w sp' E0 mem ProveSpine.fn.body e1 (zeroed mm1 out) :=
@@ -93,7 +93,7 @@ theorem spine_calls {m : Module} {w : World} (hash : HashingOk m w)
     · exact ready1.within (o := out) (n := 32) pre.oCtx pre.oTable pre.oZeros fun a o _ => zeroed_outside o
     · rw [zeroed_outside o]; exact frame a s pd
   · -- The spine closes with a zero node, then folds from the last pair up.
-    rw [if_neg (by omega)] at c
+    rw [ite_eq_right (by omega)] at c
     have less : ∀ l < k, 4 ^ j * spineStart l < count := fun l hl => by
       rcases lev with h | h
       · omega
@@ -141,4 +141,4 @@ theorem spine_calls {m : Module} {w : World} (hash : HashingOk m w)
     · exact ready2.within (o := out) (n := 32) pre.oCtx pre.oTable pre.oZeros fun a o pd => keep a o pd
     · rw [keep a o pd]; exact frame2 a s pd
 
-end Ssz.Native.Driver.ProveProof
+end EthLib.Consensus.Ssz.Native.Driver.ProveProof

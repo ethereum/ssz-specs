@@ -8,9 +8,9 @@ Node j of the level at height h, in a tree of height K, is node 2^(K-h) + j of t
 It holds the root of the specification's subtree over the leaves j 2^h onward.
 -/
 
-namespace Ssz.Native.Driver
+namespace EthLib.Consensus.Ssz.Native.Driver
 
-open Ssz Ssz.Native.Asm Ssz.Native.Ir
+open EthLib.Consensus.Ssz EthLib.Consensus.Ssz.Native.Asm EthLib.Consensus.Ssz.Native.Ir
 
 /-! ## Trees in memory -/
 
@@ -55,7 +55,7 @@ theorem climb_step (leaves : Array Bytes) (h : Nat) (narrow : leaves.size ≤ 2 
 theorem eval_shr1' {w : World} {env : Env} {mem : Memory} {a : Expr} {p : Nat}
     (ha : eval w env mem a = some (UInt64.ofNat p)) (bp : p < 2 ^ 64) :
     eval w env mem (.shr a 1) = some (UInt64.ofNat (p / 2)) := by
-  simp only [eval, ha, Option.bind_eq_bind, Option.bind, show (1 : Nat) < 64 from by decide, if_true]
+  simp only [eval, ha, Option.bind_eq_bind, Option.bind, show (1 : Nat) < 64 from by decide, ite_true]
   show some _ = some _
   congr 1
   apply UInt64.toNat_inj.mp
@@ -162,4 +162,4 @@ theorem StoreCtx.zeroAt {w : World} {mem : Memory} {ctx table zeros pad : Nat} {
     nodeAt mem (zeros + 32 * h) = zeroSubtree h :=
   nodeAt_zeros c.zeroRoots h hh
 
-end Ssz.Native.Driver
+end EthLib.Consensus.Ssz.Native.Driver

@@ -1,13 +1,13 @@
 import SszNative.Root
 import SszNative.Proofs.Reference
 import SszNative.Proofs.Validate.Main
-import Ssz.Proofs.Codec.NodeWidths
+import EthLib.Consensus.Proofs.Ssz.Codec.NodeWidths
 
 /-! Byte buffers of nodes, read as the specification's arrays of nodes. -/
 
-namespace Ssz.Native.RootProof
+namespace EthLib.Consensus.Ssz.Native.RootProof
 
-open Ssz Ssz.Native
+open EthLib.Consensus.Ssz EthLib.Consensus.Ssz.Native
 
 /-- The count nodes of a buffer from a byte offset, as the specification's array of nodes. -/
 def nodesFrom (nodes : ByteArray) (offset count : Nat) : Array Bytes :=
@@ -36,8 +36,8 @@ theorem hashPair_data (left right : ByteArray) (l : left.size = 32) (r : right.s
   -- One pair at offset zero: the digest of the 64 bytes.
   have sized : (hashPair left right).size = 32 := by
     simp [hashPair, hashPairs, hashPairsReference_size]
-  have parent : hashPair left right = Sha256.hash (left ++ right) := by
-    apply ext_get! _ _ (by rw [sized, Sha256.hash_size])
+  have parent : hashPair left right = Cryptography.Hash.Sha256.hash (left ++ right) := by
+    apply ext_get! _ _ (by rw [sized, Cryptography.Hash.Sha256.hash_size])
     intro k within
     rw [sized] at within
     have := hashPairsReference_get (left ++ right) 0 1 0 k (by simp) within
@@ -46,7 +46,7 @@ theorem hashPair_data (left right : ByteArray) (l : left.size = 32) (r : right.s
     rw [this, whole]
   -- The kernel's digest of the joined pair is the specification's combination.
   rw [parent, combine]
-  exact congrArg (fun x => (Sha256.hash x).data) (ByteArray.ext (ByteArray.data_append ..))
+  exact congrArg (fun x => (Cryptography.Hash.Sha256.hash x).data) (ByteArray.ext (ByteArray.data_append ..))
 
 /-- A buffer of zeros holds zeros. -/
 theorem zeros_data (n : Nat) (small : n < USize.size) : (zeros n).data = Array.replicate n 0 := by
@@ -60,7 +60,7 @@ theorem zeros_data (n : Nat) (small : n < USize.size) : (zeros n).data = Array.r
     rw [sized] at within
     have := gatherReference_get ByteArray.empty 0 0 0 1 n.toUSize 0 k (by simp) (by rw [toNat]; exact within)
       (by simp) (by simp)
-    simp only [toNat, Nat.mul_zero, USize.toNat_zero, Nat.not_lt_zero, if_false, Nat.zero_add] at this
+    simp only [toNat, Nat.mul_zero, USize.toNat_zero, Nat.not_lt_zero, ite_false, Nat.zero_add] at this
     simp only [zeros, gather]
     rw [this, Kernel.get!_eq _ _ (by simp [ByteArray.size]; exact within)]
     simp [ByteArray.getElem_eq_getElem_data]
@@ -190,4 +190,4 @@ theorem joinNodes_nodes (rs : List ByteArray) (sized : ∀ r ∈ rs, r.size = 32
   -- Each joined node takes 32 bytes.
   · rw [← ByteArray.size_data, data, concatData_size rs sized]
 
-end Ssz.Native.RootProof
+end EthLib.Consensus.Ssz.Native.RootProof

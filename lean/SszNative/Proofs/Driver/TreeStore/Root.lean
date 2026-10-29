@@ -8,9 +8,9 @@ against the zero tree of that height.
 Each hash lands in the tree's first 32 bytes, which hold no node, and is copied back to the output.
 -/
 
-namespace Ssz.Native.Driver
+namespace EthLib.Consensus.Ssz.Native.Driver
 
-open Ssz Ssz.Native.Asm Ssz.Native.Ir
+open EthLib.Consensus.Ssz EthLib.Consensus.Ssz.Native.Asm EthLib.Consensus.Ssz.Native.Ir
 
 /-- A root, with a word hashed in as its right sibling, or alone. -/
 def withMixin (root : Bytes) (word : Option Bytes) : Bytes :=
@@ -226,7 +226,7 @@ theorem root_ends {m : Module} {w : World} {sp : Nat} {mem : Memory}
       · by_cases hk : g < K
         · exact hk
         · rw [show K - g = 0 by omega] at hb; exact absurd hb (by decide)
-      · rw [if_neg hb] at hv; exact absurd hv nz
+      · rw [ite_eq_right hb] at hv; exact absurd hv nz
     have half : 2 ^ (K - g) / 2 = 2 ^ (K - (g + 1)) := by
       rw [show K - g = (K - (g + 1)) + 1 by omega, Nat.pow_succ, Nat.mul_div_cancel _ (by decide)]
     refine Ends.step (Runs.set _ _ _ _ _ _ _ _ (eval_shr1' (eval_var sv) (by omega))) ?_
@@ -243,7 +243,7 @@ theorem root_ends {m : Module} {w : World} {sp : Nat} {mem : Memory}
   have gK : g = K := by
     by_cases hk : g < K
     · have : 1 < 2 ^ (K - g) := Nat.one_lt_two_pow (by omega)
-      rw [if_pos this] at done; exact absurd done (by decide)
+      rw [ite_eq_left this] at done; exact absurd done (by decide)
     · omega
   rw [gK] at gv
   -- The climb, one height per pass, against the zero tree of that height.
@@ -259,7 +259,7 @@ theorem root_ends {m : Module} {w : World} {sp : Nat} {mem : Memory}
     have below : h < depth := by
       by_cases hb : h < depth
       · exact hb
-      · rw [if_neg hb] at hc; exact absurd hc nz
+      · rw [ite_eq_right hb] at hc; exact absurd hc nz
     have zr := (pre.ctxOk.congr (mm := mm') fun a ha => by
       have pc := pre.ctxOk.padCtx
       have ptab := pre.ctxOk.padTable
@@ -285,7 +285,7 @@ theorem root_ends {m : Module} {w : World} {sp : Nat} {mem : Memory}
   have done := Option.some.inj (done.symm.trans (eval_lt (eval_var hv) (eval_var vs3.2.1) (by omega) (by omega)))
   have hD : h = depth := by
     by_cases hb : h < depth
-    · rw [if_pos hb] at done; exact absurd done (by decide)
+    · rw [ite_eq_left hb] at done; exact absurd done (by decide)
     · omega
   rw [hD] at nd
   -- The word to mix in, if any.
@@ -302,11 +302,11 @@ theorem root_ends {m : Module} {w : World} {sp : Nat} {mem : Memory}
     have mo := pre.mixinOut nz
     have mp := pre.mixinPad nz
     simp only [Apart] at mx mo mp
-    rw [nd4, nd, if_neg nz, nodeAt_congr (m₂ := mem) fun i hi => fr3 _ (by omega) (by omega) (by omega)]
+    rw [nd4, nd, ite_eq_right nz, nodeAt_congr (m₂ := mem) fun i hi => fr3 _ (by omega) (by omega) (by omega)]
     rfl
   · have z : mixin = 0 := by
       have e0 := ite_eq_zero v
       exact Classical.byContradiction fun nz => nz ((ofNat_inj (mixBound nz) (by decide)).mp e0)
-    exact ⟨st3, by rw [nd, if_pos z]; rfl, fr3⟩
+    exact ⟨st3, by rw [nd, ite_eq_left z]; rfl, fr3⟩
 
-end Ssz.Native.Driver
+end EthLib.Consensus.Ssz.Native.Driver

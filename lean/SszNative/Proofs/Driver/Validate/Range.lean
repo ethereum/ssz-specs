@@ -6,11 +6,11 @@ One range against one type, read from its plan: the check the whole native check
 Each kind of type hands the range to the function for its kind, which comes back here for the types inside it.
 -/
 
-namespace Ssz.Native.Driver.Validate
+namespace EthLib.Consensus.Ssz.Native.Driver.Validate
 
 set_option maxRecDepth 20000
 
-open Ssz Ssz.Native Ssz.Native.Ir Ssz.Native.Asm Ssz.Native.Ir.Stmt Ssz.Native.Ir.Expr
+open EthLib.Consensus.Ssz EthLib.Consensus.Ssz.Native EthLib.Consensus.Ssz.Native.Ir EthLib.Consensus.Ssz.Native.Asm EthLib.Consensus.Ssz.Native.Ir.Stmt EthLib.Consensus.Ssz.Native.Ir.Expr
 
 /-- A fixed-size type's range: the size checks, then its probes. -/
 theorem validateRange_fixed (d : Desc) (b : ByteArray) (start stop : Nat) (has : hasWidth d = true) :
@@ -18,12 +18,12 @@ theorem validateRange_fixed (d : Desc) (b : ByteArray) (start stop : Nat) (has :
       if composite d = true ∧ 2 ^ 32 ≤ stop - start then .error (.offsetOverflow (stop - start))
       else if stop - start ≠ fixedWidth d then .error (.scope (fixedWidth d) (stop - start))
       else checkProbes b start (plan d) := by
-  rw [validateRange, if_pos has, validateFixed, checkRuns_runs]
+  rw [validateRange, ite_eq_left has, validateFixed, checkRuns_runs]
   by_cases c : composite d = true ∧ 2 ^ 32 ≤ stop - start
   · have h1 : (composite d && decide (stop - start ≥ 2 ^ (8 * bytesPerOffset))) = true := by
       simp [c.1, bytesPerOffset]; omega
-    rw [if_pos c]; simp only [h1, if_true]; rfl
-  · rw [if_neg c]
+    rw [ite_eq_left c]; simp only [h1, ite_true]; rfl
+  · rw [ite_eq_right c]
     have h1 : (composite d && decide (stop - start ≥ 2 ^ (8 * bytesPerOffset))) = false := by
       cases hc : composite d
       · rfl
@@ -32,13 +32,13 @@ theorem validateRange_fixed (d : Desc) (b : ByteArray) (start stop : Nat) (has :
     · have h2 : (stop - start != fixedWidth d) = true := by simpa using s
       simp [h1, h2, s, throw, throwThe, MonadExceptOf.throw, Bind.bind, Except.bind]
     · have h2 : (stop - start != fixedWidth d) = false := by simpa using s
-      rw [if_neg s]
-      simp only [h1, h2, Bool.false_eq_true, if_false]
+      rw [ite_eq_right s]
+      simp only [h1, h2, Bool.false_eq_true, ite_false]
 
 /-- A variable-size type's range, by its kind. -/
 theorem validateRange_var (d : Desc) (b : ByteArray) (start stop : Nat) (has : hasWidth d = false) :
     validateRange d b start stop = validateVariable d b start stop := by
-  rw [validateRange, if_neg (by simp [has])]
+  rw [validateRange, ite_eq_right (by simp [has])]
 
 /-- A node's first word is its tag. -/
 theorem words_head (d : Desc) : (Plan.words d)[0]! = Plan.tag d := by
@@ -71,7 +71,7 @@ theorem range_fixed_calls {m : Module} {w : World} (hm : Loaded m) (d : Desc) (h
   have tl := tag_le d
   have hsz : base + stop - (base + start) = stop - start := by omega
   have width := width_calls hm d fit p (sp - 8 - 8 * 15) mem hp (by simp only [Room] at room ⊢; omega)
-  simp only [widthWord, if_pos has] at width
+  simp only [widthWord, ite_eq_left has] at width
   have fw := fixedWidth_lt d fit has
   have hne : fixedWidth d ≠ 18446744073709551615 := by omega
   rw [validateRange_fixed d b start stop has]
@@ -145,7 +145,7 @@ set_option hygiene false in
 /-- Enters the range function on a variable-size node, past its width. -/
 macro "range_enter" : tactic => `(tactic| (
   have width := width_calls hm _ fit p (sp - 8 - 8 * 15) mem hp (by simp only [Room] at room ⊢; omega)
-  simp only [widthWord, hasWidth, Bool.false_eq_true, if_false] at width
+  simp only [widthWord, hasWidth, Bool.false_eq_true, ite_false] at width
   refine Calls.body 15 hm.range rfl (by simp only [Room] at room; omega) rfl ?_
   simp only [rangeFn]
   wsteps [hsz]
@@ -234,7 +234,7 @@ theorem range_calls {m : Module} {w : World} (hm : Loaded m) (d : Desc) : RangeO
       have vc := vector_calls hm e n ih fit he p (sp - 8 - 8 * 15) mem base b start stop err hp cp hd cd ok hle hs small
         (by simp only [Room, Desc.nesting] at room ⊢; omega)
       have width := width_calls hm _ fit p (sp - 8 - 8 * 15) mem hp (by simp only [Room] at room ⊢; omega)
-      simp only [widthWord, hasWidth, he, Bool.false_eq_true, if_false] at width
+      simp only [widthWord, hasWidth, he, Bool.false_eq_true, ite_false] at width
       refine Calls.body 15 hm.range rfl (by simp only [Room] at room; omega) rfl ?_
       simp only [rangeFn]
       wsteps [hsz]
@@ -309,7 +309,7 @@ theorem range_calls {m : Module} {w : World} (hm : Loaded m) (d : Desc) : RangeO
       have sc := struct_calls hm fs ih fl.1.1 fl.2 (p + 16) (sp - 8 - 8 * 15) mem base b start stop err hf cf hd cd ok
         hle hs small (by simp only [Room, Desc.nesting] at room ⊢; omega)
       have width := width_calls hm _ fit p (sp - 8 - 8 * 15) mem hp (by simp only [Room] at room ⊢; omega)
-      simp only [widthWord, hasWidth, all, Bool.false_eq_true, if_false] at width
+      simp only [widthWord, hasWidth, all, Bool.false_eq_true, ite_false] at width
       refine Calls.body 15 hm.range rfl (by simp only [Room] at room; omega) rfl ?_
       simp only [rangeFn]
       wsteps [hsz]
@@ -349,7 +349,7 @@ theorem range_calls {m : Module} {w : World} (hm : Loaded m) (d : Desc) : RangeO
       have sc := struct_calls hm fs ih fl.1.1 fl.2 (p + 24 + 8 * active.length) (sp - 8 - 8 * 15) mem base b start
         stop err hf cf hd cd ok hle hs small (by simp only [Room, Desc.nesting] at room ⊢; omega)
       have width := width_calls hm _ fit p (sp - 8 - 8 * 15) mem hp (by simp only [Room] at room ⊢; omega)
-      simp only [widthWord, hasWidth, all, Bool.false_eq_true, if_false] at width
+      simp only [widthWord, hasWidth, all, Bool.false_eq_true, ite_false] at width
       refine Calls.body 15 hm.range rfl (by simp only [Room] at room; omega) rfl ?_
       simp only [rangeFn]
       wsteps [hsz]
@@ -388,4 +388,4 @@ theorem range_calls {m : Module} {w : World} (hm : Loaded m) (d : Desc) : RangeO
       wsteps []
       wfin [z, z']
 
-end Ssz.Native.Driver.Validate
+end EthLib.Consensus.Ssz.Native.Driver.Validate

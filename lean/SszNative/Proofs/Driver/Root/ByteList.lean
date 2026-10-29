@@ -1,4 +1,4 @@
-import Ssz.Proofs.Codec.DecodeFits
+import EthLib.Consensus.Proofs.Ssz.Codec.DecodeFits
 import SszNative.Proofs.Driver.Root.Range
 
 /-!
@@ -8,9 +8,9 @@ It gathers the bytes into zero-padded nodes in the scratch, roots them at the li
 The gather and the mix-in serve the other list drivers too, so they are stated on their own.
 -/
 
-namespace Ssz.Native.Driver
+namespace EthLib.Consensus.Ssz.Native.Driver
 
-open Ssz Ssz.Native.Ir Ssz.Native.Ir.Expr Ssz.Native.Ir.Stmt Ssz.Native.Asm
+open EthLib.Consensus.Ssz EthLib.Consensus.Ssz.Native.Ir EthLib.Consensus.Ssz.Native.Ir.Expr EthLib.Consensus.Ssz.Native.Ir.Stmt EthLib.Consensus.Ssz.Native.Asm
 
 /-! ### Bytes packed into nodes -/
 
@@ -30,7 +30,7 @@ theorem holds_packGather {mem : Memory} {base : Nat} {b : ByteArray} (holds : Ho
     (32 * nodesFor (stop - start) + 32 - (stop - start)) 0 i (by omega)
   simp only [Nat.mul_zero, Nat.add_zero] at byte
   simp only [gathered]
-  rw [if_pos ⟨by omega, by rw [slot]; omega⟩, byte, Kernel.get!_eq _ _ (by rw [sizeEq]; exact hi),
+  rw [ite_eq_left ⟨by omega, by rw [slot]; omega⟩, byte, Kernel.get!_eq _ _ (by rw [sizeEq]; exact hi),
     ByteArray.getElem_eq_getElem_data]
   simp only [data]
   split
@@ -82,7 +82,7 @@ theorem packGather_runs {m : Module} {w : World} (gmod : GatherModule m) {sp : N
   rw [ofNat_toNat (by omega), ofNat_toNat (by omega), ofNat_toNat (by omega), ofNat_toNat (by omega)] at call
   refine ⟨_, Runs.call hv call, holds_packGather holds buf ordered inside small, fun a o => ?_⟩
   simp only [gathered]
-  rw [if_neg (by simp only [UInt64.toNat_one, Nat.mul_one]; rw [slot]; exact o)]
+  rw [ite_eq_right (by simp only [UInt64.toNat_one, Nat.mul_one]; rw [slot]; exact o)]
 
 /-! ### The scratch a byte list takes -/
 
@@ -289,4 +289,4 @@ theorem rootBytes_ok {m : Module} {w : World} (hash : HashingOk m w) (gmod : Gat
     (by rw [frame]; omega) pre (rangeEnv_entry _ _ _ _ _ _)
   exact ⟨mem', Calls.fn fns.bytes (by rw [frame]; omega) rfl run rfl, post⟩
 
-end Ssz.Native.Driver
+end EthLib.Consensus.Ssz.Native.Driver

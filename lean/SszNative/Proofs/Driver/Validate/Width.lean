@@ -7,11 +7,11 @@ The fixed width of a type, read from its plan.
 A type with no fixed width reads as the word that no width reaches.
 -/
 
-namespace Ssz.Native.Driver.Validate
+namespace EthLib.Consensus.Ssz.Native.Driver.Validate
 
 set_option maxRecDepth 20000
 
-open Ssz Ssz.Native Ssz.Native.Ir Ssz.Native.Asm Ssz.Native.Ir.Stmt Ssz.Native.Ir.Expr
+open EthLib.Consensus.Ssz EthLib.Consensus.Ssz.Native EthLib.Consensus.Ssz.Native.Ir EthLib.Consensus.Ssz.Native.Asm EthLib.Consensus.Ssz.Native.Ir.Stmt EthLib.Consensus.Ssz.Native.Ir.Expr
 
 /-- The word standing for no width. -/
 abbrev noWidth : Nat := 18446744073709551615
@@ -51,7 +51,7 @@ theorem leadingWidth_of_all : ∀ fs : List Desc, allHaveWidth fs = true → Des
   | [], _ => rfl
   | f :: fs, h => by
     simp only [allHaveWidth, Bool.and_eq_true] at h
-    rw [leadingWidth_cons, if_pos h.1, leadingWidth_of_all fs h.2, fieldsWidth]
+    rw [leadingWidth_cons, ite_eq_left h.1, leadingWidth_of_all fs h.2, fieldsWidth]
 
 /-- The first fields, and one more. -/
 theorem take_succ_append (fs : List Desc) (j : Nat) (hj : j < fs.length) : fs.take (j + 1) = fs.take j ++ [fs[j]] := by
@@ -139,9 +139,9 @@ theorem fieldsWidth_calls {m : Module} {w : World} (hm : Loaded m) (fs : List De
       by_cases has : hasWidth fs[j] = true
       · have fw := fixedWidth_lt fs[j] (fits_getElem fs fit j hjf) has
         have lw : Desc.leadingWidth (fs.take j) = fieldsWidth (fs.take j) := leadingWidth_of_all _ all
-        rw [fixedSize_eq, if_pos has] at lt
+        rw [fixedSize_eq, ite_eq_left has] at lt
         simp only [Option.getD_some] at lt
-        simp only [widthWord, if_pos has] at step
+        simp only [widthWord, ite_eq_left has] at step
         have hne : fixedWidth fs[j] ≠ 18446744073709551615 := by omega
         wcall step [h0]
         wsteps [h0, h1, h2, hne]
@@ -153,7 +153,7 @@ theorem fieldsWidth_calls {m : Module} {w : World} (hm : Loaded m) (fs : List De
         · wfin []
         · wfin [take_succ_append fs j hjf, fieldsWidth_append, fieldsWidth, h2]
         · wfin [h1]
-      · simp only [widthWord, if_neg has] at step
+      · simp only [widthWord, ite_eq_right has] at step
         wcall step [h0]
         wsteps [h0, h1, h2]
         refine ⟨⟨trivial, Or.inr ⟨by wfin [], by wfin [], ?_⟩⟩, ?_⟩
@@ -242,11 +242,11 @@ theorem width_calls {m : Module} {w : World} (hm : Loaded m) (d : Desc) : WidthO
         · simp [h] at has
         · exact h
       have hne : fixedWidth e ≠ 18446744073709551615 := by omega
-      simp only [widthWord, if_pos has] at step
+      simp only [widthWord, ite_eq_left has] at step
       wcall step []
       wsteps [r1, a1, hne]
       wfin [widthWord, hasWidth, fixedWidth, has]
-    · simp only [widthWord, if_neg has] at step
+    · simp only [widthWord, ite_eq_right has] at step
       wcall step []
       wsteps [r1, a1]
       wfin [widthWord, hasWidth, fixedWidth, has]
@@ -339,8 +339,8 @@ theorem leading_calls {m : Module} {w : World} (hm : Loaded m) (fs : List Desc) 
     by_cases has : hasWidth fs[j] = true
     · have fw := fixedWidth_lt fs[j] (fits_getElem fs fit j hjf) has
       have hne : fixedWidth fs[j] ≠ 18446744073709551615 := by omega
-      simp only [widthWord, if_pos has] at step
-      simp only [if_pos has] at lt next
+      simp only [widthWord, ite_eq_left has] at step
+      simp only [ite_eq_left has] at lt next
       wcall step [h0]
       wsteps [h0, h1, h2, hne]
       wcall skip [h0]
@@ -350,8 +350,8 @@ theorem leading_calls {m : Module} {w : World} (hm : Loaded m) (fs : List Desc) 
       · wfin []
       · wfin [next, h2]
       · wfin [h1]
-    · simp only [widthWord, if_neg has] at step
-      simp only [if_neg has] at lt next
+    · simp only [widthWord, ite_eq_right has] at step
+      simp only [ite_eq_right has] at lt next
       wcall step [h0]
       wsteps [h0, h1, h2]
       wcall skip [h0]
@@ -369,4 +369,4 @@ theorem leading_calls {m : Module} {w : World} (hm : Loaded m) (fs : List Desc) 
     simp only [List.take_length] at h2
     exact Wp.done ⟨by wonly [h2], rfl⟩
 
-end Ssz.Native.Driver.Validate
+end EthLib.Consensus.Ssz.Native.Driver.Validate

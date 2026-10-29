@@ -4,7 +4,7 @@ import SszNative.Driver.Codec
 import SszNative.Plan
 import SszNative.Proofs.Ir.Logic
 import SszNative.Proofs.Asm.Bytes
-import Ssz.Proofs.Codec.Admits
+import EthLib.Consensus.Proofs.Ssz.Codec.Admits
 
 /-!
 The codec drivers compute what their Lean references compute.
@@ -20,9 +20,9 @@ Each theorem is a call of a driver in a module holding them all, from memory hol
 A plan is read from memory as the words the plan format writes, and the stack the walk needs grows with nesting.
 -/
 
-namespace Ssz.Native.Driver
+namespace EthLib.Consensus.Ssz.Native.Driver
 
-open Ssz.Native.Ir Ssz.Native.Asm
+open EthLib.Consensus.Ssz.Native.Ir EthLib.Consensus.Ssz.Native.Asm
 
 /-- A module holds the codec drivers under their exported names. -/
 def HasCodec (m : Module) : Prop :=
@@ -197,7 +197,7 @@ theorem copy_correct (m : Module) (w : World) (linked : HasCodec m) (sp : Nat) (
   subst done
   exact Calls.fn found room rfl (Runs.block_append start₀ (Runs.block_cons runs₁ runs₂)) rfl
 
-open Ssz.Native.Plan
+open EthLib.Consensus.Ssz.Native.Plan
 
 /-- A plan's words, each eight little-endian bytes, from an address, in memory the program may read. -/
 def PlanAt (w : World) (mem : Memory) (p : Nat) (ws : List Nat) : Prop :=
@@ -844,7 +844,7 @@ theorem fieldsWidth_ok (m : Module) (w : World) (linked : HasCodec m) (fs : List
             prefix_]
           simp [Desc.fieldsFixedSize, fixed]
         · simp [assign, env₁]
-        · simp only [assign, env₁, if_pos, e2, toNat_toUInt64 _ small]
+        · simp only [assign, env₁, ite_eq_left, e2, toNat_toUInt64 _ small]
           simp [toNat_toUInt64 (j + 1) (by omega)]
           split <;> omega)
 
@@ -1273,4 +1273,4 @@ theorem leading_ok (m : Module) (w : World) (linked : HasCodec m) (fs : List Des
   refine Calls.fn found (by omega) rfl (Runs.block_cons first (Runs.block_cons second runs)) ?_
   simp [planLeading, Fields.total, eval, e3]
 
-end Ssz.Native.Driver
+end EthLib.Consensus.Ssz.Native.Driver

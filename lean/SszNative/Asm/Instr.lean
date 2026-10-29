@@ -4,7 +4,7 @@ The x86-64 instructions the native kernels use, written as data.
 One program is both what the proofs run on the machine model and what the emitter prints.
 -/
 
-namespace Ssz.Native.Asm
+namespace EthLib.Consensus.Ssz.Native.Asm
 
 /-- A general-purpose 64-bit register, in encoding order. -/
 inductive Gpr where
@@ -228,4 +228,4 @@ inductive Instr where
   | sha256msg2 (d s : Vreg)
   deriving Repr, DecidableEq, Inhabited
 
-end Ssz.Native.Asm
+end EthLib.Consensus.Ssz.Native.Asm

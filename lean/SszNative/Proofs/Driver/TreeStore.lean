@@ -11,9 +11,9 @@ The root is the specification's root of the leaves at the declared depth, with t
 Each takes the module's hashing drivers as given, through the hashing package of a module.
 -/
 
-namespace Ssz.Native.Driver
+namespace EthLib.Consensus.Ssz.Native.Driver
 
-open Ssz Ssz.Native.Asm Ssz.Native.Ir
+open EthLib.Consensus.Ssz EthLib.Consensus.Ssz.Native.Asm EthLib.Consensus.Ssz.Native.Ir
 
 /-- The build driver's frame holds twenty-one words. -/
 theorem treeBuild_frame : TreeBuild.fn.frame = 21 := rfl
@@ -166,7 +166,7 @@ theorem treeRoot_spec (leaves : Array Bytes) (depth : Nat) (fits : leaves.size �
         | none => subtreeAt leaves depth 0
         | some wd => mixIn (subtreeAt leaves depth 0) wd := by
   refine ⟨?_, by cases word <;> rfl⟩
-  simp only [merkleizeBoundedUnchecked, show ¬ 2 ^ depth < leaves.size by omega, if_false, depthFor_pow]
+  simp only [merkleizeBoundedUnchecked, show ¬ 2 ^ depth < leaves.size by omega, ite_false, depthFor_pow]
   rfl
 
-end Ssz.Native.Driver
+end EthLib.Consensus.Ssz.Native.Driver

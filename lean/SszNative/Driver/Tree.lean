@@ -1,5 +1,5 @@
 import SszNative.Driver.Hash
-import Ssz.Hash.Sha256
+import EthLib.Cryptography.Hash.Sha256
 
 /-!
 The root of a perfect Merkle tree over a buffer of 32-byte nodes, padded with zero subtrees.
@@ -9,9 +9,9 @@ An odd level's last node is hashed against the zero tree of its height.
 A lone node climbs the remaining heights against zero trees.
 -/
 
-namespace Ssz.Native.Driver
+namespace EthLib.Consensus.Ssz.Native.Driver
 
-open Ssz.Native.Ir Ssz.Native.Ir.Expr Ssz.Native.Ir.Stmt
+open EthLib.Consensus.Ssz.Native.Ir EthLib.Consensus.Ssz.Native.Ir.Expr EthLib.Consensus.Ssz.Native.Ir.Stmt
 
 /-- The heights of zero trees kept in the constant table: enough for any 64-bit capacity. -/
 abbrev zeroHeights : Nat := 64
@@ -21,7 +21,7 @@ def zeroRootsTable : ByteArray := Id.run do
   let mut table := ByteArray.mk (Array.replicate 32 0)
   let mut node := ByteArray.mk (Array.replicate 32 0)
   for _ in [0:zeroHeights] do
-    node := Ssz.Sha256.hash (node ++ node)
+    node := Cryptography.Hash.Sha256.hash (node ++ node)
     table := table ++ node
   return table
 
@@ -79,4 +79,4 @@ def merkleize : Fn :=
             level ::= dst, dst ::= dst + 32 * width, h ::= h + 1]] ++ copy32 out level)] }
 end
 
-end Ssz.Native.Driver
+end EthLib.Consensus.Ssz.Native.Driver

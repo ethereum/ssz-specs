@@ -8,11 +8,11 @@ Every value under such a layout is a child type of the range's type, and its own
 So each value meets a root call's needs, and the chunked roots of plain values meet the chunked driver's.
 -/
 
-namespace Ssz.Native.Driver.ProveProof
+namespace EthLib.Consensus.Ssz.Native.Driver.ProveProof
 
 set_option maxRecDepth 20000
 
-open Ssz Ssz.Native Ssz.Native.Ir Ssz.Native.Asm Ssz.Native.Plan
+open EthLib.Consensus.Ssz EthLib.Consensus.Ssz.Native EthLib.Consensus.Ssz.Native.Ir EthLib.Consensus.Ssz.Native.Asm EthLib.Consensus.Ssz.Native.Plan
 
 /-! ### The values under a layout -/
 
@@ -426,7 +426,7 @@ theorem chunkCalls_of {m : Module} {w : World} (hash : HashingOk m w) (gmod : Ga
       else chunkJoin f cnt ((cnt + recordsPerChunk - 1) / recordsPerChunk)) = chunkedRoots element b S width cnt := by
     split
     · rename_i few
-      rw [chunkedRoots, if_pos few]
+      rw [chunkedRoots, ite_eq_left few]
       simp only [f, Nat.mul_zero, Nat.add_zero]
     · rename_i many
       rw [chunkedRoots_join _ _ _ _ _ many]
@@ -624,7 +624,7 @@ theorem chunkCalls_layout {m : Module} {w : World} (hash : HashingOk m w) (gmod 
   have at_ : (Slots.stride element s width count).at (first + (min last count - first) - 1) =
       some (some (element, s + width * (first + (min last count - first) - 1),
         s + width * (first + (min last count - first) - 1 + 1))) := by
-    simp only [Slots.at]; rw [if_pos (by omega)]
+    simp only [Slots.at]; rw [ite_eq_left (by omega)]
   have kid := layout_children dec.sound dec.ordered dec.inside small dec.accepted dec.laid nested at_
   have ends := kid.inside
   rw [show first + (min last count - first) - 1 + 1 = first + (min last count - first) by omega] at ends
@@ -862,4 +862,4 @@ theorem progressive_calls_decoded {m : Module} {w : World} (linked : HasCodec m)
     (rootCalls_moved hash gmod fns dec lroom stack need (by omega))
     child
 
-end Ssz.Native.Driver.ProveProof
+end EthLib.Consensus.Ssz.Native.Driver.ProveProof

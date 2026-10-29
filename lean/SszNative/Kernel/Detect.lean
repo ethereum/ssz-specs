@@ -20,9 +20,9 @@ cpuid writes rbx, which the caller keeps, so r8 holds it until the return.
 No memory is touched.
 -/
 
-namespace Ssz.Native
+namespace EthLib.Consensus.Ssz.Native
 
-open Ssz.Native.Asm
+open EthLib.Consensus.Ssz.Native.Asm
 
 /--
 The kernel families the processor runs, as a mask.
@@ -101,4 +101,4 @@ def Kernel.detect : Array Instr :=
   ((leaves ++ [.jcc .b 16] ++ leaf7 ++ readable ++ [.jz 25, .zeroReg .rcx, .xgetbv, .movReg xcr .rax] ++
     combine ++ [.ret]) : List Instr).toArray
 
-end Ssz.Native
+end EthLib.Consensus.Ssz.Native

@@ -8,10 +8,11 @@ After the padding blocks, each batch adds that result back, and the sixteen-lane
 write its sixteen digests.
 -/
 
-namespace Ssz.Native.Kernel.Avx512x2
+namespace EthLib.Consensus.Ssz.Native.Kernel.Avx512x2
 
-open Ssz.Sha256 Ssz.Native.Asm
-open Ssz.Native.Kernel.Avx512 (tbl out home ring tmp tableEntry transposeOut storeCode assign_apply range8 epilogue
+open EthLib.Cryptography.Hash.Sha256 hiding K IV
+open EthLib.Consensus.Ssz.Native.Asm
+open EthLib.Consensus.Ssz.Native.Kernel.Avx512 (tbl out home ring tmp tableEntry transposeOut storeCode assign_apply range8 epilogue
   add_toNat)
 
 set_option maxRecDepth 20000 in
@@ -20,12 +21,12 @@ set_option maxHeartbeats 4000000 in
 theorem feed_view (G : Gpr → UInt64) (S T : Nat) (hS : (G sp).toNat = S) (hT : (G tbl).toNat = T) (l : Fin 16)
     (v : View) (rows : TableRows T l v) (apart : FrameApart S T) (j : Nat) (hj : j < 8) :
     let w := viewRun G (feedCode 0 ++ feedCode 1) v
-    w.regs (home j) = v.regs (home j) + initialState[j]! ∧
-    w.regs (swapReg (home j)) = v.regs (swapReg (home j)) + initialState[j]! ∧
-    w.mem (S + midSlot 0 j) = v.regs (home j) + initialState[j]! ∧
-    w.mem (S + midSlot 1 j) = v.regs (swapReg (home j)) + initialState[j]! := by
+    w.regs (home j) = v.regs (home j) + Cryptography.Hash.Sha256.IV[j]! ∧
+    w.regs (swapReg (home j)) = v.regs (swapReg (home j)) + Cryptography.Hash.Sha256.IV[j]! ∧
+    w.mem (S + midSlot 0 j) = v.regs (home j) + Cryptography.Hash.Sha256.IV[j]! ∧
+    w.mem (S + midSlot 1 j) = v.regs (swapReg (home j)) + Cryptography.Hash.Sha256.IV[j]! := by
   -- Each initial-state word is read from its table row.
-  have row : ∀ i < 8, v.mem (T + ivAvx512 i) = initialState[i]! := fun i hi => by
+  have row : ∀ i < 8, v.mem (T + ivAvx512 i) = Cryptography.Hash.Sha256.IV[i]! := fun i hi => by
     rw [show ivAvx512 i = 64 * (128 + i) by simp only [ivAvx512]; omega, rows _ (by omega),
       Avx512.tableWord_iv i l.val hi l.isLt]
   -- No table row read is a kept-state row.
@@ -125,7 +126,7 @@ theorem exec_keepsVec (r : Vreg) (body : List Instr) (h : body.all (keepsVec r) 
     rw [exec_cons, ih h.2]
     -- The first instruction writes another register, or memory.
     have hi := h.1
-    cases i <;> simp [keepsVec] at hi <;> simp only [exec1, assign] <;> rw [if_neg (Ne.symm hi)]
+    cases i <;> simp [keepsVec] at hi <;> simp only [exec1, assign] <;> rw [ite_eq_right (Ne.symm hi)]
 
 /-- A batch's transpose and stores leave the second batch's registers. -/
 theorem epilogue_keeps : ∀ r : Vreg, 8 ≤ r.val → r.val < 16 → (transposeOut ++ storeCode).all (keepsVec r) = true := by
@@ -135,4 +136,4 @@ theorem epilogue_keeps : ∀ r : Vreg, 8 ≤ r.val → r.val < 16 → (transpose
 /-- The address of a digest byte, split at the second batch. -/
 theorem out_split (O p k : Nat) (hp : 16 ≤ p) : O + 512 + 32 * (p - 16) + k = O + 32 * p + k := by omega
 
-end Ssz.Native.Kernel.Avx512x2
+end EthLib.Consensus.Ssz.Native.Kernel.Avx512x2

@@ -3,9 +3,9 @@ import SszNative.Proofs.Asm.Machine
 /-!
 Runs of the whole machine inside one routine: one instruction, a straight block, and their composition.
 -/
-open Ssz.Native.Asm
+open EthLib.Consensus.Ssz.Native.Asm
 
-namespace Ssz.Native.Asm
+namespace EthLib.Consensus.Ssz.Native.Asm
 
 /-- Runs compose. -/
 theorem Image.run_add (image : Image) (a b : Nat) (m : Machine) :
@@ -60,4 +60,4 @@ theorem Reaches.block (image : Image) (r : Nat) (pre body post : List Instr)
     rw [show pre.length + (rest.length + 1) = pre.length + 1 + rest.length by omega]
     simpa [exec_with_pc] using this
 
-end Ssz.Native.Asm
+end EthLib.Consensus.Ssz.Native.Asm

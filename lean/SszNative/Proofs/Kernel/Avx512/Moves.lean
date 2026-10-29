@@ -12,9 +12,10 @@ The sixteen-lane kernel's data movement: loading and transposing messages, and t
 ```
 -/
 
-namespace Ssz.Native.Kernel.Avx512
+namespace EthLib.Consensus.Ssz.Native.Kernel.Avx512
 
-open Ssz.Native.Asm Ssz.Sha256
+open EthLib.Consensus.Ssz.Native.Asm
+open EthLib.Cryptography.Hash.Sha256 hiding K IV
 
 /-- Reversing a little-endian read gives the big-endian read of the same four bytes. -/
 theorem bswap_readWord (mem : Nat → UInt8) (a : Nat) :
@@ -35,10 +36,10 @@ theorem pairMessage_get (mem : Nat → UInt8) (left right i : Nat) (within : i <
 
 /-- Word t of a pair is a byte-reversed read of its node, at word t mod 8. -/
 theorem pairMessage_word (mem : Nat → UInt8) (left right t : Nat) (within : t < 16) :
-    wordAt (pairMessage mem left right) (4 * t) =
+    big32 (pairMessage mem left right) (4 * t) =
       bswap (readWord mem ((if t < 8 then left else right) + 4 * (t % 8))) := by
   rw [bswap_readWord]
-  simp only [wordAt]
+  simp only [big32, getElem!_eq_get!]
   rw [pairMessage_get _ _ _ _ (by omega), pairMessage_get _ _ _ _ (by omega), pairMessage_get _ _ _ _ (by omega),
     pairMessage_get _ _ _ _ (by omega)]
   -- Words 0 to 7 come from the left node, and words 8 to 15 from the right one.
@@ -117,7 +118,7 @@ private theorem loaded_word (ls rs : Nat) (s : State) (t j : Nat) (ht : t < 16) 
 theorem prologue (ls rs : Nat) (s : State) (table : TableAt s.mem (s.gpr tbl).toNat) :
     let s' := exec (loadCode ls rs ++ transposeIn ++ swapIn) s
     (∀ t < 16, ∀ j : Fin 16, s'.vec (ring t) j =
-      wordAt (pairMessage s.mem ((s.gpr left).toNat + ls * j.val) ((s.gpr right).toNat + rs * j.val)) (4 * t)) ∧
+      big32 (pairMessage s.mem ((s.gpr left).toNat + ls * j.val) ((s.gpr right).toNat + rs * j.val)) (4 * t)) ∧
     s'.gpr = s.gpr ∧ s'.mem = s.mem ∧ s'.zf = s.zf := by
   intro s'
   -- The loads, then the lane moves from the loaded state.
@@ -181,7 +182,7 @@ theorem stores (s : State) (mask : ∀ l, s.vec (tmp 2) l = reverseLane l.val) (
   | zero =>
     simp only [List.range_zero, List.flatMap_nil, exec_nil]
     refine ⟨fun a => ?_, by trivial, by trivial, fun _ _ _ => by trivial, by trivial⟩
-    rw [if_neg (by omega)]
+    rw [ite_eq_right (by omega)]
   | succ n ih =>
     obtain ⟨mem, gpr, zf, homes, maskReg⟩ := ih (by omega)
     simp only [List.range_succ, List.flatMap_append, List.flatMap_singleton, exec_append]
@@ -211,9 +212,9 @@ theorem stores (s : State) (mask : ∀ l, s.vec (tmp 2) l = reverseLane l.val) (
     · simp [exec1, zf]
     · intro k hk hk8
       simp only [exec1, assign]
-      rw [if_neg (fun e => by have := home_inj k n hk8 (by omega) e; omega), homes k (by omega) hk8]
+      rw [ite_eq_right (fun e => by have := home_inj k n hk8 (by omega) e; omega), homes k (by omega) hk8]
     · simp only [exec1, assign]
-      rw [if_neg (home_ne_tmp n).symm, maskReg]
+      rw [ite_eq_right (home_ne_tmp n).symm, maskReg]
 
 /-- The stores: the mask load, then one body per digest register. -/
 theorem storeCode_eq : storeCode = .vload (tmp 2) (tableEntry bswapAvx512) :: (List.range 8).flatMap storeStep := rfl
@@ -278,7 +279,7 @@ theorem maskLoad_spec (s : State) (table : TableAt s.mem (s.gpr tbl).toNat) :
         simp [bswapAvx512]; omega,
       readWord_table _ _ table _ (by simp [bswapAvx512, tableSize]; omega), bswapRow l]
   · simp only [exec1, assign]
-    rw [if_neg (home_ne_tmp k)]
+    rw [ite_eq_right (home_ne_tmp k)]
 
 /-- After the transpose out and the stores, output bytes 32p to 32p + 31 are the digest of the state in lane p. -/
 theorem epilogue (s : State) (table : TableAt s.mem (s.gpr tbl).toNat) :
@@ -299,7 +300,7 @@ theorem epilogue (s : State) (table : TableAt s.mem (s.gpr tbl).toNat) :
   rw [← whole] at mem gpr zf
   refine ⟨?_, ?_, gpr.trans (gpr2.trans gpr1), zf.trans (zf2.trans zf1)⟩
   · intro p k hk
-    rw [mem, gpr2, gpr1, if_pos (by omega), digest_get _ _ hk, Vector.getElem_ofFn]
+    rw [mem, gpr2, gpr1, ite_eq_left (by omega), digest_get _ _ hk, Vector.getElem_ofFn]
     -- Byte 32p + k sits in register p / 2, lane 8 (p mod 2) + k / 4.
     simp only [outByte, laneByte, laneOf, wordByte]
     rw [show (s.gpr out).toNat + 32 * p.val + k - (s.gpr out).toNat = 32 * p.val + k by omega,
@@ -310,12 +311,12 @@ theorem epilogue (s : State) (table : TableAt s.mem (s.gpr tbl).toNat) :
       show 2 * (p.val / 2) + (8 * (p.val % 2) + k / 4) / 8 = p.val by omega]
     exact bswap_byte _ _ (by omega)
   · intro a outside
-    rw [mem, gpr2, gpr1, if_neg outside, mem2, mem1]
+    rw [mem, gpr2, gpr1, ite_eq_right outside, mem2, mem1]
 
 /-- The initial-state loads: register j holds word j of the initial state in every lane, and no other register changes. -/
 theorem ivLoads_sources : ∀ r : Fin 32, ∀ l : Fin 16,
     absExec ((List.range 8).map fun j => .vload (home j) (tableEntry (ivAvx512 j))) Abs.start r l =
-      if r.val < 8 then .const (initialState[r.val % 8]!) else .reg r l := by
+      if r.val < 8 then .const (Cryptography.Hash.Sha256.IV[r.val % 8]!) else .reg r l := by
   -- The tracker's result for every lane, checked by evaluation.
   decide +kernel
 
@@ -327,7 +328,7 @@ theorem ivLoads_moves : ((List.range 8).map fun j => Instr.vload (home j) (table
 /-- After the initial-state loads, register j holds word j of the initial state in every lane. -/
 theorem ivLoads (s : State) (table : TableAt s.mem (s.gpr tbl).toNat) :
     let s' := exec ((List.range 8).map fun j => .vload (home j) (tableEntry (ivAvx512 j))) s
-    (∀ j < 8, ∀ l, s'.vec (home j) l = initialState[j]!) ∧
+    (∀ j < 8, ∀ l, s'.vec (home j) l = Cryptography.Hash.Sha256.IV[j]!) ∧
     (∀ r : Vreg, 8 ≤ r.val → s'.vec r = s.vec r) ∧
     s'.gpr = s.gpr ∧ s'.mem = s.mem ∧ s'.zf = s.zf := by
   intro s'
@@ -335,7 +336,7 @@ theorem ivLoads (s : State) (table : TableAt s.mem (s.gpr tbl).toNat) :
   have moved := absExec_sound _ ivLoads_moves s.vec Abs.start s (agrees_start s) table
   refine ⟨fun j hj l => ?_, fun r hr => funext fun l => ?_, moved.2.2.1, moved.2.1, moved.2.2.2⟩
   · have sources := ivLoads_sources ⟨j, by omega⟩ l
-    rw [if_pos hj] at sources
+    rw [ite_eq_left hj] at sources
     have same : home j = ⟨j, by omega⟩ := by simp [home, Nat.mod_eq_of_lt hj]
     rw [same, moved.1 _ _ (by rw [sources]; simp), sources]
     simp only [Src.denote, Nat.mod_eq_of_lt hj]
@@ -344,4 +345,4 @@ theorem ivLoads (s : State) (table : TableAt s.mem (s.gpr tbl).toNat) :
     rw [moved.1 _ _ (by rw [sources]; simp), sources]
     rfl
 
-end Ssz.Native.Kernel.Avx512
+end EthLib.Consensus.Ssz.Native.Kernel.Avx512

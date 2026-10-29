@@ -6,9 +6,9 @@ A compiled function keeps the call contract, and so does every function of a mod
 The entry builds the frame, the body and the result follow, and the exit releases the frame and pops the return.
 -/
 
-namespace Ssz.Native.Ir
+namespace EthLib.Consensus.Ssz.Native.Ir
 
-open Ssz.Native.Asm
+open EthLib.Consensus.Ssz.Native.Asm
 
 /-- Storing registers to consecutive slots: each slot holds its register, and nothing else in memory changes. -/
 theorem slotStores_exec (base k : Nat) (hbase : base < 2 ^ 64) (reg : Nat → Gpr) (noRsp : ∀ i, reg i ≠ .rsp) :
@@ -34,10 +34,10 @@ theorem slotStores_exec (base k : Nat) (hbase : base < 2 ^ 64) (reg : Nat → Gp
         apply readLE_congr
         intro j hj
         simp only [store]
-        rw [if_neg (by omega)]
+        rw [ite_eq_right (by omega)]
       · subst h; rw [readLE_store8, g]
     · simp only [Asm.exec, exec1, addr, store, Width.bytes]
-      rw [if_neg (by omega), rest a (by omega)]
+      rw [ite_eq_right (by omega), rest a (by omega)]
 
 /-- Whether an instruction needs no instruction set extension. -/
 def Instr.baseline (i : Instr) : Bool := i.features.isEmpty
@@ -203,7 +203,7 @@ theorem fn_ok (m : Module) (image : Image) (w : World) (name : String) (f : Fn) 
     simp only [prologue, exec_append]
   generalize hA : Asm.exec [.subImm .rsp (8 * f.frame)] s0 = sA at splitP
   have rspA : sA.gpr .rsp = base.toUInt64 := by
-    rw [← hA]; simp only [Asm.exec, exec1, assign, if_true, s0]
+    rw [← hA]; simp only [Asm.exec, exec1, assign, ite_true, s0]
     rw [show ((8 * f.frame : Nat)).toUInt64 = (8 * f.frame).toUInt64 from rfl, toUInt64_sub _ _ (by omega), hbase,
       Nat.sub_sub]
   have gprA : ∀ g, g ≠ .rsp → sA.gpr g = s.gpr g := by
@@ -242,13 +242,13 @@ theorem fn_ok (m : Module) (image : Image) (w : World) (name : String) (f : Fn) 
       have := frame_room f
       rw [restD a (by omega), memC, restB a (by omega), memA]
       simp only [s0, store]
-      rw [if_neg (by omega)]
+      rw [ite_eq_right (by omega)]
       exact heap a ha
     · simp [s1, cpuD, restC, cpuB, restA, cpu, c]
     · simp [s1, stD, restC, stB, restA, running]
     · simp only [s1, gD, gC, gB, c]
       simp only [keptRegs, List.mem_cons, List.not_mem_nil, or_false] at hg
-      rw [assign, if_neg (by rcases hg with rfl | rfl | rfl | rfl | rfl | rfl <;> simp),
+      rw [assign, ite_eq_right (by rcases hg with rfl | rfl | rfl | rfl | rfl | rfl <;> simp),
         gprA g (by rcases hg with rfl | rfl | rfl | rfl | rfl | rfl <;> simp)]
   -- What the prologue left below the return address and off the stack.
   have frameRoom := frame_room f
@@ -278,7 +278,7 @@ theorem fn_ok (m : Module) (image : Image) (w : World) (name : String) (f : Fn) 
     (by rw [pE, cvars]; simp [resCode]; omega) h3.running
   let s4 := { exec1 (.addImm .rsp (8 * f.frame)) s3 with pc := (pro ++ bodyCode ++ resCode).length + 1 }
   have rsp4 : s4.gpr .rsp = (sp - 8).toUInt64 := by
-    simp only [s4, exec1, assign, if_true]
+    simp only [s4, exec1, assign, ite_true]
     rw [h3.rsp, cbase, toUInt64_add _ _ (by omega)]
     congr 1; omega
   have gpr4 : ∀ g, g ≠ .rsp → s4.gpr g = s3.gpr g := by intro g hg; simp [s4, exec1, assign, hg]
@@ -310,25 +310,25 @@ theorem fn_ok (m : Module) (image : Image) (w : World) (name : String) (f : Fn) 
     rw [step0]
     exact (congrArg (fun m => image.step m) hk).trans stepRet
   · simp [assign, gpr4 .rax (by simp), rax3]
-  · simp only [assign, if_true]
+  · simp only [assign, ite_true]
     rw [rsp4, show (8 : UInt64) = (8 : Nat).toUInt64 from rfl, toUInt64_add _ _ (by omega)]
     congr 1; omega
   · have ne : g ≠ .rsp := by
       simp only [keptRegs, List.mem_cons, List.not_mem_nil, or_false] at hg
       rcases hg with rfl | rfl | rfl | rfl | rfl | rfl <;> simp
-    simp only [assign, if_neg ne]; rw [gpr4 g ne, h3.kept g hg]
+    simp only [assign, ite_eq_right ne]; rw [gpr4 g ne, h3.kept g hg]
   · simp only; rw [mem4]; exact h3.heap a (by rw [cw]; exact ha)
   · simp only; rw [mem4, m3 a (Or.inr (by rw [cbase, cframe]; omega)), m2 a (by rw [cbase, cframe]; omega) (by rw [cw]; exact hi),
       stack1 a (by omega)]
-    simp only [s0, store]; rw [if_neg (by omega)]
+    simp only [s0, store]; rw [ite_eq_right (by omega)]
   · simp [s4, exec1, h3.cpu, cw, cpu]
   · simp [s4, exec1, h3.running]
 
-end Ssz.Native.Ir
+end EthLib.Consensus.Ssz.Native.Ir
 
-namespace Ssz.Native.Ir
+namespace EthLib.Consensus.Ssz.Native.Ir
 
-open Ssz.Native.Asm
+open EthLib.Consensus.Ssz.Native.Asm
 
 /-- What a routine outside the language must guarantee: its call contract, for its meaning. -/
 def ExternOk (image : Image) (w : World) (name : String) (e : Extern) : Prop :=
@@ -366,4 +366,4 @@ theorem module_ok (m : Module) (image : Image) (w : World) (placed : Placed m im
         intro r s sp args ir ir' res _ _ _ _ _ _ _ _ _ _ _ _ spec
         simp [callSpec, hf, he] at spec
 
-end Ssz.Native.Ir
+end EthLib.Consensus.Ssz.Native.Ir

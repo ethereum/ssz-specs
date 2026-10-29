@@ -7,10 +7,11 @@ The pair runs the setup, the two first-block loops, the first feed-forwards, the
 Each lane l of the first batch hashes pair l, and each lane l of the second batch pair 16 + l.
 -/
 
-namespace Ssz.Native.Kernel.Avx512x2
+namespace EthLib.Consensus.Ssz.Native.Kernel.Avx512x2
 
-open Ssz.Sha256 Ssz.Native.Asm
-open Ssz.Native.Kernel.Avx512 (tbl left right out count home tableEntry transposeOut storeCode epilogue add_toNat
+open EthLib.Cryptography.Hash.Sha256 hiding K IV
+open EthLib.Consensus.Ssz.Native.Asm
+open EthLib.Consensus.Ssz.Native.Kernel.Avx512 (tbl left right out count home tableEntry transposeOut storeCode epilogue add_toNat
   roundsTo K W PW home_eq_role home_eq_role64 compress_rounds pairMessage_size)
 
 /-- The index of the closing instructions. -/
@@ -133,7 +134,7 @@ theorem output_spec (y : State) (S T O : Nat) (hS : (y.gpr sp).toNat = S) (hT : 
     exact table i hi
   obtain ⟨d6, k6, g6, -⟩ := epilogue z5 tab5
   have out5 : (z5.gpr out).toNat = O + 512 := by
-    rw [g5, g4, g3]; simp only [assign, if_true]; rw [g2, g1, add_toNat _ _ (by rw [hO]; omega), hO]
+    rw [g5, g4, g3]; simp only [assign, ite_true]; rw [g2, g1, add_toNat _ _ (by rw [hO]; omega), hO]
   rw [out5] at d6 k6
   generalize hz6 : exec (transposeOut ++ storeCode) z5 = z6 at d6 k6 g6
   -- The first batch's final words.
@@ -144,7 +145,7 @@ theorem output_spec (y : State) (S T O : Nat) (hS : (y.gpr sp).toNat = S) (hT : 
     simp only [Vector.getElem_ofFn]
     rw [v1, ← hA p j hj]
     have := finish_view y.gpr 0 (by omega) (view y p) j hj
-    simp only [if_true] at this
+    simp only [ite_true] at this
     rw [this, hS]
     rfl
   -- The second batch's final words.
@@ -157,7 +158,7 @@ theorem output_spec (y : State) (S T O : Nat) (hS : (y.gpr sp).toNat = S) (hT : 
     simp only [view]
     rw [v4, ← hB p j hj]
     have := finish_view z3.gpr 1 (by omega) (view z3 p) j hj
-    simp only [show ¬ (1 = 0) from by decide, if_false] at this
+    simp only [show ¬ (1 = 0) from by decide, ite_false] at this
     rw [this, sp3]
     simp only [view]
     have big := swap_role_range 0 j
@@ -180,4 +181,4 @@ theorem output_spec (y : State) (S T O : Nat) (hS : (y.gpr sp).toNat = S) (hT : 
   · rw [g6, g5, g4, g3]; simp [assign, g2, g1]
   · rw [g6, g5, g4, g3]; simp [assign, hr, g2, g1]
 
-end Ssz.Native.Kernel.Avx512x2
+end EthLib.Consensus.Ssz.Native.Kernel.Avx512x2

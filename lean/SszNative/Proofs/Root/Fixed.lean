@@ -9,9 +9,9 @@ A run of records one stride apart is rooted as columns, one per field or element
 A single record is rooted as its own row of leaves.
 -/
 
-namespace Ssz.Native
+namespace EthLib.Consensus.Ssz.Native
 
-open Ssz
+open EthLib.Consensus.Ssz
 
 /-- A buffer of zeros of the requested size. -/
 theorem zeros_spec (size : Nat) (small : size < USize.size) :
@@ -24,7 +24,7 @@ theorem zeros_spec (size : Nat) (small : size < USize.size) :
   -- A gather of an empty field into one slot reads only padding.
   have := gatherReference_get ByteArray.empty 0 0 0 1 size.toUSize 0 x (by rw [h1]; decide)
     (by rw [toUSize_toNat _ small]; exact lx) (by simp [hz]) (by simp [hz])
-  simp only [toUSize_toNat _ small, Nat.mul_zero, Nat.zero_add, hz, Nat.not_lt_zero, if_false] at this
+  simp only [toUSize_toNat _ small, Nat.mul_zero, Nat.zero_add, hz, Nat.not_lt_zero, ite_false] at this
   simpa [zeros, gather] using this
 
 /-- A node past the first buffer of two joined ones is a node of the second. -/
@@ -284,8 +284,8 @@ theorem fieldLeaves_spec (b : ByteArray) (start : Nat) (fieldsAll : List Desc)
       · rename_i packs
         have := (packs_root f packs (sound f fm) w1 (recordBytes b (start + offset) (fixedWidth f))
           (by simp [recordBytes]; rw [slice_size b _ _ (by omega)]; omega)).1
-        rw [copySlice_get _ _ _ _ _ _ (by omega) (by omega) lx, if_neg (by omega)]
-      · rw [copySlice_get _ _ _ _ _ _ (by rw [one.1]; omega) (by omega) lx, if_neg (by omega)]
+        rw [copySlice_get _ _ _ _ _ _ (by omega) (by omega) lx, ite_eq_right (by omega)]
+      · rw [copySlice_get _ _ _ _ _ _ (by rw [one.1]; omega) (by omega) lx, ite_eq_right (by omega)]
     have here : nodeOf next 0 node = recordRoot f (recordBytes b (start + offset) (fixedWidth f)) := by
       by_cases packs : packsIntoNode f = true
       · have cut : (recordBytes b (start + offset) (fixedWidth f)).size = fixedWidth f := by
@@ -299,21 +299,21 @@ theorem fieldLeaves_spec (b : ByteArray) (start : Nat) (fieldsAll : List Desc)
         intro x lx
         rw [packBytes_node_get _ 0 x lx, cut, Nat.zero_add]
         rw [← hnext]
-        simp only [packs, if_true]
+        simp only [packs, ite_true]
         rw [copySlice_get _ _ _ _ _ _ (by omega) (by omega) (by omega)]
         simp only [Nat.mul_zero, Nat.zero_add]
         split
         · rename_i payload
-          rw [if_pos (by omega), show 32 * node + x - 32 * node = x by omega, recordBytes,
+          rw [ite_eq_left (by omega), show 32 * node + x - 32 * node = x by omega, recordBytes,
             slice_getElem! b _ _ _ (by omega) (by omega)]
-        · rw [if_neg (by omega), zero _ (by omega) (by omega)]
+        · rw [ite_eq_right (by omega), zero _ (by omega) (by omega)]
       · rw [← one.2]
         apply nodeOf_of_get _ _ _ _ (by rw [nodeOf_size _ _ _ (by rw [one.1]; omega)]) (by omega)
         intro x lx
         rw [nodeOf_get _ _ _ _ (by rw [one.1]; omega) lx]
         rw [← hnext]
-        simp only [packs, Bool.false_eq_true, if_false]
-        rw [copySlice_get _ _ _ _ _ _ (by rw [one.1]; omega) (by omega) (by omega), if_pos (by omega)]
+        simp only [packs, Bool.false_eq_true, ite_false]
+        rw [copySlice_get _ _ _ _ _ _ (by rw [one.1]; omega) (by omega) (by omega), ite_eq_left (by omega)]
         simp only [Nat.zero_add, Nat.mul_zero]
         congr 1
         omega
@@ -518,7 +518,7 @@ theorem rootsOf_spec (d : Desc) : plain d = true → d.wellFormed = .ok () → R
         have : i = 0 := by omega
         subst this
         rw [nodeOf_single _ ms, md, Nat.mul_zero, Nat.add_zero, width]
-        simp only [recordRoot, basic, Bool.false_eq_true, if_false]
+        simp only [recordRoot, basic, Bool.false_eq_true, ite_false]
         rw [elements]
         congr 1
         apply Array.ext
@@ -554,7 +554,7 @@ theorem rootsOf_spec (d : Desc) : plain d = true → d.wellFormed = .ok () → R
           (by rw [len]; exact Nat.le_refl _)
         refine ⟨tree.1, fun i li => ?_⟩
         rw [tree.2 i li, width]
-        simp only [recordRoot, basic, Bool.false_eq_true, if_false]
+        simp only [recordRoot, basic, Bool.false_eq_true, ite_false]
         rw [elements]
   | container names fields ih =>
     -- A plain struct has plain fields of positive width, and at least one of them.
@@ -705,4 +705,4 @@ theorem rootsOf_hashTreeRoot (d : Desc) (p : plain d = true) (sound : d.wellForm
     · rw [← hashTreeRootAt_eq_hashTreeRoot d v d.nesting (Nat.le_refl _), root, (rootsOf_spec d p sound b start stride count run).2 i record]
     · rw [← hashTreeRootAt_eq_hashTreeRoot d v d.nesting (Nat.le_refl _), root, (chunkedRoots_spec d p sound b start stride count run).2 i record]
 
-end Ssz.Native
+end EthLib.Consensus.Ssz.Native

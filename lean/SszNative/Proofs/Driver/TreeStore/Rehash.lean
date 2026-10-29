@@ -9,9 +9,9 @@ digest is copied back to its parent.
 Either way, each parent ends as the hash of its two children, and nothing else in the tree changes.
 -/
 
-namespace Ssz.Native.Driver
+namespace EthLib.Consensus.Ssz.Native.Driver
 
-open Ssz Ssz.Native.Asm Ssz.Native.Ir
+open EthLib.Consensus.Ssz EthLib.Consensus.Ssz.Native.Asm EthLib.Consensus.Ssz.Native.Ir
 
 /--
 What the update driver needs: its context, the tree, the indices, and a scratch buffer of 104 bytes per index.
@@ -151,7 +151,7 @@ theorem rehash_ends {m : Module} {w : World} {sp : Nat} {mem : Memory}
     have span : q (k - 1) - q 0 + 1 = k := by
       by_cases hb : q (k - 1) - q 0 + 1 = k
       · exact hb
-      · rw [if_neg hb] at v; exact absurd rfl v
+      · rw [ite_eq_right hb] at v; exact absurd rfl v
     have cons := sorted_consecutive sorted k1 span
     have run := StoreCtx.runPre (lo := tree + 32 * S) (len := 32 * S) (lo' := tree + 32 * S) (len' := 32 * S)
       (ls := 64) (rs := 64) (left := tree + 64 * q 0) (right := tree + 64 * q 0 + 32) (n := k)
@@ -297,4 +297,4 @@ theorem rehash_ends {m : Module} {w : World} {sp : Nat} {mem : Memory}
       Ends.nil ⟨hv5.agree' ag6, fun i hi => by rw [fill3 i (Nat.zero_le _) hi, digest i hi], fun a ha hp hn => by
         rw [kept3 a fun j _ hj => hn j hj, same3 a ha hp]⟩
 
-end Ssz.Native.Driver
+end EthLib.Consensus.Ssz.Native.Driver

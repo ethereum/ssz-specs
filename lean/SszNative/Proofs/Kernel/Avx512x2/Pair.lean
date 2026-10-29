@@ -4,10 +4,11 @@ import SszNative.Proofs.Kernel.Avx512x2.Batch
 One batch pair of the thirty-two-lane kernel on the machine: the setup, the three loops, and the output, in order.
 -/
 
-namespace Ssz.Native.Kernel.Avx512x2
+namespace EthLib.Consensus.Ssz.Native.Kernel.Avx512x2
 
-open Ssz.Sha256 Ssz.Native.Asm
-open Ssz.Native.Kernel.Avx512 (tbl left right out count home transposeOut storeCode add_toNat roundsTo K W PW
+open EthLib.Cryptography.Hash.Sha256 hiding K IV
+open EthLib.Consensus.Ssz.Native.Asm
+open EthLib.Consensus.Ssz.Native.Kernel.Avx512 (tbl left right out count home transposeOut storeCode add_toNat roundsTo K W PW
   home_eq_role home_eq_role64 compress_rounds pairMessage_size)
 
 /-- Memory and registers before a batch pair, as the whole pair needs them. -/
@@ -25,7 +26,7 @@ structure BatchPre (ls rs : Nat) (s : State) : Prop extends SetupPre ls rs s whe
 def PairDone (ls rs : Nat) (s y : State) : Prop :=
   y.status = .running ∧ y.pc = loopHead + (body ls rs).length ∧
   (∀ p < 32, ∀ k < 32, y.mem ((s.gpr out).toNat + 32 * p + k) =
-    (Sha256.hash (pairMessage s.mem ((s.gpr left).toNat + ls * p) ((s.gpr right).toNat + rs * p))).get! k) ∧
+    (Cryptography.Hash.Sha256.hash (pairMessage s.mem ((s.gpr left).toNat + ls * p) ((s.gpr right).toNat + rs * p))).get! k) ∧
   (∀ a, ¬ ((s.gpr out).toNat ≤ a ∧ a < (s.gpr out).toNat + 1024) →
     a < (s.gpr sp).toNat ∨ (s.gpr sp).toNat + frame ≤ a → y.mem a = s.mem a) ∧
   y.gpr left = s.gpr left + (16 * ls).toUInt64 ∧ y.gpr right = s.gpr right + (16 * rs).toUInt64 ∧
@@ -115,7 +116,7 @@ theorem pair_run (ls rs : Nat) (s : State) (hpc : s.pc = loopHead) (running : s.
   have outTable : Apart (O, 1024) (T, tableSize) := by rw [← hT, ← hO]; exact pre.outTable
   have outBound : O + 1024 ≤ addressBound := by rw [← hO]; exact pre.outBound
   let m : Fin 16 → Nat → ByteArray := msg s.mem (s.gpr left).toNat (s.gpr right).toNat ls rs
-  let mid : Fin 16 → Nat → Vector UInt32 8 := fun l b => compress initialState (m l b) 0
+  let mid : Fin 16 → Nat → Vector UInt32 8 := fun l b => compress Cryptography.Hash.Sha256.IV (m l b) 0
   obtain ⟨b1, b2, b3, b4, b5⟩ := blocks_straight
   -- The setup.
   obtain ⟨lanes1, kept1, left1, right1, words1, consts1, blocks1, others1⟩ := setup_spec ls rs s pre.toSetupPre
@@ -166,7 +167,7 @@ theorem pair_run (ls rs : Nat) (s : State) (hpc : s.pc = loopHead) (running : s.
     simp only [pre4, List.length_append, List.length_cons, List.length_nil]
   have inv20 : FirstLoop S T m x1.gpr s.mem 6 2 0 x2 :=
     ⟨fun _ => by rw [g2]; exact inv1.wordsAt (by omega), by rw [g2]; exact inv1.constsAt, by rw [g2]; rfl,
-      fun r h1 h2 h3 => by rw [g2]; simp only [assign, if_neg h3]; exact inv1.others r h1 h2 h3,
+      fun r h1 h2 h3 => by rw [g2]; simp only [assign, ite_eq_right h3]; exact inv1.others r h1 h2 h3,
       fun l => by simp only [view, vm2.1, vm2.2]; exact inv1.lanes l,
       fun a ha => by rw [vm2.2]; exact inv1.kept a ha⟩
   obtain ⟨y2, inv2, sty2, pcy2, run4⟩ := loop_run (program ls rs) (pre4 ls rs) (firstBlock false)
@@ -197,7 +198,7 @@ theorem pair_run (ls rs : Nat) (s : State) (hpc : s.pc = loopHead) (running : s.
   have st5 : (exec middleCode y2).status = .running := by rw [exec_status, sty2]
   -- Each lane: the first compressions, and their copies kept.
   have firstWords : ∀ l, ∀ b < 2, ∀ j < 8,
-      y2.vec (if b = 0 then home j else swapReg (home j)) l + initialState[j]! = (mid l b)[j]! := by
+      y2.vec (if b = 0 then home j else swapReg (home j)) l + Cryptography.Hash.Sha256.IV[j]! = (mid l b)[j]! := by
     intro l b hb j hj
     obtain ⟨rolesA, rolesB, -, -⟩ := inv2.lanes l
     have rA := congrArg (·[j]) rolesA
@@ -207,15 +208,15 @@ theorem pair_run (ls rs : Nat) (s : State) (hpc : s.pc = loopHead) (running : s.
     simp only [mid]
     rw [compress_get _ _ j hj, UInt32.add_comm]
     rcases (show b = 0 ∨ b = 1 by omega) with rfl | rfl
-    · simp only [if_true]
-      rw [getElem!_pos (roundsTo initialState K (fun i => (schedule (m l 0) 0)[i]!) 64) j hj]
+    · simp only [ite_true]
+      rw [getElem!_pos (roundsTo Cryptography.Hash.Sha256.IV K (fun i => (schedule (m l 0) 0)[i]!) 64) j hj]
       exact congrArg _ rA
-    · simp only [show ¬ (1 = 0) from by decide, if_false]
-      rw [getElem!_pos (roundsTo initialState K (fun i => (schedule (m l 1) 0)[i]!) 64) j hj]
+    · simp only [show ¬ (1 = 0) from by decide, ite_false]
+      rw [getElem!_pos (roundsTo Cryptography.Hash.Sha256.IV K (fun i => (schedule (m l 1) 0)[i]!) 64) j hj]
       exact congrArg _ rB
   have pad0 : PadLoop S T mid y2.gpr s.mem 0 (exec middleCode y2) := by
     refine ⟨by rw [g5']; simp only [assign]; exact inv2.constsAt, by rw [g5']; rfl,
-      fun r h1 h2 => by rw [g5']; simp only [assign, if_neg h2], fun l => ?_, fun l b hb j hj => ?_,
+      fun r h1 h2 => by rw [g5']; simp only [assign, ite_eq_right h2], fun l => ?_, fun l b hb j hj => ?_,
       fun a ha => by rw [vm5.2, k5 a ha, inv2.kept a ha]⟩
     · have rows := (inv2.lanes l).2.2.2
       refine ⟨?_, ?_, fun row hrow => ?_⟩
@@ -291,10 +292,10 @@ theorem pair_run (ls rs : Nat) (s : State) (hpc : s.pc = loopHead) (running : s.
     have hv : y3.vec (if b = 0 then home j else swapReg (home j)) l =
         (roundsTo (mid l b) K (fun i => (schedule Kernel.paddingBlock 0)[i]!) 64)[j]! := by
       rcases (show b = 0 ∨ b = 1 by omega) with rfl | rfl
-      · simp only [if_true]
+      · simp only [ite_true]
         rw [getElem!_pos (roundsTo (mid l 0) K (fun i => (schedule Kernel.paddingBlock 0)[i]!) 64) j hj]
         exact rA
-      · simp only [show ¬ (1 = 0) from by decide, if_false]
+      · simp only [show ¬ (1 = 0) from by decide, ite_false]
         rw [getElem!_pos (roundsTo (mid l 1) K (fun i => (schedule Kernel.paddingBlock 0)[i]!) 64) j hj]
         exact rB
     rw [inv3.mids l b hb j hj, compress_get (mid l b) Kernel.paddingBlock j hj, hv, UInt32.add_comm]
@@ -308,7 +309,7 @@ theorem pair_run (ls rs : Nat) (s : State) (hpc : s.pc = loopHead) (running : s.
   rw [run1, run2, run3, run4, run5, run6, run7]
   -- Each byte of each digest is its pair's hash.
   have digest_eq : ∀ l : Fin 16, ∀ b < 2, digest (compress (mid l b) Kernel.paddingBlock 0) =
-      Sha256.hash (pairMessage s.mem ((s.gpr left).toNat + ls * (16 * b + l.val))
+      Cryptography.Hash.Sha256.hash (pairMessage s.mem ((s.gpr left).toNat + ls * (16 * b + l.val))
         ((s.gpr right).toNat + rs * (16 * b + l.val))) := fun l b _ => by
     rw [hash_pair _ (pairMessage_size _ _ _)]
     rfl
@@ -336,4 +337,4 @@ theorem pair_run (ls rs : Nat) (s : State) (hpc : s.pc = loopHead) (running : s.
       others1 _ (by decide) (by decide) (by decide) (by decide) (by decide)]
   · simp only; rw [gz r h3, keep3 r h4 h5 h6, others1 r h1 h2 h4 h5 h6]
 
-end Ssz.Native.Kernel.Avx512x2
+end EthLib.Consensus.Ssz.Native.Kernel.Avx512x2

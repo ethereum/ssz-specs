@@ -13,9 +13,9 @@ The second pair keeps its state in registers 8 and 9, and its schedule in regist
 After its first block, each pair keeps that block's state in the first two of its schedule registers.
 -/
 
-namespace Ssz.Native.Kernel.ShaNiDual
+namespace EthLib.Consensus.Ssz.Native.Kernel.ShaNiDual
 
-open Ssz.Native.Asm
+open EthLib.Consensus.Ssz.Native.Asm
 
 /-- The registers one of the two pairs works in. -/
 structure Lane where
@@ -126,4 +126,4 @@ def program (ls rs : Nat) : Array Instr :=
   (([.test count, .jz finish, .movdqu bswap (tableEntry bswapShaNi)] ++ pairsCode ls rs ++ tail ++ [.zeroReg .rax, .ret]) :
     List Instr).toArray
 
-end Ssz.Native.Kernel.ShaNiDual
+end EthLib.Consensus.Ssz.Native.Kernel.ShaNiDual

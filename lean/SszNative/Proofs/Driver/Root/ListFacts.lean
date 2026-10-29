@@ -4,9 +4,9 @@ import SszNative.Proofs.Driver.Root.Sequence
 What decoding a list gives its root: the count of elements, each element's range, and how the count is read.
 -/
 
-namespace Ssz.Native.Driver
+namespace EthLib.Consensus.Ssz.Native.Driver
 
-open Ssz
+open EthLib.Consensus.Ssz
 
 /-- What a list's decoding gives its root, read on the encoding: the count, each element's range, and the bounds. -/
 theorem list_decoded {element : Desc} {lim : Option Nat} {b : ByteArray} {start stop : Nat} {slices : List Bytes}
@@ -41,13 +41,13 @@ theorem list_decoded {element : Desc} {lim : Option Nat} {b : ByteArray} {start 
     subst sliced
     refine ⟨counted, ranges_of_cut rangesEq len within decoded, by rw [rangesEq, len], capped, fun fx => ?_,
       fun fx => ?_⟩
-    · have := fixedFacts (fixedWidth element) (by rw [fixedSize_eq, if_pos fx])
+    · have := fixedFacts (fixedWidth element) (by rw [fixedSize_eq, ite_eq_left fx])
       rw [size] at this; exact this
-    · have := varFacts (by rw [fixedSize_eq, if_neg (by simp [fx])])
+    · have := varFacts (by rw [fixedSize_eq, ite_eq_right (by simp [fx])])
       rw [size] at this
       rcases this with h | ⟨four, cnt, table⟩
       · exact .inl h
       · refine .inr ⟨four, ?_, table⟩
         rw [cnt, readUint_slice b start stop 0 inside (by omega), Nat.add_zero]
 
-end Ssz.Native.Driver
+end EthLib.Consensus.Ssz.Native.Driver

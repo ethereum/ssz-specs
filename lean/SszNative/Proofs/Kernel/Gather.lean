@@ -11,14 +11,14 @@ The gathering kernel, run on the machine model: each record's field lands in its
 ```
 -/
 
-namespace Ssz.Native.Asm
+namespace EthLib.Consensus.Ssz.Native.Asm
 
 /-- A forward copy between ranges that share no address is a plain copy. -/
 theorem copyForward_apart (mem : Nat → UInt8) (dst src n : Nat)
     (apart : ∀ k < n, ¬ (dst ≤ src + k ∧ src + k < dst + n)) (x : Nat) :
     copyForward mem dst src n x = if dst ≤ x ∧ x < dst + n then mem (src + (x - dst)) else mem x := by
   induction n generalizing mem dst src with
-  | zero => simp only [copyForward]; rw [if_neg (by omega)]
+  | zero => simp only [copyForward]; rw [ite_eq_right (by omega)]
   | succ n ih =>
     -- The first byte is written, then the rest is copied from one address further on.
     simp only [copyForward]
@@ -28,22 +28,22 @@ theorem copyForward_apart (mem : Nat → UInt8) (dst src n : Nat)
       -- The source byte read later is never the destination byte written first.
       have away := apart (x - dst) (by omega)
       simp only [inside, and_self, ↓reduceIte, this, assign]
-      rw [if_neg (by omega), if_pos (by omega)]
+      rw [ite_eq_right (by omega), ite_eq_left (by omega)]
     · simp only [inside, ↓reduceIte, assign]
       by_cases e : x = dst
       · subst e; simp
-      · rw [if_neg e, if_neg (by omega)]
+      · rw [ite_eq_right e, ite_eq_right (by omega)]
 
 /-- A sum of two registers that does not reach the top of the address space. -/
 theorem toNat_add_of_lt (a b : UInt64) (h : a.toNat + b.toNat < 2 ^ 64) : (a + b).toNat = a.toNat + b.toNat := by
   rw [UInt64.toNat_add]
   exact Nat.mod_eq_of_lt h
 
-end Ssz.Native.Asm
+end EthLib.Consensus.Ssz.Native.Asm
 
-namespace Ssz.Native.Kernel
+namespace EthLib.Consensus.Ssz.Native.Kernel
 
-open Ssz.Native.Asm
+open EthLib.Consensus.Ssz.Native.Asm
 
 /-- The loop body: one record's field, its padding, and on to the next record. -/
 private def body : List Instr :=
@@ -172,23 +172,23 @@ private theorem record (t : State) (i : Nat) (inv : Inv s out src count width sk
     by_cases padding : out + (width + pad) * i + width ≤ x ∧ x < out + (width + pad) * i + width + pad
     · -- A padding byte of slot i.
       obtain ⟨k, rfl⟩ : ∃ k, x = out + (width + pad) * i + width + k := ⟨x - (out + (width + pad) * i + width), by omega⟩
-      rw [if_pos padding, if_pos ⟨by omega, by rw [Nat.mul_succ]; omega⟩, Nat.add_assoc,
-        recordByte_at _ _ _ _ _ _ _ _ (by omega), if_neg (by omega)]
+      rw [ite_eq_left padding, ite_eq_left ⟨by omega, by rw [Nat.mul_succ]; omega⟩, Nat.add_assoc,
+        recordByte_at _ _ _ _ _ _ _ _ (by omega), ite_eq_right (by omega)]
       rfl
-    rw [if_neg padding]
+    rw [ite_eq_right padding]
     by_cases field : out + (width + pad) * i ≤ x ∧ x < out + (width + pad) * i + width
     · -- A field byte of slot i, read from a source address the output never covers.
       obtain ⟨k, rfl⟩ : ∃ k, x = out + (width + pad) * i + k := ⟨x - (out + (width + pad) * i), by omega⟩
       have outside := apart i more k (by omega)
-      rw [if_pos field, if_neg (by omega), if_pos ⟨by omega, by rw [Nat.mul_succ]; omega⟩,
-        recordByte_at _ _ _ _ _ _ _ _ (by omega), if_pos (by omega)]
+      rw [ite_eq_left field, ite_eq_right (by omega), ite_eq_left ⟨by omega, by rw [Nat.mul_succ]; omega⟩,
+        recordByte_at _ _ _ _ _ _ _ _ (by omega), ite_eq_left (by omega)]
       congr 1
       omega
     · -- Any other byte: an earlier slot, or untouched.
-      rw [if_neg field]
+      rw [ite_eq_right field]
       by_cases earlier : out ≤ x ∧ x < out + (width + pad) * i
-      · rw [if_pos earlier, if_pos ⟨earlier.1, by rw [Nat.mul_succ]; omega⟩]
-      · rw [if_neg earlier, if_neg (by rw [Nat.mul_succ]; omega)]
+      · rw [ite_eq_left earlier, ite_eq_left ⟨earlier.1, by rw [Nat.mul_succ]; omega⟩]
+      · rw [ite_eq_right earlier, ite_eq_right (by rw [Nat.mul_succ]; omega)]
 
 /-- The loop, from any record on, writes every remaining record and leaves the routine at its branch. -/
 private theorem records (m : Nat) : ∀ (t : State) (i : Nat), i + m = count → 0 < m →
@@ -209,7 +209,7 @@ private theorem records (m : Nat) : ∀ (t : State) (i : Nat), i + m = count →
       subst last
       simp only [show i + 1 = count by omega, Nat.lt_irrefl, ↓reduceIte] at next
       simpa [run] using next
-    · rw [if_pos (by omega)] at next
+    · rw [ite_eq_left (by omega)] at next
       exact ih _ (i + 1) (by omega) (by omega) next hw hs hp ob sb apart
 
 end
@@ -265,7 +265,7 @@ theorem gather_correct (s : State) (out src count width skip pad : Nat)
     · -- Byte k of slot i lies inside the output.
       have := Nat.mul_le_mul_left (width + pad) (show i + 1 ≤ count by omega)
       rw [Nat.mul_succ] at this
-      rw [mem, if_pos ⟨by omega, by omega⟩, recordByte_at _ _ _ _ _ _ _ _ hk]
-    · rw [mem, if_neg hx]
+      rw [mem, ite_eq_left ⟨by omega, by omega⟩, recordByte_at _ _ _ _ _ _ _ _ hk]
+    · rw [mem, ite_eq_right hx]
 
-end Ssz.Native.Kernel
+end EthLib.Consensus.Ssz.Native.Kernel

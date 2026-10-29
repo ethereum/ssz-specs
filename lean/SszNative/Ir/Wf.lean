@@ -8,7 +8,7 @@ arguments to each call.
 These checks are plain functions, so a linker can run them before it trusts the compiled code.
 -/
 
-namespace Ssz.Native.Ir
+namespace EthLib.Consensus.Ssz.Native.Ir
 
 /-- Whether every variable an expression reads is below a count. -/
 def Expr.varsBelow (n : Nat) : Expr → Bool
@@ -31,4 +31,4 @@ def Stmt.wf (n : Nat) : Stmt → Bool
 def Fn.wf (f : Fn) : Bool :=
   f.params ≤ 6 && f.params ≤ f.vars && f.body.wf f.vars && f.result.varsBelow f.vars
 
-end Ssz.Native.Ir
+end EthLib.Consensus.Ssz.Native.Ir

@@ -16,9 +16,9 @@ The schedule follows Prysm's hashtree.
 Each round adds its constant to H before E is ready, so four operations separate one E from the next.
 -/
 
-namespace Ssz.Native.Kernel.Avx512
+namespace EthLib.Consensus.Ssz.Native.Kernel.Avx512
 
-open Ssz.Native.Asm
+open EthLib.Consensus.Ssz.Native.Asm
 
 /-- The output address, the first argument. -/
 abbrev out : Gpr := .rdi
@@ -217,4 +217,4 @@ def program (ls rs : Nat) : Array Instr :=
   let finish := loopHead + (batchCode ls rs).length + tail.length
   (([.test count, .jz finish] ++ batchCode ls rs ++ tail ++ [.vzeroupper, .zeroReg .rax, .ret]) : List Instr).toArray
 
-end Ssz.Native.Kernel.Avx512
+end EthLib.Consensus.Ssz.Native.Kernel.Avx512

@@ -13,9 +13,9 @@ Nothing here builds a value: a caller decodes or encodes each part itself, one l
 A union has two parts: its selector byte, then the encoding of the option the selector names.
 -/
 
-namespace Ssz.Native
+namespace EthLib.Consensus.Ssz.Native
 
-open Ssz
+open EthLib.Consensus.Ssz
 
 /--
 Where each part of a composite sits inside the range of its encoding, refusing the range as deserialization does.
@@ -140,4 +140,4 @@ def assembleBits (limit : Option Nat) (count : Nat) (packed : ByteArray) : Excep
   if last >>> UInt8.ofNat used != 0 then throw .paddingBits
   return packed.set! (packed.size - 1) (last ||| (1 <<< UInt8.ofNat used))
 
-end Ssz.Native
+end EthLib.Consensus.Ssz.Native

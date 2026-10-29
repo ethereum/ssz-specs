@@ -7,9 +7,9 @@ The code of every statement computes its meaning.
 Loops and calls are proved by induction on the fuel their meaning takes.
 -/
 
-namespace Ssz.Native.Ir
+namespace EthLib.Consensus.Ssz.Native.Ir
 
-open Ssz.Native.Asm
+open EthLib.Consensus.Ssz.Native.Asm
 
 /-- What a statement's code guarantees, for a meaning of the statement with some fuel. -/
 def StmtOk (m : Module) (c : Site) (fuel : Nat) (stmt : Stmt) : Prop :=
@@ -57,7 +57,7 @@ theorem set_ok (m : Module) (c : Site) (fits : c.Fits) (fuel : Nat) (x : Nat) (e
         simp [exec1, slot_addr c fits s1 h1.rsp, rax1, Width.bytes]
       · simp only [exec1, slot_addr c fits s1 h1.rsp, store, Width.bytes]
         have := fits.vars
-        rw [if_neg (by omega), m1 a (Or.inr lo)]
+        rw [ite_eq_right (by omega), m1 a (Or.inr lo)]
 
 /-- Two statements compile to their codes one after the other. -/
 theorem seq_ok (m : Module) (c : Site) (fuel : Nat) (a b : Stmt) (iha : StmtOk m c fuel a) (ihb : StmtOk m c fuel b) :
@@ -136,7 +136,7 @@ theorem ite_ok (m : Module) (c : Site) (fits : c.Fits) (fuel : Nat) (cond : Expr
   by_cases zero : v = 0
   · -- The second branch.
     subst zero
-    simp only [bne_self_eq_false, Bool.false_eq_true, if_false] at ex
+    simp only [bne_self_eq_false, Bool.false_eq_true, ite_false] at ex
     have jump : (if s1.zf then elsePc else s1.pc + 1) = elsePc := by simp [z1]
     rw [jump] at r2
     obtain ⟨s3, r3, p3, h3, m3⟩ := ihe elsePc (pre ++ cc ++ [.test .rax, .jz elsePc] ++ yes ++
@@ -147,7 +147,7 @@ theorem ite_ok (m : Module) (c : Site) (fits : c.Fits) (fuel : Nat) (cond : Expr
       fun a lo hi => by rw [m3 a lo hi]; exact m1 a lo⟩
   · -- The first branch, then over the second.
     have nz : (v != 0) = true := by simpa using zero
-    simp only [nz, if_true] at ex
+    simp only [nz, ite_true] at ex
     have next : (if s1.zf then elsePc else s1.pc + 1) = pc + cc.length + 2 := by
       simp [z1, zero, p1, cc] <;> omega
     rw [next] at r2
@@ -192,7 +192,7 @@ theorem loop_ok (m : Module) (c : Site) (fits : c.Fits) (fuel : Nat) (cond : Exp
   by_cases zero : v = 0
   · -- Out of the loop.
     subst zero
-    simp only [beq_self_eq_true, if_true, pure, Option.some.injEq, Prod.mk.injEq] at ex
+    simp only [beq_self_eq_true, ite_true, pure, Option.some.injEq, Prod.mk.injEq] at ex
     obtain ⟨rfl, rfl⟩ := ex
     have jump : (if s1.zf then done else s1.pc + 1) = done := by simp [z1]
     rw [jump] at r2
@@ -200,7 +200,7 @@ theorem loop_ok (m : Module) (c : Site) (fits : c.Fits) (fuel : Nat) (cond : Exp
       fun a lo _ => m1 a lo⟩
   · -- Once through the body, then back to the test.
     have nz : (v == 0) = false := by simpa using zero
-    simp only [nz, Bool.false_eq_true, if_false] at ex
+    simp only [nz, Bool.false_eq_true, ite_false] at ex
     cases eb : exec m c.w fuel c.base env ir body with
     | none => simp [eb] at ex
     | some p =>
@@ -266,14 +266,14 @@ theorem store_ok (m : Module) (c : Site) (fits : c.Fits) (fuel : Nat) (w : Width
         apply readLE_congr
         intro k hk
         simp only [store]
-        rw [if_neg (by have := fits.low; have := fits.high; have := fits.vars; omega)]
+        rw [ite_eq_right (by have := fits.low; have := fits.high; have := fits.vars; omega)]
       · simp only [exec1, addr, rcx4, store]
         split
         · rfl
         · exact h4.heap b hb
     · simp only [exec1, addr, store]
       have := fits.low
-      rw [if_neg (by omega)]
+      rw [ite_eq_right (by omega)]
       exact m4 b (Or.inr lo)
   · simp at ex
 
@@ -344,7 +344,7 @@ theorem args_ok (c : Site) (fits : c.Fits) (env : Env) (ir : Memory) :
         rw [← this, show c.vars + i + (j + 1) = c.vars + (i + 1) + j by omega]
     · rw [m3 b (by omega)]
       have e2 : s2.mem b = s1.mem b := by
-        rw [mem2]; simp only [store]; rw [if_neg (by omega)]
+        rw [mem2]; simp only [store]; rw [ite_eq_right (by omega)]
       rw [e2, m1 b (by omega)]
 
 /-- The six argument registers are distinct. -/
@@ -456,7 +456,7 @@ theorem call_ok (m : Module) (c : Site) (fits : c.Fits) (fuel : Nat) (f : String
     simp [exec1, slot_addr c fits s3 h3.rsp, rax3, Width.bytes]
   · simp only [exec1, slot_addr c fits s3 h3.rsp, store, Width.bytes]
     have := fits.vars
-    rw [if_neg (by omega), stack3 a (by omega) hi, show s2.mem = s1.mem from ml, m1 a (Or.inr lo)]
+    rw [ite_eq_right (by omega), stack3 a (by omega) hi, show s2.mem = s1.mem from ml, m1 a (Or.inr lo)]
 
 /-- With no fuel, no statement has a meaning, so its code owes nothing. -/
 theorem zero_ok (m : Module) (c : Site) (stmt : Stmt) : StmtOk m c 0 stmt := by
@@ -497,4 +497,4 @@ theorem stmt_ok (m : Module) (c : Site) (fits : c.Fits) (bound : Nat)
       exact loop_ok m c fits k cond body wf.1 (ih' body wf.2) (ih' _ whole)
     | call f args dst => exact call_ok m c fits k f args dst wf (calls k (by omega) f)
 
-end Ssz.Native.Ir
+end EthLib.Consensus.Ssz.Native.Ir

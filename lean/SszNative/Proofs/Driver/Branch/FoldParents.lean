@@ -2,9 +2,9 @@ import SszNative.Proofs.Driver.Branch.FoldKept
 
 /-! The compiled first pass of a fold level builds the level's parents in order, or refuses as the Lean fold does. -/
 
-namespace Ssz.Native.Driver.BranchProof
+namespace EthLib.Consensus.Ssz.Native.Driver.BranchProof
 
-open Ssz.Native.Ir Ssz.Native.Asm
+open EthLib.Consensus.Ssz.Native.Ir EthLib.Consensus.Ssz.Native.Asm
 
 /-- The first entries are a prefix of the entries. -/
 theorem entriesAt_take (mem : Memory) (a n i : Nat) (h : i ≤ n) : (entriesAt mem a n).take i = entriesAt mem a i := by
@@ -150,8 +150,8 @@ theorem fold_parents_calls {m : Module} {w : World} {ctx : UInt64} {ready : Memo
         have := srcNow (40 * (env 6).toNat + 8 + k) (by omega)
         rwa [show src.toNat + (40 * (env 6).toNat + 8 + k) = src.toNat + 40 * (env 6).toNat + 8 + k by omega] at this
     -- The search reads the source entries, which are as they were.
-    have searchNow : ∀ key, firstAt (wordAt mem' src.toNat 40) key count.toNat =
-        firstAt (wordAt mem src.toNat 40) key count.toNat := fun key =>
+    have searchNow : ∀ key, firstAt (big32 mem' src.toNat 40) key count.toNat =
+        firstAt (big32 mem src.toNat 40) key count.toNat := fun key =>
       firstAt_congr key _ fun j hj => readLE_congr mem' mem _ 8 fun k hk => by
         rw [Nat.add_assoc]; exact srcNow _ (by omega)
     have fcall := fun key => find_calls (w := w) hf (sp := sp - 160) (by omega) src 40 count key mem' fun j hj =>
@@ -176,43 +176,43 @@ theorem fold_parents_calls {m : Module} {w : World} {ctx : UInt64} {ready : Memo
         by_cases h : (Nat.log2 x.toNat).toUInt64 = depth
         · show Nat.log2 x.toNat = _
           rw [← h, toNat_ofNat_of_lt _ (by omega)]
-        · simp only [assign, ↓reduceIte, Nat.reduceEqDiff, e3, if_neg h] at on
+        · simp only [assign, ↓reduceIte, Nat.reduceEqDiff, e3, ite_eq_right h] at on
           exact absurd rfl on
       have xParity : (x &&& 1).toNat = x.toNat % 2 := toNat_and_one x
       -- The entry where the search stops, and what the node set holds at the searched index.
-      have found : ∀ key : UInt64, (firstAt (wordAt mem src.toNat 40) key count.toNat).toUInt64 = count ↔
+      have found : ∀ key : UInt64, (firstAt (big32 mem src.toNat 40) key count.toNat).toUInt64 = count ↔
           nodeAt E key.toNat = none := by
         intro key
-        have le := firstAt_le (wordAt mem src.toNat 40) key count.toNat
+        have le := firstAt_le (big32 mem src.toNat 40) key count.toNat
         show _ ↔ nodeAt (entriesAt mem src.toNat count.toNat) key.toNat = none
         rw [nodeAt_entriesAt]
         constructor
         · intro h
           have := congrArg UInt64.toNat h
           rw [toNat_ofNat_of_lt _ (by omega)] at this
-          rw [if_neg (by omega)]
+          rw [ite_eq_right (by omega)]
         · intro h
           split at h
           · cases h
           · apply UInt64.toNat_inj.mp
             rw [toNat_ofNat_of_lt _ (by omega)]; omega
-      have foundAt : ∀ key : UInt64, (firstAt (wordAt mem src.toNat 40) key count.toNat) < count.toNat →
-          nodeAt E key.toNat = some (readNode mem (src.toNat + 40 * firstAt (wordAt mem src.toNat 40) key count.toNat + 8)) :=
+      have foundAt : ∀ key : UInt64, (firstAt (big32 mem src.toNat 40) key count.toNat) < count.toNat →
+          nodeAt E key.toNat = some (readNode mem (src.toNat + 40 * firstAt (big32 mem src.toNat 40) key count.toNat + 8)) :=
         fun key h => by
           show nodeAt (entriesAt mem src.toNat count.toNat) key.toNat = _
-          rw [nodeAt_entriesAt, if_pos h]
+          rw [nodeAt_entriesAt, ite_eq_left h]
       refine Wp.cons (Wp.ite (eval_eq (eval_and rfl rfl) rfl) (fun even => ?_) (fun odd => ?_))
       · -- An even index joins the entry holding the next index.
         have xEven : x.toNat % 2 = 0 := by
           by_cases h : x &&& 1 = 0
           · rw [← xParity, h]; rfl
-          · simp only [assign, ↓reduceIte, Nat.reduceEqDiff, if_neg h] at even; exact absurd rfl even
+          · simp only [assign, ↓reduceIte, Nat.reduceEqDiff, ite_eq_right h] at even; exact absurd rfl even
         have up : (x + 1).toNat = x.toNat + 1 := by
           rw [toNat_add_of_lt _ _ (by have := x.toNat_lt; simp; omega)]; simp
         have c := fcall (x + 1)
         simp only [UInt64.reduceToNat] at c
         rw [searchNow] at c
-        generalize hJ : firstAt (wordAt mem src.toNat 40) (x + 1) count.toNat = J at c
+        generalize hJ : firstAt (big32 mem src.toNat 40) (x + 1) count.toNat = J at c
         have hJle : J ≤ count.toNat := by rw [← hJ]; exact firstAt_le _ _ _
         refine Wp.cons (Wp.call (values := [src, 40, count, x + 1])
           (by rw [show src = env 0 from e0.symm, show count = env 1 from e1.symm]; rfl) ⟨_, mem', c, ?_⟩)
@@ -221,7 +221,7 @@ theorem fold_parents_calls {m : Module} {w : World} {ctx : UInt64} {ready : Memo
           have miss : J.toUInt64 = count := by
             by_cases h : J.toUInt64 = count
             · exact h
-            · simp only [assign, ↓reduceIte, Nat.reduceEqDiff, e1, if_neg h] at none_; exact absurd rfl none_
+            · simp only [assign, ↓reduceIte, Nat.reduceEqDiff, e1, ite_eq_right h] at none_; exact absurd rfl none_
           rw [← hJ, found, up] at miss
           refine Wp.cons (Wp.set rfl (Wp.cons (Wp.set rfl (Wp.nil (Wp.nil (Wp.nil
             (Wp.cons (Wp.set (eval_add rfl rfl) (Wp.nil ⟨?_, ?_⟩))))))))) <;>
@@ -233,7 +233,7 @@ theorem fold_parents_calls {m : Module} {w : World} {ctx : UInt64} {ready : Memo
         · -- A sibling: the parent is hashed into the next place, and its index written before it.
           have hit : J < count.toNat := by
             by_cases h : J.toUInt64 = count
-            · simp only [assign, ↓reduceIte, Nat.reduceEqDiff, e1, if_pos h] at some_; exact absurd some_ (by decide)
+            · simp only [assign, ↓reduceIte, Nat.reduceEqDiff, e1, ite_eq_left h] at some_; exact absurd some_ (by decide)
             · rcases Nat.lt_or_eq_of_le hJle with l | l
               · exact l
               · exact absurd (by rw [l]; exact UInt64.ofNat_toNat) h
@@ -304,7 +304,7 @@ theorem fold_parents_calls {m : Module} {w : World} {ctx : UInt64} {ready : Memo
       · -- An odd index needs the entry holding the index before.
         have xOdd : x.toNat % 2 = 1 := by
           by_cases h : x &&& 1 = 0
-          · simp only [assign, ↓reduceIte, Nat.reduceEqDiff, if_pos h] at odd; exact absurd odd (by decide)
+          · simp only [assign, ↓reduceIte, Nat.reduceEqDiff, ite_eq_left h] at odd; exact absurd odd (by decide)
           · have : (x &&& 1).toNat ≠ 0 := fun e => h (UInt64.toNat_inj.mp (by rw [e]; rfl))
             omega
         have down : (x - 1).toNat = x.toNat - 1 := by
@@ -316,10 +316,10 @@ theorem fold_parents_calls {m : Module} {w : World} {ctx : UInt64} {ready : Memo
           (by rw [show src = env 0 from e0.symm, show count = env 1 from e1.symm]; rfl) ⟨_, mem', c, ?_⟩)
         refine Wp.ite (eval_eq rfl rfl) (fun none_ => ?_) (fun some_ => ?_)
         · -- No entry before: the pass is refused.
-          have miss : (firstAt (wordAt mem src.toNat 40) (x - 1) count.toNat).toUInt64 = count := by
-            by_cases h : (firstAt (wordAt mem src.toNat 40) (x - 1) count.toNat).toUInt64 = count
+          have miss : (firstAt (big32 mem src.toNat 40) (x - 1) count.toNat).toUInt64 = count := by
+            by_cases h : (firstAt (big32 mem src.toNat 40) (x - 1) count.toNat).toUInt64 = count
             · exact h
-            · simp only [assign, ↓reduceIte, Nat.reduceEqDiff, e1, if_neg h] at none_; exact absurd rfl none_
+            · simp only [assign, ↓reduceIte, Nat.reduceEqDiff, e1, ite_eq_right h] at none_; exact absurd rfl none_
           rw [found, down] at miss
           refine Wp.cons (Wp.set rfl (Wp.cons (Wp.set rfl (Wp.nil (Wp.nil
             (Wp.cons (Wp.set (eval_add rfl rfl) (Wp.nil ⟨?_, ?_⟩)))))))) <;>
@@ -329,9 +329,9 @@ theorem fold_parents_calls {m : Module} {w : World} {ctx : UInt64} {ready : Memo
             · rw [levelParents_odd _ _ _ _ onLevel xOdd, miss]; rfl
           · rw [e1, afterEnd]; omega
         · -- The entry before exists: no parent of its own.
-          have there : (firstAt (wordAt mem src.toNat 40) (x - 1) count.toNat).toUInt64 ≠ count := by
+          have there : (firstAt (big32 mem src.toNat 40) (x - 1) count.toNat).toUInt64 ≠ count := by
             intro h
-            simp only [assign, ↓reduceIte, Nat.reduceEqDiff, e1, if_pos h] at some_; exact absurd some_ (by decide)
+            simp only [assign, ↓reduceIte, Nat.reduceEqDiff, e1, ite_eq_left h] at some_; exact absurd some_ (by decide)
           rw [Ne, found, down] at there
           refine Wp.skip (Wp.nil (Wp.cons (Wp.set (eval_add rfl rfl) (Wp.nil ⟨?_, ?_⟩)))) <;>
             simp only [ParentInv, assign, ↓reduceIte, Nat.reduceEqDiff, next]
@@ -345,7 +345,7 @@ theorem fold_parents_calls {m : Module} {w : World} {ctx : UInt64} {ready : Memo
       have offLevel : levelOf x.toNat ≠ depth.toNat := by
         intro h
         simp only [assign, ↓reduceIte, Nat.reduceEqDiff, e3] at off
-        rw [if_pos (UInt64.toNat_inj.mp (by rw [toNat_ofNat_of_lt _ (by omega)]; exact h))] at off
+        rw [ite_eq_left (UInt64.toNat_inj.mp (by rw [toNat_ofNat_of_lt _ (by omega)]; exact h))] at off
         exact absurd off (by decide)
       refine Wp.skip (Wp.cons (Wp.set (eval_add rfl rfl) (Wp.nil ⟨?_, ?_⟩)))
       · simp only [ParentInv, assign, ↓reduceIte, Nat.reduceEqDiff, next]
@@ -379,4 +379,4 @@ theorem fold_parents_calls {m : Module} {w : World} {ctx : UInt64} {ready : Memo
     · intro a fa outD outO
       rw [store_outside _ _ _ _ _ (by simpa [Width.bytes] using outO), frame a fa (by omega)]
 
-end Ssz.Native.Driver.BranchProof
+end EthLib.Consensus.Ssz.Native.Driver.BranchProof

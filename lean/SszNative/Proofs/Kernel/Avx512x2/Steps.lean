@@ -11,10 +11,11 @@ A rowwise block reads and writes scratch rows through pointers into the scratch 
 Each lane of it runs alone on the rows the invariants mention: scratch rows, and rows outside the scratch area.
 -/
 
-namespace Ssz.Native.Kernel.Avx512x2
+namespace EthLib.Consensus.Ssz.Native.Kernel.Avx512x2
 
-open Ssz.Sha256 Ssz.Native.Asm
-open Ssz.Native.Kernel.Avx512 (fetch step_jnz run_one assign_apply)
+open EthLib.Cryptography.Hash.Sha256 hiding K IV
+open EthLib.Consensus.Ssz.Native.Asm
+open EthLib.Consensus.Ssz.Native.Kernel.Avx512 (fetch step_jnz run_one assign_apply)
 
 /-- One pass of a loop: the block, then the branch back or out. -/
 theorem loop_iteration (p : Array Instr) (pre B post : List Instr)
@@ -71,7 +72,7 @@ theorem loop_run (p : Array Instr) (pre B post : List Instr)
   refine ⟨exec B y, inv', by simpa using ry, by simpa using py, ?_⟩
   rw [show n * (B.length + 1) = (n - 1) * (B.length + 1) + (B.length + 1) by
     rw [← Nat.succ_mul, show (n - 1).succ = n by omega], run_add, hy,
-    loop_iteration p pre B post layout straight y py ry, if_pos (last.mpr rfl)]
+    loop_iteration p pre B post layout straight y py ry, ite_eq_left (last.mpr rfl)]
 
 /-- Whether a memory operand is a 64-byte-aligned row through the scratch base, or a row through the table base. -/
 def rowOp (fb tb : Gpr) (fmax tmax : Nat) (m : Mem) : Bool :=
@@ -151,7 +152,7 @@ theorem viewRun_stores (G : Gpr → UInt64) (row : Nat → Nat) (reg : Nat → V
     rw [List.range_succ, List.map_append, viewRun_append]
     simp only [List.map_cons, List.map_nil, viewRun, viewStep, addrOf]
     by_cases last : u = n
-    · subst last; rw [assign_apply, if_pos rfl]
+    · subst last; rw [assign_apply, ite_eq_left rfl]
       -- The earlier stores write no register.
       have keep : (viewRun G ((List.range u).map fun u => .vstore ⟨sp, row u⟩ (reg u)) v).regs = v.regs := by
         funext r
@@ -160,7 +161,7 @@ theorem viewRun_stores (G : Gpr → UInt64) (row : Nat → Nat) (reg : Nat → V
         obtain ⟨w, -, rfl⟩ := List.mem_map.mp hi
         simp [destOf]
       rw [keep]
-    · rw [assign_apply, if_neg (fun e => last (inj u n hu (by omega) (by omega)))]
+    · rw [assign_apply, ite_eq_right (fun e => last (inj u n hu (by omega) (by omega)))]
       exact ih (fun a b ha hb => inj a b (by omega) (by omega)) u (by omega)
 
-end Ssz.Native.Kernel.Avx512x2
+end EthLib.Consensus.Ssz.Native.Kernel.Avx512x2

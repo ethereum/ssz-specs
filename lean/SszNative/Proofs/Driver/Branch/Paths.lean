@@ -1,5 +1,5 @@
 import SszNative.Proofs.Driver.Branch.VerifyBranch
-import Ssz.Proofs.Merkle.HelperUniqueness
+import EthLib.Consensus.Proofs.Ssz.Merkle.HelperUniqueness
 
 /-!
 The index checks and helper indices of a multiproof, restated in the shape the compiled loops compute them.
@@ -8,9 +8,9 @@ A path is walked by halving until the root, a claim is checked against each of i
 indices are the distinct candidates, largest first.
 -/
 
-namespace Ssz.Native.Driver.BranchProof
+namespace EthLib.Consensus.Ssz.Native.Driver.BranchProof
 
-open Ssz
+open EthLib.Consensus.Ssz
 
 /-- Checked claims are each at least two. -/
 theorem rejectClaimPaths_valid (l : List Nat) :
@@ -23,7 +23,7 @@ theorem rejectClaimPaths_valid (l : List Nat) :
     · simp [zero] at h
     by_cases one : c = 1
     · simp [one] at h
-    simp only [zero, one, if_false] at h
+    simp only [zero, one, ite_false] at h
     split at h
     · cases h
     intro x hx
@@ -112,4 +112,4 @@ theorem getHelperIndices_eq {l : List Nat} (accepted : rejectRelated l = .ok ())
   · rw [members, (getHelperIndices_frontier built).2.2 x]
     simp [candidatesOf, claimPaths_eq, gindexSibling]
 
-end Ssz.Native.Driver.BranchProof
+end EthLib.Consensus.Ssz.Native.Driver.BranchProof

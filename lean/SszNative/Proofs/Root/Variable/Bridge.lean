@@ -4,9 +4,9 @@ import SszNative.Proofs.Root.Merkle
 
 /-! The trees and the fixed-size roots, as proved node by node, gathered as the facts the other roots rest on. -/
 
-namespace Ssz.Native.RootProof
+namespace EthLib.Consensus.Ssz.Native.RootProof
 
-open Ssz Ssz.Native
+open EthLib.Consensus.Ssz EthLib.Consensus.Ssz.Native
 
 /-- The two readings of a buffer's nodes are the same. -/
 theorem nodesFrom_same (nodes : ByteArray) (offset count : Nat) :
@@ -49,7 +49,7 @@ theorem facts_hold : Facts where
     · -- No nodes: the zero tree of the depth.
       subst zero
       rw [Native.merkleizeAt]
-      simp only [beq_self_eq_true, if_true, zeroRoot_data]
+      simp only [beq_self_eq_true, ite_true, zeroRoot_data]
       rw [subtreeAt_past _ _ _ (by simp [RootProof.nodesFrom])]
     · rw [nodesFrom_same]
       exact (merkleizeAt_spec nodes offset count depth fits inside small).2
@@ -75,4 +75,4 @@ theorem facts_hold : Facts where
         obtain ⟨v, read, _, root⟩ := rootsOf_hashTreeRoot d p sound b s t c run i h valid
         exact ⟨v, read, root⟩) b start count small one records
 
-end Ssz.Native.RootProof
+end EthLib.Consensus.Ssz.Native.RootProof

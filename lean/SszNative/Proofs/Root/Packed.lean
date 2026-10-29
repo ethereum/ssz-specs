@@ -6,17 +6,17 @@ import SszNative.Root
 
 /-! Values packed into nodes: gathered into zero-padded blocks, then hashed level by level. -/
 
-namespace Ssz.Native
+namespace EthLib.Consensus.Ssz.Native
 
-open Ssz
+open EthLib.Consensus.Ssz
 
 /-- The tree a nonempty count of leaves needs is under twice as wide as the count. -/
 theorem two_pow_depthFor_lt (n : Nat) (positive : 1 ≤ n) : 2 ^ depthFor n < 2 * n := by
   -- Induction following how the depth halves the count.
   induction n using depthFor.induct with
-  | case1 n small => rw [depthFor, if_pos small]; omega
+  | case1 n small => rw [depthFor, ite_eq_left small]; omega
   | case2 n large ih =>
-    rw [depthFor, if_neg large, Nat.pow_succ]
+    rw [depthFor, ite_eq_right large, Nat.pow_succ]
     have := ih (by omega)
     -- An odd count is never a power of two above one.
     rcases Nat.mod_two_eq_zero_or_one n with even | odd
@@ -43,7 +43,7 @@ theorem packBytes_node_get (data : Bytes) (j x : Nat) (lx : x < 32) :
   -- Past the packed nodes, the zero node's bytes are zero.
   · rw [Array.getElem?_eq_none (by omega), Option.getD_none, getElem!_pos _ x (by simp [zeroChunk]; exact lx)]
     simp only [packBytes_size, bytesPerChunk] at node
-    rw [if_neg (by omega)]
+    rw [ite_eq_right (by omega)]
     simp [zeroChunk]
 
 /-- Gathered records, each zero-padded to a block of nodes, read as the nodes their bytes pack into. -/
@@ -178,4 +178,4 @@ theorem packedRoots_spec (b : ByteArray) (start stride width count : Nat)
   simp only [packedRoot, cut, chunksForBytes, bytesPerChunk, depth, nodesFor]
   rw [show width + 32 - 1 = width + 31 by omega]
 
-end Ssz.Native
+end EthLib.Consensus.Ssz.Native

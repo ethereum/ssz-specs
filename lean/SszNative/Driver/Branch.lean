@@ -27,9 +27,9 @@ Each verifier answers one word:
 A multiproof's node sets are lists of 40-byte entries: an index, then its node.
 -/
 
-namespace Ssz.Native.Driver
+namespace EthLib.Consensus.Ssz.Native.Driver
 
-open Ssz.Native.Ir Ssz.Native.Ir.Expr Ssz.Native.Ir.Stmt
+open EthLib.Consensus.Ssz.Native.Ir EthLib.Consensus.Ssz.Native.Ir.Expr EthLib.Consensus.Ssz.Native.Ir.Stmt
 
 /-- The bytes of one entry of a node set: an 8-byte index, then a 32-byte node. -/
 abbrev entryBytes : Nat := 40
@@ -516,4 +516,4 @@ def branchFns : List (String × Fn) :=
 theorem branchFns_wf : branchFns.all (fun f => f.2.wf) = true := by
   decide +kernel
 
-end Ssz.Native.Driver
+end EthLib.Consensus.Ssz.Native.Driver

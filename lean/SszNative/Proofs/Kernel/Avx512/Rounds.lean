@@ -15,9 +15,10 @@ So each lane runs as one scalar SHA-256 over its own message:
 - the second feed-forward ends the second compression, in registers 0 to 7.
 -/
 
-namespace Ssz.Native.Kernel.Avx512
+namespace EthLib.Consensus.Ssz.Native.Kernel.Avx512
 
-open Ssz.Sha256 Ssz.Native.Asm
+open EthLib.Cryptography.Hash.Sha256 hiding K IV
+open EthLib.Consensus.Ssz.Native.Asm
 
 /-- Whether an instruction reads and writes each lane on its own, and writes only a vector register. -/
 def lanewise : Instr → Bool
@@ -74,8 +75,8 @@ theorem assign_ne {α β : Type} [DecidableEq α] (f : α → β) (a : α) (b : 
   simp [assign, h]
 
 /-- Table 0xCA is the choice function. -/
-theorem ternlog_ca (a b c : UInt32) : ternlog 0xCA a b c = choose a b c := by
-  simp (config := { decide := true }) only [ternlog, choose, ite_true, ite_false]
+theorem ternlog_ca (a b c : UInt32) : ternlog 0xCA a b c = ch a b c := by
+  simp (config := { decide := true }) only [ternlog, ch, ite_true, ite_false]
   apply UInt32.toBitVec_inj.mp
   apply BitVec.eq_of_getLsbD_eq
   intro i hi
@@ -93,9 +94,9 @@ theorem ternlog_96 (a b c : UInt32) : ternlog 0x96 a b c = a ^^^ b ^^^ c := by
   simp [hi]
   cases a.toBitVec[i] <;> cases b.toBitVec[i] <;> cases c.toBitVec[i] <;> rfl
 
-/-- Table 0xE8 is the majority function. -/
-theorem ternlog_e8 (a b c : UInt32) : ternlog 0xE8 a b c = majority a b c := by
-  simp (config := { decide := true }) only [ternlog, majority, ite_true, ite_false]
+/-- Table 0xE8 is the maj function. -/
+theorem ternlog_e8 (a b c : UInt32) : ternlog 0xE8 a b c = maj a b c := by
+  simp (config := { decide := true }) only [ternlog, maj, ite_true, ite_false]
   apply UInt32.toBitVec_inj.mp
   apply BitVec.eq_of_getLsbD_eq
   intro i hi
@@ -119,14 +120,14 @@ theorem firstRound_eq (t : Nat) :
 
 /-- One round from the sum that seeds it: the sum is H plus the round's constant and word. -/
 def roundT (st : Vector UInt32 8) (sum : UInt32) : Vector UInt32 8 :=
-  let t1 := sum + choose st[4] st[5] st[6] + bigSigma1 st[4]
-  #v[t1 + (bigSigma0 st[0] + majority st[0] st[1] st[2]), st[0], st[1], st[2], st[3] + t1, st[4], st[5], st[6]]
+  let t1 := sum + ch st[4] st[5] st[6] + bigSigma1 st[4]
+  #v[t1 + (bigSigma0 st[0] + maj st[0] st[1] st[2]), st[0], st[1], st[2], st[3] + t1, st[4], st[5], st[6]]
 
 /-- A round of the specification is a round seeded with H plus the constant plus the word. -/
 theorem round_eq_roundT (st : Vector UInt32 8) (k w : UInt32) : round st k w = roundT st (st[7] + k + w) := by
   -- The specification's sum and the seeded sum add the same five words in another order.
-  have t1 : st[7] + bigSigma1 st[4] + choose st[4] st[5] st[6] + k + w =
-      st[7] + k + w + choose st[4] st[5] st[6] + bigSigma1 st[4] := by ac_rfl
+  have t1 : st[7] + bigSigma1 st[4] + ch st[4] st[5] st[6] + k + w =
+      st[7] + k + w + ch st[4] st[5] st[6] + bigSigma1 st[4] := by ac_rfl
   simp only [round, roundT, t1]
 
 
@@ -237,29 +238,29 @@ theorem table_lane (mem : Nat → UInt8) (gpr : Gpr → UInt64) (table : TableAt
 
 /-- The constants row of round t. -/
 theorem tableWord_k (t : Nat) (l : Nat) (ht : t < 64) (hl : l < 16) :
-    tableWord (16 * t + l) = roundConstants[t]! := by
+    tableWord (16 * t + l) = Cryptography.Hash.Sha256.K[t]! := by
   -- The word falls in the constants rows.
   simp only [tableWord]
-  rw [if_pos (by omega), show (16 * t + l) / 16 % 64 = t by omega]
+  rw [ite_eq_left (by omega), show (16 * t + l) / 16 % 64 = t by omega]
 
 /-- The padding row of round t: the constant plus the padding block's schedule word. -/
 theorem tableWord_pad (t : Nat) (l : Nat) (ht : t < 64) (hl : l < 16) :
-    tableWord (16 * (64 + t) + l) = roundConstants[t]! + (schedule paddingBlock 0)[t]! := by
+    tableWord (16 * (64 + t) + l) = Cryptography.Hash.Sha256.K[t]! + (schedule paddingBlock 0)[t]! := by
   -- The word falls in the padding rows.
   simp only [tableWord]
-  rw [if_neg (by omega), if_pos (by omega), paddingWK, show (16 * (64 + t) + l - 1024) / 16 % 64 = t by omega]
+  rw [ite_eq_right (by omega), ite_eq_left (by omega), paddingWK, show (16 * (64 + t) + l - 1024) / 16 % 64 = t by omega]
 
 /-- The initial-state row of word j. -/
 theorem tableWord_iv (j : Nat) (l : Nat) (hj : j < 8) (hl : l < 16) :
-    tableWord (16 * (128 + j) + l) = initialState[j]! := by
+    tableWord (16 * (128 + j) + l) = Cryptography.Hash.Sha256.IV[j]! := by
   -- The word falls in the initial-state rows.
   simp only [tableWord]
-  rw [if_neg (by omega), if_neg (by omega), if_pos (by omega), show (16 * (128 + j) + l - 2048) / 16 % 8 = j by omega]
+  rw [ite_eq_right (by omega), ite_eq_right (by omega), ite_eq_left (by omega), show (16 * (128 + j) + l - 2048) / 16 % 8 = j by omega]
 
 /-- A first-block round on one lane: the working words take one round of the constant and the schedule word. -/
 theorem firstRound_lane (mem gpr l regs) (table : TableAt mem (gpr tbl).toNat) (t : Nat) (ht : t < 64) :
     (Vector.ofFn fun j : Fin 8 => laneRun mem gpr l (firstRound t) regs (role (t + 1) j)) =
-      round (Vector.ofFn fun j : Fin 8 => regs (role t j)) roundConstants[t]! (regs (ring t)) := by
+      round (Vector.ofFn fun j : Fin 8 => regs (role t j)) Cryptography.Hash.Sha256.K[t]! (regs (ring t)) := by
   -- Compare the eight working words one by one.
   rw [round_eq_roundT]
   apply Vector.ext
@@ -289,11 +290,11 @@ theorem firstRound_other (mem gpr l regs) (t : Nat) (r : Vreg) (low : 8 ≤ r.va
 /-- A schedule step on one lane: the next word from the four words it reads. -/
 theorem schedule_lane (mem gpr l regs) (t : Nat) :
     laneRun mem gpr l (scheduleCode t) regs (ring t) =
-      regs (ring t) + sigma0 (regs (ring (t + 1))) + regs (ring (t + 9)) + sigma1 (regs (ring (t + 14))) := by
+      regs (ring t) + smallSigma0 (regs (ring (t + 1))) + regs (ring (t + 9)) + smallSigma1 (regs (ring (t + 14))) := by
   -- The step adds the four words, with the two small sigmas built from rotations and a shift.
   simp only [scheduleCode, laneRun, laneStep, assign_same, assign_ne _ _ _ _ (ring_ne_tmp _ _),
     assign_ne _ _ _ _ (ring_add_ne t 1 (by decide)), assign_ne _ _ _ _ (ring_add_ne t 9 (by decide))]
-  simp [tmp, assign, ternlog_96, sigma0, sigma1]
+  simp [tmp, assign, ternlog_96, smallSigma0, smallSigma1]
   ac_rfl
 
 /-- A schedule step leaves every register below the last three temporaries alone, except the word it writes. -/
@@ -325,30 +326,30 @@ private theorem range_eq_finRange (n : Nat) : List.range n = (List.finRange n).m
 /-- Compression as the working words after sixty-four rounds, added to the state. -/
 theorem compress_rounds (st : Vector UInt32 8) (b : ByteArray) (start : Nat) :
     compress st b start =
-      st.zipWith (· + ·) (roundsTo st (fun i => roundConstants[i]!) (fun i => (schedule b start)[i]!) 64) := by
+      st.zipWith (· + ·) (roundsTo st (fun i => Cryptography.Hash.Sha256.K[i]!) (fun i => (schedule b start)[i]!) 64) := by
   -- The specification's fold reads its constants and words in range, so the defaulted reads agree.
-  have same : (fun cur (i : Fin 64) => round cur roundConstants[i] (schedule b start)[i]) =
-      fun cur i => round cur roundConstants[i.val]! (schedule b start)[i.val]! := by
+  have same : (fun cur (i : Fin 64) => round cur Cryptography.Hash.Sha256.K[i] (schedule b start)[i]) =
+      fun cur i => round cur Cryptography.Hash.Sha256.K[i.val]! (schedule b start)[i.val]! := by
     funext cur i
-    rw [getElem!_pos roundConstants i.val i.isLt, getElem!_pos (schedule b start) i.val i.isLt]
+    rw [getElem!_pos Cryptography.Hash.Sha256.K i.val i.isLt, getElem!_pos (schedule b start) i.val i.isLt]
     rfl
   simp only [compress, roundsTo, range_eq_finRange, List.foldl_map]
   rw [same]
 
 /-- The round constant of round i. -/
-abbrev K (i : Nat) : UInt32 := roundConstants[i]!
+abbrev K (i : Nat) : UInt32 := Cryptography.Hash.Sha256.K[i]!
 
 /-- Word i of a block's schedule. -/
 abbrev W (m : ByteArray) (i : Nat) : UInt32 := (schedule m 0)[i]!
 
 /-- The first sixteen schedule words are the block's big-endian words. -/
-theorem W_input (m : ByteArray) (i : Nat) (h : i < 16) : W m i = wordAt m (4 * i) := by
+theorem W_input (m : ByteArray) (i : Nat) (h : i < 16) : W m i = big32 m (4 * i) := by
   -- Schedule words below 16 are the block's input words.
   rw [W, getElem!_pos (schedule m 0) i (by omega), schedule_input m 0 i h, Nat.zero_add]
 
 /-- Later schedule words follow the four-term recurrence. -/
 theorem W_next (m : ByteArray) (t : Nat) (h : t < 48) :
-    W m (t + 16) = W m t + sigma0 (W m (t + 1)) + W m (t + 9) + sigma1 (W m (t + 14)) := by
+    W m (t + 16) = W m t + smallSigma0 (W m (t + 1)) + W m (t + 9) + smallSigma1 (W m (t + 14)) := by
   -- Read the recurrence at index t + 16.
   simp only [W]
   rw [getElem!_pos (schedule m 0) (t + 16) (by omega), schedule_recurrence m 0 (t + 16) (by omega) (by omega),
@@ -359,7 +360,7 @@ theorem W_next (m : ByteArray) (t : Nat) (h : t < 48) :
 
 /-- One lane of the first block before round t: the working words, and the schedule words not yet consumed. -/
 def FirstInv (m : ByteArray) (t : Nat) (regs : Vreg → UInt32) : Prop :=
-  (Vector.ofFn fun j : Fin 8 => regs (role t j)) = roundsTo initialState K (W m) t ∧
+  (Vector.ofFn fun j : Fin 8 => regs (role t j)) = roundsTo Cryptography.Hash.Sha256.IV K (W m) t ∧
   ∀ u, t ≤ u → u < t + 16 → u < 64 → regs (ring u) = W m u
 
 /-- One first-block round with its schedule step. -/
@@ -446,11 +447,11 @@ theorem range8 : List.range 8 = [0, 1, 2, 3, 4, 5, 6, 7] := rfl
 
 /-- After the initial-state loads, register j holds word j of the initial state. -/
 theorem ivCode_lane (mem gpr l regs) (table : TableAt mem (gpr tbl).toNat) (j : Nat) (hj : j < 8) :
-    laneRun mem gpr l ivCode regs (home j) = initialState[j]! := by
+    laneRun mem gpr l ivCode regs (home j) = Cryptography.Hash.Sha256.IV[j]! := by
   -- Each of the eight words is loaded from its table row.
   have hj' : j = 0 ∨ j = 1 ∨ j = 2 ∨ j = 3 ∨ j = 4 ∨ j = 5 ∨ j = 6 ∨ j = 7 := by omega
   have row : ∀ i, i < 8 → readWord mem ((gpr (tableEntry (ivAvx512 i)).base).toNat + (tableEntry (ivAvx512 i)).disp + 4 * l.val) =
-      initialState[i]! := fun i hi => by
+      Cryptography.Hash.Sha256.IV[i]! := fun i hi => by
     rw [show ivAvx512 i = 64 * (128 + i) by simp only [ivAvx512]; omega, table_lane mem gpr table l _ (by omega),
       tableWord_iv i l.val hi l.isLt]
   rcases hj' with rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl <;>
@@ -468,13 +469,13 @@ theorem ivCode_other (mem gpr l regs) (r : Vreg) (low : 8 ≤ r.val) :
 
 /-- The first block's invariant holds before its first round. -/
 theorem first_start (mem gpr l regs) (table : TableAt mem (gpr tbl).toNat) (m : ByteArray)
-    (words : ∀ t < 16, regs (ring t) = wordAt m (4 * t)) : FirstInv m 0 (laneRun mem gpr l ivCode regs) := by
+    (words : ∀ t < 16, regs (ring t) = big32 m (4 * t)) : FirstInv m 0 (laneRun mem gpr l ivCode regs) := by
   -- The working words are the initial state, and the schedule window is the input words.
   constructor
   · apply Vector.ext
     intro i hi
     simp only [Vector.getElem_ofFn, roundsTo, List.range_zero, List.foldl_nil]
-    rw [← home_eq_role i hi, ivCode_lane mem gpr l regs table i hi, getElem!_pos initialState i hi]
+    rw [← home_eq_role i hi, ivCode_lane mem gpr l regs table i hi, getElem!_pos Cryptography.Hash.Sha256.IV i hi]
   · intro u _ hi _
     rw [ivCode_other _ _ _ _ _ (ring_range u).1, words u (by omega), W_input m u (by omega)]
 
@@ -499,12 +500,12 @@ def PadInv (mid : Vector UInt32 8) (t : Nat) (regs : Vreg → UInt32) : Prop :=
 
 /-- The feed-forward adds the initial state to each working word and keeps a copy aside. -/
 theorem feed_lane (mem gpr l regs) (table : TableAt mem (gpr tbl).toNat) (j : Nat) (hj : j < 8) :
-    laneRun mem gpr l feed regs (home j) = regs (home j) + initialState[j]! ∧
-    laneRun mem gpr l feed regs (ring j) = regs (home j) + initialState[j]! := by
+    laneRun mem gpr l feed regs (home j) = regs (home j) + Cryptography.Hash.Sha256.IV[j]! ∧
+    laneRun mem gpr l feed regs (ring j) = regs (home j) + Cryptography.Hash.Sha256.IV[j]! := by
   -- Each of the eight words gains its initial-state word, and a copy is kept aside.
   have hj' : j = 0 ∨ j = 1 ∨ j = 2 ∨ j = 3 ∨ j = 4 ∨ j = 5 ∨ j = 6 ∨ j = 7 := by omega
   have row : ∀ i, i < 8 → readWord mem ((gpr (tableEntry (ivAvx512 i)).base).toNat + (tableEntry (ivAvx512 i)).disp + 4 * l.val) =
-      initialState[i]! := fun i hi => by
+      Cryptography.Hash.Sha256.IV[i]! := fun i hi => by
     rw [show ivAvx512 i = 64 * (128 + i) by simp only [ivAvx512]; omega, table_lane mem gpr table l _ (by omega),
       tableWord_iv i l.val hi l.isLt]
   rcases hj' with rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl <;>
@@ -515,20 +516,20 @@ theorem feed_lane (mem gpr l regs) (table : TableAt mem (gpr tbl).toNat) (j : Na
 /-- The padding block's invariant holds before its first round, with the first block's result kept aside. -/
 theorem feed_start (mem gpr l regs) (table : TableAt mem (gpr tbl).toNat) (m : ByteArray)
     (inv : FirstInv m 64 regs) :
-    PadInv (compress initialState m 0) 0 (laneRun mem gpr l feed regs) := by
+    PadInv (compress Cryptography.Hash.Sha256.IV m 0) 0 (laneRun mem gpr l feed regs) := by
   -- The first compression is the initial state plus the working words after sixty-four rounds.
-  have mid : ∀ j (hj : j < 8), (compress initialState m 0)[j] = initialState[j]! + regs (home j) := by
+  have mid : ∀ j (hj : j < 8), (compress Cryptography.Hash.Sha256.IV m 0)[j] = Cryptography.Hash.Sha256.IV[j]! + regs (home j) := by
     intro j hj
     have := congrArg (·[j]) inv.1
     simp only [Vector.getElem_ofFn] at this
-    rw [compress_rounds, Vector.getElem_zipWith, ← this, home_eq_role64 j hj, getElem!_pos initialState j hj]
+    rw [compress_rounds, Vector.getElem_zipWith, ← this, home_eq_role64 j hj, getElem!_pos Cryptography.Hash.Sha256.IV j hj]
   constructor
   · apply Vector.ext
     intro i hi
     simp only [Vector.getElem_ofFn, roundsTo, List.range_zero, List.foldl_nil]
     rw [← home_eq_role i hi, (feed_lane mem gpr l regs table i hi).1, mid i hi, UInt32.add_comm]
   · intro j hj
-    rw [(feed_lane mem gpr l regs table j hj).2, getElem!_pos (compress initialState m 0) j hj, mid j hj,
+    rw [(feed_lane mem gpr l regs table j hj).2, getElem!_pos (compress Cryptography.Hash.Sha256.IV m 0) j hj, mid j hj,
       UInt32.add_comm]
 
 /-- A padding round keeps the invariant one round on. -/
@@ -576,8 +577,8 @@ theorem finish_lane (mem gpr l regs) (j : Nat) (hj : j < 8) :
 
 /-- One lane of the whole compute core: two compressions of that lane's message. -/
 theorem core_lane (mem gpr l regs) (table : TableAt mem (gpr tbl).toNat) (m : ByteArray)
-    (words : ∀ t < 16, regs (ring t) = wordAt m (4 * t)) (j : Nat) (hj : j < 8) :
-    laneRun mem gpr l core regs (home j) = (compress (compress initialState m 0) paddingBlock 0)[j] := by
+    (words : ∀ t < 16, regs (ring t) = big32 m (4 * t)) (j : Nat) (hj : j < 8) :
+    laneRun mem gpr l core regs (home j) = (compress (compress Cryptography.Hash.Sha256.IV m 0) paddingBlock 0)[j] := by
   -- Run the first block, the feed-forward, the padding block, and the final feed-forward.
   simp only [core, laneRun_append]
   have first := first_block mem gpr l _ table m (first_start mem gpr l regs table m words) 64 (Nat.le_refl _)
@@ -609,9 +610,9 @@ The compute core: from the sixteen messages' input words, each lane ends with it
 Only vector registers change.
 -/
 theorem core_spec (s : State) (table : TableAt s.mem (s.gpr tbl).toNat) (m : Fin 16 → ByteArray)
-    (words : ∀ t < 16, ∀ p, s.vec (ring t) p = wordAt (m p) (4 * t)) :
+    (words : ∀ t < 16, ∀ p, s.vec (ring t) p = big32 (m p) (4 * t)) :
     (∀ j (hj : j < 8), ∀ p,
-      (exec core s).vec (home j) p = (compress (compress initialState (m p) 0) paddingBlock 0)[j]) ∧
+      (exec core s).vec (home j) p = (compress (compress Cryptography.Hash.Sha256.IV (m p) 0) paddingBlock 0)[j]) ∧
     (exec core s).gpr = s.gpr ∧ (exec core s).mem = s.mem ∧ (exec core s).zf = s.zf := by
   -- The core runs lane by lane, and each lane computes its own two compressions.
   have h := exec_lanewise core core_lanewise s

@@ -11,7 +11,7 @@ The gathering routines for one field width, run on the machine model: each field
 One zero-extending load and one or two stores move a whole slot, so no byte copy runs.
 -/
 
-namespace Ssz.Native.Asm
+namespace EthLib.Consensus.Ssz.Native.Asm
 
 /-- Byte j of a word read from memory is the memory byte j places on. -/
 theorem readWord_byte (mem : Nat → UInt8) (a j : Nat) (hj : j < 4) :
@@ -59,10 +59,10 @@ theorem laneByte_loaded (mem : Nat → UInt8) (a n k : Nat) (hk : k < 64) (v : L
   -- Byte k sits in lane k / 4, at position k mod 4 within it.
   simp only [laneByte, laneOf, hv, Nat.mod_eq_of_lt (show k / 4 < 16 by omega)]
   by_cases inside : k / 4 < n
-  · rw [if_pos inside, if_pos (by omega), wordByte_mod, readWord_byte _ _ _ (by omega)]
+  · rw [ite_eq_left inside, ite_eq_left (by omega), wordByte_mod, readWord_byte _ _ _ (by omega)]
     congr 1
     omega
-  · rw [if_neg inside, if_neg (by omega), zero_byte]
+  · rw [ite_eq_right inside, ite_eq_right (by omega), zero_byte]
 
 /-- The bytes of a register whose lowest lane alone is set: that lane's bytes, then zeros. -/
 theorem laneByte_low (w : UInt32) (k : Nat) (hk : k < 64) :
@@ -73,8 +73,8 @@ theorem laneByte_low (w : UInt32) (k : Nat) (hk : k < 64) :
     simp only [laneOf, Fin.ext_iff, Fin.val_zero]
     omega
   by_cases low : k < 4
-  · rw [if_pos (lowest.mpr low), if_pos low]
-  · rw [if_neg (fun h => low (lowest.mp h)), if_neg low, zero_byte]
+  · rw [ite_eq_left (lowest.mpr low), ite_eq_left low]
+  · rw [ite_eq_right (fun h => low (lowest.mp h)), ite_eq_right low, zero_byte]
 
 /-- Stores that agree on every byte they write leave the same memory. -/
 theorem store_congr (mem : Nat → UInt8) (a n : Nat) (f g : Nat → UInt8) (h : ∀ k < n, f k = g k) :
@@ -91,17 +91,17 @@ theorem store_halves (mem : Nat → UInt8) (a : Nat) (f g : Nat → UInt8) :
   funext x
   simp only [store]
   by_cases high : a + 32 ≤ x ∧ x < a + 32 + 32
-  · rw [if_pos high, if_pos (by omega), if_neg (by omega), show x - (a + 32) = x - a - 32 by omega]
-  · rw [if_neg high]
+  · rw [ite_eq_left high, ite_eq_left (by omega), ite_eq_right (by omega), show x - (a + 32) = x - a - 32 by omega]
+  · rw [ite_eq_right high]
     by_cases low : a ≤ x ∧ x < a + 32
-    · rw [if_pos low, if_pos (by omega), if_pos (by omega)]
-    · rw [if_neg low, if_neg (by omega)]
+    · rw [ite_eq_left low, ite_eq_left (by omega), ite_eq_left (by omega)]
+    · rw [ite_eq_right low, ite_eq_right (by omega)]
 
-end Ssz.Native.Asm
+end EthLib.Consensus.Ssz.Native.Asm
 
-namespace Ssz.Native.Kernel
+namespace EthLib.Consensus.Ssz.Native.Kernel
 
-open Ssz.Native.Asm
+open EthLib.Consensus.Ssz.Native.Asm
 
 /-- The straight-line part of a record: load, store, and advance, without the branch back. -/
 def straight (width slot : Nat) : List Instr :=
@@ -217,16 +217,16 @@ private theorem record (shape : Shape program code) (effect : RecordEffect code 
       have offset : out + slot * i + k - (out + slot * i) = k := by omega
       have inside : out ≤ out + slot * i + k ∧ out + slot * i + k < out + slot * (i + 1) := by
         rw [Nat.mul_succ]; omega
-      rw [if_pos here, if_pos inside, tableEntry, offset]
+      rw [ite_eq_left here, ite_eq_left inside, tableEntry, offset]
       by_cases field : k < width
       · have outside := apart i more k field
-        rw [if_pos field, if_pos field, mem, if_neg (by omega)]
-      · rw [if_neg field, if_neg field]
+        rw [ite_eq_left field, ite_eq_left field, mem, ite_eq_right (by omega)]
+      · rw [ite_eq_right field, ite_eq_right field]
     · -- Any other byte: an earlier slot, or untouched.
-      rw [if_neg here, mem]
+      rw [ite_eq_right here, mem]
       by_cases earlier : out ≤ x ∧ x < out + slot * i
-      · rw [if_pos earlier, if_pos ⟨earlier.1, by rw [Nat.mul_succ]; omega⟩]
-      · rw [if_neg earlier, if_neg (by rw [Nat.mul_succ]; omega)]
+      · rw [ite_eq_left earlier, ite_eq_left ⟨earlier.1, by rw [Nat.mul_succ]; omega⟩]
+      · rw [ite_eq_right earlier, ite_eq_right (by rw [Nat.mul_succ]; omega)]
 
 /-- The loop, from any record on, writes every remaining record and leaves the routine at its branch. -/
 private theorem records (shape : Shape program code) (effect : RecordEffect code width slot)
@@ -248,9 +248,9 @@ private theorem records (shape : Shape program code) (effect : RecordEffect code
     by_cases last : m = 0
     · -- The last record falls through to the end.
       subst last
-      rw [if_neg (by omega), show i + 1 = count by omega] at next
+      rw [ite_eq_right (by omega), show i + 1 = count by omega] at next
       simpa only [Nat.mul_zero, run] using next
-    · rw [if_pos (by omega)] at next
+    · rw [ite_eq_left (by omega)] at next
       exact ih _ (i + 1) (by omega) (by omega) next
 
 /-- A routine of this shape copies each record's field into its slot and zeroes the rest of the slot. -/
@@ -309,8 +309,8 @@ theorem shaped_correct (shape : Shape program code) (effect : RecordEffect code 
       rw [Nat.mul_succ] at grow
       have tableEntry := recordByte_at s.mem out src width skip (slot - width) i k (by omega)
       rw [show width + (slot - width) = slot by omega] at tableEntry
-      rw [mem, if_pos ⟨by omega, by omega⟩, tableEntry]
-    · rw [mem, if_neg hx]
+      rw [mem, ite_eq_left ⟨by omega, by omega⟩, tableEntry]
+    · rw [mem, ite_eq_right hx]
 
 end
 
@@ -332,19 +332,19 @@ theorem straight_effect (width : Nat) (known : width ∈ [1, 2, 4, 8, 16, 32]) :
   -- One byte, moved through a general register into the lowest lane.
   · rw [laneByte_low _ _ (by omega)]
     by_cases low : k < 4
-    · rw [if_pos low, byte_lane _ _ low]
+    · rw [ite_eq_left low, byte_lane _ _ low]
       by_cases z : k = 0 <;> simp [z]
-    · rw [if_neg low, if_neg (by omega)]
+    · rw [ite_eq_right low, ite_eq_right (by omega)]
   -- Two bytes, moved the same way.
   · rw [laneByte_low _ _ (by omega)]
     by_cases low : k < 4
-    · rw [if_pos low, pair_lane _ _ _ low]
+    · rw [ite_eq_left low, pair_lane _ _ _ low]
       by_cases z : k = 0
       · simp [z]
       · by_cases o : k = 1
         · simp [o]
-        · rw [if_neg z, if_neg o, if_neg (by omega)]
-    · rw [if_neg low, if_neg (by omega)]
+        · rw [ite_eq_right z, ite_eq_right o, ite_eq_right (by omega)]
+    · rw [ite_eq_right low, ite_eq_right (by omega)]
   -- A lane count fits each width: one, two, four, or eight lanes.
   · rw [laneByte_loaded _ _ 1 k (by omega) _ (fun l => by
       by_cases h : l = 0
@@ -365,13 +365,13 @@ theorem key_effect : RecordEffect straightKey 48 64 := by
     apply store_congr
     intro k hk
     by_cases low : k < 32
-    · rw [if_pos low, laneByte_loaded _ _ 8 k (by omega) _ (fun l => rfl), if_pos (by omega), if_pos (by omega)]
-    · rw [if_neg low, laneByte_loaded _ _ 4 (k - 32) (by omega) _ (fun l => rfl)]
+    · rw [ite_eq_left low, laneByte_loaded _ _ 8 k (by omega) _ (fun l => rfl), ite_eq_left (by omega), ite_eq_left (by omega)]
+    · rw [ite_eq_right low, laneByte_loaded _ _ 4 (k - 32) (by omega) _ (fun l => rfl)]
       by_cases key : k < 48
-      · rw [if_pos (by omega), if_pos key]
+      · rw [ite_eq_left (by omega), ite_eq_left key]
         congr 1
         omega
-      · rw [if_neg (by omega), if_neg key]
+      · rw [ite_eq_right (by omega), ite_eq_right key]
   -- The pointer and count updates, and the flag the count leaves.
   all_goals try (simp [straightKey, exec, exec1, assign]; done)
   -- No other register is written.
@@ -437,4 +437,4 @@ theorem gatherKey_correct (s : State) (out src count skip : Nat)
   shaped_correct _ _ 48 64 s out src count skip key_shape key_effect (by omega) (by omega) (by omega)
     start running hout hsrc hcount hskip outBound srcBound apart
 
-end Ssz.Native.Kernel
+end EthLib.Consensus.Ssz.Native.Kernel

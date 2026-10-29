@@ -7,9 +7,9 @@ Every copy loop of the tree drivers has this shape: two addresses computed, 32 b
 Destinations miss each other and every source, so each copy lands and stays.
 -/
 
-namespace Ssz.Native.Driver
+namespace EthLib.Consensus.Ssz.Native.Driver
 
-open Ssz Ssz.Native.Asm Ssz.Native.Ir
+open EthLib.Consensus.Ssz EthLib.Consensus.Ssz.Native.Asm EthLib.Consensus.Ssz.Native.Ir
 
 /-- Variables as at the start, except the index and the two addresses. -/
 def Agree (e0 e : Env) (I D S : Nat) : Prop :=
@@ -54,7 +54,7 @@ theorem copy_loop {m : Module} {w : World} {sp : Nat} {e0 : Env} {mem : Memory} 
     have below : i < n := by
       by_cases hb : i < n
       · exact hb
-      · rw [if_neg hb] at hv; exact absurd hv nz
+      · rw [ite_eq_right hb] at hv; exact absurd hv nz
     -- Memory outside every destination is as at the start.
     have kept : KeptOut mem mm dst i0 n := fun a ha => fr a fun j a1 a2 => ha j a1 (by omega)
     have ed := hD e mm i ag iv li below kept
@@ -97,9 +97,9 @@ theorem copy_loop {m : Module} {w : World} {sp : Nat} {e0 : Env} {mem : Memory} 
     have ex := Option.some.inj (ex.symm.trans (eval_lt (eval_var iv) (hN e mm ag) (by omega) (by omega)))
     have hin : i = n := by
       by_cases hb : i < n
-      · rw [if_pos hb] at ex; exact absurd ex (by decide)
+      · rw [ite_eq_left hb] at ex; exact absurd ex (by decide)
       · omega
     subst hin
     exact ⟨ag, iv, done, fun a ha => fr a fun j b1 b2 => ha j b1 b2⟩
 
-end Ssz.Native.Driver
+end EthLib.Consensus.Ssz.Native.Driver

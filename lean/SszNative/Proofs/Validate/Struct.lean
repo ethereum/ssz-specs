@@ -2,9 +2,9 @@ import SszNative.Proofs.Validate.Seq
 
 /-! Struct field ranges agreeing with the slices deserialization cuts. -/
 
-namespace Ssz.Native
+namespace EthLib.Consensus.Ssz.Native
 
-open Ssz
+open EthLib.Consensus.Ssz
 
 /-- The slot deserialization reads where the native check reads a place. -/
 def Place.toSlot (b : ByteArray) : Place → Slot
@@ -195,4 +195,4 @@ theorem fieldRanges_cut (fields : List Desc) (b : ByteArray) (start stop : Nat) 
     rintro ⟨rfl, rfl, placed⟩
     exact placeRanges_cut b start stop ordered inside places ending placed
 
-end Ssz.Native
+end EthLib.Consensus.Ssz.Native

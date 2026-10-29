@@ -15,9 +15,9 @@ and the digests a wide kernel writes there are copied out.
 The SSE2 kernel runs on every processor, so every run is hashed.
 -/
 
-namespace Ssz.Native.Driver
+namespace EthLib.Consensus.Ssz.Native.Driver
 
-open Ssz.Native.Asm Ssz.Native.Ir
+open EthLib.Consensus.Ssz.Native.Asm EthLib.Consensus.Ssz.Native.Ir
 
 /-! ## Words -/
 
@@ -138,20 +138,20 @@ theorem readLE_congr (m₁ m₂ : Nat → UInt8) (a n : Nat) (same : ∀ i < n, 
 theorem hashed_zero (mem : Memory) (out left right ls rs : Nat) : hashed mem out left right 0 ls rs = mem := by
   funext a
   simp only [hashed]
-  rw [if_neg (by omega)]
+  rw [ite_eq_right (by omega)]
 
 /-- Hashing leaves every byte outside the digests as it was. -/
 theorem hashed_outside {mem : Memory} {out left right count ls rs a : Nat}
     (outside : ¬ (out ≤ a ∧ a < out + 32 * count)) : hashed mem out left right count ls rs a = mem a := by
   simp only [hashed]
-  rw [if_neg outside]
+  rw [ite_eq_right outside]
 
 /-- Byte k of digest p, after hashing. -/
 theorem hashed_inside {mem : Memory} {out left right count ls rs p k : Nat} (hp : p < count) (hk : k < 32) :
     hashed mem out left right count ls rs (out + 32 * p + k) =
-      (Sha256.hash (pairMessage mem (left + ls * p) (right + rs * p))).get! k := by
+      (Cryptography.Hash.Sha256.hash (pairMessage mem (left + ls * p) (right + rs * p))).get! k := by
   simp only [hashed]
-  rw [if_pos (by omega), show (out + 32 * p + k - out) / 32 = p by omega,
+  rw [ite_eq_left (by omega), show (out + 32 * p + k - out) / 32 = p by omega,
     show (out + 32 * p + k - out) % 32 = k by omega]
 
 /--
@@ -184,7 +184,7 @@ theorem hashed_append (mem : Memory) (out left right k j ls rs : Nat)
     · rw [hashed_outside early, hashed_outside (by omega)]
 
 /-- What hashing a whole run needs, it needs for the pairs left after hashing some of them. -/
-theorem _root_.Ssz.Native.Ir.HashPre.rest {w : World} {mem : Memory} {out left right count ls rs table k j : Nat}
+theorem _root_.EthLib.Consensus.Ssz.Native.Ir.HashPre.rest {w : World} {mem : Memory} {out left right count ls rs table k j : Nat}
     (pre : HashPre w mem out left right count ls rs table) (le : k + j ≤ count) :
     HashPre w (hashed mem out left right k ls rs) (out + 32 * k) (left + ls * k) (right + rs * k) j ls rs table := by
   have ta := pre.tableApart
@@ -206,7 +206,7 @@ theorem _root_.Ssz.Native.Ir.HashPre.rest {w : World} {mem : Memory} {out left r
     omega
 
 /-- A run's digests lie apart from every input node, as the composition of pieces needs. -/
-theorem _root_.Ssz.Native.Ir.HashPre.apart {w : World} {mem : Memory} {out left right count ls rs table : Nat}
+theorem _root_.EthLib.Consensus.Ssz.Native.Ir.HashPre.apart {w : World} {mem : Memory} {out left right count ls rs table : Nat}
     (pre : HashPre w mem out left right count ls rs table) :
     ∀ p < count, Apart (out, 32 * count) (left + ls * p, 32) ∧ Apart (out, 32 * count) (right + rs * p, 32) :=
   pre.inputsApart
@@ -419,7 +419,7 @@ theorem eval_five {a b c d e : Expr} {va vb vc vd ve : UInt64} (ha : eval w env 
 theorem eval_shr {a : Expr} {p j : Nat} (ha : eval w env mem a = some (UInt64.ofNat p)) (bp : p < 2 ^ 64)
     (hj : j < 64) : eval w env mem (.shr a j) = some (UInt64.ofNat (p / 2 ^ j)) := by
   have small : p / 2 ^ j < 2 ^ 64 := Nat.lt_of_le_of_lt (Nat.div_le_self p _) bp
-  simp only [eval, ha, Option.bind_eq_bind, Option.bind, if_pos hj]
+  simp only [eval, ha, Option.bind_eq_bind, Option.bind, ite_eq_left hj]
   congr 1
   apply UInt64.toNat_inj.mp
   rw [UInt64.toNat_shiftRight, ofNat_toNat bp, ofNat_toNat small, Nat.shiftRight_eq_div_pow]
@@ -430,7 +430,7 @@ theorem eval_shr {a : Expr} {p j : Nat} (ha : eval w env mem a = some (UInt64.of
 theorem eval_shl {a : Expr} {p j : Nat} (ha : eval w env mem a = some (UInt64.ofNat p)) (bp : p * 2 ^ j < 2 ^ 64)
     (hj : j < 64) : eval w env mem (.shl a j) = some (UInt64.ofNat (p * 2 ^ j)) := by
   have small : p < 2 ^ 64 := Nat.lt_of_le_of_lt (Nat.le_mul_of_pos_right p (Nat.two_pow_pos j)) bp
-  simp only [eval, ha, Option.bind_eq_bind, Option.bind, if_pos hj]
+  simp only [eval, ha, Option.bind_eq_bind, Option.bind, ite_eq_left hj]
   congr 1
   apply UInt64.toNat_inj.mp
   rw [UInt64.toNat_shiftLeft, ofNat_toNat small, ofNat_toNat bp, Nat.shiftLeft_eq]
@@ -519,7 +519,7 @@ theorem answers_hash {w : World} {sp : Nat} {code : Array Instr} {batch ls rs : 
 /-- A hashing kernel's meaning with scratch answers as the one without, where the stack has room for the scratch. -/
 theorem answers_frame {w : World} {sp : Nat} {code : Array Instr} {batch ls rs frame : Nat}
     (room : w.stackLo + 8 + frame ≤ sp) : Answers w sp (hashFrameExtern code batch ls rs frame) code batch ls rs :=
-  fun _ _ => by simp only [hashFrameExtern, if_pos room]
+  fun _ _ => by simp only [hashFrameExtern, ite_eq_left room]
 
 /-- A module holding the three hashing drivers, and the eighteen kernels they call, under their exported names. -/
 structure HashModule (m : Module) : Prop where
@@ -627,13 +627,13 @@ theorem At.write {env : Env} {ls rs out left right count ctx table : Nat} {mask 
 
 /-- A one-or-zero test that is not zero means its condition fails. -/
 theorem ite_ne_zero {p : Prop} [Decidable p] (h : (if p then (0 : UInt64) else 1) ≠ 0) : ¬ p := by
-  intro hp; exact h (if_pos hp)
+  intro hp; exact h (ite_eq_left hp)
 
 /-- A one-or-zero test that is zero means its condition holds. -/
 theorem ite_eq_zero {p : Prop} [Decidable p] (h : (if p then (0 : UInt64) else 1) = 0) : p := by
   by_cases hp : p
   · exact hp
-  · rw [if_neg hp] at h; exact absurd h (by decide)
+  · rw [ite_eq_right hp] at h; exact absurd h (by decide)
 
 /-- A word converted from a number below the word size is zero only for zero. -/
 theorem ofNat_eq_zero {n : Nat} (h : n < 2 ^ 64) : UInt64.ofNat n = 0 ↔ n = 0 :=
@@ -664,13 +664,13 @@ theorem advance_ends {m : Module} {w : World} {sp : Nat} {env : Env} {mem : Memo
   refine Ends.nil ⟨⟨by omega, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_⟩, rfl⟩
   · -- The output pointer moves 32 bytes per pair.
     simp only [assign, show (0 : Nat) ≠ 3 by decide, show (0 : Nat) ≠ 2 by decide, show (0 : Nat) ≠ 1 by decide,
-      if_false, if_true]
+      ite_false, ite_true]
     congr 1; rw [Nat.mul_add]; omega
-  · simp only [assign, show (1 : Nat) ≠ 3 by decide, show (1 : Nat) ≠ 2 by decide, if_false, if_true]
+  · simp only [assign, show (1 : Nat) ≠ 3 by decide, show (1 : Nat) ≠ 2 by decide, ite_false, ite_true]
     congr 1; rw [Nat.mul_add]; omega
-  · simp only [assign, show (2 : Nat) ≠ 3 by decide, if_false, if_true]
+  · simp only [assign, show (2 : Nat) ≠ 3 by decide, ite_false, ite_true]
     congr 1; rw [Nat.mul_add]; omega
-  · simp only [assign, if_true]
+  · simp only [assign, ite_true]
     congr 1; omega
   · simp only [assign]; exact h.ctx
   · simp only [assign]; exact h.mask
@@ -702,7 +702,7 @@ theorem kernel_runs {m : Module} {w : World} {sp : Nat} {env : Env} {mem mm : Me
   have e4 := ofNat_toNat (show table < 2 ^ 64 by omega)
   simp only [hashExtern]
   rw [e0, e1, e2, e3, e4]
-  rw [if_pos ⟨runs, rest⟩, hashed_append mem out left right k (batch * q) ls rs
+  rw [ite_eq_left ⟨runs, rest⟩, hashed_append mem out left right k (batch * q) ls rs
     fun p hp => by
       have := pre.inputsApart p (by omega)
       simp only [Apart] at this ⊢
@@ -757,13 +757,13 @@ theorem batches_ends {m : Module} {w : World} {sp : Nat} {env : Env} {mem : Memo
 /-- A copied byte inside the destination is the source byte at the same offset. -/
 theorem copied_in (mem : Memory) (dst src n q : Nat) (hq : q < n) : copied mem dst src n (dst + q) = mem (src + q) := by
   simp only [copied, store]
-  rw [if_pos (by omega), Nat.add_sub_cancel_left]
+  rw [ite_eq_left (by omega), Nat.add_sub_cancel_left]
 
 /-- A byte outside the destination is not copied over. -/
 theorem copied_out {mem : Memory} {dst src n a : Nat} (h : ¬ (dst ≤ a ∧ a < dst + n)) :
     copied mem dst src n a = mem a := by
   simp only [copied, store]
-  rw [if_neg h]
+  rw [ite_eq_right h]
 
 /-- Two pairs whose nodes agree byte for byte have the same message. -/
 theorem pairMessage_eq (m₁ m₂ : Nat → UInt8) (a b c d : Nat) (left : ∀ i < 32, m₁ (a + i) = m₂ (c + i))
@@ -815,7 +815,7 @@ theorem copyIn_loop {m : Module} {w : World} {sp : Nat} {env : Env} {mem : Memor
     have lt : j < count := by
       by_cases h : j < count
       · exact h
-      · rw [if_neg h] at hv; cases hv; exact absurd rfl nz
+      · rw [ite_eq_right h] at hv; cases hv; exact absurd rfl nz
     have e10 := (frame 10 (by decide)).trans h10
     have e1 := (frame 1 (by decide)).trans h1
     have e2 := (frame 2 (by decide)).trans h2
@@ -859,7 +859,7 @@ theorem copyIn_loop {m : Module} {w : World} {sp : Nat} {env : Env} {mem : Memor
     rw [eval_lt (eval_var h9') (eval_var ((frame 3 (by decide)).trans h3)) (by omega) (by omega)] at done
     have all : count ≤ j := by
       by_cases h : j < count
-      · rw [if_pos h] at done; cases done
+      · rw [ite_eq_left h] at done; cases done
       · omega
     exact ⟨frame, outside, fun p hp => copiedAll p (by omega)⟩
 
@@ -889,7 +889,7 @@ theorem copyOut_loop {m : Module} {w : World} {sp : Nat} {env : Env} {mem : Memo
     have lt : j < count := by
       by_cases h : j < count
       · exact h
-      · rw [if_neg h] at hv; cases hv; exact absurd rfl nz
+      · rw [ite_eq_right h] at hv; cases hv; exact absurd rfl nz
     have e10 := (frame 10 (by decide)).trans h10
     have e0 := (frame 0 (by decide)).trans h0
     -- One digest, read from the padding area, which no earlier copy wrote.
@@ -916,7 +916,7 @@ theorem copyOut_loop {m : Module} {w : World} {sp : Nat} {env : Env} {mem : Memo
     rw [eval_lt (eval_var h9') (eval_var ((frame 3 (by decide)).trans h3)) (by omega) (by omega)] at done
     have all : count ≤ j := by
       by_cases h : j < count
-      · rw [if_pos h] at done; cases done
+      · rw [ite_eq_left h] at done; cases done
       · omega
     have jc : j = count := by omega
     subst jc
@@ -1182,11 +1182,11 @@ theorem hashCalls {m : Module} (w : World) (mod : HashModule m) (layout : Layout
   rw [status] at call
   exact ⟨mem', call, post⟩
 
-end Ssz.Native.Driver
+end EthLib.Consensus.Ssz.Native.Driver
 
-namespace Ssz.Native.Driver
+namespace EthLib.Consensus.Ssz.Native.Driver
 
-open Ssz.Native.Asm Ssz.Native.Ir
+open EthLib.Consensus.Ssz.Native.Asm EthLib.Consensus.Ssz.Native.Ir
 
 /-- The mask the detection routine returns lets the dispatcher call every kernel it chooses. -/
 theorem kernelsRun_featureMask (w : World) : KernelsRun w w.cpu.featureMask :=
@@ -1194,4 +1194,4 @@ theorem kernelsRun_featureMask (w : World) : KernelsRun w w.cpu.featureMask :=
     fun bit ls rs => Kernel.runs_of_mask_shani w.cpu ls rs bit,
     fun bit ls rs => Kernel.runs_of_mask_avx2 w.cpu ls rs bit⟩
 
-end Ssz.Native.Driver
+end EthLib.Consensus.Ssz.Native.Driver

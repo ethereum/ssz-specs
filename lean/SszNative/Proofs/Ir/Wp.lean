@@ -9,9 +9,9 @@ Each kind of statement reaches a condition exactly when its parts do, so these f
 conditions on what it computes, one statement at a time.
 -/
 
-namespace Ssz.Native.Ir
+namespace EthLib.Consensus.Ssz.Native.Ir
 
-open Ssz.Native.Asm
+open EthLib.Consensus.Ssz.Native.Asm
 
 /-- A statement runs from variables and memory to some state meeting a condition. -/
 def Wp (m : Module) (w : World) (sp : Nat) (s : Stmt) (env : Env) (mem : Memory) (Q : Env → Memory → Prop) : Prop :=
@@ -74,7 +74,7 @@ theorem runs_succ {s : Stmt} {env env' : Env} {mem mem' : Memory} (h : Runs m w 
       | none => simp [ha, hb] at h
       | some y =>
         by_cases ok : w.access x.toNat wd.bytes = true
-        · simp only [ha, hb, ok, if_true, pure, Option.some.injEq, Prod.mk.injEq] at h
+        · simp only [ha, hb, ok, ite_true, pure, Option.some.injEq, Prod.mk.injEq] at h
           obtain ⟨rfl, rfl⟩ := h
           exact ⟨x, y, rfl, rfl, ok, q⟩
         · simp [ha, hb, ok] at h
@@ -107,16 +107,16 @@ theorem runs_succ {s : Stmt} {env env' : Env} {mem mem' : Memory} (h : Runs m w 
     | some v =>
       refine ⟨v, rfl, ?_⟩
       by_cases nz : v = 0
-      · subst nz; simp only [hc, bne_self_eq_false, Bool.false_eq_true, if_false] at h
-        simp only [ne_eq, not_true_eq_false, if_false]; exact ⟨e', m', ⟨f, h⟩, q⟩
+      · subst nz; simp only [hc, bne_self_eq_false, Bool.false_eq_true, ite_false] at h
+        simp only [ne_eq, not_true_eq_false, ite_false]; exact ⟨e', m', ⟨f, h⟩, q⟩
       · have : (v != 0) = true := by simpa using nz
-        simp only [hc, this, if_true] at h
-        simp only [ne_eq, nz, not_false_eq_true, if_true]; exact ⟨e', m', ⟨f, h⟩, q⟩
+        simp only [hc, this, ite_true] at h
+        simp only [ne_eq, nz, not_false_eq_true, ite_true]; exact ⟨e', m', ⟨f, h⟩, q⟩
   · rintro ⟨v, hc, h⟩
     by_cases nz : v = 0
-    · subst nz; simp only [ne_eq, not_true_eq_false, if_false] at h
+    · subst nz; simp only [ne_eq, not_true_eq_false, ite_false] at h
       obtain ⟨e', m', r, q⟩ := h; exact ⟨e', m', Runs.ite_false hc r, q⟩
-    · simp only [ne_eq, nz, not_false_eq_true, if_true] at h
+    · simp only [ne_eq, nz, not_false_eq_true, ite_true] at h
       obtain ⟨e', m', r, q⟩ := h; exact ⟨e', m', Runs.ite_true v hc nz r, q⟩
 
 /-- A call reaches what holds of its result. -/
@@ -188,7 +188,7 @@ theorem Calls.of_wp {f : String} {args : List UInt64} {mem mem' : Memory} {fn : 
 
 namespace Wp
 
-open Ssz.Native.Ir.Stmt
+open EthLib.Consensus.Ssz.Native.Ir.Stmt
 
 variable {m : Module} {w : World} {sp : Nat} {env : Env} {mem : Memory} {Q : Env → Memory → Prop}
 
@@ -229,25 +229,25 @@ theorem set {x : Var} {e : Expr} {rest : List Stmt} {v : UInt64} (h : eval w env
 /-- A branch at the head of a block, its condition holding. -/
 theorem ifElse_t {c : Expr} {yes no rest : List Stmt} {v : UInt64} (h : eval w env mem c = some v) (nz : v ≠ 0)
     (k : Wp m w sp (.block (yes ++ rest)) env mem Q) : Wp m w sp (.block (ifElse c yes no :: rest)) env mem Q := by
-  rw [block_cons, ifElse, wp_ite]; refine ⟨v, h, ?_⟩; simp only [ne_eq, nz, not_false_eq_true, if_true]
+  rw [block_cons, ifElse, wp_ite]; refine ⟨v, h, ?_⟩; simp only [ne_eq, nz, not_false_eq_true, ite_true]
   exact (block_append _ _ _ _).mp k
 
 /-- A branch at the head of a block, its condition failing. -/
 theorem ifElse_f {c : Expr} {yes no rest : List Stmt} (h : eval w env mem c = some 0)
     (k : Wp m w sp (.block (no ++ rest)) env mem Q) : Wp m w sp (.block (ifElse c yes no :: rest)) env mem Q := by
-  rw [block_cons, ifElse, wp_ite]; refine ⟨0, h, ?_⟩; simp only [ne_eq, not_true_eq_false, if_false]
+  rw [block_cons, ifElse, wp_ite]; refine ⟨0, h, ?_⟩; simp only [ne_eq, not_true_eq_false, ite_false]
   exact (block_append _ _ _ _).mp k
 
 /-- A guarded block at the head of a block, its condition holding. -/
 theorem when_t {c : Expr} {yes rest : List Stmt} {v : UInt64} (h : eval w env mem c = some v) (nz : v ≠ 0)
     (k : Wp m w sp (.block (yes ++ rest)) env mem Q) : Wp m w sp (.block (when c yes :: rest)) env mem Q := by
-  rw [block_cons, when, wp_ite]; refine ⟨v, h, ?_⟩; simp only [ne_eq, nz, not_false_eq_true, if_true]
+  rw [block_cons, when, wp_ite]; refine ⟨v, h, ?_⟩; simp only [ne_eq, nz, not_false_eq_true, ite_true]
   exact (block_append _ _ _ _).mp k
 
 /-- A guarded block at the head of a block, its condition failing. -/
 theorem when_f {c : Expr} {yes rest : List Stmt} (h : eval w env mem c = some 0)
     (k : Wp m w sp (.block rest) env mem Q) : Wp m w sp (.block (when c yes :: rest)) env mem Q := by
-  rw [block_cons, when, wp_ite]; refine ⟨0, h, ?_⟩; simp only [ne_eq, not_true_eq_false, if_false]
+  rw [block_cons, when, wp_ite]; refine ⟨0, h, ?_⟩; simp only [ne_eq, not_true_eq_false, ite_false]
   exact (wp_skip _ _ _).mpr k
 
 /-- A call at the head of a block. -/
@@ -290,4 +290,4 @@ theorem when_assign {x : Var} {c e : Expr} {rest : List Stmt} {cv ev : UInt64} (
 
 end Wp
 
-end Ssz.Native.Ir
+end EthLib.Consensus.Ssz.Native.Ir

@@ -9,9 +9,9 @@ What that call does is the induction hypothesis on the element type, taken here 
 The tree driver then folds the element roots into the root, with its scratch past them.
 -/
 
-namespace Ssz.Native.Driver
+namespace EthLib.Consensus.Ssz.Native.Driver
 
-open Ssz.Native.Ir Ssz.Native.Ir.Expr Ssz.Native.Ir.Stmt Ssz.Native.Asm
+open EthLib.Consensus.Ssz.Native.Ir EthLib.Consensus.Ssz.Native.Ir.Expr EthLib.Consensus.Ssz.Native.Ir.Stmt EthLib.Consensus.Ssz.Native.Asm
 
 /-! ### The room it takes -/
 
@@ -140,10 +140,10 @@ theorem vectorOne_runs {m : Module} {w : World} (hash : HashingOk m w) (fns : Ro
       subst this
       have : c = length := by rw [hc, chunk]; rw [chunk] at few; omega
       subst this
-      simp only [oneSpan, if_pos few] at spanIn ⊢
+      simp only [oneSpan, ite_eq_left few] at spanIn ⊢
       omega
     · have top := rootsNeed_chunk element (show c ≤ recordsPerChunk by rw [hc]; exact Nat.min_le_left _ _)
-      simp only [oneSpan, if_neg few] at spanIn ⊢
+      simp only [oneSpan, ite_eq_right few] at spanIn ⊢
       omega
   -- The element roots fit their room.
   have fits : 32 * length ≤ oneSpan element length := by
@@ -205,7 +205,7 @@ theorem vectorOne_runs {m : Module} {w : World} (hash : HashingOk m w) (fns : Ro
       chunkedRoots element b start (fixedWidth element) length := by
     split
     · rename_i few
-      rw [chunkedRoots, if_pos few]
+      rw [chunkedRoots, ite_eq_left few]
       simp only [f, Nat.mul_zero, Nat.add_zero]
     · rename_i many
       rw [chunkedRoots_join _ _ _ _ _ many]
@@ -290,4 +290,4 @@ theorem vectorOne_runs {m : Module} {w : World} (hash : HashingOk m w) (fns : Ro
   subst this
   rw [Nat.mul_zero, Nat.add_zero, root2, nodeOf_single _ (by rw [rootSize])]
 
-end Ssz.Native.Driver
+end EthLib.Consensus.Ssz.Native.Driver

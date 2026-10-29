@@ -4,11 +4,11 @@ import SszNative.Proofs.Driver.Validate.StructSpec
 A struct's fields walked natively: fixed fields in place, the table as a whole, then every field in order.
 -/
 
-namespace Ssz.Native.Driver.Validate
+namespace EthLib.Consensus.Ssz.Native.Driver.Validate
 
 set_option maxRecDepth 20000
 
-open Ssz Ssz.Native Ssz.Native.Ir Ssz.Native.Asm Ssz.Native.Ir.Stmt Ssz.Native.Ir.Expr
+open EthLib.Consensus.Ssz EthLib.Consensus.Ssz.Native EthLib.Consensus.Ssz.Native.Ir EthLib.Consensus.Ssz.Native.Asm EthLib.Consensus.Ssz.Native.Ir.Stmt EthLib.Consensus.Ssz.Native.Ir.Expr
 
 /-- The fields from one on are that field, then the rest. -/
 theorem drop_cons (fs : List Desc) (j : Nat) (hj : j < fs.length) : fs.drop j = fs[j] :: fs.drop (j + 1) :=
@@ -85,14 +85,14 @@ theorem inline_calls {m : Module} {w : World} (hm : Loaded m) (fs : List Desc) (
       have lj1 := leadingWidth_take_le fs (j + 1)
       rw [drop_cons fs j hjf] at rest
       by_cases hw : hasWidth fs[j] = true
-      · simp only [widthWord, if_pos hw] at width
+      · simp only [widthWord, ite_eq_left hw] at width
         have fw := fixedWidth_lt fs[j] fitj hw
         have hne : fixedWidth fs[j] ≠ 18446744073709551615 := by omega
         have sl : slot fs[j] = fixedWidth fs[j] := by simp [slot, hw]
         have step := ih fs[j] (List.getElem_mem hjf) fitj _ (sp - 8 - 8 * 11) mem base b
           (start + Desc.leadingWidth (fs.take j)) (start + Desc.leadingWidth (fs.take j) + fixedWidth fs[j]) err
           hpj cpj hd cd ok (by omega) (by omega) small hroom
-        simp only [placesFrom, hw, if_true, validateInline] at rest
+        simp only [placesFrom, hw, ite_true, validateInline] at rest
         rcases hR : validateRange fs[j] b (start + Desc.leadingWidth (fs.take j))
             (start + Desc.leadingWidth (fs.take j) + fixedWidth fs[j]) with y | u
         · rw [hR] at step rest
@@ -124,10 +124,10 @@ theorem inline_calls {m : Module} {w : World} (hm : Loaded m) (fs : List Desc) (
             Or.inl ⟨by wfin [], trivial, ?_⟩⟩, by wfin [h1]⟩
           · wfin [take_succ_append fs j hjf, wordsAll_append, Plan.wordsAll]
           · rw [rest, succ, sl]; rfl
-      · simp only [widthWord, if_neg hw] at width
+      · simp only [widthWord, ite_eq_right hw] at width
         have sl : slot fs[j] = 4 := by simp [slot, hw]
         have skip := skip_calls hm fs[j] fitj _ (sp - 8 - 8 * 11) _ hpj (by simp only [Room] at hroom ⊢; omega)
-        simp only [placesFrom, hw, Bool.false_eq_true, if_false, validateInline] at rest
+        simp only [placesFrom, hw, Bool.false_eq_true, ite_false, validateInline] at rest
         wcall width [h0]
         wsteps [h6]
         wcall skip [h0]
@@ -156,8 +156,8 @@ theorem varOffs_append (b : ByteArray) (start : Nat) : ∀ (a c : List Desc) (po
   | f :: a, c, pos => by
     rw [List.cons_append, leadingWidth_cons]
     by_cases hw : hasWidth f = true
-    · simp only [varOffs, hw, if_true, varOffs_append b start a c, slot]; congr 2; omega
-    · simp only [varOffs, hw, Bool.false_eq_true, if_false, varOffs_append b start a c, slot, List.cons_append]
+    · simp only [varOffs, hw, ite_true, varOffs_append b start a c, slot]; congr 2; omega
+    · simp only [varOffs, hw, Bool.false_eq_true, ite_false, varOffs_append b start a c, slot, List.cons_append]
       congr 3; omega
 
 /-- The fields' bodies, split around a field. -/
@@ -210,7 +210,7 @@ theorem nextBody_calls {m : Module} {w : World} (hm : Loaded m) (fs : List Desc)
       have split := varOffs_split b start fs pos j
       rw [varOffs_all b start _ pos all, List.nil_append, drop_cons fs j hjf] at split
       by_cases hw : hasWidth fs[j] = true
-      · simp only [widthWord, if_pos hw] at width
+      · simp only [widthWord, ite_eq_left hw] at width
         have fw := fixedWidth_lt fs[j] fitj hw
         have hne : fixedWidth fs[j] ≠ 18446744073709551615 := by omega
         have sl : slot fs[j] = fixedWidth fs[j] := by simp [slot, hw]
@@ -222,7 +222,7 @@ theorem nextBody_calls {m : Module} {w : World} (hm : Loaded m) (fs : List Desc)
         refine ⟨⟨trivial, j + 1, by omega, Or.inl ⟨?_, ?_, by wfin [], by wfin [succ, sl], by wfin [h4]⟩⟩, by wfin [h1]⟩
         · rw [take_succ_append fs j hjf, allHaveWidth_append]; simp [all, allHaveWidth, hw]
         · wfin [take_succ_append fs j hjf, wordsAll_append, Plan.wordsAll]
-      · simp only [widthWord, if_neg hw] at width
+      · simp only [widthWord, ite_eq_right hw] at width
         have sl : slot fs[j] = 4 := by simp [slot, hw]
         rw [succ, sl] at lj1
         have r := hd.offset (start + pos + Desc.leadingWidth (fs.take j)) (by omega)
@@ -262,8 +262,8 @@ theorem varOffs_lt (b : ByteArray) (start : Nat) : ∀ (fs : List Desc) (pos : N
   | [], _, x, h => by simp [varOffs] at h
   | f :: fs, pos, x, h => by
     by_cases hw : hasWidth f = true
-    · simp only [varOffs, hw, if_true] at h; exact varOffs_lt b start fs _ x h
-    · simp only [varOffs, hw, Bool.false_eq_true, if_false, List.mem_cons] at h
+    · simp only [varOffs, hw, ite_true] at h; exact varOffs_lt b start fs _ x h
+    · simp only [varOffs, hw, Bool.false_eq_true, ite_false, List.mem_cons] at h
       rcases h with rfl | h
       · exact offsetAt_lt b _
       · exact varOffs_lt b start fs _ x h
@@ -360,12 +360,12 @@ theorem structSpans_calls {m : Module} {w : World} (hm : Loaded m) (fs : List De
       generalize hV : varOffs b start (fs.take j) 0 = V at empty full vnext vall vlt
       have lastlt := getElem!_lt V (2 ^ 32) (by decide) vlt (V.length - 1)
       by_cases hw : hasWidth fs[j] = true
-      · simp only [widthWord, if_pos hw] at width
+      · simp only [widthWord, ite_eq_left hw] at width
         have fw := fixedWidth_lt fs[j] fitj hw
         have hne : fixedWidth fs[j] ≠ 18446744073709551615 := by omega
         have sl : slot fs[j] = fixedWidth fs[j] := by simp [slot, hw]
         have skip := skip_calls hm fs[j] fitj _ _ mem hpj hroom
-        simp only [varOffs, hw, if_true, List.append_nil] at vnext
+        simp only [varOffs, hw, ite_true, List.append_nil] at vnext
         wcall width [h0]
         wsteps [hne, h8]
         wcall skip [h0]
@@ -375,7 +375,7 @@ theorem structSpans_calls {m : Module} {w : World} (hm : Loaded m) (fs : List De
         · wfin [take_succ_append fs j hjf, wordsAll_append, Plan.wordsAll]
         · intro e; rw [vnext] at e; obtain ⟨a, c⟩ := empty e; exact ⟨by wfin [a], by wfin [c]⟩
         · intro e; rw [vnext] at e ⊢; obtain ⟨a, c, d, f⟩ := full e; exact ⟨by wfin [a], c, by wfin [d], f⟩
-      · simp only [widthWord, if_neg hw] at width
+      · simp only [widthWord, ite_eq_right hw] at width
         have sl : slot fs[j] = 4 := by simp [slot, hw]
         rw [succ, sl] at lj1
         have skip := skip_calls hm fs[j] fitj _ _ mem hpj hroom
@@ -398,7 +398,7 @@ theorem structSpans_calls {m : Module} {w : World} (hm : Loaded m) (fs : List De
           by_cases fo : o ≠ Desc.leadingWidth fs
           · rw [vall] at hX
             simp only [getElem!_def, List.getElem?_cons_zero, ne_eq, fo, not_false_eq_true,
-              if_true] at hX
+              ite_true] at hX
             wcall width [h0]
             wsteps [h8, h2, r, a, s0, fo, h4]
             wfail [h4, h5]
@@ -428,7 +428,7 @@ theorem structSpans_calls {m : Module} {w : World} (hm : Loaded m) (fs : List De
                   Desc.leadingWidth fs := by
                 rw [getElem!_append_left V _ 0 (by cases V with | nil => exact absurd rfl ve | cons _ _ => simp)]
                 exact first
-              rw [f0, if_neg (by simp)]
+              rw [f0, ite_eq_right (by simp)]
               have vl : 0 < V.length := by cases V with | nil => exact absurd rfl ve | cons _ _ => simp
               refine spans_unordered _ size V.length vl (by simp) (ord_prefix V _ ord) ?_
               rw [getElem!_append_mid, getElem!_append_left V _ (V.length - 1) (by omega)]
@@ -466,7 +466,7 @@ theorem structSpans_calls {m : Module} {w : World} (hm : Loaded m) (fs : List De
       simp only [List.take_length] at empty full
       have ne := varOffs_some b start fs 0 some
       obtain ⟨s1, first, plast, ord⟩ := full ne
-      rw [← hX, if_neg (by simp [first]), spans_ordered _ size ord]
+      rw [← hX, ite_eq_right (by simp [first]), spans_ordered _ size ord]
       have lastlt := getElem!_lt _ (2 ^ 32) (by decide) (varOffs_lt b start fs 0)
         ((varOffs b start fs 0).length - 1)
       by_cases past : size < (varOffs b start fs 0)[(varOffs b start fs 0).length - 1]!
@@ -567,12 +567,12 @@ theorem fields_calls {m : Module} {w : World} (hm : Loaded m) (fs : List Desc) (
       rw [drop_cons fs j hjf] at rest
       simp only [rangesFrom] at rest
       by_cases hw : hasWidth fs[j] = true
-      · simp only [widthWord, if_pos hw] at width
+      · simp only [widthWord, ite_eq_left hw] at width
         have fw := fixedWidth_lt fs[j] fitj hw
         have hne : fixedWidth fs[j] ≠ 18446744073709551615 := by omega
         have sl : slot fs[j] = fixedWidth fs[j] := by simp [slot, hw]
         rw [succ, sl] at lj1 whole
-        simp only [rangeOf, hw, if_true] at rest
+        simp only [rangeOf, hw, ite_true] at rest
         rw [validateFields] at rest
         have step := ih fs[j] (List.getElem_mem hjf) fitj _ (sp - 8 - 8 * 15) mem base b
           (start + Desc.leadingWidth (fs.take j)) (start + Desc.leadingWidth (fs.take j) + fixedWidth fs[j]) err
@@ -601,10 +601,10 @@ theorem fields_calls {m : Module} {w : World} (hm : Loaded m) (fs : List Desc) (
             by wfin [h4], Or.inl ⟨by wfin [], trivial, ?_⟩⟩, by wfin [h1]⟩
           · wfin [take_succ_append fs j hjf, wordsAll_append, Plan.wordsAll]
           · rw [rest, succ, sl]; rfl
-      · simp only [widthWord, if_neg hw] at width
+      · simp only [widthWord, ite_eq_right hw] at width
         have sl : slot fs[j] = 4 := by simp [slot, hw]
         rw [succ, sl] at lj1 whole
-        simp only [rangeOf, hw, Bool.false_eq_true, if_false] at rest
+        simp only [rangeOf, hw, Bool.false_eq_true, ite_false] at rest
         rw [validateFields] at rest
         -- The body's end: the next body's start, or the size, never before its own start.
         have vall : varOffs b start fs 0 = varOffs b start (fs.take j) 0 ++
@@ -731,7 +731,7 @@ theorem struct_calls {m : Module} {w : World} (hm : Loaded m) (fs : List Desc) (
     wfin [o, res, after, wrote_eq]
   wsteps [hsz, o]
   by_cases all : allHaveWidth fs = true
-  · simp only [fieldsWord, if_pos all] at fwc
+  · simp only [fieldsWord, ite_eq_left all] at fwc
     have fw : fieldsWidth fs < 2 ^ 32 := by rw [← leadingWidth_of_all fs all]; exact lead
     have hne : fieldsWidth fs ≠ 18446744073709551615 := by omega
     wcall fwc []
@@ -753,7 +753,7 @@ theorem struct_calls {m : Module} {w : World} (hm : Loaded m) (fs : List Desc) (
       wsteps []
       wfin [o, all, sc, hfw]
   · simp only [Bool.not_eq_true] at all
-    simp only [fieldsWord, all, Bool.false_eq_true, if_false] at fwc
+    simp only [fieldsWord, all, Bool.false_eq_true, ite_false] at fwc
     have lc := leading_calls hm fs fit p (sp - 8 - 8 * 15) mem hp (by simp only [Room] at room ⊢; omega)
     wcall fwc []
     wsteps []
@@ -773,12 +773,12 @@ theorem struct_calls {m : Module} {w : World} (hm : Loaded m) (fs : List Desc) (
       · have ss := structSpans_calls hm fs fit all p (sp - 8 - 8 * 15) mem base b start (stop - start) err hp cp hd
           ok (by omega) (by omega) lead (by simp only [Room] at room ⊢; omega)
         by_cases c : (varOffs b start fs 0)[0]! ≠ Desc.leadingWidth fs
-        · rw [if_pos c] at ss
+        · rw [ite_eq_left c] at ss
           wsteps [res]
           wcall ss []
           wsteps [res]
           wfin [o, all, tl, hI, c, res, after, Bind.bind, Except.bind]
-        · rw [if_neg c] at ss
+        · rw [ite_eq_right c] at ss
           simp only [ne_eq, Decidable.not_not] at c
           rcases hS : spansOutcome (varOffs b start fs 0) (stop - start) with y | v
           · rw [hS] at ss
@@ -797,4 +797,4 @@ theorem struct_calls {m : Module} {w : World} (hm : Loaded m) (fs : List Desc) (
             wsteps []
             wfin [o, all, tl, hI, c, hS, Bind.bind, Except.bind]
 
-end Ssz.Native.Driver.Validate
+end EthLib.Consensus.Ssz.Native.Driver.Validate

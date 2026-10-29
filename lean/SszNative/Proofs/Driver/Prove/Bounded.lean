@@ -9,11 +9,11 @@ A node below the subtree's leaves is a node of the value at one leaf, which the 
 That walk, and the calls rooting values under the leaves, are taken as contracts.
 -/
 
-namespace Ssz.Native.Driver.ProveProof
+namespace EthLib.Consensus.Ssz.Native.Driver.ProveProof
 
 set_option maxRecDepth 20000
 
-open Ssz Ssz.Native Ssz.Native.Ir Ssz.Native.Asm Ssz.Native.Ir.Stmt Ssz.Native.Ir.Expr Ssz.Native.Plan
+open EthLib.Consensus.Ssz EthLib.Consensus.Ssz.Native EthLib.Consensus.Ssz.Native.Ir EthLib.Consensus.Ssz.Native.Asm EthLib.Consensus.Ssz.Native.Ir.Stmt EthLib.Consensus.Ssz.Native.Ir.Expr EthLib.Consensus.Ssz.Native.Plan
 
 /-! ### The Lean walk, step by step -/
 
@@ -39,7 +39,7 @@ theorem boundedNode_inside (budget : Nat) (b : ByteArray) (layout : EncodedLayou
   have width : 2 ^ depthFor capacity >>> depth = 2 ^ (depthFor capacity - depth) := by
     rw [Nat.shiftRight_eq_div_pow, Nat.pow_div inside (by decide)]
   rw [boundedNode]
-  simp only [nextPow2, Nat.log2_two_pow, if_pos inside, width, depthFor_pow, gindexBelow]
+  simp only [nextPow2, Nat.log2_two_pow, ite_eq_left inside, width, depthFor_pow, gindexBelow]
   rfl
 
 /-- A node below a bounded subtree's leaves is a node of the value at one leaf, or a refusal. -/
@@ -53,7 +53,7 @@ theorem boundedNode_below (budget : Nat) (b : ByteArray) (layout : EncodedLayout
         | some (some (d, s, e)) => nodeRootAt budget d b s e (gindexRebase index (depth - depthFor capacity))
         | _ => .error .pathIntoGap := by
   rw [boundedNode]
-  simp only [nextPow2, Nat.log2_two_pow, if_neg (show ¬ depth ≤ depthFor capacity by omega), gindexBelow]
+  simp only [nextPow2, Nat.log2_two_pow, ite_eq_right (show ¬ depth ≤ depthFor capacity by omega), gindexBelow]
   rfl
 
 /-! ### The driver -/
@@ -512,4 +512,4 @@ theorem bounded_calls {m : Module} {w : World} (linked : HasCodec m) (gmod : Gat
         · intro node h; rw [xIs] at h; cases h
         · intro _ _ _ _; rfl
 
-end Ssz.Native.Driver.ProveProof
+end EthLib.Consensus.Ssz.Native.Driver.ProveProof

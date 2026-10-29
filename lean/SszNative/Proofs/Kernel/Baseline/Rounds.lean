@@ -10,11 +10,12 @@ So the three rotations of a mixing function fold into six shifts joined by exclu
 Each shift continues an earlier one in the same direction, so the counts add up along a chain.
 -/
 
-namespace Ssz.Native.Kernel.Baseline
+namespace EthLib.Consensus.Ssz.Native.Kernel.Baseline
 
-open Ssz.Sha256 Ssz.Native.Asm
-open Ssz.Native.Kernel.Avx512x2 (View addrOf)
-open Ssz.Native.Kernel.Avx512 (roundT roundsTo roundsTo_succ assign_apply assign_same assign_ne)
+open EthLib.Cryptography.Hash.Sha256 hiding K IV
+open EthLib.Consensus.Ssz.Native.Asm
+open EthLib.Consensus.Ssz.Native.Kernel.Avx512x2 (View addrOf)
+open EthLib.Consensus.Ssz.Native.Kernel.Avx512 (roundT roundsTo roundsTo_succ assign_apply assign_same assign_ne)
 
 /-- Exclusive or of bits can swap its first two terms. -/
 theorem bne_left_comm (a b c : Bool) : (a != (b != c)) = (b != (a != c)) := by
@@ -46,27 +47,27 @@ theorem bigSigma0_shifts (a : UInt32) :
 /-- The schedule mixing of the word two places back, as five chained shifts. -/
 theorem sigma1_shifts (w : UInt32) :
     w >>> (10 : Nat).toUInt32 ^^^ w >>> (17 : Nat).toUInt32 ^^^ w >>> (17 : Nat).toUInt32 >>> (2 : Nat).toUInt32 ^^^
-      w <<< (13 : Nat).toUInt32 ^^^ w <<< (13 : Nat).toUInt32 <<< (2 : Nat).toUInt32 = sigma1 w := by
+      w <<< (13 : Nat).toUInt32 ^^^ w <<< (13 : Nat).toUInt32 <<< (2 : Nat).toUInt32 = smallSigma1 w := by
   -- Bit by bit, each rotation is its two shifts.
   apply word_ext
   simp only [Nat.forall_lt_succ_right, Nat.not_lt_zero, false_imp_iff, implies_true, true_and]
-  simp [sigma1, rotr, Bool.bne_assoc, bne_comm, bne_left_comm]
+  simp [smallSigma1, rotr, shr, Bool.bne_assoc, bne_comm, bne_left_comm]
 
 /-- The schedule mixing of the word fifteen places back, as five chained shifts. -/
 theorem sigma0_shifts (w : UInt32) :
     w >>> (3 : Nat).toUInt32 ^^^ w >>> (7 : Nat).toUInt32 ^^^ w >>> (7 : Nat).toUInt32 >>> (11 : Nat).toUInt32 ^^^
-      w <<< (14 : Nat).toUInt32 ^^^ w <<< (14 : Nat).toUInt32 <<< (11 : Nat).toUInt32 = sigma0 w := by
+      w <<< (14 : Nat).toUInt32 ^^^ w <<< (14 : Nat).toUInt32 <<< (11 : Nat).toUInt32 = smallSigma0 w := by
   -- Bit by bit, each rotation is its two shifts.
   apply word_ext
   simp only [Nat.forall_lt_succ_right, Nat.not_lt_zero, false_imp_iff, implies_true, true_and]
-  simp [sigma0, rotr, Bool.bne_assoc, bne_comm, bne_left_comm]
+  simp [smallSigma0, rotr, shr, Bool.bne_assoc, bne_comm, bne_left_comm]
 
 /-- Majority is c where a and b differ, and their common bit elsewhere. -/
-theorem majority_split (a b c : UInt32) : (a ^^^ b) &&& c ^^^ a &&& b = majority a b c := by
+theorem majority_split (a b c : UInt32) : (a ^^^ b) &&& c ^^^ a &&& b = maj a b c := by
   -- Bit by bit, on every pattern of the three inputs.
   apply word_ext
   intro i hi
-  simp [majority, hi]
+  simp [maj, hi]
   cases a.toBitVec[i] <;> cases b.toBitVec[i] <;> cases c.toBitVec[i] <;> rfl
 
 /-- Two working-word registers of one round are the same exactly when their words are. -/
@@ -115,8 +116,8 @@ set_option maxHeartbeats 4000000 in
 /-- A round's tail on one lane: the new A in word 7's register, the new E in word 3's, and the rest kept. -/
 theorem tail_regs (G : Gpr → UInt64) (v : View) (t : Nat) :
     let w := fun j => v.regs (role t j)
-    let sum := v.regs t1 + choose (w 4) (w 5) (w 6) + bigSigma1 (w 4)
-    (viewRun G (roundTail t) v).regs (role t 7) = sum + (bigSigma0 (w 0) + majority (w 0) (w 1) (w 2)) ∧
+    let sum := v.regs t1 + ch (w 4) (w 5) (w 6) + bigSigma1 (w 4)
+    (viewRun G (roundTail t) v).regs (role t 7) = sum + (bigSigma0 (w 0) + maj (w 0) (w 1) (w 2)) ∧
     (viewRun G (roundTail t) v).regs (role t 3) = w 3 + sum ∧
     ∀ j, j < 7 → j ≠ 3 → (viewRun G (roundTail t) v).regs (role t j) = w j := by
   intro w sum
@@ -137,7 +138,7 @@ theorem tail_regs (G : Gpr → UInt64) (v : View) (t : Nat) :
       (ne _).2.2.2.2.1, (ne _).2.2.2.2.2.1, (ne _).2.2.2.2.2.2.1, (ne _).2.2.2.2.2.2.2, ite_true, ite_false,
       Nat.reduceSub, Nat.reduceLT, Nat.reduceMod, Nat.reduceEqDiff, bigSigma1_shifts, bigSigma0_shifts]
     try rw [majority_split]
-    simp only [sum, w, choose]
+    simp only [sum, w, ch]
     ac_rfl
 
 /-- A round's tail on one lane takes the working words one round on, from the seeded sum. -/
@@ -184,7 +185,7 @@ theorem role_mod (i k j : Nat) (hk : k < 8) : role (8 * i + k) j = role k j := b
 
 /-- One lane of the first block before round t: the working words, and the schedule words stored so far. -/
 def FirstInv (S : Nat) (m : ByteArray) (t : Nat) (v : View) : Prop :=
-  (Vector.ofFn fun j : Fin 8 => v.regs (role t j)) = roundsTo initialState Avx512.K (Avx512.W m) t ∧
+  (Vector.ofFn fun j : Fin 8 => v.regs (role t j)) = roundsTo Cryptography.Hash.Sha256.IV Avx512.K (Avx512.W m) t ∧
   ∀ u < 64, u < t + 16 → v.mem (S + wordSlot u) = Avx512.W m u
 
 /-- Word 8i + m of block i, read through the schedule pointer, is the scratch area's word. -/
@@ -199,7 +200,7 @@ theorem wordSlot_inj (S u u' : Nat) (hu : u < 80) (hu' : u' < 80) (h : S + wordS
 /-- The schedule step's reads and its store, on one lane: the next word from four earlier ones. -/
 theorem schedule_view (G : Gpr → UInt64) (v : View) (k : Nat) :
     (viewRun G (scheduleStep k) v).mem = assign v.mem ((G words).toNat + wordRel (k + 16))
-      (sigma1 (v.mem ((G words).toNat + wordRel (k + 14))) + sigma0 (v.mem ((G words).toNat + wordRel (k + 1))) +
+      (smallSigma1 (v.mem ((G words).toNat + wordRel (k + 14))) + smallSigma0 (v.mem ((G words).toNat + wordRel (k + 1))) +
         v.mem ((G words).toNat + wordRel k) + v.mem ((G words).toNat + wordRel (k + 9))) ∧
     ∀ r : Vreg, r.val < 12 → (viewRun G (scheduleStep k) v).regs r = v.regs r := by
   have r12 : ∀ r : Vreg, r.val < 12 → (r = sa) = False ∧ (r = sb) = False ∧ (r = sc) = False ∧ (r = sd) = False :=
@@ -226,11 +227,11 @@ theorem first_step (G : Gpr → UInt64) (v : View) (S : Nat) (m : ByteArray) (i 
   -- The seeds: the schedule word, plus H, plus the constant.
   let v1 := viewRun G [.movdqu t1 ⟨words, wordRel k⟩, .paddd t1 (role k 7), .padddMem t1 ⟨consts, 64 * k⟩] v
   have v1t1 : v1.regs t1 = Avx512.W m (8 * i + k) + v.regs (role k 7) + Avx512.K (8 * i + k) := by
-    simp only [v1, viewRun, viewStep, assign_apply, if_true, t1ne, if_false, addrOf]
+    simp only [v1, viewRun, viewStep, assign_apply, ite_true, t1ne, ite_false, addrOf]
     rw [← konst, show (G words).toNat + wordRel k = S + wordSlot (8 * i + k) by
       rw [wordsAt]; exact wordRel_slot S i k hi (by omega), words' _ (by omega) (by omega)]
   have v1roles : ∀ j, v1.regs (role k j) = v.regs (role k j) := fun j => by
-    simp only [v1, viewRun, viewStep, assign_apply, t1ne, if_false]
+    simp only [v1, viewRun, viewStep, assign_apply, t1ne, ite_false]
   have v1mem : v1.mem = v.mem := rfl
   have split : firstRound k =
     [.movdqu t1 ⟨words, wordRel k⟩, .paddd t1 (role k 7), .padddMem t1 ⟨consts, 64 * k⟩] ++ roundTail k := rfl
@@ -301,7 +302,7 @@ theorem first_step (G : Gpr → UInt64) (v : View) (S : Nat) (m : ByteArray) (i 
     · rename_i on
       have early : 8 * i + k < 48 := by rw [hs] at on; simp at on; omega
       rw [(schedule_view G v2 k).1, v2mem, assign_apply, wordsAt, wordRel_slot S i (k + 16) hi (by omega),
-        if_neg (ha _ (by omega))]
+        ite_eq_right (ha _ (by omega))]
     · simp only [viewRun]; rw [v2mem]
 
 /-- Eight first-block rounds keep the invariant eight rounds on, and change no row outside the schedule words. -/
@@ -344,9 +345,9 @@ theorem pad_step (G : Gpr → UInt64) (v : View) (S : Nat) (mid : Vector UInt32 
   -- The seed: H plus the table's precomputed word and constant.
   let v1 := viewRun G [.movdqa t1 (role k 7), .padddMem t1 ⟨consts, 64 * k⟩] v
   have v1t1 : v1.regs t1 = v.regs (role k 7) + (Avx512.K (8 * i + k) + Avx512.PW (8 * i + k)) := by
-    simp only [v1, viewRun, viewStep, assign_apply, if_true, addrOf]; rw [konst]
+    simp only [v1, viewRun, viewStep, assign_apply, ite_true, addrOf]; rw [konst]
   have v1roles : ∀ j, v1.regs (role k j) = v.regs (role k j) := fun j => by
-    simp only [v1, viewRun, viewStep, assign_apply, t1ne, if_false]
+    simp only [v1, viewRun, viewStep, assign_apply, t1ne, ite_false]
   have v1mem : v1.mem = v.mem := rfl
   have run : viewRun G (paddingRound k) v = viewRun G (roundTail k) v1 := rfl
   clear_value v1
@@ -383,4 +384,4 @@ theorem pad_block (G : Gpr → UInt64) (v : View) (S : Nat) (mid : Vector UInt32
     obtain ⟨next, same'⟩ := pad_step G _ S mid i n (by omega) (by rw [same]; exact konst n (by omega)) inv'
     exact ⟨next, same'.trans same⟩
 
-end Ssz.Native.Kernel.Baseline
+end EthLib.Consensus.Ssz.Native.Kernel.Baseline

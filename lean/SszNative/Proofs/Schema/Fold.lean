@@ -3,9 +3,9 @@ import SszNative.Proofs.Root.Merkle
 
 /-! The short fold a compiled struct uses is the specification's tree over its leaves. -/
 
-namespace Ssz.Native
+namespace EthLib.Consensus.Ssz.Native
 
-open Ssz
+open EthLib.Consensus.Ssz
 
 /-- A node written just past a buffer's first whole nodes sits between them and the rest of the buffer. -/
 theorem pad_eq (src dest : ByteArray) (d : Nat) (wide : src.size = 32) :
@@ -135,10 +135,10 @@ theorem foldShort_spec (leaves : Array Bytes) (r : Nat) :
           have odd : width % 2 = 1 := by omega
           have last : 2 * j + 1 = width := by omega
           have pad : nodeOf padded 0 (2 * j + 1) = zeroSubtree h := by
-            simp only [padded, odd, beq_self_eq_true, if_true]
+            simp only [padded, odd, beq_self_eq_true, ite_true]
             rw [last, (pad_nodes _ _ width (zeroRoot_size h) inside).2.1, zeroRoot_data]
           rw [keep (2 * j) (by omega), nodes (2 * j) (by omega), pad,
             subtreeAt_past leaves h ((2 * j).succ * 2 ^ h)
               (by rw [show (2 * j).succ = width by omega]; exact covers)]
 
-end Ssz.Native
+end EthLib.Consensus.Ssz.Native

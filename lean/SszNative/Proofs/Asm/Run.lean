@@ -2,7 +2,7 @@ import SszNative.Asm.Semantics
 
 /-! Running straight-line blocks: a block's steps are its instructions in order. -/
 
-namespace Ssz.Native.Asm
+namespace EthLib.Consensus.Ssz.Native.Asm
 
 /-- Whether an instruction always passes control to the next one. -/
 def Instr.straight : Instr → Bool
@@ -111,4 +111,4 @@ theorem run_block (program : Array Instr) (pre body post : List Instr)
     congr 1
     omega
 
-end Ssz.Native.Asm
+end EthLib.Consensus.Ssz.Native.Asm

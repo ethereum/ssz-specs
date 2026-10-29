@@ -7,9 +7,9 @@ The claims' paths are written one after the other, then the siblings that are no
 again, distinct and largest first.
 -/
 
-namespace Ssz.Native.Driver.BranchProof
+namespace EthLib.Consensus.Ssz.Native.Driver.BranchProof
 
-open Ssz.Native.Ir Ssz.Native.Asm
+open EthLib.Consensus.Ssz.Native.Ir EthLib.Consensus.Ssz.Native.Asm
 
 /-- A path is as long as its index's level. -/
 theorem pathOf_length (c : Nat) : (pathOf c).length = Nat.log2 c := by
@@ -215,10 +215,10 @@ theorem candidates_calls {m : Module} {w : World} (hc : m.fns.lookup "ssz_branch
     refine Wp.cons (Wp.ite (eval_eq rfl rfl) (fun fresh => ?_) (fun seen => ?_))
     · -- A sibling off every path is a candidate, written next.
       have off : (p ^^^ 1).toNat ∉ P := by
-        have : (firstAt (wordAt mem' (env 0).toNat 8) (p ^^^ 1) (env 1).toNat).toUInt64 = env 1 := by
-          by_cases h : (firstAt (wordAt mem' (env 0).toNat 8) (p ^^^ 1) (env 1).toNat).toUInt64 = env 1
+        have : (firstAt (big32 mem' (env 0).toNat 8) (p ^^^ 1) (env 1).toNat).toUInt64 = env 1 := by
+          by_cases h : (firstAt (big32 mem' (env 0).toNat 8) (p ^^^ 1) (env 1).toNat).toUInt64 = env 1
           · exact h
-          · simp only [assign, ↓reduceIte, Nat.reduceEqDiff, if_neg h] at fresh; exact absurd rfl fresh
+          · simp only [assign, ↓reduceIte, Nat.reduceEqDiff, ite_eq_right h] at fresh; exact absurd rfl fresh
         rw [e0, e1, firstAt_words_eq_count, pathsNow] at this
         exact this
       have addrN : (env 2 + 8 * env 6).toNat = out.toNat + 8 * (env 6).toNat := by
@@ -240,9 +240,9 @@ theorem candidates_calls {m : Module} {w : World} (hc : m.fns.lookup "ssz_branch
       · simp only [assign, ↓reduceIte, Nat.reduceEqDiff, next]; omega
     · -- A sibling on some path is no candidate.
       have on : (p ^^^ 1).toNat ∈ P := by
-        have : ¬ (firstAt (wordAt mem' (env 0).toNat 8) (p ^^^ 1) (env 1).toNat).toUInt64 = env 1 := by
+        have : ¬ (firstAt (big32 mem' (env 0).toNat 8) (p ^^^ 1) (env 1).toNat).toUInt64 = env 1 := by
           intro h
-          simp only [assign, ↓reduceIte, Nat.reduceEqDiff, if_pos h] at seen
+          simp only [assign, ↓reduceIte, Nat.reduceEqDiff, ite_eq_left h] at seen
           exact absurd seen (by decide)
         rw [e0, e1, firstAt_words_eq_count, pathsNow] at this
         exact Classical.not_not.mp this
@@ -265,4 +265,4 @@ theorem candidates_calls {m : Module} {w : World} (hc : m.fns.lookup "ssz_branch
     apply UInt64.toNat_inj.mp
     rw [len, toNat_ofNat_of_lt _ (by have := count.toNat_lt; omega)]
 
-end Ssz.Native.Driver.BranchProof
+end EthLib.Consensus.Ssz.Native.Driver.BranchProof

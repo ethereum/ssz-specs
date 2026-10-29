@@ -11,9 +11,9 @@ The root of an encoding, end to end: the call returns zero and writes the specif
 The dispatcher is proved for every type by induction on the type, each driver from its children's dispatcher calls.
 -/
 
-namespace Ssz.Native.Driver
+namespace EthLib.Consensus.Ssz.Native.Driver
 
-open Ssz Ssz.Native.Ir Ssz.Native.Ir.Expr Ssz.Native.Ir.Stmt Ssz.Native.Asm
+open EthLib.Consensus.Ssz EthLib.Consensus.Ssz.Native.Ir EthLib.Consensus.Ssz.Native.Ir.Expr EthLib.Consensus.Ssz.Native.Ir.Stmt EthLib.Consensus.Ssz.Native.Asm
 
 /-- The dispatcher writes the Lean root of a range of every type. -/
 theorem rootOf_ok {m : Module} {w : World} (hash : HashingOk m w) (gmod : GatherModule m) (fns : RangeFns m)
@@ -102,4 +102,4 @@ theorem hashTreeRoot_calls {m : Module} {w : World} (hash : HashingOk m w) (gmod
   simp only [read, Bind.bind, Except.bind]
   exact agrees
 
-end Ssz.Native.Driver
+end EthLib.Consensus.Ssz.Native.Driver

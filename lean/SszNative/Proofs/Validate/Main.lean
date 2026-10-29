@@ -6,9 +6,9 @@ The native decoding check refuses exactly what deserialization refuses, for the 
 A range of an encoding stands for the slice deserialization would cut out of it.
 -/
 
-namespace Ssz.Native
+namespace EthLib.Consensus.Ssz.Native
 
-open Ssz
+open EthLib.Consensus.Ssz
 
 /-- What accepted sequence ranges tell of a stride: it starts the range, and its elements are of the fixed width. -/
 def StrideOk (element : Desc) (start stop : Nat) : Ranges → Prop
@@ -252,13 +252,13 @@ theorem validate_sound (d : Desc) : AgreesEverywhere d := by
     -- Fixed-size scalars are their sizes and probes.
     intro b start stop ordered inside
     unfold Agrees
-    rw [validateRange, if_pos (show hasWidth _ = true from rfl)]
+    rw [validateRange, ite_eq_left (show hasWidth _ = true from rfl)]
     exact validateFixed_sound _ rfl b start stop ordered inside
   | byteList limit =>
     -- Byte lists check the composite ceiling before the declared limit.
     intro b start stop ordered inside
     unfold Agrees
-    rw [validateRange, if_neg (by simp [hasWidth]), validateVariable]
+    rw [validateRange, ite_eq_right (by simp [hasWidth]), validateVariable]
     simp [deserialize, offsetBound, slice_size b start stop inside, throw, throwThe,
       MonadExceptOf.throw, Bind.bind, Except.bind, Except.map, pure, Except.pure]
     split <;> first | rfl | (split <;> rfl)
@@ -266,7 +266,7 @@ theorem validate_sound (d : Desc) : AgreesEverywhere d := by
     -- Bit lists are refused for their delimiter alike on both sides.
     intro b start stop ordered inside
     unfold Agrees
-    rw [validateRange, if_neg (by simp [hasWidth]), validateVariable, deserialize]
+    rw [validateRange, ite_eq_right (by simp [hasWidth]), validateVariable, deserialize]
     have agrees := delimited_agrees b start stop (some limit) ordered inside
     rw [show discard (delimitedCount b start stop (some limit)) =
         (delimitedCount b start stop (some limit)).map (fun _ => ()) by
@@ -275,7 +275,7 @@ theorem validate_sound (d : Desc) : AgreesEverywhere d := by
   | progressiveBitList limit =>
     intro b start stop ordered inside
     unfold Agrees
-    rw [validateRange, if_neg (by simp [hasWidth]), validateVariable, deserialize]
+    rw [validateRange, ite_eq_right (by simp [hasWidth]), validateVariable, deserialize]
     have agrees := delimited_agrees b start stop limit ordered inside
     rw [show discard (delimitedCount b start stop limit) = (delimitedCount b start stop limit).map (fun _ => ()) by
       cases delimitedCount b start stop limit <;> rfl, agrees]
@@ -285,9 +285,9 @@ theorem validate_sound (d : Desc) : AgreesEverywhere d := by
     intro b start stop ordered inside
     unfold Agrees
     by_cases has : hasWidth element = true
-    · rw [validateRange, if_pos (show hasWidth (.vector element length) = true from has)]
+    · rw [validateRange, ite_eq_left (show hasWidth (.vector element length) = true from has)]
       exact validateFixed_sound (.vector element length) has b start stop ordered inside
-    · rw [validateRange, if_neg (show ¬ hasWidth (.vector element length) = true from has), validateVariable,
+    · rw [validateRange, ite_eq_right (show ¬ hasWidth (.vector element length) = true from has), validateVariable,
         deserialize]
       exact sequence_sound element b start stop ordered inside ih _ _
         (vectorRanges_cut element length b start stop ordered inside)
@@ -296,14 +296,14 @@ theorem validate_sound (d : Desc) : AgreesEverywhere d := by
     -- Lists are sequences of ranges, cut alike.
     intro b start stop ordered inside
     unfold Agrees
-    rw [validateRange, if_neg (by simp [hasWidth]), validateVariable, deserialize]
+    rw [validateRange, ite_eq_right (by simp [hasWidth]), validateVariable, deserialize]
     exact sequence_sound element b start stop ordered inside ih _ _
       (listRanges_cut element _ b start stop ordered inside)
       (fun r read => listRanges_stride element _ b start stop r read)
   | progressiveList element limit ih =>
     intro b start stop ordered inside
     unfold Agrees
-    rw [validateRange, if_neg (by simp [hasWidth]), validateVariable, deserialize]
+    rw [validateRange, ite_eq_right (by simp [hasWidth]), validateVariable, deserialize]
     exact sequence_sound element b start stop ordered inside ih _ _
       (listRanges_cut element _ b start stop ordered inside)
       (fun r read => listRanges_stride element _ b start stop r read)
@@ -312,10 +312,10 @@ theorem validate_sound (d : Desc) : AgreesEverywhere d := by
     intro b start stop ordered inside
     unfold Agrees
     by_cases has : allHaveWidth fields = true
-    · rw [validateRange, if_pos (show hasWidth (.container names fields) = true from has)]
+    · rw [validateRange, ite_eq_left (show hasWidth (.container names fields) = true from has)]
       exact validateFixed_sound (.container names fields)
         (show hasWidth (.container names fields) = true from has) b start stop ordered inside
-    · rw [validateRange, if_neg (show ¬ hasWidth (.container names fields) = true from has), validateVariable]
+    · rw [validateRange, ite_eq_right (show ¬ hasWidth (.container names fields) = true from has), validateVariable]
       rw [deserialize, validateStruct_sound fields b start stop ordered inside ih]
       cases deserializeStruct fields (slice b start stop) <;> rfl
   | progressiveContainer active names fields ih =>
@@ -323,10 +323,10 @@ theorem validate_sound (d : Desc) : AgreesEverywhere d := by
     intro b start stop ordered inside
     unfold Agrees
     by_cases has : allHaveWidth fields = true
-    · rw [validateRange, if_pos (show hasWidth (.progressiveContainer active names fields) = true from has)]
+    · rw [validateRange, ite_eq_left (show hasWidth (.progressiveContainer active names fields) = true from has)]
       exact validateFixed_sound (.progressiveContainer active names fields)
         (show hasWidth (.progressiveContainer active names fields) = true from has) b start stop ordered inside
-    · rw [validateRange, if_neg (show ¬ hasWidth (.progressiveContainer active names fields) = true from has),
+    · rw [validateRange, ite_eq_right (show ¬ hasWidth (.progressiveContainer active names fields) = true from has),
         validateVariable]
       rw [deserialize, validateStruct_sound fields b start stop ordered inside ih]
       cases deserializeStruct fields (slice b start stop) <;> rfl
@@ -334,7 +334,7 @@ theorem validate_sound (d : Desc) : AgreesEverywhere d := by
     -- A union's selector byte is read alike, and the rest of the range is the chosen option.
     intro b start stop ordered inside
     unfold Agrees
-    rw [validateRange, if_neg (by simp [hasWidth]), validateVariable, deserialize]
+    rw [validateRange, ite_eq_right (by simp [hasWidth]), validateVariable, deserialize]
     have size := slice_size b start stop inside
     by_cases small : stop - start < 1
     · simp [small, size, throw, throwThe, MonadExceptOf.throw, Bind.bind, Except.bind, Except.map]
@@ -356,4 +356,4 @@ theorem validate_eq (d : Desc) (b : ByteArray) :
     simp [slice, ← ByteArray.size_data]
   rw [validate, validate_sound d b 0 b.size (Nat.zero_le _) (Nat.le_refl _), whole]
 
-end Ssz.Native
+end EthLib.Consensus.Ssz.Native

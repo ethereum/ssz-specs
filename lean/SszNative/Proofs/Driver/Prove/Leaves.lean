@@ -12,11 +12,11 @@ by the slot reader.
 What the calls rooting values do is taken as hypotheses, so the proof serves any type.
 -/
 
-namespace Ssz.Native.Driver.ProveProof
+namespace EthLib.Consensus.Ssz.Native.Driver.ProveProof
 
 set_option maxRecDepth 20000
 
-open Ssz Ssz.Native Ssz.Native.Ir Ssz.Native.Asm Ssz.Native.Ir.Stmt Ssz.Native.Ir.Expr Ssz.Native.Plan
+open EthLib.Consensus.Ssz EthLib.Consensus.Ssz.Native EthLib.Consensus.Ssz.Native.Ir EthLib.Consensus.Ssz.Native.Asm EthLib.Consensus.Ssz.Native.Ir.Stmt EthLib.Consensus.Ssz.Native.Ir.Expr EthLib.Consensus.Ssz.Native.Plan
 
 /-! ### Records kept where memory agrees -/
 
@@ -156,7 +156,7 @@ theorem bytesAt_joinNodes {mem : Memory} {buf : Nat} {rs : List ByteArray} (size
     have inJoin : (joinNodes rs).data[j]'h2 = rs[j / 32].data[j % 32]'(by rw [ByteArray.size_data, r32]; omega) := by
       have e := congrArg (fun a : Array UInt8 => a[j % 32]?) node
       simp only [Ssz.Native.nodeOf, ByteArray.data_extract] at e
-      rw [Array.getElem?_extract, if_pos (by rw [ByteArray.size_data, size]; omega),
+      rw [Array.getElem?_extract, ite_eq_left (by rw [ByteArray.size_data, size]; omega),
         show 0 + 32 * (j / 32) + j % 32 = j by omega, Array.getElem?_eq_getElem h2,
         Array.getElem?_eq_getElem (by rw [ByteArray.size_data, r32]; omega)] at e
       exact Option.some.inj e
@@ -178,12 +178,12 @@ theorem leavesIn_nested {b : ByteArray} {layout : EncodedLayout} {slots : Slots}
   subst nested
   cases slots with
   | stride e s wd c =>
-    simp only [leavesIn, notChunked e s wd c rfl, EncodedLayout.count, Slots.count, Bool.false_eq_true, if_false]
+    simp only [leavesIn, notChunked e s wd c rfl, EncodedLayout.count, Slots.count, Bool.false_eq_true, ite_false]
     congr 1
     apply List.map_congr_left
     intro i hi
     have := List.mem_range.mp hi
-    simp only [Slots.at, show first + i < c by omega, if_true, slotRoot]
+    simp only [Slots.at, show first + i < c by omega, ite_true, slotRoot]
   | listed l =>
     simp only [leavesIn, EncodedLayout.count, Slots.count]
     congr 1
@@ -248,10 +248,10 @@ theorem packedNodes_get (b : ByteArray) {a e p : Nat} (cut : Option Nat) (ordere
     simp only [ByteArray.set!, ByteArray.get!, Array.set!_eq_setIfInBounds]
     rw [getElem!_pos _ p (by simp; omega), Array.getElem_setIfInBounds (by simp; omega)]
     by_cases last : p + 1 = e - a
-    · rw [if_pos (by omega), if_pos last, getElem!_pos _ _ (by simp; omega), getElem!_pos _ _ (by simp; omega)]
+    · rw [ite_eq_left (by omega), ite_eq_left last, getElem!_pos _ _ (by simp; omega), getElem!_pos _ _ (by simp; omega)]
       congr 2
       omega
-    · rw [if_neg (by omega), if_neg last, getElem!_pos _ _ (by simp; omega)]
+    · rw [ite_eq_right (by omega), ite_eq_right last, getElem!_pos _ _ (by simp; omega)]
 
 
 /-! ### Values rooted one at a time -/
@@ -465,7 +465,7 @@ theorem clear_byte (x : UInt8) {k : Nat} (hk : k < 8) :
 /-- One record gathered with no skip: its bytes, then zeros. -/
 theorem gathered_one (mem : Memory) {out src width pad x : Nat} (hx : out ≤ x ∧ x < out + (width + pad)) :
     gathered mem out src 1 width 0 pad x = if x - out < width then mem (src + (x - out)) else 0 := by
-  simp only [gathered, Nat.mul_one, if_pos hx, Kernel.recordByte, Nat.add_zero]
+  simp only [gathered, Nat.mul_one, ite_eq_left hx, Kernel.recordByte, Nat.add_zero]
   rw [Nat.div_eq_of_lt (by omega), Nat.mod_eq_of_lt (by omega), Nat.mul_zero, Nat.add_zero]
 
 /-- The leaves driver's statements for packed leaves. -/
@@ -553,9 +553,9 @@ theorem leaves_packed {m : Module} {w : World} (gmod : GatherModule m) {sp : Nat
   have endLe : lo' + bytes' ≤ e - a := by simp only [lo', bytes']; split <;> omega
   have copied : ∀ j < 32 * cnt, (j < bytes' ↔ 32 * first + j < e - a) := fun j hj => by
     simp only [bytes']; split <;> omega
-  have loIs : cnt ≠ 0 → lo' = 32 * first := fun h => by simp only [lo', h, if_false]
+  have loIs : cnt ≠ 0 → lo' = 32 * first := fun h => by simp only [lo', h, ite_false]
   have bytesIs : cnt ≠ 0 → bytes' = min (e - a) (32 * (first + cnt)) - 32 * first := fun h => by
-    simp only [bytes', h, if_false]
+    simp only [bytes', h, ite_false]
   have pad : bytes' + (32 * cnt + 32 - bytes') = 32 * cnt + 32 := by omega
   have pre : GatherPre w buf (data + a + lo') 1 bytes' 0 (32 * cnt + 32 - bytes') :=
     ⟨by rw [pad, Nat.mul_one]; exact BranchProof.access_prefix bufAcc (by omega),
@@ -587,7 +587,7 @@ theorem leaves_packed {m : Module} {w : World} (gmod : GatherModule m) {sp : Nat
   have outGather : ∀ x, ¬ (buf ≤ x ∧ x < buf + span) → mem1 x = mem x := fun x hx => by
     rw [← hm1]
     simp only [gathered, Nat.mul_one]
-    rw [if_neg (by rw [pad]; omega)]
+    rw [ite_eq_right (by rw [pad]; omega)]
   have recKeep : ∀ k, k + 8 ≤ 144 → readLE mem1 (lay + k) 8 = readLE mem (lay + k) 8 := fun k hk =>
     readLE_congr _ _ _ 8 fun i hi => outGather _ (by omega)
   -- The bytes the leaves span, read back from the packed range.
@@ -615,10 +615,10 @@ theorem leaves_packed {m : Module} {w : World} (gmod : GatherModule m) {sp : Nat
     have z : cnt ≠ 0 := by omega
     rw [inGather j (by omega), packByte, loIs z]
     by_cases inside' : j < bytes'
-    · rw [if_pos inside', if_pos ((copied j hj).mp inside')]
+    · rw [ite_eq_left inside', ite_eq_left ((copied j hj).mp inside')]
       congr 1
       omega
-    · rw [if_neg inside', if_neg (fun h => inside' ((copied j hj).mpr h))]
+    · rw [ite_eq_right inside', ite_eq_right (fun h => inside' ((copied j hj).mpr h))]
   have f104 := (recKeep 104 (by omega)).trans flag
   cases cut with
   | none =>
@@ -631,7 +631,7 @@ theorem leaves_packed {m : Module} {w : World} (gmod : GatherModule m) {sp : Nat
     have f112 := (recKeep 112 (by omega)).trans (bit k rfl)
     by_cases last : bytes' ≠ 0 ∧ lo' + bytes' = e - a
     · -- The delimiter's byte was gathered: its bit is cleared.
-      have z : cnt ≠ 0 := by intro h; simp only [bytes', h, if_true] at last; omega
+      have z : cnt ≠ 0 := by intro h; simp only [bytes', h, ite_true] at last; omega
       have lastAcc : w.access (buf + bytes' - 1) 1 = true := by
         rw [show buf + bytes' - 1 = buf + (bytes' - 1) by omega]; exact BranchProof.access_sub bufAcc (by omega)
       refine Wp.when_t (by wev [f104, g0, acc, h10, h12, h9, last.1, last.2]) (by simp) ?_
@@ -647,18 +647,18 @@ theorem leaves_packed {m : Module} {w : World} (gmod : GatherModule m) {sp : Nat
         rw [ofNat_toNat (by omega), packedAt j hj, ← gatherIs j hj]
         by_cases at_ : j = bytes' - 1
         · subst at_
-          rw [store_in (by omega), if_pos (by rw [loIs z] at last; omega),
+          rw [store_in (by omega), ite_eq_left (by rw [loIs z] at last; omega),
             show buf + (bytes' - 1) - (buf + bytes' - 1) = 0 by omega, show buf + (bytes' - 1) = buf + bytes' - 1 by omega,
             clear_byte _ k8]
-        · rw [store_out (by omega), if_neg (by rw [loIs z] at last; omega)]
+        · rw [store_out (by omega), ite_eq_right (by rw [loIs z] at last; omega)]
     · -- The delimiter's byte lies past the leaves, or there are none.
       refine Wp.when_f (by
         wonly [f104, g0, acc, h10, h12, h9]
         by_cases h1 : lo' + bytes' = e - a
-        · rw [if_pos h1, if_pos (Classical.byContradiction fun h => last ⟨h, h1⟩)]
-        · rw [if_neg h1]) (Wp.done (finish mem1 outGather fun j hj => ?_))
+        · rw [ite_eq_left h1, ite_eq_left (Classical.byContradiction fun h => last ⟨h, h1⟩)]
+        · rw [ite_eq_right h1]) (Wp.done (finish mem1 outGather fun j hj => ?_))
       have z : cnt ≠ 0 := by omega
-      rw [packedAt j hj, ← gatherIs j hj, if_neg]
+      rw [packedAt j hj, ← gatherIs j hj, ite_eq_right]
       intro h
       exact last ⟨by have := (copied j hj).mpr (by omega); omega, by rw [loIs z, bytesIs z]; omega⟩
 
@@ -729,14 +729,14 @@ theorem rootsOf_empty (d : Desc) (b : ByteArray) (start stride : Nat) : (rootsOf
     rw [rootsOf]
     split
     · exact packedRoots_empty _ _ _ _ _
-    · simp only [beq_iff_eq, Nat.zero_ne_one, if_false]
+    · simp only [beq_iff_eq, Nat.zero_ne_one, ite_false]
       refine climbColumn_empty 0 rfl _ _ _ (columnTree_empty 0 rfl _ _ _ fun c m => ?_)
       simp only [elementColumns, List.mem_map, List.mem_range] at m
       obtain ⟨i, _, rfl⟩ := m
       exact rootsOf_empty element b _ stride
   | .container _ fields =>
     rw [rootsOf]
-    simp only [beq_iff_eq, Nat.zero_ne_one, if_false]
+    simp only [beq_iff_eq, Nat.zero_ne_one, ite_false]
     exact climbColumn_empty 0 rfl _ _ _ (columnTree_empty 0 rfl _ _ _ (fieldColumns_empty fields b start stride 0))
   | .bool | .uint _ | .byteVector _ | .bitVector _ | .byteList _ | .bitList _ | .progressiveBitList _
   | .list _ _ | .progressiveList _ _ | .progressiveContainer _ _ _ | .compatibleUnion _ _ =>
@@ -759,7 +759,7 @@ end
 /-- The chunked roots of no values are empty. -/
 theorem chunkedRoots_empty (d : Desc) (b : ByteArray) (start stride : Nat) :
     chunkedRoots d b start stride 0 = ByteArray.empty := by
-  rw [chunkedRoots, if_pos (Nat.zero_le _)]
+  rw [chunkedRoots, ite_eq_left (Nat.zero_le _)]
   apply ByteArray.ext
   exact Array.eq_empty_of_size_eq_zero (rootsOf_empty d b start stride)
 
@@ -946,12 +946,12 @@ theorem leaves_calls {m : Module} {w : World} (linked : HasCodec m) (gmod : Gath
       refine Wp.ifElse_f (by wev [f6, kind1, acc0]) ?_
       by_cases pl : plain e = true
       · -- Plain values are rooted together.
-        rw [if_pos pl] at flag
+        rw [ite_eq_left pl] at flag
         refine Wp.ifElse_t (by wev [f0, f6, kind1, acc0, acc, flag]) (by decide) ?_
         by_cases none : cnt = 0
         · -- No values: nothing is called, and no roots are written.
           refine Wp.when_f (by wev [f5, none]) (Wp.done ⟨by wev [f5], ?_, fun _ _ _ => rfl⟩)
-          simp only [leavesIn, EncodedLayout.count, pl, if_true] at hL ⊢
+          simp only [leavesIn, EncodedLayout.count, pl, ite_true] at hL ⊢
           rw [hL, hc, none, chunkedRoots_empty]
           rfl
         refine Wp.when_t (by wev [f5]) (by
@@ -963,10 +963,10 @@ theorem leaves_calls {m : Module} {w : World} (linked : HasCodec m) (gmod : Gath
         refine Wp.call (values := [UInt64.ofNat q, UInt64.ofNat data + UInt64.ofNat s + UInt64.ofNat wd *
           UInt64.ofNat first, UInt64.ofNat wd, UInt64.ofNat cnt, UInt64.ofNat buf, UInt64.ofNat ctx])
           (by wev [f0, f1, f3, f4, f5, f7, acc, plan, start, wide']) call (Wp.done ⟨by wev [f5], ?_, kept⟩)
-        simp only [leavesIn, EncodedLayout.count, pl, if_true] at hL ⊢
+        simp only [leavesIn, EncodedLayout.count, pl, ite_true] at hL ⊢
         rw [hL, hc]
         exact nodes
-      · rw [if_neg pl] at flag
+      · rw [ite_eq_right pl] at flag
         refine Wp.ifElse_f (by wev [f0, f6, kind1, acc0, acc, flag]) ?_
         exact loopCase fun e' s' wd' c' h => by cases h; simpa using pl
     | listed l =>
@@ -975,4 +975,4 @@ theorem leaves_calls {m : Module} {w : World} (linked : HasCodec m) (gmod : Gath
       refine Wp.ifElse_f (by wonly [f0, f6, acc0, acc]; simp [k1]) ?_
       exact loopCase fun e' s' wd' c' h => by cases h
 
-end Ssz.Native.Driver.ProveProof
+end EthLib.Consensus.Ssz.Native.Driver.ProveProof

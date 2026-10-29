@@ -10,9 +10,9 @@ A buffer sits in memory when every one of its bytes is there, from some address.
 Each kernel's memory then holds, at its output, exactly the buffer the reference computes from the buffers it read.
 -/
 
-namespace Ssz.Native.Driver
+namespace EthLib.Consensus.Ssz.Native.Driver
 
-open Ssz.Native.Ir Ssz.Native.Asm
+open EthLib.Consensus.Ssz.Native.Ir EthLib.Consensus.Ssz.Native.Asm
 
 /-! ### Buffers in memory -/
 
@@ -36,12 +36,12 @@ theorem bytesAt_of_holds {mem : Memory} {a n : Nat} {bytes : ByteArray} (size : 
     rw [h i hi, Kernel.get!_eq _ _ hi, ByteArray.getElem_eq_getElem_data]
 
 /-- A buffer stays in memory that agrees with the old memory on its bytes. -/
-theorem _root_.Ssz.Native.Holds.congr {m₁ m₂ : Memory} {a : Nat} {bytes : ByteArray} (h : Holds m₁ a bytes)
+theorem _root_.EthLib.Consensus.Ssz.Native.Holds.congr {m₁ m₂ : Memory} {a : Nat} {bytes : ByteArray} (h : Holds m₁ a bytes)
     (same : ∀ i < bytes.size, m₂ (a + i) = m₁ (a + i)) : Holds m₂ a bytes :=
   fun i hi => by rw [same i hi, h i hi]
 
 /-- A buffer in memory holds its tail from further on. -/
-theorem _root_.Ssz.Native.Holds.drop {mem : Memory} {a : Nat} {bytes : ByteArray} (h : Holds mem a bytes) (k : Nat) :
+theorem _root_.EthLib.Consensus.Ssz.Native.Holds.drop {mem : Memory} {a : Nat} {bytes : ByteArray} (h : Holds mem a bytes) (k : Nat) :
     Holds mem (a + k) (bytes.extract k bytes.size) := by
   intro i hi
   rw [ByteArray.size_extract] at hi
@@ -111,7 +111,7 @@ theorem holds_gathered {mem : Memory} {base : Nat} {b : ByteArray} (holds : Hold
     have := Nat.mul_le_mul_left slot (show i + 1 ≤ count by omega)
     rw [Nat.mul_succ] at this; omega
   simp only [gathered]
-  rw [if_pos ⟨by omega, by rw [slotEq]; omega⟩, ← Nat.add_assoc, byte]
+  rw [ite_eq_left ⟨by omega, by rw [slotEq]; omega⟩, ← Nat.add_assoc, byte]
   split
   · rw [show base + start + stride * i + k = base + (start + stride * i + k) by omega,
       holds _ (by have := inside _ hi; omega)]
@@ -168,4 +168,4 @@ theorem holds_hashed_fixed {mem : Memory} {lb nb : Nat} {left node : ByteArray} 
   -- Parent p hashes node p of the column, then the fixed node.
   rw [pairMessage_fixed mem lb nb left node _ hl hn (by omega) ni]
 
-end Ssz.Native.Driver
+end EthLib.Consensus.Ssz.Native.Driver

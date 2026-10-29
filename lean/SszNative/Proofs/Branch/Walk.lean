@@ -2,9 +2,9 @@ import SszNative.Proofs.Branch.Leaves
 
 /-! The walk down a generalized index, over an encoding and over the decoded value, step by step. -/
 
-namespace Ssz.Native.BranchProof
+namespace EthLib.Consensus.Ssz.Native.BranchProof
 
-open Ssz Ssz.Native
+open EthLib.Consensus.Ssz EthLib.Consensus.Ssz.Native
 
 /-- Whether a type's encodings lay out their trees as the values they decode to do. -/
 def LaysOut (d : Desc) : Prop :=
@@ -173,13 +173,13 @@ theorem walk (lays : ∀ d, LaysOut d) : ∀ budget, WalkAt budget
       cases mixinE with
       | none =>
         subst mixin
-        simp only [Option.isSome_none, Bool.false_eq_true, if_false]
+        simp only [Option.isSome_none, Bool.false_eq_true, ite_false]
         cases limitE with
         | some capacity => exact bounded_step budget ih b small _ _ c deep _ _ _ _
         | none => exact progressive_step budget ih b small _ _ c deep _ _ 0 0
       | some word =>
         subst mixin
-        simp only [Option.isSome_some, if_true, Option.map_some]
+        simp only [Option.isSome_some, ite_true, Option.map_some]
         split
         · split
           · rfl
@@ -188,4 +188,4 @@ theorem walk (lays : ∀ d, LaysOut d) : ∀ budget, WalkAt budget
           | some capacity => exact bounded_step budget ih b small _ _ c deep _ _ _ _
           | none => exact progressive_step budget ih b small _ _ c deep _ _ 0 0
 
-end Ssz.Native.BranchProof
+end EthLib.Consensus.Ssz.Native.BranchProof

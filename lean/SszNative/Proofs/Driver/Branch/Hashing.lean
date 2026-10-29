@@ -6,9 +6,9 @@ What the branch drivers' proofs take of the hashing driver, and the words the ve
 The hashing driver's own proof is separate: here its contract is a hypothesis.
 -/
 
-namespace Ssz.Native.Driver.BranchProof
+namespace EthLib.Consensus.Ssz.Native.Driver.BranchProof
 
-open Ssz.Native.Ir Ssz.Native.Asm
+open EthLib.Consensus.Ssz.Native.Ir EthLib.Consensus.Ssz.Native.Asm
 
 /-- The word a verifier answers for a verdict or a refusal. -/
 def answerCode : Except Err Bool → UInt64
@@ -41,7 +41,7 @@ structure PairHashing (m : Module) (w : World) (ctx : UInt64) (ready : Memory �
     (∀ k < 32, free (out.toNat + k)) → (∀ k < 32, free (left.toNat + k)) → (∀ k < 32, free (right.toNat + k)) →
     Apart (out.toNat, 32) (left.toNat, 32) → Apart (out.toNat, 32) (right.toNat, 32) →
     ∃ mem', Calls m w "ssz_hash_columns" sp [out, left, right, 1, ctx] mem 0 mem' ∧ ready mem' ∧
-      (∀ k < 32, mem' (out.toNat + k) = (Sha256.hash (pairMessage mem left.toNat right.toNat)).get! k) ∧
+      (∀ k < 32, mem' (out.toNat + k) = (Cryptography.Hash.Sha256.hash (pairMessage mem left.toNat right.toNat)).get! k) ∧
       (∀ a, free a → ¬ (out.toNat ≤ a ∧ a < out.toNat + 32) → mem' a = mem a)
   /-- Writing only free addresses keeps the context. -/
   ready_frame : ∀ mem mem', ready mem → (∀ a, ¬ free a → mem' a = mem a) → ready mem'
@@ -72,6 +72,6 @@ theorem PairHashing.pair_node {m : Module} {w : World} {ctx : UInt64} {ready : M
   -- The digest is 32 bytes, read back from where it was written.
   refine ⟨mem', call, r', ?_, frame⟩
   rw [combine_readNode]
-  exact readNode_digest (Sha256.hash_size _) bytes
+  exact readNode_digest (Cryptography.Hash.Sha256.hash_size _) bytes
 
-end Ssz.Native.Driver.BranchProof
+end EthLib.Consensus.Ssz.Native.Driver.BranchProof

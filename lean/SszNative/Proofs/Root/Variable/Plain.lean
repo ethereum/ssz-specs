@@ -2,9 +2,9 @@ import SszNative.Proofs.Root.Variable.Union
 
 /-! Roots of types rooted as columns, as one record of its own. -/
 
-namespace Ssz.Native.RootProof
+namespace EthLib.Consensus.Ssz.Native.RootProof
 
-open Ssz Ssz.Native
+open EthLib.Consensus.Ssz EthLib.Consensus.Ssz.Native
 
 variable (facts : Facts)
 
@@ -47,4 +47,4 @@ theorem plain_root (d : Desc) (isPlain : plain d = true) (sound : d.wellFormed =
   simp only [Nat.mul_zero, Nat.zero_add, ByteArray.data_extract]
   rw [Array.extract_eq_self_of_le (by rw [ByteArray.size_data, sized]; omega)]
 
-end Ssz.Native.RootProof
+end EthLib.Consensus.Ssz.Native.RootProof

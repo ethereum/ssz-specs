@@ -28,9 +28,9 @@ Every bit the block cuts out is then the bit the feature checks read, which give
 Each bit of the mask also lets a family of kernels run, for every stride and field width.
 -/
 
-namespace Ssz.Native.Kernel.Detect
+namespace EthLib.Consensus.Ssz.Native.Kernel.Detect
 
-open Ssz.Native.Asm
+open EthLib.Consensus.Ssz.Native.Asm
 
 /-- A word's bit at a position, as one or zero. -/
 def bitAt (v : UInt64) (k : Nat) : UInt64 :=
@@ -156,13 +156,13 @@ theorem exec_combine (t : State) (one1 : t.gpr one = 1) :
   generalize exec (flags .rcx wideBits) t5 = t6 at a6 k6 m6 c6
   -- Every register but the three accumulators and the temporary is as on entry.
   have keep1 : ∀ g, g ≠ .rax → g ≠ .rcx → g ≠ .rdx → g ≠ tmp → t1.gpr g = t.gpr g := fun g ga _ _ _ => by
-    rw [g1, assign, if_neg ga]
+    rw [g1, assign, ite_eq_right ga]
   have keep3 : ∀ g, g ≠ .rax → g ≠ .rcx → g ≠ .rdx → g ≠ tmp → t3.gpr g = t.gpr g := fun g ga gc gd gt => by
-    rw [g3, assign, if_neg gd, k2 g ga gt, keep1 g ga gc gd gt]
+    rw [g3, assign, ite_eq_right gd, k2 g ga gt, keep1 g ga gc gd gt]
   have keepA : ∀ g, g ≠ .rax → g ≠ .rcx → g ≠ .rdx → g ≠ tmp → tA.gpr g = t.gpr g := fun g ga gc gd gt => by
-    rw [gA, assign, if_neg gc, k4 g gd gt, keep3 g ga gc gd gt]
+    rw [gA, assign, ite_eq_right gc, k4 g gd gt, keep3 g ga gc gd gt]
   have keep5 : ∀ g, g ≠ .rax → g ≠ .rcx → g ≠ .rdx → g ≠ tmp → t5.gpr g = t.gpr g := fun g ga gc gd gt => by
-    rw [g5, assign, if_neg gc, gC, assign, if_neg ga, assign, if_neg gc, kB g gc gt, keepA g ga gc gd gt]
+    rw [g5, assign, ite_eq_right gc, gC, assign, ite_eq_right ga, assign, ite_eq_right gc, kB g gc gt, keepA g ga gc gd gt]
   have keep : ∀ g, g ≠ .rax → g ≠ .rcx → g ≠ .rdx → g ≠ tmp → t6.gpr g = t.gpr g := fun g ga gc gd gt => by
     rw [k6 g gc gt, keep5 g ga gc gd gt]
   -- Each accumulation reads only the three words, which no accumulation changes.
@@ -180,13 +180,13 @@ theorem exec_combine (t : State) (one1 : t.gpr one = 1) :
     rw [a4, g3]
     rfl
   have deepB : tB.gpr .rcx = andBits tA.gpr deepBits (andBits t3.gpr avxBits 1) := by
-    rw [aB, gA, assign, if_pos rfl, avx4]
+    rw [aB, gA, assign, ite_eq_left rfl, avx4]
   have shaB : tB.gpr .rax = andBits t1.gpr shaBits 1 := by
-    rw [kB _ (by decide) (by decide), gA, assign, if_neg (by decide), k4 _ (by decide) (by decide), g3, assign,
-      if_neg (by decide), a2, g1]
+    rw [kB _ (by decide) (by decide), gA, assign, ite_eq_right (by decide), k4 _ (by decide) (by decide), g3, assign,
+      ite_eq_right (by decide), a2, g1]
     rfl
   have rdxB : tB.gpr .rdx = andBits t3.gpr avxBits 1 := by
-    rw [kB _ (by decide) (by decide), gA, assign, if_neg (by decide), avx4]
+    rw [kB _ (by decide) (by decide), gA, assign, ite_eq_right (by decide), avx4]
   -- The four accumulators at the end.
   have sha : t6.gpr .rax = andBits t1.gpr shaBits 1 ||| andBits tA.gpr deepBits (andBits t3.gpr avxBits 1) <<< 3 := by
     rw [k6 _ (by decide) (by decide), g5, gC]
@@ -268,7 +268,7 @@ theorem digitOf_xcrWord (cpu : Cpu) (k : Nat) (hk : k < 32) :
   unfold xcrWord
   cases cpu.osxsave
   · simp [digitOf]
-  · simp only [if_true, Bool.true_and, digitOf, UInt64.toNat_and,
+  · simp only [ite_true, Bool.true_and, digitOf, UInt64.toNat_and,
       show (0xFFFFFFFF : UInt64).toNat = 2 ^ 32 - 1 from rfl, Nat.and_two_pow_sub_one_eq_mod]
     -- Cutting at bit 32 keeps every digit below it.
     rw [← Nat.testBit_eq_decide_div_mod_eq, ← Nat.testBit_eq_decide_div_mod_eq, Nat.testBit_mod_two_pow]
@@ -445,11 +445,11 @@ theorem finish (t : State) (at25 : At25 s t) :
 
 end
 
-end Ssz.Native.Kernel.Detect
+end EthLib.Consensus.Ssz.Native.Kernel.Detect
 
-namespace Ssz.Native.Kernel
+namespace EthLib.Consensus.Ssz.Native.Kernel
 
-open Ssz.Native.Asm Kernel.Detect
+open EthLib.Consensus.Ssz.Native.Asm Kernel.Detect
 
 /--
 The routine returns the processor's kernel mask in rax.
@@ -648,4 +648,4 @@ theorem runs_of_mask_avx (cpu : Cpu) (width : Nat) (bit : cpu.featureMask &&& 4 
 theorem runs_gather (cpu : Cpu) : cpu.runs gather :=
   runs_of_features cpu gather [] (by decide +kernel) (by simp)
 
-end Ssz.Native.Kernel
+end EthLib.Consensus.Ssz.Native.Kernel

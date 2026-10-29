@@ -1,5 +1,5 @@
 import SszNative
-import Ssz.Proofs.Audit
+import SszNative.Proofs.Audit
 import SszNative.Proofs.Asm.Run
 import SszNative.Proofs.Asm.Machine
 import SszNative.Proofs.Ir.Logic
@@ -87,4 +87,4 @@ The proofs that the native implementation computes the specification.
 -/
 
 -- The audit runs after every proof is imported, so a new proof module needs no entry.
-audit_ssz
+audit_native

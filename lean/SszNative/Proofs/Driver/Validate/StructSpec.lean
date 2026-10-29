@@ -7,11 +7,11 @@ The Lean check reads the fixed part into places, then turns the places into rang
 Here both are written field by field, the form the native walk takes.
 -/
 
-namespace Ssz.Native.Driver.Validate
+namespace EthLib.Consensus.Ssz.Native.Driver.Validate
 
 set_option maxRecDepth 20000
 
-open Ssz Ssz.Native
+open EthLib.Consensus.Ssz EthLib.Consensus.Ssz.Native
 
 /-- The bytes a field takes in the fixed part: its width, or an offset. -/
 def slot (f : Desc) : Nat := if hasWidth f then fixedWidth f else 4
@@ -44,12 +44,12 @@ theorem readPlaces_eq (b : ByteArray) (start size : Nat) : ∀ (fs : List Desc) 
     have rest := readPlaces_eq b start size fs (pos + slot f) (by simp only [slot]; omega)
     simp only [readPlaces, fixedSize_eq f]
     by_cases hw : hasWidth f = true
-    · simp only [hw, if_true, slot] at rest h ⊢
-      rw [if_neg (by omega)]
+    · simp only [hw, ite_true, slot] at rest h ⊢
+      rw [ite_eq_right (by omega)]
       simp [rest, Bind.bind, Except.bind, pure, Except.pure, placesFrom, hw, slot, leadingWidth_cons,
         Nat.add_assoc]
-    · simp only [hw, Bool.false_eq_true, if_false, slot] at rest h ⊢
-      rw [if_neg (by simp [bytesPerOffset]; omega)]
+    · simp only [hw, Bool.false_eq_true, ite_false, slot] at rest h ⊢
+      rw [ite_eq_right (by simp [bytesPerOffset]; omega)]
       simp [rest, Bind.bind, Except.bind, pure, Except.pure, placesFrom, hw, slot, leadingWidth_cons,
         bytesPerOffset, Nat.add_assoc]
 
@@ -76,7 +76,7 @@ theorem varOffs_some (b : ByteArray) (start : Nat) : ∀ (fs : List Desc) (pos :
   | f :: fs, pos, h => by
     by_cases hw : hasWidth f = true
     · simp only [allHaveWidth, hw, Bool.true_and] at h
-      simp only [varOffs, hw, if_true]; exact varOffs_some b start fs _ h
+      simp only [varOffs, hw, ite_true]; exact varOffs_some b start fs _ h
     · simp [varOffs, hw]
 
 /-- Where the next body begins, from a position of the fixed part on: the next variable field's offset, or the size. -/
@@ -99,10 +99,10 @@ theorem takePlaces_eq (b : ByteArray) (start size : Nat) : ∀ (fs : List Desc) 
   | [], _, _, _ => by simp [placesFrom, takePlaces, rangesFrom]
   | f :: fs, pos, spans, h => by
     by_cases hw : hasWidth f = true
-    · simp only [varOffs, hw, if_true] at h
+    · simp only [varOffs, hw, ite_true] at h
       simp [placesFrom, hw, takePlaces, takePlaces_eq b start size fs _ spans h, rangesFrom, rangeOf,
         Bind.bind, Except.bind, pure, Except.pure]
-    · simp only [varOffs, hw, Bool.false_eq_true, if_false] at h
+    · simp only [varOffs, hw, Bool.false_eq_true, ite_false] at h
       have s4 : slot f = 4 := by simp [slot, hw]
       rw [s4] at h
       cases hl : varOffs b start fs (pos + 4) with
@@ -234,8 +234,8 @@ theorem struct_outcome (fs : List Desc) (b : ByteArray) (start stop : Nat) :
     have none := varOffs_all b start fs 0 all
     have b1 : (stop - start != fieldsWidth fs) = false := by simp [sc]
     have b2 : (stop - start != 0 + Desc.leadingWidth fs) = false := by simp [sc, leadingWidth_of_all fs all]
-    rw [if_neg o, if_pos all, if_neg (show ¬ (stop - start ≠ fieldsWidth fs) by omega)]
-    simp only [o, all, b1, b2, if_true, if_false, Bool.false_eq_true, rp, Bind.bind, Except.bind, pure,
+    rw [ite_eq_right o, ite_eq_left all, ite_eq_right (show ¬ (stop - start ≠ fieldsWidth fs) by omega)]
+    simp only [o, all, b1, b2, ite_true, ite_false, Bool.false_eq_true, rp, Bind.bind, Except.bind, pure,
       Except.pure, placeStarts_eq, none, List.isEmpty_nil, Bool.not_true, placeRanges,
       held_all b start (stop - start) fs 0 all]
   · simp only [Bool.not_eq_true] at all
@@ -243,24 +243,24 @@ theorem struct_outcome (fs : List Desc) (b : ByteArray) (start stop : Nat) :
     · simp [o, all, tl, Bind.bind, Except.bind]
     have rp := readPlaces_eq b start (stop - start) fs 0 (by omega)
     have some := varOffs_some b start fs 0 all
-    simp only [o, all, tl, if_false, Bool.false_eq_true, rp, Nat.zero_add, Bind.bind, Except.bind, pure,
+    simp only [o, all, tl, ite_false, Bool.false_eq_true, rp, Nat.zero_add, Bind.bind, Except.bind, pure,
       Except.pure, placeStarts_eq, placeRanges]
     have ne : (varOffs b start fs 0).isEmpty = false := by
       cases h : varOffs b start fs 0 with
       | nil => exact absurd h some
       | cons _ _ => rfl
-    simp only [ne, Bool.not_false, if_true, Bool.false_eq_true, if_false]
+    simp only [ne, Bool.not_false, ite_true, Bool.false_eq_true, ite_false]
     cases validateInline fs b (placesFrom b start fs 0) with
     | error x => rfl
     | ok u =>
       simp only
       generalize (varOffs b start fs 0)[0]! = v0
       by_cases fo : v0 = Desc.leadingWidth fs
-      · simp only [fo, ne_eq, not_true_eq_false, if_false, bne_self_eq_false, Bool.false_eq_true]
+      · simp only [fo, ne_eq, not_true_eq_false, ite_false, bne_self_eq_false, Bool.false_eq_true]
         cases hs : offsetSpans (varOffs b start fs 0) (stop - start) with
         | error x => simp [spansOutcome, hs, Except.map]
         | ok sp =>
           simp [spansOutcome, hs, Except.map, takePlaces_eq b start (stop - start) fs 0 sp hs]
       · simp [fo, throw, throwThe, MonadExceptOf.throw]
 
-end Ssz.Native.Driver.Validate
+end EthLib.Consensus.Ssz.Native.Driver.Validate

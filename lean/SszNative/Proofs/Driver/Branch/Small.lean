@@ -2,9 +2,9 @@ import SszNative.Proofs.Driver.Branch.Common
 
 /-! The level of an index, the search for a word, and the comparison of two nodes, as calls. -/
 
-namespace Ssz.Native.Driver.BranchProof
+namespace EthLib.Consensus.Ssz.Native.Driver.BranchProof
 
-open Ssz.Native.Ir Ssz.Native.Asm
+open EthLib.Consensus.Ssz.Native.Ir EthLib.Consensus.Ssz.Native.Asm
 
 /-- Halving a word down to one counts its level. -/
 theorem level_body (m : Module) (w : World) (sp : Nat) (x : UInt64) (mem : Memory) :
@@ -25,12 +25,12 @@ theorem level_body (m : Module) (w : World) (sp : Nat) (x : UInt64) (mem : Memor
         (Runs.block_cons (Runs.set m w sp _ mem' 1 _ _ rfl) (Runs.block_nil m w sp _ mem')), ⟨same, ?_⟩, ?_⟩
       · have half := log2_half (env 0).toNat (by omega)
         have bound := log2_lt_64 x
-        simp only [assign, toNat_shr_one, show (0 : Nat) ≠ 1 by decide, show (1 : Nat) ≠ 0 by decide, if_false,
-          if_true, aluResult]
+        simp only [assign, toNat_shr_one, show (0 : Nat) ≠ 1 by decide, show (1 : Nat) ≠ 0 by decide, ite_false,
+          ite_true, aluResult]
         rw [toNat_add_of_lt _ _ (by simp; omega)]
         simp only [UInt64.reduceToNat]
         omega
-      · simp only [assign, show (0 : Nat) ≠ 1 by decide, if_false, if_true, toNat_shr_one]
+      · simp only [assign, show (0 : Nat) ≠ 1 by decide, ite_false, ite_true, toNat_shr_one]
         omega)
     (assign (entryEnv [x]) 1 0) mem ⟨rfl, by simp [assign, entryEnv, Nat.log2]⟩
   subst same
@@ -71,10 +71,10 @@ theorem firstAt_eq (f : Nat → UInt64) (key : UInt64) :
         · omega
         · exact ⟨early, h⟩
       have := firstAt_eq f key n i before (.inr hit)
-      rw [this, if_pos early]
+      rw [this, ite_eq_left early]
     · -- Nothing matches below the last position, so the shorter search runs to its end.
       have := firstAt_eq f key n n (fun j hj => before j (by omega)) (.inl rfl)
-      rw [this, if_neg (by omega)]
+      rw [this, ite_eq_right (by omega)]
       by_cases last : i = n
       · subst last
         have hit : f i = key := by
@@ -83,7 +83,7 @@ theorem firstAt_eq (f : Nat → UInt64) (key : UInt64) :
           · exact h
         simp [hit]
       · have miss : f n ≠ key := before n (by omega)
-        simp only [miss, if_false]
+        simp only [miss, ite_false]
         omega
 
 /-- The first position is at most the count. -/
@@ -104,16 +104,16 @@ theorem firstAt_spec (f : Nat → UInt64) (key : UInt64) :
     obtain ⟨before, stop⟩ := firstAt_spec f key n
     simp only [firstAt]
     by_cases early : firstAt f key n < n
-    · rw [if_pos early]
+    · rw [ite_eq_left early]
       rcases stop with e | ⟨_, hit⟩
       · omega
       · exact ⟨before, .inr ⟨by omega, hit⟩⟩
-    · rw [if_neg early]
+    · rw [ite_eq_right early]
       have atEnd : firstAt f key n = n := by have := firstAt_le f key n; omega
       rw [atEnd] at before
       by_cases hit : f n = key
-      · rw [if_pos hit]; exact ⟨before, .inr ⟨by omega, hit⟩⟩
-      · rw [if_neg hit]
+      · rw [ite_eq_left hit]; exact ⟨before, .inr ⟨by omega, hit⟩⟩
+      · rw [ite_eq_right hit]
         refine ⟨fun j hj => ?_, .inl rfl⟩
         by_cases last : j = n
         · rw [last]; exact hit
@@ -135,24 +135,24 @@ theorem firstAt_lt_iff (f : Nat → UInt64) (key : UInt64) (n : Nat) :
     · omega
 
 /-- Words a stride apart from a base, by position. -/
-def wordAt (mem : Memory) (base stride : Nat) (j : Nat) : UInt64 :=
+def big32 (mem : Memory) (base stride : Nat) (j : Nat) : UInt64 :=
   readLE mem (base + stride * j) 8
 
 /-- The search keeps its arguments, a stop at least its position, and no match before its position. -/
 private def FindInv (mem : Memory) (base stride count key : UInt64) (env : Env) (mem' : Memory) : Prop :=
   mem' = mem ∧ env 0 = base ∧ env 1 = stride ∧ env 2 = count ∧ env 3 = key ∧ (env 4).toNat ≤ (env 5).toNat ∧
-    (∀ j < (env 4).toNat, wordAt mem base.toNat stride.toNat j ≠ key) ∧
+    (∀ j < (env 4).toNat, big32 mem base.toNat stride.toNat j ≠ key) ∧
     (env 5 = count ∨ (env 5 = env 4 ∧ (env 4).toNat < count.toNat ∧
-      wordAt mem base.toNat stride.toNat (env 4).toNat = key))
+      big32 mem base.toNat stride.toNat (env 4).toNat = key))
 
 /-- A call of the search returns the first position holding the key, or the count, and writes nothing. -/
 theorem find_calls {m : Module} {w : World} (hf : m.fns.lookup "ssz_branch_find" = some Find.fn) {sp : Nat}
     (room : w.stackLo + 80 ≤ sp) (base stride count key : UInt64) (mem : Memory)
     (acc : ∀ j < count.toNat, w.access (base.toNat + stride.toNat * j) 8 = true) :
     Calls m w "ssz_branch_find" sp [base, stride, count, key] mem
-      (firstAt (wordAt mem base.toNat stride.toNat) key count.toNat).toUInt64 mem := by
+      (firstAt (big32 mem base.toNat stride.toNat) key count.toNat).toUInt64 mem := by
   obtain ⟨r, mem', call, hr, hm⟩ := Calls.of_wp (Q := fun r mem' =>
-      r = (firstAt (wordAt mem base.toNat stride.toNat) key count.toNat).toUInt64 ∧ mem' = mem)
+      r = (firstAt (big32 mem base.toNat stride.toNat) key count.toNat).toUInt64 ∧ mem' = mem)
     (w := w) (sp := sp) (args := [base, stride, count, key]) (mem := mem) hf
     (by have frame : Find.fn.frame = 9 := by decide
         omega) rfl (by
@@ -173,13 +173,13 @@ theorem find_calls {m : Module} {w : World} (hf : m.fns.lookup "ssz_branch_find"
         have := access_bound a
         rw [h0, h1, toNat_addr _ _ _ (by omega)]
       have word : eval w env mem' (Ir.Expr.ld (Ir.Expr.var 0 + Ir.Expr.var 1 * Ir.Expr.var 4)) =
-          some (wordAt mem' base.toNat stride.toNat (env 4).toNat) := by
-        rw [eval_ld (eval_add rfl (eval_mul rfl rfl)) (by rw [addr]; exact a), wordAt, addr]
+          some (big32 mem' base.toNat stride.toNat (env 4).toNat) := by
+        rw [eval_ld (eval_add rfl (eval_mul rfl rfl)) (by rw [addr]; exact a), big32, addr]
       refine Wp.ite (eval_eq word rfl) (fun hit => ?_) (fun miss => ?_)
       · -- A match stops the search where it stands.
-        have hit : wordAt mem' base.toNat stride.toNat (env 4).toNat = key := by
+        have hit : big32 mem' base.toNat stride.toNat (env 4).toNat = key := by
           rw [← h3]
-          by_cases e : wordAt mem' base.toNat stride.toNat (env 4).toNat = env 3
+          by_cases e : big32 mem' base.toNat stride.toNat (env 4).toNat = env 3
           · exact e
           · simp [e] at hit
         refine Wp.cons (Wp.set rfl (Wp.nil ⟨⟨rfl, ?_⟩, ?_⟩)) <;> simp only [assign, ↓reduceIte,
@@ -187,7 +187,7 @@ theorem find_calls {m : Module} {w : World} (hf : m.fns.lookup "ssz_branch_find"
         · exact ⟨h0, h1, h2, h3, Nat.le_refl _, before, .inr ⟨trivial, inRange, hit⟩⟩
         · omega
       · -- A miss moves the position on by one.
-        have miss : wordAt mem' base.toNat stride.toNat (env 4).toNat ≠ key := by
+        have miss : big32 mem' base.toNat stride.toNat (env 4).toNat ≠ key := by
           rw [← h3]; intro eq; simp [eq] at miss
         have next : (env 4 + 1).toNat = (env 4).toNat + 1 := by
           have := count.toNat_lt
@@ -207,7 +207,7 @@ theorem find_calls {m : Module} {w : World} (hf : m.fns.lookup "ssz_branch_find"
         simpa [Cond.holds, UInt64.lt_iff_toNat_lt] using z
       refine Wp.nil ⟨env 4, rfl, ?_, rfl⟩
       apply UInt64.toNat_inj.mp
-      have bound := firstAt_le (wordAt mem' base.toNat stride.toNat) key count.toNat
+      have bound := firstAt_le (big32 mem' base.toNat stride.toNat) key count.toNat
       have := count.toNat_lt
       rw [toNat_ofNat_of_lt _ (by omega)]
       symm
@@ -291,20 +291,20 @@ theorem same_calls {m : Module} {w : World} (hf : m.fns.lookup "ssz_branch_same"
         refine Wp.set rfl (Wp.cons (Wp.set (eval_add rfl rfl) (Wp.nil ⟨⟨rfl, ?_⟩, ?_⟩))) <;>
           simp only [assign, ↓reduceIte, Nat.reduceEqDiff, next]
         · refine ⟨h0, h1, by omega, ?_⟩
-          rw [if_neg]
+          rw [ite_eq_right]
           intro h; exact differ ((extend.mp h).2)
         · omega
       · have agree : mem' (a.toNat + (env 2).toNat) = mem' (b.toNat + (env 2).toNat) := by
           by_cases e : mem' (a.toNat + (env 2).toNat) = mem' (b.toNat + (env 2).toNat)
           · exact e
-          · simp only [if_neg (fun h => e (UInt8.toUInt64_inj.mp h))] at agree; exact absurd agree (by decide)
+          · simp only [ite_eq_right (fun h => e (UInt8.toUInt64_inj.mp h))] at agree; exact absurd agree (by decide)
         refine Wp.skip (Wp.cons (Wp.set (eval_add rfl rfl) (Wp.nil ⟨⟨rfl, ?_⟩, ?_⟩))) <;>
           simp only [assign, ↓reduceIte, Nat.reduceEqDiff, next]
         · refine ⟨h0, h1, by omega, ?_⟩
           rw [flag]
           by_cases all : ∀ k < (env 2).toNat, mem' (a.toNat + k) = mem' (b.toNat + k)
-          · rw [if_pos all, if_pos (extend.mpr ⟨all, agree⟩)]
-          · rw [if_neg all, if_neg (fun h => all (extend.mp h).1)]
+          · rw [ite_eq_left all, ite_eq_left (extend.mpr ⟨all, agree⟩)]
+          · rw [ite_eq_right all, ite_eq_right (fun h => all (extend.mp h).1)]
         · omega
     · -- On exit all 32 bytes were compared.
       have ge : ¬ (env 2).toNat < 32 := by
@@ -312,9 +312,9 @@ theorem same_calls {m : Module} {w : World} (hf : m.fns.lookup "ssz_branch_same"
       refine Wp.nil ⟨env 3, rfl, ?_, rfl⟩
       rw [flag, show (env 2).toNat = 32 by omega]
       by_cases all : ∀ k < 32, mem' (a.toNat + k) = mem' (b.toNat + k)
-      · rw [if_pos all, if_pos ((readNode_eq_iff _ _ _).mpr all)]
-      · rw [if_neg all, if_neg (fun h => all ((readNode_eq_iff _ _ _).mp h))])
+      · rw [ite_eq_left all, ite_eq_left ((readNode_eq_iff _ _ _).mpr all)]
+      · rw [ite_eq_right all, ite_eq_right (fun h => all ((readNode_eq_iff _ _ _).mp h))])
   rw [hr, hm] at call
   exact call
 
-end Ssz.Native.Driver.BranchProof
+end EthLib.Consensus.Ssz.Native.Driver.BranchProof

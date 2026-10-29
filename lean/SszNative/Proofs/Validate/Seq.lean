@@ -2,9 +2,9 @@ import SszNative.Proofs.Validate.Parts
 
 /-! Sequence ranges agreeing with the slices deserialization cuts. -/
 
-namespace Ssz.Native
+namespace EthLib.Consensus.Ssz.Native
 
-open Ssz
+open EthLib.Consensus.Ssz
 
 /-- A vector's ranges cut the slices deserialization cuts, or both refuse alike. -/
 theorem vectorRanges_cut (element : Desc) (length : Nat) (b : ByteArray) (start stop : Nat)
@@ -139,4 +139,4 @@ theorem listRanges_cut (element : Desc) (limit : Option Nat) (b : ByteArray) (st
                   · simp [Except.map, CutAgree]
                   · exact rest _ _ rfl
 
-end Ssz.Native
+end EthLib.Consensus.Ssz.Native

@@ -5,11 +5,11 @@ import SszNative.Proofs.Validate.Records
 Sequences: a fixed count of variable-size elements, and a counted sequence of either kind.
 -/
 
-namespace Ssz.Native.Driver.Validate
+namespace EthLib.Consensus.Ssz.Native.Driver.Validate
 
 set_option maxRecDepth 20000
 
-open Ssz Ssz.Native Ssz.Native.Ir Ssz.Native.Asm Ssz.Native.Ir.Stmt Ssz.Native.Ir.Expr
+open EthLib.Consensus.Ssz EthLib.Consensus.Ssz.Native EthLib.Consensus.Ssz.Native.Ir EthLib.Consensus.Ssz.Native.Asm EthLib.Consensus.Ssz.Native.Ir.Stmt EthLib.Consensus.Ssz.Native.Ir.Expr
 
 /-- A table whose spans were accepted is in order, its last offset within the size. -/
 theorem spans_ok_facts : ∀ (l : List Nat) (size : Nat) (sp : List Nat), offsetSpans l size = .ok sp →
@@ -68,10 +68,10 @@ theorem vector_outcome (e : Desc) (n : Nat) (b : ByteArray) (start stop : Nat) (
   simp only [vectorRanges, none, ob, bytesPerOffset]
   by_cases o : 2 ^ 32 ≤ stop - start
   · simp [o, throw, throwThe, MonadExceptOf.throw, Bind.bind, Except.bind]
-  · simp only [o, if_false]
+  · simp only [o, ite_false]
     by_cases s : stop - start < n * 4
     · simp [s, throw, throwThe, MonadExceptOf.throw, Bind.bind, Except.bind]
-    · simp only [s, if_false]
+    · simp only [s, ite_false]
       by_cases z : n = 0
       · subst z; simp [Bind.bind, Except.bind, pure, Except.pure, validateRanges, validateEach]
       · have first : ((List.range n).map fun i => offsetAt b (start + i * 4))[0]! = offsetAt b start := by
@@ -83,7 +83,7 @@ theorem vector_outcome (e : Desc) (n : Nat) (b : ByteArray) (start stop : Nat) (
           have key := validate_bodies e b start (stop - start) (tableOffsets b start n)
           rw [tl] at key
           simp only [tableOffsets, bytesPerOffset] at key ⊢
-          simp only [z, first, f, if_false, ne_eq, not_true_eq_false, beq_iff_eq]
+          simp only [z, first, f, ite_false, ne_eq, not_true_eq_false, beq_iff_eq]
           rw [← key]
           cases offsetSpans ((List.range n).map fun i => offsetAt b (start + i * 4)) (stop - start) <;>
             simp [Bind.bind, Except.bind, pure, Except.pure, validateRanges]
@@ -214,7 +214,7 @@ theorem list_outcome (e : Desc) (has lim : Nat) (b : ByteArray) (start stop : Na
   by_cases z : stop - start = 0
   · simp [listRanges, ob, z, Bind.bind, Except.bind, pure, Except.pure, validateRanges, validateEach]
   by_cases hw : hasWidth e = true
-  · have fs : e.fixedSize = some (fixedWidth e) := by rw [fixedSize_eq, if_pos hw]
+  · have fs : e.fixedSize = some (fixedWidth e) := by rw [fixedSize_eq, ite_eq_left hw]
     by_cases w0 : fixedWidth e = 0
     · simp [listRanges, ob, o, z, fs, w0, hw, throw, throwThe, MonadExceptOf.throw, Bind.bind, Except.bind]
     have hmod : (stop - start) % fixedWidth e ≤ stop - start := Nat.mod_le _ _
@@ -222,16 +222,16 @@ theorem list_outcome (e : Desc) (has lim : Nat) (b : ByteArray) (start stop : Na
     by_cases d : (stop - start) % fixedWidth e ≠ 0
     · simp [listRanges, ob, o, z, fs, w0, hw, d, throw, throwThe, MonadExceptOf.throw, Bind.bind, Except.bind]
     simp only [ne_eq, Decidable.not_not] at d
-    simp only [listRanges, ob, fs, ge_iff_le, o, if_false, beq_iff_eq, z, w0, bne_iff_ne, ne_eq, d,
-      not_true_eq_false, hw, if_true]
+    simp only [listRanges, ob, fs, ge_iff_le, o, ite_false, beq_iff_eq, z, w0, bne_iff_ne, ne_eq, d,
+      not_true_eq_false, hw, ite_true]
     simp only [Bind.bind, Except.bind, pure, Except.pure, Over, Plan.readBound]
     by_cases hh : has = 0
     · simp [hh, validateRanges_stride]
     · by_cases oo : lim < (stop - start) / fixedWidth e
       · simp [hh, oo, throw, throwThe, MonadExceptOf.throw]
       · simp [hh, oo, validateRanges_stride]
-  · have fs : e.fixedSize = none := by rw [fixedSize_eq, if_neg hw]
-    simp only [listRanges, ob, fs, ge_iff_le, o, if_false, beq_iff_eq, z, hw, bytesPerOffset, Bool.false_eq_true]
+  · have fs : e.fixedSize = none := by rw [fixedSize_eq, ite_eq_right hw]
+    simp only [listRanges, ob, fs, ge_iff_le, o, ite_false, beq_iff_eq, z, hw, bytesPerOffset, Bool.false_eq_true]
     by_cases s4 : stop - start < 4
     · simp [s4, throw, throwThe, MonadExceptOf.throw, Bind.bind, Except.bind]
     by_cases f4 : offsetAt b start < 4
@@ -244,16 +244,16 @@ theorem list_outcome (e : Desc) (has lim : Nat) (b : ByteArray) (start stop : Na
     have key := validate_bodies e b start (stop - start) (tableOffsets b start (offsetAt b start / 4))
     rw [tableOffsets_length] at key
     simp only [tableOffsets, bytesPerOffset] at key
-    simp only [s4, f4, fa, fp, if_false, bne_iff_ne, ne_eq, not_true_eq_false, gt_iff_lt, Over, Plan.readBound,
+    simp only [s4, f4, fa, fp, ite_false, bne_iff_ne, ne_eq, not_true_eq_false, gt_iff_lt, Over, Plan.readBound,
       Bind.bind, Except.bind, pure, Except.pure, tableOffsets, bytesPerOffset]
     by_cases hh : has = 0
-    · simp only [hh, beq_self_eq_true, if_true]
+    · simp only [hh, beq_self_eq_true, ite_true]
       rw [← key]
       cases offsetSpans ((List.range (offsetAt b start / 4)).map fun i => offsetAt b (start + i * 4)) (stop - start) <;>
         simp [Bind.bind, Except.bind, validateRanges]
     · by_cases oo : lim < offsetAt b start / 4
       · simp [hh, oo, throw, throwThe, MonadExceptOf.throw]
-      · simp only [hh, oo, beq_iff_eq, if_false, and_false, not_false_eq_true]
+      · simp only [hh, oo, beq_iff_eq, ite_false, and_false, not_false_eq_true]
         rw [← key]
         cases offsetSpans ((List.range (offsetAt b start / 4)).map fun i => offsetAt b (start + i * 4)) (stop - start) <;>
           simp [Bind.bind, Except.bind, validateRanges]
@@ -290,7 +290,7 @@ theorem list_calls {m : Module} {w : World} (hm : Loaded m) (e : Desc) (ih : Ran
   · wsteps [hsz, o, z]
     wfin [o, z, res, after]
   by_cases hw : hasWidth e = true
-  · simp only [widthWord, if_pos hw] at width
+  · simp only [widthWord, ite_eq_left hw] at width
     have fw := fixedWidth_lt e fit hw
     have hne : fixedWidth e ≠ 18446744073709551615 := by omega
     wsteps [hsz, o, z]
@@ -319,7 +319,7 @@ theorem list_calls {m : Module} {w : World} (hm : Loaded m) (e : Desc) (ih : Ran
     · have ov' : has = 0 ∨ ¬ lim < (stop - start) / fixedWidth e := by unfold Over at ov; omega
       have probes := hasProbes_calls hm e fit p (sp - 8 - 8 * 17) mem hp (by simp only [Room] at hroom ⊢; omega)
       by_cases none : plan e = []
-      · simp only [probeBit, if_pos none] at probes
+      · simp only [probeBit, ite_eq_left none] at probes
         rcases ov' with h0 | lt
         · wsteps [w0, hsz, d, h0]
           wcall probes []
@@ -329,7 +329,7 @@ theorem list_calls {m : Module} {w : World} (hm : Loaded m) (e : Desc) (ih : Ran
           wcall probes []
           wsteps []
           wfin [o, z, hw, w0, d, ov, none, seqR_nil, res, after]
-      · simp only [probeBit, if_neg none] at probes
+      · simp only [probeBit, ite_eq_right none] at probes
         have recs := records_calls hm e (probe_calls hm e) fit hw p (sp - 8 - 8 * 17) mem base b start
           ((stop - start) / fixedWidth e) err (by omega) hp cp hd cd ok
           (by rw [Nat.div_mul_cancel (Nat.dvd_of_mod_eq_zero d)]; omega) (by simp only [Room] at hroom ⊢; omega)
@@ -346,7 +346,7 @@ theorem list_calls {m : Module} {w : World} (hm : Loaded m) (e : Desc) (ih : Ran
           wcall recs [hsz]
           wsteps []
           wfin [o, z, hw, w0, d, ov]
-  · simp only [widthWord, if_neg hw] at width
+  · simp only [widthWord, ite_eq_right hw] at width
     wsteps [hsz, o, z]
     wcall width []
     wsteps []
@@ -417,4 +417,4 @@ theorem list_calls {m : Module} {w : World} (hm : Loaded m) (e : Desc) (ih : Ran
         wsteps []
         wfin [o, z, hw, s4, f4, fa, fp, ov, hS]
 
-end Ssz.Native.Driver.Validate
+end EthLib.Consensus.Ssz.Native.Driver.Validate

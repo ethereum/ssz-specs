@@ -10,11 +10,11 @@ Any other node is found under the range's layout record: a mixed-in word, a node
 a node of one value under it, which the walk of that value's type roots one level down.
 -/
 
-namespace Ssz.Native.Driver.ProveProof
+namespace EthLib.Consensus.Ssz.Native.Driver.ProveProof
 
 set_option maxRecDepth 20000
 
-open Ssz Ssz.Native Ssz.Native.Ir Ssz.Native.Asm Ssz.Native.Ir.Stmt Ssz.Native.Ir.Expr Ssz.Native.Plan
+open EthLib.Consensus.Ssz EthLib.Consensus.Ssz.Native EthLib.Consensus.Ssz.Native.Ir EthLib.Consensus.Ssz.Native.Asm EthLib.Consensus.Ssz.Native.Ir.Stmt EthLib.Consensus.Ssz.Native.Ir.Expr EthLib.Consensus.Ssz.Native.Plan
 
 /-- The functions the walk to a node calls, each under its name. -/
 structure ProveFns (m : Module) : Prop where
@@ -446,12 +446,12 @@ theorem node_at_step {m : Module} {w : World} (fns : ProveFns m) (hash : Hashing
       | some x => exact ⟨x, rfl⟩
     have Dmb : Nat.log2 idx - 1 = D := by omega
     rw [hw] at lean
-    simp only [Dmb, bit, if_true] at lean
+    simp only [Dmb, bit, ite_true] at lean
     have sOut := pre.sOut
     simp only [Apart] at sOut
     by_cases dz : D = 0
     · -- The word itself, copied out of the record.
-      simp only [dz, ne_eq, not_true_eq_false, if_false] at lean
+      simp only [dz, ne_eq, not_true_eq_false, ite_false] at lean
       have dz' : (UInt64.ofNat D) = 0 := by rw [dz]; rfl
       refine Wp.ifElse_f (by wev [dz']) ?_
       have aw : w.access (job + 24 + 40) 32 = true := Driver.access_sub pre.scrAcc (by omega) (by omega)
@@ -472,7 +472,7 @@ theorem node_at_step {m : Module} {w : World} (fns : ProveFns m) (hash : Hashing
       · rw [Validate.toNat_ofNat_lt (by omega)] at fr
         rw [fr a h1, keep3 a (fun h => h2 ⟨h.1, by omega⟩)]
     · -- A turn below the word, which has no parts.
-      simp only [dz, ne_eq, not_false_eq_true, if_true] at lean
+      simp only [dz, ne_eq, not_false_eq_true, ite_true] at lean
       have dz' : (UInt64.ofNat D) ≠ 0 := by
         intro h; have := congrArg UInt64.toNat h; rw [Validate.toNat_ofNat_lt (by omega)] at this; exact dz this
       refine Wp.ifElse_t (v := 1) (by wev [dz']) (by decide) ?_
@@ -624,7 +624,7 @@ theorem node_at_step {m : Module} {w : World} (fns : ProveFns m) (hash : Hashing
       have capS := limit_small laidE pre.fits pre.sound sml ins cap hl
       simp only [treeWalk, hl] at xw
       have cap3 := laid3.capacity cap hl
-      simp only [hl, Option.isSome_some, if_true] at bd3
+      simp only [hl, Option.isSome_some, ite_true] at bd3
       refine Wp.ifElse_t (v := 1) (by wev [a16, bd3]) (by decide) ?_
       obtain ⟨r, mb', bcall, brc, bnode, bframe⟩ := bounded_calls_decoded fns.range.roots.plan.codec fns.gather hash
         fns.range fns.bounded fns.range.roots.plan.depth fns.pow2 fns.shr fns.leaves fns.slot broom laid3 wpre
@@ -637,7 +637,7 @@ theorem node_at_step {m : Module} {w : World} (fns : ProveFns m) (hash : Hashing
     | none =>
       -- A progressive tree, from its first level.
       simp only [treeWalk, hl] at xw
-      simp only [hl, Option.isSome_none, Bool.false_eq_true, if_false] at bd3
+      simp only [hl, Option.isSome_none, Bool.false_eq_true, ite_false] at bd3
       refine Wp.ifElse_f (by wev [a16, bd3]) ?_
       obtain ⟨r, mb', pcall, prc, pnode, pframe⟩ := progressive_calls_decoded fns.range.roots.plan.codec fns.gather
         hash fns.range fns.progressive fns.spineWalk fns.bounded fns.spine fns.level fns.range.roots.plan.depth
@@ -808,4 +808,4 @@ theorem nodeAtOk_of {m : Module} {w : World} (fns : ProveFns m) (hash : HashingO
     exact bytes k hk
   padKept := fun a h1 h2 => by simp only [ProveFree]; omega
 
-end Ssz.Native.Driver.ProveProof
+end EthLib.Consensus.Ssz.Native.Driver.ProveProof

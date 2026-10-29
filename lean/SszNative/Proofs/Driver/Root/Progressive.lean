@@ -9,9 +9,9 @@ It then closes the spine with a zero node and folds it from the last pair up, ea
 the pair before.
 -/
 
-namespace Ssz.Native.Driver
+namespace EthLib.Consensus.Ssz.Native.Driver
 
-open Ssz Ssz.Native.Ir Ssz.Native.Ir.Expr Ssz.Native.Ir.Stmt Ssz.Native.Asm
+open EthLib.Consensus.Ssz EthLib.Consensus.Ssz.Native.Ir EthLib.Consensus.Ssz.Native.Ir.Expr EthLib.Consensus.Ssz.Native.Ir.Stmt EthLib.Consensus.Ssz.Native.Asm
 
 /-! ### The spine, level by level -/
 
@@ -65,7 +65,7 @@ theorem spineFrom_step (x : ByteArray) {count k : Nat} (hk : spineStart k < coun
   have hl : Nat.log2 (4 ^ k) = 2 * k := by rw [four_pow_eq, Nat.log2_two_pow]
   have fuel : count + 1 - k = (count - k) + 1 := by omega
   simp only [spineFrom, spineTree, fuel, spine, hl]
-  rw [if_neg (by omega), spineStart, show 4 * 4 ^ k = 4 ^ (k + 1) by rw [Nat.pow_succ, Nat.mul_comm],
+  rw [ite_eq_right (by omega), spineStart, show 4 * 4 ^ k = 4 ^ (k + 1) by rw [Nat.pow_succ, Nat.mul_comm],
     show count + 1 - (k + 1) = count - k by omega]
 
 /-- A level past the nodes is the zero node. -/
@@ -73,7 +73,7 @@ theorem spineFrom_done (x : ByteArray) {count k : Nat} (hk : k ≤ count) (h : c
     spineFrom x count k = zeroNode := by
   have fuel : count + 1 - k = (count - k) + 1 := by omega
   simp only [spineFrom, fuel, spine]
-  rw [if_pos h]
+  rw [ite_eq_left h]
 
 /-- The spine from a level is one node. -/
 theorem spineFrom_size {x : ByteArray} {count : Nat} (inside : 32 * count ≤ x.size) (small : x.size < USize.size)
@@ -128,7 +128,7 @@ theorem spineFromAt_step (j : Nat) (x : ByteArray) {count k : Nat} (hk : 4 ^ j *
   have hl : Nat.log2 (4 ^ (j + k)) = 2 * (j + k) := by rw [four_pow_eq, Nat.log2_two_pow]
   have fuel : count + 1 - k = (count - k) + 1 := by omega
   simp only [spineFromAt, spineTreeAt, fuel, spine, hl]
-  rw [if_neg (by omega), startFrom_succ,
+  rw [ite_eq_right (by omega), startFrom_succ,
     show 4 * 4 ^ (j + k) = 4 ^ (j + (k + 1)) by rw [← Nat.add_assoc, Nat.pow_succ, Nat.mul_comm],
     show count + 1 - (k + 1) = count - k by omega]
 
@@ -137,7 +137,7 @@ theorem spineFromAt_done (j : Nat) (x : ByteArray) {count k : Nat} (hk : k ≤ c
     (h : count ≤ 4 ^ j * spineStart k) : spineFromAt j x count k = zeroNode := by
   have fuel : count + 1 - k = (count - k) + 1 := by omega
   simp only [spineFromAt, fuel, spine]
-  rw [if_pos h]
+  rw [ite_eq_left h]
 
 /-- The spine from a level is one node. -/
 theorem spineFromAt_size {x : ByteArray} {count : Nat} (inside : 32 * count ≤ x.size) (small : x.size < USize.size)
@@ -400,7 +400,7 @@ theorem spineLoop_ends {m : Module} {w : World} (hash : HashingOk m w) {sp : Nat
     have more : 4 ^ j * spineStart k < count := by
       by_cases h : 4 ^ j * spineStart k < count
       · exact h
-      · rw [if_neg h] at c; cases c; exact absurd rfl nz
+      · rw [ite_eq_right h] at c; cases c; exact absurd rfl nz
     have k30 := levelFrom_few jle more few
     have pw1 := startFrom_pow j (k + 1)
     have wide1 := level_wide' (show j + (k + 1) ≤ 31 by omega)
@@ -420,12 +420,12 @@ theorem spineLoop_ends {m : Module} {w : World} (hash : HashingOk m w) {sp : Nat
         (UInt64.ofNat (count - 4 ^ j * spineStart k))) (mem := mm)
         (a := v.var .width) (b := v.var .here) (eval_var hw') (eval_var assign_eq) (by omega) (by omega)
       by_cases full : 4 ^ (j + k) < count - 4 ^ j * spineStart k
-      · rw [if_pos full] at cc
+      · rw [ite_eq_left full] at cc
         rw [show here = 4 ^ (j + k) from Nat.min_eq_left (by omega)]
         have := Runs.when_true (m := m) (sp := sp) (body := [v.var .here ::= v.var .width]) 1 cc
           (by decide) (Runs.block_cons (Runs.set' (eval_var hw')) (Runs.block_nil _ _ _ _ _))
         simpa only [assign_assign] using this
-      · rw [if_neg full] at cc
+      · rw [ite_eq_right full] at cc
         rw [show here = count - 4 ^ j * spineStart k from Nat.min_eq_right (by omega)]
         exact Runs.when_false cc
     let F := Asm.assign e (v.slot .here) (UInt64.ofNat here)
@@ -527,7 +527,7 @@ theorem spineLoop_ends {m : Module} {w : World} (hash : HashingOk m w) {sp : Nat
     have alow := startFrom_lt k31
     rw [eval_lt (eval_var hs) (eval_var ev.count) (by omega) (by omega)] at exit
     refine ⟨k, at_, Nat.le_of_not_lt fun h => ?_⟩
-    rw [if_pos h] at exit
+    rw [ite_eq_left h] at exit
     cases exit
 
 /-- The subtree loop's state of the driver over a run of nodes is the general one from the first level. -/
@@ -629,7 +629,7 @@ theorem spineFold_ends {m : Module} {w : World} (hash : HashingOk m w) {sp : Nat
     have pos : 0 < i := by
       by_cases h : 0 < i
       · exact h
-      · rw [if_neg h] at c; cases c; exact absurd rfl nz
+      · rw [ite_eq_right h] at c; cases c; exact absurd rfl nz
     have ready := pre.ready.within (o := scratch) (n := progressiveSpan count) pre.sCtx pre.sTable pre.sZeros
       fun a o pd => frame a o pd
     obtain ⟨mm', call, node, keep⟩ := pairInto_runs (m := m) (w := w) hash (sp := sp) room (env := e) (mem := mm)
@@ -673,7 +673,7 @@ theorem spineFold_ends {m : Module} {w : World} (hash : HashingOk m w) {sp : Nat
     rw [eval_lt (eval_lit 0) (eval_var hi) (by decide) (by omega)] at exit
     have : i = 0 := by
       by_cases h : 0 < i
-      · rw [if_pos h] at exit; cases exit
+      · rw [ite_eq_left h] at exit; cases exit
       · omega
     subst this
     exact at_
@@ -761,7 +761,7 @@ theorem rootProgressive_calls {m : Module} {w : World} (hash : HashingOk m w)
   by_cases empty : k = 0
   · -- No subtree: the root is the zero node.
     subst empty
-    rw [if_pos rfl] at c
+    rw [ite_eq_left rfl] at c
     have z := zero32_at (m := m) (sp := sp') (env := e1) (mem := mm1) (dst := RootProgressive.out)
       (fun _ => eval_var ev.out) pre.oAcc
     have body : Runs m w sp' E0 mem RootProgressive.fn.body e1 (zeroed mm1 out) :=
@@ -772,7 +772,7 @@ theorem rootProgressive_calls {m : Module} {w : World} (hash : HashingOk m w)
     · exact ready1.within (o := out) (n := 32) pre.oCtx pre.oTable pre.oZeros fun a o _ => zeroed_outside o
     · rw [zeroed_outside o]; exact frame a s pd
   · -- The spine closes with a zero node, then folds from the last pair up.
-    rw [if_neg (by omega)] at c
+    rw [ite_eq_right (by omega)] at c
     have less : ∀ j < k, spineStart j < count := fun j hj => by
       rcases lev with h | h
       · omega
@@ -816,4 +816,4 @@ theorem rootProgressive_calls {m : Module} {w : World} (hash : HashingOk m w)
     · exact ready2.within (o := out) (n := 32) pre.oCtx pre.oTable pre.oZeros fun a o pd => keep a o pd
     · rw [keep a o pd]; exact frame2 a s pd
 
-end Ssz.Native.Driver
+end EthLib.Consensus.Ssz.Native.Driver

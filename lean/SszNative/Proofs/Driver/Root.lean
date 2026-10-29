@@ -1,6 +1,6 @@
 import SszNative.Driver.Root
 import SszNative.Proofs.Ir.Logic
-import Ssz.Proofs.Merkle.Merkleize
+import EthLib.Consensus.Proofs.Ssz.Merkle.Merkleize
 import SszNative.Plan
 import SszNative.Proofs.Driver.Codec
 import SszNative.Proofs.Driver.Hash
@@ -15,9 +15,9 @@ They step past a field with the codec's walk past one node, and hold for every w
 for the type's nesting.
 -/
 
-namespace Ssz.Native.Driver
+namespace EthLib.Consensus.Ssz.Native.Driver
 
-open Ssz.Native.Ir Ssz.Native.Ir.Expr Ssz.Native.Ir.Stmt Ssz.Native.Asm
+open EthLib.Consensus.Ssz.Native.Ir EthLib.Consensus.Ssz.Native.Ir.Expr EthLib.Consensus.Ssz.Native.Ir.Stmt EthLib.Consensus.Ssz.Native.Asm
 
 /-! ### Notation as constructors -/
 
@@ -70,11 +70,11 @@ private theorem half_up (n : Nat) : (n + 1) / 2 = n / 2 + n % 2 := by omega
 
 /-- A depth step: more than one leaf takes one level more than half of them, rounded up. -/
 private theorem depthFor_step {n : Nat} (big : 1 < n) : depthFor n = depthFor (n / 2 + n % 2) + 1 := by
-  rw [depthFor, if_neg (by omega), half_up]
+  rw [depthFor, ite_eq_right (by omega), half_up]
 
 /-- At most one leaf needs no level. -/
 private theorem depthFor_small {n : Nat} (small : n ≤ 1) : depthFor n = 0 := by
-  rw [depthFor, if_pos small]
+  rw [depthFor, ite_eq_left small]
 
 /-- The depth for any count a word holds is at most 64. -/
 theorem depthFor_word (n : UInt64) : depthFor n.toNat ≤ 64 :=
@@ -292,12 +292,12 @@ theorem eval_ceilDiv {w : World} {env : Env} {mem : Memory} {a : Expr} {x : UInt
   -- The quotient by a literal is something the arithmetic decision procedure handles.
   by_cases r : x % k.toUInt64 = 0
   · have r0 : x.toNat % k = 0 := by rw [← rn, r]; rfl
-    simp only [r, if_true, UInt64.add_zero, UInt64.toNat_div, kn]
+    simp only [r, ite_true, UInt64.add_zero, UInt64.toNat_div, kn]
     rw [UInt64.toNat_ofNat_of_lt' (by rw [UInt64.size]; rcases hk with rfl | rfl | rfl <;> omega)]
     rcases hk with rfl | rfl | rfl <;> omega
   · have r1 : x.toNat % k ≠ 0 := by
       intro h; apply r; apply UInt64.toNat_inj.mp; rw [rn, h]; rfl
-    simp only [r, if_false, UInt64.toNat_add, UInt64.toNat_div, kn, UInt64.toNat_one]
+    simp only [r, ite_false, UInt64.toNat_add, UInt64.toNat_div, kn, UInt64.toNat_one]
     rw [UInt64.toNat_ofNat_of_lt' (by rw [UInt64.size]; rcases hk with rfl | rfl | rfl <;> omega)]
     rcases hk with rfl | rfl | rfl <;> omega
 
@@ -385,7 +385,7 @@ theorem planWidth_calls (hf : PlanFns m) (d : Desc) (a sp : Nat) (mem : Memory) 
       (Runs.ifElse_false tag_cond (Runs.ifElse_true 1 tag_cond (by decide)
         (Runs.set' (eval_ceilDiv hld 8 (by simp)))))))) ?_
     simp only [PlanWidth.fn, eval, Asm.assign, fixedWidth]
-    simp only [if_true]
+    simp only [ite_true]
     congr 2
     rw [addr_toNat (by omega)]
     omega
@@ -1077,7 +1077,7 @@ theorem scratchWidth_calls (hf : PlanFns m) (d : Desc) (a sp : Nat) (mem : Memor
       (Runs.ifElse_false tag_cond (Runs.ifElse_true 1 tag_cond (by decide)
         (Runs.set' (eval_ceilDiv hld 8 (by simp)))))))) ?_
     simp only [ScratchWidth.fn, eval, Asm.assign, satWidth]
-    simp only [if_true]
+    simp only [ite_true]
     congr 2
     rw [addr_toNat nf]
     omega
@@ -1354,13 +1354,13 @@ theorem scratchRoots_calls (hf : PlanFns m) (d : Desc) (a count sp : Nat) (mem :
         mem (smul_le _ _) hc (by simp only [isp]; rw [scratchRootsFrame]; omega)
       refine Calls.fn hf.scratchRoots (scratchRootsFrame ▸ room') rfl (Runs.block_cons tag0
         (Runs.ifElse_true 1 tag_cond (by decide) (Runs.block_cons sl (Runs.block_cons ss (Runs.block_cons se
-          (Runs.ifElse_true 1 (by have := eval_le_tag (e := e) tagE; rw [if_pos basic] at this; exact this) (by decide)
+          (Runs.ifElse_true 1 (by have := eval_le_tag (e := e) tagE; rw [ite_eq_left basic] at this; exact this) (by decide)
             (Runs.block_cons (Runs.call (by simp [eval, Asm.assign]) width)
               (Runs.block_cons mul (Runs.call (by simp [eval, Asm.assign, c1]) packed))))))))) ?_
       simp [ScratchRoots.fn, eval, Asm.assign, rootsNeed, basic]
     · have notBasic : eval w (Asm.assign (Asm.assign E1 3 (sat l).toUInt64) 4 (a + 16).toUInt64) mem
           (le (ld ScratchRoots.e) 1) = some 0 := by
-        have := eval_le_tag (e := e) tagE; rw [if_neg basic] at this; exact this
+        have := eval_le_tag (e := e) tagE; rw [ite_eq_right basic] at this; exact this
       have child (c : Nat) (hc' : c ≤ scratchCap) := scratchRoots_calls hf e (a + 16) c isp mem he' fe hp hc'
         (by simp only [isp]; rw [scratchRootsFrame]; omega)
       have R := rootsNeed_le e
@@ -1385,7 +1385,7 @@ theorem scratchRoots_calls (hf : PlanFns m) (d : Desc) (a count sp : Nat) (mem :
                 have := eval_le_nat (w := w) (env := E2) (mem := mem) (a := (ScratchRoots.len : Expr))
                   (b := ((recordsPerChunk : Nat) : Expr)) (x := sat l) (y := recordsPerChunk)
                   (by simp [E2, eval, Asm.assign]) (by simp [eval]) (lt64 L) (by decide)
-                rw [if_pos small] at this; exact this) (by decide)
+                rw [ite_eq_left small] at this; exact this) (by decide)
               (Runs.block_cons (Runs.call (by simp [E2, eval, Asm.assign]) (child (sat l) L))
                 (Runs.block_nil m w isp _ mem)), by simp [E2, Asm.assign], by simp [C, Asm.assign, small]⟩
           · -- Chunks of a fixed count, their roots kept in a buffer.
@@ -1393,7 +1393,7 @@ theorem scratchRoots_calls (hf : PlanFns m) (d : Desc) (a count sp : Nat) (mem :
                 have := eval_le_nat (w := w) (env := E2) (mem := mem) (a := (ScratchRoots.len : Expr))
                   (b := ((recordsPerChunk : Nat) : Expr)) (x := sat l) (y := recordsPerChunk)
                   (by simp [E2, eval, Asm.assign]) (by simp [eval]) (lt64 L) (by decide)
-                rw [if_neg small] at this; exact this)
+                rw [ite_eq_right small] at this; exact this)
               (Runs.block_append (Runs.block_cons (Runs.call (by simp [E2, eval, Asm.assign]) (child recordsPerChunk
                   (by decide)))
                 (Runs.block_cons (smulIn_runs ScratchRoots.u (x := 32) (y := sat l) (by simp [eval])
@@ -1633,7 +1633,7 @@ theorem eval_div_nat {w : World} {env : Env} {mem : Memory} {a b : Expr} {x y : 
   have ynz : y.toUInt64 ≠ 0 := by
     intro h; have := congrArg UInt64.toNat h; rw [addr_toNat hy] at this; exact nz this
   simp only [div_eq, eval_div', ha, hb, Option.bind_some]
-  simp only [ynz, beq_iff_eq, if_false]
+  simp only [ynz, beq_iff_eq, ite_false]
   congr 1
   apply UInt64.toNat_inj.mp
   rw [UInt64.toNat_div, addr_toNat hx, addr_toNat hy, addr_toNat (Nat.lt_of_le_of_lt (Nat.div_le_self _ _) hx)]
@@ -1766,7 +1766,7 @@ theorem listElements_runs (hf : PlanFns m) (e : Desc) (ea size sp : Nat) (env : 
   have NL := nodesFor_le hs
   by_cases basic : e.isBasic
   · -- Basic elements pack, and need nothing of their own.
-    refine ⟨_, Runs.ifElse_true 1 (by have := eval_le_tag (e := e) tagE; rw [if_pos basic] at this; exact this)
+    refine ⟨_, Runs.ifElse_true 1 (by have := eval_le_tag (e := e) tagE; rw [ite_eq_left basic] at this; exact this)
       (by decide) (Runs.block_cons (Runs.set' (eval_nodes (by simp [eval, h1]) hs))
         (Runs.block_cons (satIn_runs RootScratch.nodes (x := nodesFor size) (by simp [Asm.assign]) (lt64 NL))
           (Runs.block_cons (Runs.set' rfl) (Runs.block_nil _ _ _ _ _)))),
@@ -1788,7 +1788,7 @@ theorem listElements_runs (hf : PlanFns m) (e : Desc) (ea size sp : Nat) (env : 
       (sat_le _) (by simp [EP, Asm.assign]) (by simp [EP, Asm.assign])
       (by simp [EP, Asm.assign, nkeep 8 (by decide) (by decide), h8])
       (by simp [EP, Asm.assign, nkeep 1 (by decide) (by decide), h1]) stack rec
-    refine ⟨EC, Runs.ifElse_false (by have := eval_le_tag (e := e) tagE; rw [if_neg basic] at this; exact this)
+    refine ⟨EC, Runs.ifElse_false (by have := eval_le_tag (e := e) tagE; rw [ite_eq_right basic] at this; exact this)
       (Runs.block_cons (Runs.call (by simp [eval, h8]) fixed)
         (Runs.block_cons nodes
           (Runs.block_cons (satIn_runs RootScratch.nodes (x := nodesRaw e size) n7 rawFits)
@@ -2209,4 +2209,4 @@ theorem rootScratch_exact (hf : PlanFns m) (d : Desc) (a size sp : Nat) (mem : M
     Calls m w "ssz_root_scratch" sp [a.toUInt64, size.toUInt64] mem (rootScratch d size).toUInt64 mem :=
   rootScratch_calls hf d a size sp mem hw fits hp hs stack
 
-end Ssz.Native.Driver
+end EthLib.Consensus.Ssz.Native.Driver

@@ -4,11 +4,11 @@ import SszNative.Proofs.Driver.Validate.Spans
 Each body a checked table of offsets opens, checked in order against the element's type.
 -/
 
-namespace Ssz.Native.Driver.Validate
+namespace EthLib.Consensus.Ssz.Native.Driver.Validate
 
 set_option maxRecDepth 20000
 
-open Ssz Ssz.Native Ssz.Native.Ir Ssz.Native.Asm Ssz.Native.Ir.Stmt Ssz.Native.Ir.Expr
+open EthLib.Consensus.Ssz EthLib.Consensus.Ssz.Native EthLib.Consensus.Ssz.Native.Ir EthLib.Consensus.Ssz.Native.Asm EthLib.Consensus.Ssz.Native.Ir.Stmt EthLib.Consensus.Ssz.Native.Ir.Expr
 
 /-- What checking a range against a node computes. -/
 def RangeOk (m : Module) (w : World) (d : Desc) : Prop :=
@@ -55,7 +55,7 @@ theorem offsetSpans_ok (start : Nat) : ∀ (l : List Nat) (size : Nat), OrdUpTo 
       have := last (by simp)
       simpa [show (rest.length + 1 + 1 - 1) = rest.length + 1 by omega] using this)
     refine ⟨(n - s) :: spans, ?_, ?_⟩
-    · simp only [offsetSpans, show ¬ n < s by omega, if_false, hs]; rfl
+    · simp only [offsetSpans, show ¬ n < s by omega, ite_false, hs]; rfl
     · simp only [bodies, List.zip_cons_cons, List.map_cons] at hb ⊢
       rw [show (s :: n :: rest).length = (n :: rest).length + 1 by simp, range_succ_map]
       rw [hb]
@@ -167,7 +167,7 @@ theorem each_calls {m : Module} {w : World} (hm : Loaded m) (e : Desc) (ih : Ran
         have g2 := tableOffsets_get b start count (j + 1) more
         have o2 := offsetAt_lt b (start + 4 * j + 4)
         have nx : next = offsetAt b (start + 4 * j + 4) := by
-          rw [← hnext, if_pos more, g2]; congr 1
+          rw [← hnext, ite_eq_left more, g2]; congr 1
         subst nx
         wsteps [h6, h2, more, h1, r2, a2]
         rcases hR : validateRange e b (start + offsetAt b (start + 4 * j)) (start + offsetAt b (start + 4 * j + 4))
@@ -186,7 +186,7 @@ theorem each_calls {m : Module} {w : World} (hm : Loaded m) (e : Desc) (ih : Ran
             Or.inl ⟨by wfin [res], rfl, ?_⟩⟩, by wfin [h6]⟩
           rw [range_map_succ, validateEach_append, sofar, range_j, validateEach, hR]
           first | rfl | simp [validateEach, Bind.bind, Except.bind]
-      · have nx : size = next := by rw [← hnext, if_neg more]
+      · have nx : size = next := by rw [← hnext, ite_eq_right more]
         subst nx
         wsteps [h6, h2, more, h3]
         rcases hR : validateRange e b (start + offsetAt b (start + 4 * j)) (start + size) with x | u
@@ -215,4 +215,4 @@ theorem each_calls {m : Module} {w : World} (hm : Loaded m) (e : Desc) (ih : Ran
     refine ⟨_, by wev [h6, h2, h5], fun nz => absurd (by wonly []) nz, fun _ => ?_⟩
     exact Wp.done ⟨by wonly [h5, fails, res], by simp [after, fails]⟩
 
-end Ssz.Native.Driver.Validate
+end EthLib.Consensus.Ssz.Native.Driver.Validate

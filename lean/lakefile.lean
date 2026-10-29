@@ -6,16 +6,8 @@ package ssz where
   -- An undeclared identifier becomes a silent new variable by default.
   leanOptions := #[⟨`warningAsError, true⟩, ⟨`autoImplicit, false⟩, ⟨`relaxedAutoImplicit, false⟩]
 
--- No third-party dependencies: proofs use Lean's standard logical axioms.
-
-/-- The executable specification, which is what an implementer reads. -/
-@[default_target]
-lean_lib Ssz
-
-/-- The machine-checked properties of it, which nothing else depends on. -/
-@[default_target]
-lean_lib SszProofs where
-  roots := #[`Ssz.Proofs]
+/-- The Lean specification of SSZ, and its proofs, as `EthLib.Consensus.Ssz`. -/
+require EthLib from git "https://github.com/tcoratger/ethlib" @ "b7e2b022c9cdd7aeb7292936538de446920371da"
 
 /-- SSZ read straight from encodings, on native kernels printed from Lean programs. -/
 @[default_target]
@@ -41,10 +33,6 @@ lean_exe conformance where
 @[default_target]
 lean_exe regressions where
   root := `Tests
-
-/-- Parses headers without loading their imports; used by the audited source-closure gate. -/
-lean_exe importHeaders where
-  root := `scripts.ParseImports
 
 /-- The kernels the Lean programs in `SszNative` print, assembled with the toolchain's compiler. -/
 target nativeKernels pkg : FilePath := do

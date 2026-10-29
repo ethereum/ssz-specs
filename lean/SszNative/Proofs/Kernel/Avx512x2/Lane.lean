@@ -9,10 +9,11 @@ The second batch's round is the first batch's with its registers renamed.
 A schedule step reads four words of its batch from their rows and writes the word sixteen rounds on.
 -/
 
-namespace Ssz.Native.Kernel.Avx512x2
+namespace EthLib.Consensus.Ssz.Native.Kernel.Avx512x2
 
-open Ssz.Sha256 Ssz.Native.Asm
-open Ssz.Native.Kernel.Avx512 (role home tmp roundT round_eq_roundT roundsTo roundsTo_succ roundTail tail_lane K W PW
+open EthLib.Cryptography.Hash.Sha256 hiding K IV
+open EthLib.Consensus.Ssz.Native.Asm
+open EthLib.Consensus.Ssz.Native.Kernel.Avx512 (role home tmp roundT round_eq_roundT roundsTo roundsTo_succ roundTail tail_lane K W PW
   W_next role_ne_t1 tableWord_k tableWord_pad laneRun assign_same assign_ne assign_apply ternlog_96 role_lt)
 
 /-- Roles repeat every eight rounds. -/
@@ -118,7 +119,7 @@ theorem seeded_lane_swap (G : Gpr → UInt64) (v : View) (t j : Nat) (hj : j < 8
   congr 2
   · apply Vector.ext; intro i hi
     simp only [Vector.getElem_ofFn]
-    rw [if_neg (swap_role_ne_t1 _ _), if_neg (swap_role_ne_t1 _ _), ← role_mod]
+    rw [ite_eq_right (swap_role_ne_t1 _ _), ite_eq_right (swap_role_ne_t1 _ _), ← role_mod]
   · simp only [ite_true]; rw [← role_mod]
 
 /-- The second batch's padding-style round on one lane. -/
@@ -139,18 +140,18 @@ theorem single_lane_swap (G : Gpr → UInt64) (v : View) (t j : Nat) (hj : j < 8
   congr 2
   · apply Vector.ext; intro i hi
     simp only [Vector.getElem_ofFn]
-    rw [if_neg (swap_role_ne_t1 _ _), ← role_mod]
+    rw [ite_eq_right (swap_role_ne_t1 _ _), ← role_mod]
   · simp only [ite_true]; rw [← role_mod]
 
 /-- A schedule step on one lane: it stores the word sixteen on, from the four words it reads. -/
 theorem scheduleStep_mem (G : Gpr → UInt64) (v : View) (b k : Nat) :
     (viewRun G (scheduleStep b k) v).mem = assign v.mem (addrOf G ⟨words, wordRel b (k + 16)⟩)
-      (v.mem (addrOf G ⟨words, wordRel b k⟩) + sigma0 (v.mem (addrOf G ⟨words, wordRel b (k + 1)⟩)) +
-        v.mem (addrOf G ⟨words, wordRel b (k + 9)⟩) + sigma1 (v.mem (addrOf G ⟨words, wordRel b (k + 14)⟩))) := by
+      (v.mem (addrOf G ⟨words, wordRel b k⟩) + smallSigma0 (v.mem (addrOf G ⟨words, wordRel b (k + 1)⟩)) +
+        v.mem (addrOf G ⟨words, wordRel b (k + 9)⟩) + smallSigma1 (v.mem (addrOf G ⟨words, wordRel b (k + 14)⟩))) := by
   -- The step adds the four words, with the two small sigmas built from rotations and a shift.
   simp only [scheduleStep, viewRun, viewStep]
   congr 1
-  simp [assign, sa, sb, sc, sd, ternlog_96, sigma0, sigma1]
+  simp [assign, sa, sb, sc, sd, ternlog_96, smallSigma0, smallSigma1]
   ac_rfl
 
 /-- The first batch's round registers: its working words, its sum, and its temporaries. -/
@@ -237,8 +238,8 @@ theorem consts_addr (G : Gpr → UInt64) (T i k : Nat) (hc : (G consts).toNat = 
 
 /-- One lane of the first blocks before round t: both batches' working words, their schedule words so far, and the table. -/
 def FirstInv (S T : Nat) (l : Fin 16) (m : Nat → ByteArray) (t : Nat) (v : View) : Prop :=
-  (Vector.ofFn fun j : Fin 8 => v.regs (role t j)) = roundsTo initialState K (W (m 0)) t ∧
-  (Vector.ofFn fun j : Fin 8 => v.regs (swapReg (role t j))) = roundsTo initialState K (W (m 1)) t ∧
+  (Vector.ofFn fun j : Fin 8 => v.regs (role t j)) = roundsTo Cryptography.Hash.Sha256.IV K (W (m 0)) t ∧
+  (Vector.ofFn fun j : Fin 8 => v.regs (swapReg (role t j))) = roundsTo Cryptography.Hash.Sha256.IV K (W (m 1)) t ∧
   (∀ b < 2, ∀ u < t + 16, u < 64 → v.mem (S + wordSlot b u) = W (m b) u) ∧
   TableRows T l v
 
@@ -253,7 +254,7 @@ theorem role_small (t j : Nat) : (role t j).val < 8 := role_lt t j
 theorem swap_role_range (t j : Nat) : 8 ≤ (swapReg (role t j)).val ∧ (swapReg (role t j)).val < 16 := by
   -- Renaming moves registers below 8 up by 8.
   have := role_lt t j
-  simp only [swapReg, if_pos this]
+  simp only [swapReg, ite_eq_left this]
   simp only [Fin.val_add]
   omega
 
@@ -310,7 +311,7 @@ theorem first_step (G : Gpr → UInt64) (S T : Nat) (l : Fin 16) (m : Nat → By
     simp only [Vector.getElem_ofFn]
     rw [split, keepS _ (by have := role_small (t + 1) j; omega), roleA j hj]
     simp only [v1]
-    rw [firstRound_eq, show forBatch 0 _ = _ from if_pos rfl, seeded_lane G v t j hj, roundsTo_succ,
+    rw [firstRound_eq, show forBatch 0 _ = _ from ite_eq_left rfl, seeded_lane G v t j hj, roundsTo_succ,
       round_eq_roundT, ← rolesA, wAddr0 0 (by omega), kAddr, kRow, sched₀ 0 (by omega) t (by omega) ht]
     simp only [Vector.getElem_ofFn]
     rw [add_swap]
@@ -319,7 +320,7 @@ theorem first_step (G : Gpr → UInt64) (S T : Nat) (l : Fin 16) (m : Nat → By
     simp only [Vector.getElem_ofFn]
     rw [split, keepS _ (by have := swap_role_range (t + 1) j; omega)]
     simp only [v2]
-    rw [firstRound_eq, show forBatch 1 _ = _ from if_neg (by decide), seeded_lane_swap G v1 t j hj, roundsTo_succ,
+    rw [firstRound_eq, show forBatch 1 _ = _ from ite_eq_right (by decide), seeded_lane_swap G v1 t j hj, roundsTo_succ,
       round_eq_roundT, ← rolesB, m1, wAddr0 1 (by omega), kAddr, kRow, sched₀ 1 (by omega) t (by omega) ht]
     have same : (Vector.ofFn fun j : Fin 8 => v1.regs (swapReg (role t j))) =
         Vector.ofFn fun j : Fin 8 => v.regs (swapReg (role t j)) := by
@@ -335,7 +336,7 @@ theorem first_step (G : Gpr → UInt64) (S T : Nat) (l : Fin 16) (m : Nat → By
     by_cases fresh : u = t + 16
     · subst fresh
       have early : t < 48 := by omega
-      rw [if_pos (hs.mpr early), viewRun_append, scheduleStep_mem, scheduleStep_mem]
+      rw [ite_eq_left (hs.mpr early), viewRun_append, scheduleStep_mem, scheduleStep_mem]
       -- Every address as a schedule-word row.
       have a0 := wAddr0 0 (by omega)
       have a1 := wAddr0 1 (by omega)
@@ -446,14 +447,14 @@ theorem pad_step (G : Gpr → UInt64) (T : Nat) (l : Fin 16) (mid : Nat → Vect
     simp only [Vector.getElem_ofFn]
     rw [split, viewRun_regs_keep G _ _ pB v1 _ (by have := role_small (t + 1) j; simp [inB]; omega)]
     simp only [v1]
-    rw [paddingRound_eq, show forBatch 0 _ = _ from if_pos rfl, single_lane G v t j hj, roundsTo_succ,
+    rw [paddingRound_eq, show forBatch 0 _ = _ from ite_eq_left rfl, single_lane G v t j hj, roundsTo_succ,
       round_eq_roundT, ← rolesA, pAddr, pRow]
     simp only [Vector.getElem_ofFn]
     simp only [UInt32.add_assoc]
   · -- The second batch's round, on the lanes the first batch's round left.
     apply Vector.ext; intro j hj
     simp only [Vector.getElem_ofFn]
-    rw [split, paddingRound_eq, show forBatch 1 _ = _ from if_neg (by decide), single_lane_swap G v1 t j hj,
+    rw [split, paddingRound_eq, show forBatch 1 _ = _ from ite_eq_right (by decide), single_lane_swap G v1 t j hj,
       roundsTo_succ, round_eq_roundT, ← rolesB, m1, pAddr, pRow]
     have same : (Vector.ofFn fun j : Fin 8 => v1.regs (swapReg (role t j))) =
         Vector.ofFn fun j : Fin 8 => v.regs (swapReg (role t j)) := by
@@ -491,4 +492,4 @@ theorem pad_block_mem (G : Gpr → UInt64) (v : View) :
   -- Every round of the block, checked by evaluation.
   decide +kernel
 
-end Ssz.Native.Kernel.Avx512x2
+end EthLib.Consensus.Ssz.Native.Kernel.Avx512x2

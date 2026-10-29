@@ -6,9 +6,9 @@ The fold loop of the compiled multiproof verifier: one level per pass, between t
 Each pass writes the level's parents, then the entries off the level, into the other area, and swaps the two.
 -/
 
-namespace Ssz.Native.Driver.BranchProof
+namespace EthLib.Consensus.Ssz.Native.Driver.BranchProof
 
-open Ssz.Native.Ir Ssz.Native.Asm
+open EthLib.Consensus.Ssz.Native.Ir EthLib.Consensus.Ssz.Native.Asm
 
 /-- Four evaluated arguments evaluate together. -/
 theorem mapM_four {w : World} {env : Env} {mem : Memory} {a b c d : Ir.Expr} {x y z u : UInt64}
@@ -163,4 +163,4 @@ theorem fold_loop {m : Module} {w : World} {ctx : UInt64} {ready : Memory → Pr
     exact post env mem' ⟨e0, e1, e8, areas, sizeLe, rd, frame, state⟩
       (UInt64.toNat_inj.mp (by rw [zero]; rfl))
 
-end Ssz.Native.Driver.BranchProof
+end EthLib.Consensus.Ssz.Native.Driver.BranchProof

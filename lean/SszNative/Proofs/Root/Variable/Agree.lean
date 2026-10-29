@@ -3,9 +3,9 @@ import SszNative.Proofs.Root.Variable.Packed
 
 /-! Every type's root, by induction on the type, from the cases proved one by one. -/
 
-namespace Ssz.Native.RootProof
+namespace EthLib.Consensus.Ssz.Native.RootProof
 
-open Ssz Ssz.Native
+open EthLib.Consensus.Ssz EthLib.Consensus.Ssz.Native
 
 variable (facts : Facts)
 
@@ -58,4 +58,4 @@ theorem agrees (d : Desc) : Agrees d := by
   | compatibleUnion selectors options ih =>
     intro sound b s e v o i small read; exact union_root facts selectors options ih sound b s e v o i small read
 
-end Ssz.Native.RootProof
+end EthLib.Consensus.Ssz.Native.RootProof

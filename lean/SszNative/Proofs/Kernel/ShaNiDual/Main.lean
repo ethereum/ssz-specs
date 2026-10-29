@@ -6,9 +6,10 @@ The interleaved SHA-NI kernel computes SHA-256 of every pair it is given.
 The loop runs the two pairs' code once per two pairs, then moves the three addresses on and counts down.
 -/
 
-namespace Ssz.Native.Kernel.ShaNiDual
+namespace EthLib.Consensus.Ssz.Native.Kernel.ShaNiDual
 
-open Ssz.Native.Asm Ssz.Sha256
+open EthLib.Consensus.Ssz.Native.Asm
+open EthLib.Cryptography.Hash.Sha256 hiding K IV
 open ShaNi (writes MaskReady read_table tableWord_reverse lane_movdqu toNat_add_lt toNat_sub_one sub_one_zero
   pairMessage_congr)
 
@@ -100,7 +101,7 @@ def Fits (s : State) (ls rs : Nat) : Prop :=
 def Expect (s : State) (ls rs k x : Nat) : UInt8 :=
   let o := (s.gpr out).toNat
   if o ≤ x ∧ x < o + 64 * k then
-    (Sha256.hash (pairMessage s.mem ((s.gpr left).toNat + ls * ((x - o) / 32))
+    (Cryptography.Hash.Sha256.hash (pairMessage s.mem ((s.gpr left).toNat + ls * ((x - o) / 32))
       ((s.gpr right).toNat + rs * ((x - o) / 32)))).get! ((x - o) % 32)
   else s.mem x
 
@@ -116,7 +117,7 @@ theorem expect_outside (s : State) (ls rs k x : Nat)
     (h : x < (s.gpr out).toNat ∨ (s.gpr out).toNat + 64 * k ≤ x) : Expect s ls rs k x = s.mem x := by
   -- The address lies outside the first 2k output slots.
   unfold Expect
-  rw [if_neg (by omega)]
+  rw [ite_eq_right (by omega)]
 
 /-- One pass of the loop body: two pairs' digests written, the addresses moved on, and the count down by one. -/
 theorem iterate (ls rs k : Nat) (s u : State) (table₀ : TableAt s.mem (s.gpr tbl).toNat) (fits : Fits s ls rs)
@@ -171,16 +172,16 @@ theorem iterate (ls rs k : Nat) (s u : State) (table₀ : TableAt s.mem (s.gpr t
     rw [msg₀, msg₁, ho, hmem]
     unfold Expect
     by_cases second : (s.gpr out).toNat + 64 * k + 32 ≤ x ∧ x < (s.gpr out).toNat + 64 * k + 32 + 32
-    · rw [if_pos second, if_pos (by omega), show (x - (s.gpr out).toNat) / 32 = 2 * k + 1 by omega,
+    · rw [ite_eq_left second, ite_eq_left (by omega), show (x - (s.gpr out).toNat) / 32 = 2 * k + 1 by omega,
         show (x - (s.gpr out).toNat) % 32 = x - ((s.gpr out).toNat + 64 * k + 32) by omega]
-    · rw [if_neg second]
+    · rw [ite_eq_right second]
       by_cases first : (s.gpr out).toNat + 64 * k ≤ x ∧ x < (s.gpr out).toNat + 64 * k + 32
-      · rw [if_pos first, if_pos (by omega), show (x - (s.gpr out).toNat) / 32 = 2 * k by omega,
+      · rw [ite_eq_left first, ite_eq_left (by omega), show (x - (s.gpr out).toNat) / 32 = 2 * k by omega,
           show (x - (s.gpr out).toNat) % 32 = x - ((s.gpr out).toNat + 64 * k) by omega]
-      · rw [if_neg first]
+      · rw [ite_eq_right first]
         by_cases before : (s.gpr out).toNat ≤ x ∧ x < (s.gpr out).toNat + 64 * k
-        · rw [if_pos before, if_pos (by omega)]
-        · rw [if_neg before, if_neg (by omega)]
+        · rw [ite_eq_left before, ite_eq_left (by omega)]
+        · rw [ite_eq_right before, ite_eq_right (by omega)]
   -- The countdown's zero flag says whether this was the last pass.
   · simp only [v, e, az, g]
     rw [sub_one_zero _ (by omega), hc]
@@ -305,7 +306,7 @@ theorem program_correct (ls rs : Nat) (s : State) (start : s.pc = 0) (running : 
     ∃ steps, let f := run (program ls rs) steps s
       f.status = .returned ∧
       (∀ p < 2 * (s.gpr count).toNat, ∀ k < 32, f.mem ((s.gpr out).toNat + 32 * p + k) =
-        (Sha256.hash (pairMessage s.mem ((s.gpr left).toNat + ls * p) ((s.gpr right).toNat + rs * p))).get! k) ∧
+        (Cryptography.Hash.Sha256.hash (pairMessage s.mem ((s.gpr left).toNat + ls * p) ((s.gpr right).toNat + rs * p))).get! k) ∧
       (∀ a, ¬ ((s.gpr out).toNat ≤ a ∧ a < (s.gpr out).toNat + 32 * (2 * (s.gpr count).toNat)) → f.mem a = s.mem a) ∧
       (∀ r ∈ calleeSaved, f.gpr r = s.gpr r) ∧ f.gpr .rax = 0 := by
   -- The hypotheses bundle into what the loop needs.
@@ -319,7 +320,7 @@ theorem program_correct (ls rs : Nat) (s : State) (start : s.pc = 0) (running : 
     refine ⟨steps, done, fun p hp k hk => ?_, fun a ha => ?_, hsaved, hrax⟩
     · rw [hmem]
       unfold Expect
-      rw [if_pos (by omega), show ((s.gpr out).toNat + 32 * p + k - (s.gpr out).toNat) / 32 = p by omega,
+      rw [ite_eq_left (by omega), show ((s.gpr out).toNat + 32 * p + k - (s.gpr out).toNat) / 32 = p by omega,
         show ((s.gpr out).toNat + 32 * p + k - (s.gpr out).toNat) % 32 = k by omega]
     · rw [hmem, expect_outside _ _ _ _ _ (by omega)]
   -- The opening: the count check, then the mask.
@@ -389,4 +390,4 @@ theorem program_correct (ls rs : Nat) (s : State) (start : s.pc = 0) (running : 
     rw [run_add, r3]
     exact ⟨done, dmem, dsaved, drax⟩
 
-end Ssz.Native.Kernel.ShaNiDual
+end EthLib.Consensus.Ssz.Native.Kernel.ShaNiDual

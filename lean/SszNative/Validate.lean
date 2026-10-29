@@ -1,4 +1,4 @@
-import Ssz.Codec.Deserialize
+import EthLib.Consensus.Ssz.Codec.Deserialize
 
 /-!
 Checking an encoding against a type, without building the value it holds.
@@ -8,9 +8,9 @@ A range of the encoding stands for the slice deserialization would cut out of it
 Every step mirrors a step of deserialization, on ranges in place of slices.
 -/
 
-namespace Ssz.Native
+namespace EthLib.Consensus.Ssz.Native
 
-open Ssz
+open EthLib.Consensus.Ssz
 
 /-- The little-endian four-byte offset at a position. -/
 @[inline] def offsetAt (b : ByteArray) (pos : Nat) : Nat :=
@@ -488,4 +488,4 @@ where an external descriptor is accepted before using it for roots or proofs.
 def validate (d : Desc) (b : ByteArray) : Except Err Unit :=
   validateRange d b 0 b.size
 
-end Ssz.Native
+end EthLib.Consensus.Ssz.Native

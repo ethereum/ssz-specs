@@ -1,11 +1,11 @@
 import SszNative.Proofs.Root.Variable.Sequence
-import Ssz.Proofs.Codec.RootDomain
+import EthLib.Consensus.Proofs.Ssz.Codec.RootDomain
 
 /-! Roots of structs whose fields are not rooted as columns: one root per field, under a bounded or progressive tree. -/
 
-namespace Ssz.Native.RootProof
+namespace EthLib.Consensus.Ssz.Native.RootProof
 
-open Ssz Ssz.Native
+open EthLib.Consensus.Ssz EthLib.Consensus.Ssz.Native
 
 variable (facts : Facts)
 
@@ -204,10 +204,10 @@ theorem container_root (names : List String) (fields : List Desc) (ih : ∀ fiel
   simp only [List.length_zip, ← lengths, Nat.min_self] at count
   -- Both sides bound the tree by the field count, over the fields' roots.
   rw [hashTreeRoot_unfold]
-  simp only [merkleLayout, lengths, bne_self_eq_false, Bool.false_eq_true, if_false, MerkleLayout.nesting,
+  simp only [merkleLayout, lengths, bne_self_eq_false, Bool.false_eq_true, ite_false, MerkleLayout.nesting,
     leafChunks, fields_mapM rooted, finishLayout, Bind.bind, Except.bind, pure, Except.pure]
   rw [rootOf]
-  simp only [notPlain, Bool.false_eq_true, if_false]
+  simp only [notPlain, Bool.false_eq_true, ite_false]
   unfold Small at small
   have tree := joined_bounded facts _ sized _ (Nat.le_refl _) (by omega)
   rw [← lengths, count, tree]
@@ -238,7 +238,7 @@ theorem progressiveContainer_root (active : List Bool) (names : List String) (fi
   have cv : List.countP id active = values.length := by rw [counted, lengths]
   -- The specification's layout leaves are the placed roots, under a progressive tree.
   rw [hashTreeRoot_unfold]
-  simp only [merkleLayout, layoutSlots, lengths, cv, bne_self_eq_false, Bool.false_eq_true, if_false, placed,
+  simp only [merkleLayout, layoutSlots, lengths, cv, bne_self_eq_false, Bool.false_eq_true, ite_false, placed,
     MerkleLayout.nesting, leafChunks, mapped, finishLayout, Bind.bind, Except.bind, pure, Except.pure, throw,
     throwThe, MonadExceptOf.throw]
   -- The native root places the same roots, then mixes in the layout's node.
@@ -249,4 +249,4 @@ theorem progressiveContainer_root (active : List Bool) (names : List String) (fi
     (Or.inr (by rw [joined, length]; have := USize.le_size; omega))
   rw [hashPair_mixIn tree (facts.activeFields active) (by simp) (by simp)]
 
-end Ssz.Native.RootProof
+end EthLib.Consensus.Ssz.Native.RootProof

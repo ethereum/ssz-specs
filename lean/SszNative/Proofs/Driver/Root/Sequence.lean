@@ -1,4 +1,4 @@
-import Ssz.Proofs.Codec.DecodeFits
+import EthLib.Consensus.Proofs.Ssz.Codec.DecodeFits
 import SszNative.Proofs.Driver.Root.Elements
 
 /-!
@@ -8,9 +8,9 @@ The elements driver writes the element roots into the scratch, and the tree driv
 The facts here about element roots and their tree serve the list and container drivers too.
 -/
 
-namespace Ssz.Native.Driver
+namespace EthLib.Consensus.Ssz.Native.Driver
 
-open Ssz Ssz.Native.Ir Ssz.Native.Ir.Expr Ssz.Native.Ir.Stmt Ssz.Native.Asm
+open EthLib.Consensus.Ssz EthLib.Consensus.Ssz.Native.Ir EthLib.Consensus.Ssz.Native.Ir.Expr EthLib.Consensus.Ssz.Native.Ir.Stmt EthLib.Consensus.Ssz.Native.Asm
 
 /-! ### Roots of ranges -/
 
@@ -115,7 +115,7 @@ theorem vector_decoded {element : Desc} {length : Nat} {b : ByteArray} {start st
     subst sliced
     have size := slice_size b start stop inside
     refine ⟨ranges_of_cut rangesEq len within decoded, fun fx => ?_, ?_, by rw [rangesEq, len]⟩
-    · have := vectorSlices_offsets (by rw [fixedSize_eq, if_neg (by simp [fx])]) cut
+    · have := vectorSlices_offsets (by rw [fixedSize_eq, ite_eq_right (by simp [fx])]) cut
       rw [size] at this
       simp only [bytesPerOffset] at this
       omega
@@ -158,7 +158,7 @@ theorem rootVector_ok {m : Module} {w : World} (hash : HashingOk m w) (fns : Ran
       32 * length + max (varNeed element size) (32 + (2560 + 2048 + 32 * length)) := by
     have below := pre.below
     rw [hsize] at below
-    simp only [varNeed, notPlain, Bool.false_eq_true, if_false] at below ⊢
+    simp only [varNeed, notPlain, Bool.false_eq_true, ite_false] at below ⊢
     have satLen : sat length = length := sat_of_lt (by simp only [sat]; have := cap_eq; omega)
     rw [satLen] at below ⊢
     simp only [treeNeed, RootProgressive.spineBytes, zeroHeights] at below ⊢
@@ -303,8 +303,8 @@ theorem rootVector_ok {m : Module} {w : World} (hash : HashingOk m w) (fns : Ran
     have code : rootOf (.vector element length) b start stop =
         merkleizeDepth (joinNodes rs) length (depthFor length) := by
       rw [rootOf]
-      simp only [notPlain, Bool.false_eq_true, if_false, merkleizeCapacity, rs]
+      simp only [notPlain, Bool.false_eq_true, ite_false, merkleizeCapacity, rs]
     rw [root2, code]
     exact merkleizeDepth_of_nodes rlen sized nodes (le_two_pow_depthFor _) (by rw [usize]; omega)
 
-end Ssz.Native.Driver
+end EthLib.Consensus.Ssz.Native.Driver

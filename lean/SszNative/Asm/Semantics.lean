@@ -1,5 +1,5 @@
 import SszNative.Asm.Instr
-import Ssz.Hash.Sha256
+import EthLib.Cryptography.Hash.Sha256
 
 /-!
 What each instruction does, following the Intel Software Developer's Manual.
@@ -24,9 +24,9 @@ The model leaves out what the callers rule out instead:
 The README maps each instruction to its page of Intel's executable specification.
 -/
 
-namespace Ssz.Native.Asm
+namespace EthLib.Consensus.Ssz.Native.Asm
 
-open Ssz.Sha256 (rotr sigma0 sigma1 bigSigma0 bigSigma1 choose majority)
+open EthLib.Cryptography.Hash.Sha256 (rotr smallSigma0 smallSigma1 bigSigma0 bigSigma1 ch maj)
 
 /-- A vector register's sixteen 32-bit lanes: lanes 0 to 3 are its xmm part, and lanes 0 to 7 its ymm part. -/
 abbrev Lanes := Fin 16 → UInt32
@@ -187,8 +187,8 @@ def shuffleBytes (src mask : Lanes) (k : Nat) : UInt8 :=
 def rounds2 (cdgh abef : Lanes) (wk0 wk1 : UInt32) : Lanes :=
   let round (s : UInt32 × UInt32 × UInt32 × UInt32 × UInt32 × UInt32 × UInt32 × UInt32) (wk : UInt32) :=
     let (a, b, c, d, e, f, g, h) := s
-    let t1 := choose e f g + bigSigma1 e + wk + h
-    (t1 + majority a b c + bigSigma0 a, a, b, c, t1 + d, e, f, g)
+    let t1 := ch e f g + bigSigma1 e + wk + h
+    (t1 + maj a b c + bigSigma0 a, a, b, c, t1 + d, e, f, g)
   let s0 := (abef 3, abef 2, cdgh 3, cdgh 2, abef 1, abef 0, cdgh 1, cdgh 0)
   let s1 := round s0 wk0
   let s2 := round s1 wk1
@@ -389,12 +389,12 @@ def exec1 (i : Instr) (s : State) : State :=
   | .sha256rnds2 d r => set d (rounds2 (vec d) (vec r) (vec 0 0) (vec 0 1))
   | .sha256msg1 d r =>
     let w (k : Nat) : UInt32 := if h : k < 4 then vec d ⟨k, by omega⟩ else vec r 0
-    set d fun l => if l.val < 4 then w l.val + sigma0 (w (l.val + 1)) else vec d l
+    set d fun l => if l.val < 4 then w l.val + smallSigma0 (w (l.val + 1)) else vec d l
   | .sha256msg2 d r =>
-    let w16 := vec d 0 + sigma1 (vec r 2)
-    let w17 := vec d 1 + sigma1 (vec r 3)
-    let w18 := vec d 2 + sigma1 w16
-    let w19 := vec d 3 + sigma1 w17
+    let w16 := vec d 0 + smallSigma1 (vec r 2)
+    let w17 := vec d 1 + smallSigma1 (vec r 3)
+    let w18 := vec d 2 + smallSigma1 w16
+    let w19 := vec d 3 + smallSigma1 w17
     set d fun l => match l.val with
       | 0 => w16
       | 1 => w17
@@ -434,4 +434,4 @@ def exec : List Instr → State → State
   | [], s => s
   | i :: rest, s => exec rest (exec1 i s)
 
-end Ssz.Native.Asm
+end EthLib.Consensus.Ssz.Native.Asm

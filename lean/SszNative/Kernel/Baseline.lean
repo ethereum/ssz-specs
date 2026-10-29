@@ -23,9 +23,9 @@ Registers 0 to 7 hold the working words, renamed rather than moved each round.
 Registers 8 to 11 hold the running sum and two temporaries, and registers 12 to 15 the schedule step's temporaries.
 -/
 
-namespace Ssz.Native.Kernel.Baseline
+namespace EthLib.Consensus.Ssz.Native.Kernel.Baseline
 
-open Ssz.Native.Asm
+open EthLib.Consensus.Ssz.Native.Asm
 
 /-- The output address, the first argument. -/
 abbrev out : Gpr := .rdi
@@ -232,4 +232,4 @@ def program (ls rs : Nat) : Array Instr :=
   (([.subImm sp frame, .test count, .jz finish] ++ body ls rs ++ tail ++
     [.addImm sp frame, .zeroReg .rax, .ret]) : List Instr).toArray
 
-end Ssz.Native.Kernel.Baseline
+end EthLib.Consensus.Ssz.Native.Kernel.Baseline

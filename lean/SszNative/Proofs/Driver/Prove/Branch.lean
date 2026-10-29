@@ -8,9 +8,9 @@ The compiled branch builder walks to each sibling on the path, as the Lean branc
 The walk to one node is taken as a contract here, and discharged for every type by the walk's own proof.
 -/
 
-namespace Ssz.Native.Driver.ProveProof
+namespace EthLib.Consensus.Ssz.Native.Driver.ProveProof
 
-open Ssz Ssz.Native.Ir Ssz.Native.Asm Ssz.Native.Driver.BranchProof
+open EthLib.Consensus.Ssz EthLib.Consensus.Ssz.Native.Ir EthLib.Consensus.Ssz.Native.Asm EthLib.Consensus.Ssz.Native.Driver.BranchProof
 
 /-- The code a proving driver answers for a refusal. -/
 def errCode : Err → UInt64

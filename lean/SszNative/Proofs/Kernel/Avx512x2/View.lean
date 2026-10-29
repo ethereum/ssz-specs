@@ -12,10 +12,11 @@ A store changes every row overlapping it, but a lane of a row that coincides wit
 So each lane runs alone over the rows that every store either coincides with or misses, lane for lane.
 -/
 
-namespace Ssz.Native.Kernel.Avx512x2
+namespace EthLib.Consensus.Ssz.Native.Kernel.Avx512x2
 
-open Ssz.Sha256 Ssz.Native.Asm
-open Ssz.Native.Kernel.Avx512 (laneStep laneRun lanewise assign_same assign_ne assign_apply)
+open EthLib.Cryptography.Hash.Sha256 hiding K IV
+open EthLib.Consensus.Ssz.Native.Asm
+open EthLib.Consensus.Ssz.Native.Kernel.Avx512 (laneStep laneRun lanewise assign_same assign_ne assign_apply)
 
 /-- Whether an instruction acts on each lane alone, reading and writing memory only in whole 64-byte rows. -/
 def rowwise : Instr → Bool
@@ -104,7 +105,7 @@ theorem readWord_store_other (mem : Nat → UInt8) (A a : Nat) (v : Lanes) (l : 
   have := l.isLt
   have far : a + 64 ≤ A ∨ A + 64 ≤ a := by omega
   simp only [readWord, store]
-  rw [if_neg (by omega), if_neg (by omega), if_neg (by omega), if_neg (by omega)]
+  rw [ite_eq_right (by omega), ite_eq_right (by omega), ite_eq_right (by omega), ite_eq_right (by omega)]
 
 /-- The row of a store or a read is the base register plus the displacement. -/
 theorem state_addr (s : State) (m : Mem) : s.addr m = addrOf s.gpr m := rfl
@@ -146,14 +147,14 @@ theorem exec1_view (i : Instr) (h : rowwise i) (s : State) (V : Fin 16 → View)
     · simp only [exec1, viewStep, hv]
     · simp only [exec1, viewStep, assign, State.addr]
       by_cases same : a = addrOf s.gpr m
-      · rw [if_pos same, same]
+      · rw [ite_eq_left same, same]
         exact (readWord_store_same _ _ _ l).trans (hv r l)
-      · rw [if_neg same, ← hm l a ha]
+      · rw [ite_eq_right same, ← hm l a ha]
         exact readWord_store_other _ _ _ _ l same (ha _ mine)
     · have := hx _ rfl
       simp only [addrOf] at this
       simp only [exec1, store, State.addr]
-      rw [if_neg (by omega)]
+      rw [ite_eq_right (by omega)]
 
 /-- The addresses a list stores to. -/
 def storesOf (gpr : Gpr → UInt64) (body : List Instr) : List Nat := body.filterMap (storeOf gpr)
@@ -287,4 +288,4 @@ theorem swapReg_swapReg : ∀ r, swapReg (swapReg r) = r := by
   -- Every register, checked by evaluation.
   decide
 
-end Ssz.Native.Kernel.Avx512x2
+end EthLib.Consensus.Ssz.Native.Kernel.Avx512x2

@@ -2,9 +2,10 @@ import SszNative.Proofs.Kernel.ShaNi.Pair
 
 /-! The SHA-NI kernel's last phase: the second feed-forward, the digest's words in order, and the stores. -/
 
-namespace Ssz.Native.Kernel.ShaNi
+namespace EthLib.Consensus.Ssz.Native.Kernel.ShaNi
 
-open Ssz.Native.Asm Ssz.Sha256
+open EthLib.Consensus.Ssz.Native.Asm
+open EthLib.Cryptography.Hash.Sha256 hiding K IV
 
 /-- Reversing a register's four lanes. -/
 theorem quad_pshufd_1B (t : State) (d r : Vreg) (a b c e : UInt32) (q : Quad (t.vec r) a b c e) :
@@ -30,6 +31,7 @@ def Ordered (lo hi : Lanes) (f : Vector UInt32 8) : Prop :=
   Quad lo (bswap32 f[0]) (bswap32 f[1]) (bswap32 f[2]) (bswap32 f[3]) ∧
   Quad hi (bswap32 f[4]) (bswap32 f[5]) (bswap32 f[6]) (bswap32 f[7])
 
+set_option maxHeartbeats 800000 in
 /-- The second feed-forward, and the digest's words put in order and byte-reversed. -/
 theorem finish_spec (s : State) (r st : Vector UInt32 8) (mask : MaskReady s)
     (hr : Packed (s.vec abef) (s.vec cdgh) r) (hs : Packed (s.vec midAbef) (s.vec midCdgh) st) :
@@ -88,19 +90,19 @@ theorem finish_spec (s : State) (r st : Vector UInt32 8) (mask : MaskReady s)
     obtain ⟨_, _, d2, d3⟩ := q4c
     rw [← h6]
     refine ⟨?_, ?_, ?_, ?_⟩
-    · rw [pblendw_high _ _ _ 0 (by decide), if_pos (by decide)]; exact b0
-    · rw [pblendw_high _ _ _ 1 (by decide), if_pos (by decide)]; exact b1
-    · rw [pblendw_high _ _ _ 2 (by decide), if_neg (by decide), v5 _ (by decide)]; exact d2
-    · rw [pblendw_high _ _ _ 3 (by decide), if_neg (by decide), v5 _ (by decide)]; exact d3
+    · rw [pblendw_high _ _ _ 0 (by decide), ite_eq_left (by decide)]; exact b0
+    · rw [pblendw_high _ _ _ 1 (by decide), ite_eq_left (by decide)]; exact b1
+    · rw [pblendw_high _ _ _ 2 (by decide), ite_eq_right (by decide), v5 _ (by decide)]; exact d2
+    · rw [pblendw_high _ _ _ 3 (by decide), ite_eq_right (by decide), v5 _ (by decide)]; exact d3
   have q7 : Quad (u₇.vec cdgh) F[4] F[5] F[6] F[7] := by
     obtain ⟨_, _, b2, b3⟩ := q4a
     obtain ⟨d0, d1, _, _⟩ := q4c
     rw [← h7]
     refine ⟨?_, ?_, ?_, ?_⟩
-    · rw [palignr8 _ _ _ 0 (by decide), dif_pos (by decide), v6 _ (by decide), v5 _ (by decide)]; exact b2
-    · rw [palignr8 _ _ _ 1 (by decide), dif_pos (by decide), v6 _ (by decide), v5 _ (by decide)]; exact b3
-    · rw [palignr8 _ _ _ 2 (by decide), dif_neg (by decide), v6 _ (by decide), v5 _ (by decide)]; exact d0
-    · rw [palignr8 _ _ _ 3 (by decide), dif_neg (by decide), v6 _ (by decide), v5 _ (by decide)]; exact d1
+    · rw [palignr8 _ _ _ 0 (by decide), dite_eq_left (by decide), v6 _ (by decide), v5 _ (by decide)]; exact b2
+    · rw [palignr8 _ _ _ 1 (by decide), dite_eq_left (by decide), v6 _ (by decide), v5 _ (by decide)]; exact b3
+    · rw [palignr8 _ _ _ 2 (by decide), dite_eq_right (by decide), v6 _ (by decide), v5 _ (by decide)]; exact d0
+    · rw [palignr8 _ _ _ 3 (by decide), dite_eq_right (by decide), v6 _ (by decide), v5 _ (by decide)]; exact d1
   -- Phase 4: every word byte-reversed, for the big-endian digest.
   have rev : ∀ (u : State) (d : Vreg), u.vec bswap = s.vec bswap → ∀ l : Fin 16, l.val < 4 →
       (exec1 (.pshufb d bswap) u).vec d l = bswap32 (u.vec d l) := fun u d hk l hl => by
@@ -158,17 +160,17 @@ theorem stores_spec (t : State) (f : Vector UInt32 8) (o : Ordered (t.vec tmp) (
   have hi := laneByte_reversed _ f 4 (by omega) o.2
   by_cases a : (t.gpr out).toNat + 16 ≤ x ∧ x < (t.gpr out).toNat + 16 + 16
   · -- The upper half: words 4 to 7.
-    rw [if_pos a, if_pos (by omega), hi _ (by omega), digest_get _ _ (by omega)]
+    rw [ite_eq_left a, ite_eq_left (by omega), hi _ (by omega), digest_get _ _ (by omega)]
     congr 2
     · congr 1; omega
     · congr 3; omega
-  · rw [if_neg a]
+  · rw [ite_eq_right a]
     by_cases b : (t.gpr out).toNat ≤ x ∧ x < (t.gpr out).toNat + 16
     · -- The lower half: words 0 to 3.
-      rw [if_pos b, if_pos (by omega), lo _ (by omega), digest_get _ _ (by omega)]
+      rw [ite_eq_left b, ite_eq_left (by omega), lo _ (by omega), digest_get _ _ (by omega)]
       congr 2
       congr 1; omega
-    · rw [if_neg b, if_neg (by omega)]
+    · rw [ite_eq_right b, ite_eq_right (by omega)]
 
 /-- The stores keep every register. -/
 theorem stores_frame (t : State) : (exec stores t).gpr = t.gpr ∧ (exec stores t).vec = t.vec := by
@@ -190,7 +192,7 @@ theorem pair_spec (s : State) (table : TableAt s.mem (s.gpr tbl).toNat) (mask : 
     (exec pairCode s).gpr = s.gpr ∧ MaskReady (exec pairCode s) ∧
     ∀ x, (exec pairCode s).mem x =
       if (s.gpr out).toNat ≤ x ∧ x < (s.gpr out).toNat + 32 then
-        (Sha256.hash (pairMessage s.mem (s.gpr left).toNat (s.gpr right).toNat)).get! (x - (s.gpr out).toNat)
+        (Cryptography.Hash.Sha256.hash (pairMessage s.mem (s.gpr left).toNat (s.gpr right).toNat)).get! (x - (s.gpr out).toNat)
       else s.mem x := by
   rw [pairCode_split]
   simp only [exec_append]
@@ -222,13 +224,13 @@ theorem pair_spec (s : State) (table : TableAt s.mem (s.gpr tbl).toNat) (mask : 
     (writes_flatMap _ _ (fun r => paddingRounds_writes r _ (by decide)) 16) t₄
   have mask5 : MaskReady t₅ := fun l hl => by rw [k5, k4, k3, k2, k1]; exact mask l hl
   -- Phase 1: the schedule's first sixteen words and the initial state.
-  have ready : Ready t₂ initialState (Wm M) 0 := by
+  have ready : Ready t₂ Cryptography.Hash.Sha256.IV (Wm M) 0 := by
     refine ⟨h2 ▸ ivLoads_spec t₁ (tab t₁ m1 g1), fun j hj _ l hl => ?_⟩
     rw [← h2, exec_vec _ ivLoads_vecOnly _ (by
       simp [ivLoads, writes, Fin.ext_iff, msg_val, abef, cdgh]; omega), ← h1, ← hm]
     simpa using loads_spec s mask j (by omega) l hl
   -- Phase 2: the first block's rounds and feed-forward.
-  have first := h3 ▸ firstAll t₂ initialState (Wm M) (tab t₂ (m2.trans m1) (g2.trans g1)) (recurs_schedule M) ready
+  have first := h3 ▸ firstAll t₂ Cryptography.Hash.Sha256.IV (Wm M) (tab t₂ (m2.trans m1) (g2.trans g1)) (recurs_schedule M) ready
   have mid := h4 ▸ middle_spec t₃ (tab t₃ (m3.trans (m2.trans m1)) (g3.trans (g2.trans g1))) _ first
   rw [← compress_rounds] at mid
   obtain ⟨midState, midCopy⟩ := mid
@@ -242,8 +244,8 @@ theorem pair_spec (s : State) (table : TableAt s.mem (s.gpr tbl).toNat) (mask : 
   rw [← keepA, ← keepC] at midCopy
   -- Phase 4: the second feed-forward, the digest's order, and the stores.
   obtain ⟨ordered, m6, g6, mask6⟩ := h6 ▸ finish_spec t₅ _ _ mask5 pad midCopy
-  have final : (compress initialState M 0).zipWith (· + ·)
-      (rounds (compress initialState M 0) K P 64) = compress (compress initialState M 0) paddingBlock 0 :=
+  have final : (compress Cryptography.Hash.Sha256.IV M 0).zipWith (· + ·)
+      (rounds (compress Cryptography.Hash.Sha256.IV M 0) K P 64) = compress (compress Cryptography.Hash.Sha256.IV M 0) paddingBlock 0 :=
     (compress_rounds _ _ _).symm
   rw [final] at ordered
   have gs : t₆.gpr = s.gpr := g6.trans (g5.trans (g4.trans (g3.trans (g2.trans g1))))
@@ -255,4 +257,4 @@ theorem pair_spec (s : State) (table : TableAt s.mem (s.gpr tbl).toNat) (mask : 
     exact mask6 l hl
   · rw [stores_spec t₆ _ ordered x, gs, ms, hash_pair M (by rw [← hm]; exact pairMessage_size _ _ _)]
 
-end Ssz.Native.Kernel.ShaNi
+end EthLib.Consensus.Ssz.Native.Kernel.ShaNi

@@ -2,9 +2,10 @@ import SszNative.Proofs.Kernel.ShaNiDual.Pair
 
 /-! One pair's last phase: the second feed-forward, the digest's words in order, and the stores. -/
 
-namespace Ssz.Native.Kernel.ShaNiDual
+namespace EthLib.Consensus.Ssz.Native.Kernel.ShaNiDual
 
-open Ssz.Native.Asm Ssz.Sha256
+open EthLib.Consensus.Ssz.Native.Asm
+open EthLib.Cryptography.Hash.Sha256 hiding K IV
 open ShaNi (writes VecOnly exec_frame exec_vec step_frame Quad Packed MaskReady packed_add quad_pshufd_1B
   quad_pshufd_B1 quad_keep lane_movdqa lane_paddd lane_pshufb pblendw_high palignr8 shuffle_reverse bswap32 Ordered
   laneByte_reversed digest_get exec1_movdquStore)
@@ -32,6 +33,7 @@ theorem finishRegs_touches (g : Lane) : ∀ i ∈ finishRegs g, ∃ d, writes i 
       | exact Or.inr (Or.inr (Or.inl rfl))
       | exact Or.inr (Or.inr (Or.inr (Or.inl rfl)))
 
+set_option maxHeartbeats 800000 in
 /-- The second feed-forward, and the digest's words put in order and byte-reversed. -/
 theorem finishRegs_spec (g : Lane) (hg : Good g) (s : State) (r st : Vector UInt32 8) (mask : MaskReady s)
     (hr : Packed (s.vec g.abef) (s.vec g.cdgh) r) (hs : Packed (s.vec g.midAbef) (s.vec g.midCdgh) st) :
@@ -93,19 +95,19 @@ theorem finishRegs_spec (g : Lane) (hg : Good g) (s : State) (r st : Vector UInt
     obtain ⟨_, _, d2, d3⟩ := q4c
     rw [← h6]
     refine ⟨?_, ?_, ?_, ?_⟩
-    · rw [pblendw_high _ _ _ 0 (by decide), if_pos (by decide)]; exact b0
-    · rw [pblendw_high _ _ _ 1 (by decide), if_pos (by decide)]; exact b1
-    · rw [pblendw_high _ _ _ 2 (by decide), if_neg (by decide), v5 _ ct]; exact d2
-    · rw [pblendw_high _ _ _ 3 (by decide), if_neg (by decide), v5 _ ct]; exact d3
+    · rw [pblendw_high _ _ _ 0 (by decide), ite_eq_left (by decide)]; exact b0
+    · rw [pblendw_high _ _ _ 1 (by decide), ite_eq_left (by decide)]; exact b1
+    · rw [pblendw_high _ _ _ 2 (by decide), ite_eq_right (by decide), v5 _ ct]; exact d2
+    · rw [pblendw_high _ _ _ 3 (by decide), ite_eq_right (by decide), v5 _ ct]; exact d3
   have q7 : Quad (u₇.vec g.cdgh) F[4] F[5] F[6] F[7] := by
     obtain ⟨_, _, b2, b3⟩ := q4a
     obtain ⟨d0, d1, _, _⟩ := q4c
     rw [← h7]
     refine ⟨?_, ?_, ?_, ?_⟩
-    · rw [palignr8 _ _ _ 0 (by decide), dif_pos (by decide), v6 _ at', v5 _ at']; exact b2
-    · rw [palignr8 _ _ _ 1 (by decide), dif_pos (by decide), v6 _ at', v5 _ at']; exact b3
-    · rw [palignr8 _ _ _ 2 (by decide), dif_neg (by decide), v6 _ ct, v5 _ ct]; exact d0
-    · rw [palignr8 _ _ _ 3 (by decide), dif_neg (by decide), v6 _ ct, v5 _ ct]; exact d1
+    · rw [palignr8 _ _ _ 0 (by decide), dite_eq_left (by decide), v6 _ at', v5 _ at']; exact b2
+    · rw [palignr8 _ _ _ 1 (by decide), dite_eq_left (by decide), v6 _ at', v5 _ at']; exact b3
+    · rw [palignr8 _ _ _ 2 (by decide), dite_eq_right (by decide), v6 _ ct, v5 _ ct]; exact d0
+    · rw [palignr8 _ _ _ 3 (by decide), dite_eq_right (by decide), v6 _ ct, v5 _ ct]; exact d1
   -- Phase 4: every word byte-reversed, for the big-endian digest.
   have rev : ∀ (u : State) (d : Vreg), u.vec bswap = s.vec bswap → ∀ l : Fin 16, l.val < 4 →
       (exec1 (.pshufb d bswap) u).vec d l = bswap32 (u.vec d l) := fun u d hk l hl => by
@@ -144,17 +146,17 @@ theorem storesAt_spec (g : Lane) (disp : Nat) (t : State) (f : Vector UInt32 8)
   have hi := laneByte_reversed _ f 4 (by omega) o.2
   by_cases a : (t.gpr out).toNat + (disp + 16) ≤ x ∧ x < (t.gpr out).toNat + (disp + 16) + 16
   · -- The upper half: words 4 to 7.
-    rw [if_pos a, if_pos (by omega), hi _ (by omega), digest_get _ _ (by omega)]
+    rw [ite_eq_left a, ite_eq_left (by omega), hi _ (by omega), digest_get _ _ (by omega)]
     congr 2
     · congr 1; omega
     · congr 3; omega
-  · rw [if_neg a]
+  · rw [ite_eq_right a]
     by_cases b : (t.gpr out).toNat + disp ≤ x ∧ x < (t.gpr out).toNat + disp + 16
     · -- The lower half: words 0 to 3.
-      rw [if_pos b, if_pos (by omega), lo _ (by omega), digest_get _ _ (by omega)]
+      rw [ite_eq_left b, ite_eq_left (by omega), lo _ (by omega), digest_get _ _ (by omega)]
       congr 2
       congr 1; omega
-    · rw [if_neg b, if_neg (by omega)]
+    · rw [ite_eq_right b, ite_eq_right (by omega)]
 
 /-- The stores keep every register and the flag. -/
 theorem storesAt_frame (g : Lane) (disp : Nat) (t : State) :
@@ -163,4 +165,4 @@ theorem storesAt_frame (g : Lane) (disp : Nat) (t : State) :
   -- Stores write only memory.
   simp [storesAt, exec1_movdquStore]
 
-end Ssz.Native.Kernel.ShaNiDual
+end EthLib.Consensus.Ssz.Native.Kernel.ShaNiDual

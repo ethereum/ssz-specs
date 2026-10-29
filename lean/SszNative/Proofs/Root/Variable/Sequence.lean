@@ -2,9 +2,9 @@ import SszNative.Proofs.Root.Variable.Elements
 
 /-! The leaves of a counted sequence, as the root reads them and as the specification lays them out. -/
 
-namespace Ssz.Native.RootProof
+namespace EthLib.Consensus.Ssz.Native.RootProof
 
-open Ssz Ssz.Native
+open EthLib.Consensus.Ssz EthLib.Consensus.Ssz.Native
 
 variable (facts : Facts)
 
@@ -96,13 +96,13 @@ theorem sequence_leaves (element : Desc) (ih : Agrees element) (sound : element.
     obtain ⟨wrote, packs, sized⟩ := basic_packing element basic sound _ limit slices values cut decoded
     obtain ⟨nodes, packedSize⟩ := packRange_nodes b start stop ordered inside (by omega)
     rw [sequenceNodes.eq_def]
-    simp only [basic, if_true, capacityOf]
+    simp only [basic, ite_true, capacityOf]
     refine ⟨by rw [nodesFor_eq], ?_, ?_, ?_, ?_⟩
     · rw [← size, sized, lengths, nodesFor_eq]; exact Nat.le_refl _
     · rw [packedSize]; omega
     · rw [packedSize]; simp only [nodesFor]; omega
     · refine ⟨.packed (packBytes (slice b start stop)), ?_, ?_⟩
-      · simp only [sequenceLayout, basic, if_true, wrote, packs, Bind.bind, Except.bind, pure, Except.pure,
+      · simp only [sequenceLayout, basic, ite_true, wrote, packs, Bind.bind, Except.bind, pure, Except.pure,
           MerkleLayout.packing]
         congr 3
         funext count
@@ -113,16 +113,16 @@ theorem sequence_leaves (element : Desc) (ih : Agrees element) (sound : element.
     have notBasic : element.isBasic = false := by simpa using basic
     have layout : sequenceLayout element values positions mixin =
         .ok ⟨.nested (values.map fun v => some (element, v)), positions.map (capacityOf element), mixin⟩ := by
-      simp only [sequenceLayout, notBasic, Bool.false_eq_true, if_false, MerkleLayout.nesting, pure, Except.pure]
+      simp only [sequenceLayout, notBasic, Bool.false_eq_true, ite_false, MerkleLayout.nesting, pure, Except.pure]
       cases positions <;> simp [capacityOf, notBasic]
     rw [sequenceNodes.eq_def]
-    simp only [notBasic, Bool.false_eq_true, if_false, capacityOf]
+    simp only [notBasic, Bool.false_eq_true, ite_false, capacityOf]
     have sizeLe : values.length ≤ stop - start := by omega
     by_cases isPlain : plain element = true
     · -- Plain elements: rooted as columns, a chunk of records at a time.
-      simp only [isPlain, if_true, countEq]
+      simp only [isPlain, ite_true, countEq]
       have fixed : element.fixedSize = some (fixedWidth element) := by
-        rw [fixedSize_eq, if_pos (hasWidth_of_plain element isPlain)]
+        rw [fixedSize_eq, ite_eq_left (hasWidth_of_plain element isPlain)]
       have unfolded : elementRanges element b start stop values.length = (List.range values.length).map fun i =>
           (start + i * fixedWidth element, start + (i + 1) * fixedWidth element) := by
         unfold elementRanges; rw [fixed]
@@ -164,7 +164,7 @@ theorem sequence_leaves (element : Desc) (ih : Agrees element) (sound : element.
         rw [← sliceAt i hi]
         exact each i hi h]
     · -- Other elements: one root per element, from its own range.
-      simp only [isPlain, Bool.false_eq_true, if_false, countEq]
+      simp only [isPlain, Bool.false_eq_true, ite_false, countEq]
       rw [show elementRanges element b start stop values.length = r.toList by rw [← countEq, rangesEq]]
       have rooted := variableRoots_spec element ih sound b small r.toList values
         (fun p m => ⟨(within p m).2.1, by have := (within p m).2.2; omega⟩) (by rw [← sliced]; exact decoded)
@@ -224,7 +224,7 @@ theorem list_root (element : Desc) (limit : Nat) (ih : Agrees element)
       decoded limit (some limit) (some (lengthWord values.length))
   -- Both sides bound the tree by the limit's capacity, then mix in the count.
   rw [hashTreeRoot_unfold]
-  simp only [merkleLayout, show ¬ values.length > limit by omega, if_false, layout, chunks, finishLayout,
+  simp only [merkleLayout, show ¬ values.length > limit by omega, ite_false, layout, chunks, finishLayout,
     Option.map_some, Bind.bind, Except.bind, pure, Except.pure]
   have room := Nat.le_trans fits (capacityOf_mono element (show values.length ≤ limit by omega))
   rw [← capacity] at room
@@ -266,4 +266,4 @@ theorem progressiveList_root (element : Desc) (limit : Option Nat) (ih : Agrees 
   simp only [counted]
   rw [hashPair_mixIn tree (facts.lengthNode _) (by simp) (by simp)]
 
-end Ssz.Native.RootProof
+end EthLib.Consensus.Ssz.Native.RootProof

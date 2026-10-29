@@ -11,10 +11,11 @@ After a batch, the pointers advance, the count goes down, and the loop branches 
 At the end, the routine drops its frame, zeroes its result, and returns.
 -/
 
-namespace Ssz.Native.Kernel.Baseline
+namespace EthLib.Consensus.Ssz.Native.Kernel.Baseline
 
-open Ssz.Sha256 Ssz.Native.Asm
-open Ssz.Native.Kernel.Avx512 (fetch step_jz step_jnz step_ret run_one add_toNat sub_toNat)
+open EthLib.Cryptography.Hash.Sha256 hiding K IV
+open EthLib.Consensus.Ssz.Native.Asm
+open EthLib.Consensus.Ssz.Native.Kernel.Avx512 (fetch step_jz step_jnz step_ret run_one add_toNat sub_toNat)
 
 /-- A loop's body ending in a branch back to its first instruction, run once from that instruction. -/
 theorem loop_once (p : Array Instr) (pre B post : List Instr) (layout : p.toList = pre ++ B ++ .jnz pre.length :: post)
@@ -49,7 +50,7 @@ theorem loop_run (p : Array Instr) (pre B post : List Instr) (layout : p.toList 
     intro i x hi hpc running inv
     obtain ⟨next, zf⟩ := step i x (by omega) inv
     refine ⟨B.length + 1, ?_⟩
-    rw [loop_once p pre B post layout straight x hpc running, if_pos (zf.mpr (by omega))]
+    rw [loop_once p pre B post layout straight x hpc running, ite_eq_left (zf.mpr (by omega))]
     exact ⟨rfl, by simpa using running, by rw [show n = i + 1 by omega]; exact pcFree _ _ _ next⟩
   | succ j ih =>
     intro i x hi hpc running inv
@@ -127,15 +128,15 @@ theorem firstLoop_step (ls rs : Nat) (s : State) (ctx : Ctx ls rs s) (base n : N
   simp only [tableSize, frame] at fb tb
   refine ⟨⟨fun h => ?_, ?_, ?_, fun r hr => ?_, fun l => ?_, outside'⟩, ?_⟩
   · -- The schedule pointer moves down one block.
-    rw [gpr']; simp only [assign, if_neg (show words ≠ blocks by decide), if_neg (show words ≠ consts by decide), if_true]
+    rw [gpr']; simp only [assign, ite_eq_right (show words ≠ blocks by decide), ite_eq_right (show words ≠ consts by decide), ite_true]
     rw [subN_toNat _ _ (by rw [wordsAt (by omega)]; simp only [wordsBase]; omega), wordsAt (by omega)]
     simp only [wordsBase]; omega
   · -- The constants pointer moves up one block.
-    rw [gpr']; simp only [assign, if_neg (show consts ≠ blocks by decide), if_true]
+    rw [gpr']; simp only [assign, ite_eq_right (show consts ≠ blocks by decide), ite_true]
     rw [add_toNat _ _ (by rw [constsAt]; simp only [addressBound] at tb ⊢; omega), constsAt]; omega
-  · rw [gpr']; simp only [assign, if_true, blocksAt]; exact count_sub n i hi (by omega)
+  · rw [gpr']; simp only [assign, ite_true, blocksAt]; exact count_sub n i hi (by omega)
   · obtain ⟨a, b, c⟩ := hr
-    rw [gpr']; simp only [assign, if_neg c, if_neg b, if_neg a]; exact kept r ⟨a, b, c⟩
+    rw [gpr']; simp only [assign, ite_eq_right c, ite_eq_right b, ite_eq_right a]; exact kept r ⟨a, b, c⟩
   · rw [show 8 * (base + (i + 1)) = 8 * (base + i) + 8 by omega]; exact lanes' l
   · rw [zf', blocksAt]; exact count_zero n i hi (by omega)
 
@@ -157,18 +158,18 @@ theorem padLoop_step (ls rs : Nat) (s : State) (ctx : Ctx ls rs s) :
   simp only [tableSize] at tb
   refine ⟨⟨?_, ?_, fun r hr => ?_, fun l => ?_, fun a ha => by rw [mem']; exact outside a ha⟩, ?_⟩
   · -- The constants pointer moves up one block.
-    rw [gpr']; simp only [assign, if_neg (show consts ≠ blocks by decide), if_true]
+    rw [gpr']; simp only [assign, ite_eq_right (show consts ≠ blocks by decide), ite_true]
     rw [add_toNat _ _ (by rw [constsAt]; simp only [addressBound] at tb ⊢; omega), constsAt]; omega
-  · rw [gpr']; simp only [assign, if_true, blocksAt]; exact count_sub 8 i hi (by omega)
+  · rw [gpr']; simp only [assign, ite_true, blocksAt]; exact count_sub 8 i hi (by omega)
   · obtain ⟨a, b, c⟩ := hr
-    rw [gpr']; simp only [assign, if_neg c, if_neg b]; exact kept r ⟨a, b, c⟩
+    rw [gpr']; simp only [assign, ite_eq_right c, ite_eq_right b]; exact kept r ⟨a, b, c⟩
   · rw [show 8 * (i + 1) = 8 * i + 8 by omega]; exact lanes' l
   · rw [zf', blocksAt]; exact count_zero 8 i hi (by omega)
 
 /-- What one batch leaves: its digests written, memory outside the output and the scratch kept, and the registers. -/
 def BatchDone (ls rs : Nat) (s y : State) : Prop :=
   y.status = .running ∧ y.pc = loopHead + (body ls rs).length ∧
-  (∀ p < 4, ∀ k < 32, y.mem ((s.gpr out).toNat + 32 * p + k) = (Sha256.hash (msg s ls rs p)).get! k) ∧
+  (∀ p < 4, ∀ k < 32, y.mem ((s.gpr out).toNat + 32 * p + k) = (Cryptography.Hash.Sha256.hash (msg s ls rs p)).get! k) ∧
   (∀ a, Outside (scratch s) a → ¬ ((s.gpr out).toNat ≤ a ∧ a < (s.gpr out).toNat + 128) → y.mem a = s.mem a) ∧
   (∀ r, Kept r → y.gpr r = s.gpr r)
 
@@ -312,7 +313,7 @@ theorem batch_second (ls rs : Nat) (s : State) (ctx : Ctx ls rs s) (x : State) (
     obtain ⟨w, c, -, k, l, o⟩ := inv
     rw [rM]
     refine FirstLoop.pc _ ⟨fun h => w h, c, by simp [exec, exec1, assign], fun r hr => ?_, fun l' => l l', fun a ha => o a ha⟩
-    simp only [exec, exec1, assign, if_neg hr.2.2]; exact k r hr
+    simp only [exec, exec1, assign, ite_eq_right hr.2.2]; exact k r hr
   obtain ⟨n2, pc4, st4, inv4⟩ := loop_run _ (pre2 ls rs) (firstBlock false) _ (layout2 ls rs)
     (List.all_eq_true.mp (pieces_straight.1 false)) 2 (FirstLoop ls rs s 6 2)
     (firstLoop_step ls rs s ctx 6 2 (by omega) false (fun i hi => by simp <;> omega)) (fun _ _ _ h => h) x3
@@ -335,9 +336,9 @@ theorem batch_third (ls rs : Nat) (s : State) (ctx : Ctx ls rs s) (x : State) (h
   have start5 : PadLoop ls rs s 0 x5 := by
     rw [rD]
     refine PadLoop.pc _ ⟨?_, ?_, fun r hr => ?_, fun l => lanes5 l, fun a ha => out5 a ha⟩
-    · rw [gpr5]; simp only [assign, if_neg (show consts ≠ blocks by decide)]; omega
+    · rw [gpr5]; simp only [assign, ite_eq_right (show consts ≠ blocks by decide)]; omega
     · rw [gpr5]; simp [assign]
-    · rw [gpr5]; simp only [assign, if_neg hr.2.2]; exact k4 r hr
+    · rw [gpr5]; simp only [assign, ite_eq_right hr.2.2]; exact k4 r hr
   obtain ⟨n3, pc6, st6, inv6⟩ := loop_run _ (pre3 ls rs) paddingBlock _ (layout3 ls rs)
     (List.all_eq_true.mp pieces_straight.2.2.1) 8 (PadLoop ls rs s) (padLoop_step ls rs s ctx) (fun _ _ _ h => h) x5
     (by rw [rD]; simp only [pre3, List.length_append]) (by rw [rD]; simp [running]) start5 (by omega)
@@ -494,7 +495,7 @@ The saved registers keep their values, the stack pointer has its frame dropped, 
 def Done (ls rs : Nat) (s : State) (c : Nat) (f : State) : Prop :=
   f.status = .returned ∧
   (∀ p < 4 * c, ∀ k < 32, f.mem ((s.gpr out).toNat + 32 * p + k) =
-    (Sha256.hash (pairMessage s.mem ((s.gpr left).toNat + ls * p) ((s.gpr right).toNat + rs * p))).get! k) ∧
+    (Cryptography.Hash.Sha256.hash (pairMessage s.mem ((s.gpr left).toNat + ls * p) ((s.gpr right).toNat + rs * p))).get! k) ∧
   (∀ a, ¬ ((s.gpr out).toNat ≤ a ∧ a < (s.gpr out).toNat + 32 * (4 * c)) → Outside (scratch s) a → f.mem a = s.mem a) ∧
   (∀ r ∈ calleeSaved, r ≠ sp → f.gpr r = s.gpr r) ∧ f.gpr sp = s.gpr sp + frame.toUInt64 ∧ f.gpr .rax = 0
 
@@ -527,15 +528,15 @@ theorem loop (ls rs : Nat) (c : Nat) : ∀ s : State, s.pc = loopHead → s.stat
     obtain ⟨st', mem', gpr'⟩ := close_run ls rs { exec (tailCode ls rs) y with pc := finishAt ls rs } rfl
       (by simp only []; rw [exec_status]; exact st)
     refine ⟨n + 5 + 3, ?_⟩
-    rw [run_add, run_add, hy, after_batch ls rs y pcY st, zf, if_pos rfl]
+    rw [run_add, run_add, hy, after_batch ls rs y pcY st, zf, ite_eq_left rfl]
     have tmem : (exec (tailCode ls rs) y).mem = y.mem := by rw [tail_exec]
     refine ⟨st', fun p hp k hk => ?_, fun a hout ha => ?_, fun r hr hsp => ?_, ?_, ?_⟩
     · rw [mem']; simp only []; rw [tmem]; exact digests p (by omega) k hk
     · rw [mem']; simp only []; rw [tmem]; exact frameY a ha (by omega)
-    · rw [gpr']; simp only [assign, if_neg (show r ≠ .rax from fun e => by subst e; simp [calleeSaved] at hr), if_neg hsp]
+    · rw [gpr']; simp only [assign, ite_eq_right (show r ≠ .rax from fun e => by subst e; simp [calleeSaved] at hr), ite_eq_right hsp]
       obtain ⟨kr, nl, nr, no, nc⟩ := saved_kept r hr
       rw [tail_other ls rs y r ⟨nl, nr, no, nc⟩, keptY r kr]
-    · rw [gpr']; simp only [assign, if_neg (show sp ≠ .rax by decide), if_true]
+    · rw [gpr']; simp only [assign, ite_eq_right (show sp ≠ .rax by decide), ite_true]
       rw [tail_other ls rs y sp ⟨by decide, by decide, by decide, by decide⟩, keptY sp kept_sp.1]
     · rw [gpr']; simp [assign]
   | succ c ih =>
@@ -670,7 +671,7 @@ theorem program_correct (ls rs : Nat) (s : State) (start : s.pc = 0) (running : 
     ∃ steps,
       (run (program ls rs) steps s).status = .returned ∧
       (∀ p < n, ∀ k < 32, (run (program ls rs) steps s).mem ((s.gpr out).toNat + 32 * p + k) =
-        (Sha256.hash (pairMessage s.mem ((s.gpr left).toNat + ls * p) ((s.gpr right).toNat + rs * p))).get! k) ∧
+        (Cryptography.Hash.Sha256.hash (pairMessage s.mem ((s.gpr left).toNat + ls * p) ((s.gpr right).toNat + rs * p))).get! k) ∧
       (∀ a, ¬ ((s.gpr out).toNat ≤ a ∧ a < (s.gpr out).toNat + 32 * n) →
         ¬ ((s.gpr sp).toNat - frame ≤ a ∧ a < (s.gpr sp).toNat) → (run (program ls rs) steps s).mem a = s.mem a) ∧
       (∀ r ∈ calleeSaved, (run (program ls rs) steps s).gpr r = s.gpr r) ∧
@@ -704,7 +705,7 @@ theorem program_correct (ls rs : Nat) (s : State) (start : s.pc = 0) (running : 
     let x : State := { s with
       gpr := assign s.gpr sp (s.gpr sp - frame.toUInt64), zf := false, cf := false, pc := loopHead }
     have xg : ∀ r, r ≠ sp → x.gpr r = s.gpr r := fun r hr => by simp [x, assign, hr]
-    have xS : scratch x = (s.gpr sp).toNat - frame := by simp only [scratch, x, assign, if_true]; exact spNat
+    have xS : scratch x = (s.gpr sp).toNat - frame := by simp only [scratch, x, assign, ite_true]; exact spNat
     have xT : tableAt x = (s.gpr tbl).toNat := by simp only [tableAt]; rw [xg tbl (by decide)]
     obtain ⟨tA, oA, iA⟩ := scratchApart
     rw [h] at outBound leftBound rightBound tableApart inputsApart oA iA
@@ -752,4 +753,4 @@ theorem leaf (ls rs : Nat) : Leaf (program ls rs) := by
   · simpa [notStraight] using List.all_eq_true.mp oS _ h
   · simpa [notStraight] using tail_straight ls rs _ h
 
-end Ssz.Native.Kernel.Baseline
+end EthLib.Consensus.Ssz.Native.Kernel.Baseline

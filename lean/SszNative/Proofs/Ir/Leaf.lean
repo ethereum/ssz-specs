@@ -6,9 +6,9 @@ Routines written by hand, proved run alone, keep the call contract inside the im
 Such a routine calls nothing, so it runs inside the image as it runs alone, up to the return that pops its caller's address.
 -/
 
-namespace Ssz.Native.Ir
+namespace EthLib.Consensus.Ssz.Native.Ir
 
-open Ssz.Native.Asm
+open EthLib.Consensus.Ssz.Native.Asm
 
 /--
 What a routine that calls nothing must guarantee when run alone, from its first instruction, for an extern meaning.
@@ -37,7 +37,7 @@ theorem extern_of_leaf (image : Image) (w : World) (name : String) (t : Nat) (e 
   by_cases room : w.stackLo + 8 ≤ sp
   rotate_left
   · simp [room] at spec
-  simp only [room, if_true] at spec
+  simp only [room, ite_true] at spec
   have spBound : sp ≤ 2 ^ 63 := by simp [addressBound] at hiBound; omega
   let back := codeAddress r (s.pc + 1)
   -- The call: the return address below the caller's stack pointer.
@@ -53,7 +53,7 @@ theorem extern_of_leaf (image : Image) (w : World) (name : String) (t : Nat) (e 
     (fun i hi => by
       have ne : argReg i ≠ .rsp := by intro h; have := argReg_scratch i; rw [h] at this; simp at this
       simp [s0, assign, ne, argRegs i hi])
-    (fun a ha => by simp only [s0, store]; rw [if_neg (by omega)]; exact heap a ha) spec
+    (fun a ha => by simp only [s0, store]; rw [ite_eq_right (by omega)]; exact heap a ha) spec
   have step0 := image_step_call image r s name t fetch running find (by rw [cpu]; exact runs)
   rw [top, topNat] at step0
   -- The routine alone, lifted into the image up to its return.
@@ -80,15 +80,15 @@ theorem extern_of_leaf (image : Image) (w : World) (name : String) (t : Nat) (e 
     exact (congrArg (fun m => image.step m) reach).trans stepRet
   · have ne : Gpr.rax ≠ .rsp := by simp
     simp [assign, ne, rax]
-  · simp only [assign, if_true]
+  · simp only [assign, ite_true]
     rw [rspF, show (8 : UInt64) = (8 : Nat).toUInt64 from rfl, toUInt64_add _ _ (by omega)]
     congr 1; omega
   · have ne : g ≠ .rsp := by
       simp only [keptRegs, List.mem_cons, List.not_mem_nil, or_false] at hg
       rcases hg with rfl | rfl | rfl | rfl | rfl | rfl <;> simp
-    simp only [assign, if_neg ne]; rw [kept g hg]; simp [s0, assign, ne]
+    simp only [assign, ite_eq_right ne]; rw [kept g hg]; simp [s0, assign, ne]
   · exact heapN a ha
-  · simp only; rw [stackN a (by omega) hi]; simp only [s0, store]; rw [if_neg (by omega)]
+  · simp only; rw [stackN a (by omega) hi]; simp only [s0, store]; rw [ite_eq_right (by omega)]
   · simp [cpuN, s0]
 
-end Ssz.Native.Ir
+end EthLib.Consensus.Ssz.Native.Ir

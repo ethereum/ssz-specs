@@ -4,9 +4,9 @@ import SszNative.Ir.Semantics
 More fuel never changes what a run means.
 -/
 
-namespace Ssz.Native.Ir
+namespace EthLib.Consensus.Ssz.Native.Ir
 
-open Ssz.Native.Asm
+open EthLib.Consensus.Ssz.Native.Asm
 
 /-- A run that has a meaning with some fuel has the same meaning with one more. -/
 theorem exec_succ (m : Module) (w : World) :
@@ -33,8 +33,8 @@ theorem exec_succ (m : Module) (w : World) :
       | some v =>
         simp only [hc] at h ⊢
         by_cases hv : (v != 0) = true
-        · simp only [hv, if_true] at h ⊢; exact ih _ _ _ _ _ h
-        · simp only [hv, Bool.false_eq_true, if_false] at h ⊢; exact ih _ _ _ _ _ h
+        · simp only [hv, ite_true] at h ⊢; exact ih _ _ _ _ _ h
+        · simp only [hv, Bool.false_eq_true, ite_false] at h ⊢; exact ih _ _ _ _ _ h
     | loop c body =>
       rw [exec] at h ⊢; simp only [bind, Option.bind] at h ⊢
       cases hc : eval w env mem c with
@@ -42,8 +42,8 @@ theorem exec_succ (m : Module) (w : World) :
       | some v =>
         simp only [hc] at h ⊢
         by_cases hz : (v == 0) = true
-        · simp only [hz, if_true] at h ⊢; exact h
-        · simp only [hz, Bool.false_eq_true, if_false] at h ⊢
+        · simp only [hz, ite_true] at h ⊢; exact h
+        · simp only [hz, Bool.false_eq_true, ite_false] at h ⊢
           cases hb : exec m w n sp env mem body with
           | none => simp [hb] at h
           | some p => simp only [hb] at h; rw [ih _ _ _ _ _ hb]; exact ih _ _ _ _ _ h
@@ -58,11 +58,11 @@ theorem exec_succ (m : Module) (w : World) :
         | some fn =>
           simp only [hf] at h ⊢
           by_cases room : (decide (w.stackLo + 8 + 8 * fn.frame ≤ sp) && values.length == fn.params) = true
-          · simp only [room, if_true] at h ⊢
+          · simp only [room, ite_true] at h ⊢
             cases hb : exec m w n (sp - 8 - 8 * fn.frame) (entryEnv values) mem fn.body with
             | none => simp [hb] at h
             | some p => simp only [hb] at h; rw [ih _ _ _ _ _ hb]; exact h
-          · simp only [room, Bool.false_eq_true, if_false] at h; simp at h
+          · simp only [room, Bool.false_eq_true, ite_false] at h; simp at h
 
 /-- More fuel never takes a meaning away. -/
 theorem exec_mono (m : Module) (w : World) (fuel more sp : Nat) (env : Env) (mem : Memory) (stmt : Stmt)
@@ -71,4 +71,4 @@ theorem exec_mono (m : Module) (w : World) (fuel more sp : Nat) (env : Env) (mem
   | zero => exact h
   | succ k ih => exact exec_succ m w _ _ _ _ _ _ ih
 
-end Ssz.Native.Ir
+end EthLib.Consensus.Ssz.Native.Ir

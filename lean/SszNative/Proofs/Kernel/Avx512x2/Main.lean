@@ -9,10 +9,11 @@ Each pass of its loop is a batch pair, then the pointer updates and the branch b
 At the end, it releases the scratch area, clears the upper vector state, and returns.
 -/
 
-namespace Ssz.Native.Kernel.Avx512x2
+namespace EthLib.Consensus.Ssz.Native.Kernel.Avx512x2
 
-open Ssz.Sha256 Ssz.Native.Asm
-open Ssz.Native.Kernel.Avx512 (tbl left right out count fetch step_jz step_jnz step_ret run_one add_toNat sub_toNat
+open EthLib.Cryptography.Hash.Sha256 hiding K IV
+open EthLib.Consensus.Ssz.Native.Asm
+open EthLib.Consensus.Ssz.Native.Kernel.Avx512 (tbl left right out count fetch step_jz step_jnz step_ret run_one add_toNat sub_toNat
   pairMessage_congr)
 
 /-- The updates advance the three pointers, count one pair down, and set the zero flag on the last. -/
@@ -139,7 +140,7 @@ theorem Layout.pre {ls rs : Nat} {s : State} {c : Nat} (h : Layout ls rs s (c + 
 def Done (ls rs : Nat) (s : State) (c : Nat) (f : State) : Prop :=
   f.status = .returned ∧
   (∀ p < 32 * c, ∀ k < 32, f.mem ((s.gpr out).toNat + 32 * p + k) =
-    (Sha256.hash (pairMessage s.mem ((s.gpr left).toNat + ls * p) ((s.gpr right).toNat + rs * p))).get! k) ∧
+    (Cryptography.Hash.Sha256.hash (pairMessage s.mem ((s.gpr left).toNat + ls * p) ((s.gpr right).toNat + rs * p))).get! k) ∧
   (∀ a, ¬ ((s.gpr out).toNat ≤ a ∧ a < (s.gpr out).toNat + 32 * (32 * c)) →
     a < (s.gpr sp).toNat ∨ (s.gpr sp).toNat + frame ≤ a → f.mem a = s.mem a) ∧
   (∀ r ∈ calleeSaved, r ≠ sp → f.gpr r = s.gpr r) ∧ f.gpr sp = s.gpr sp + frame.toUInt64 ∧ f.gpr .rax = 0
@@ -169,7 +170,7 @@ theorem loop (ls rs : Nat) (c : Nat) : ∀ s : State, s.pc = loopHead → s.stat
       others _ (by decide) (by decide) (by decide) (by decide) (by decide) (by decide)
     have zf : (exec [.addImm left (16 * ls), .addImm right (16 * rs), .addImm out 512, .subImm count 1] y).zf = true := by
       rw [tail_exec, ycount, one]; rfl
-    rw [zf, if_pos rfl] at hrun
+    rw [zf, ite_eq_left rfl] at hrun
     obtain ⟨cst, cmem, cgpr⟩ := closing ls rs { exec [.addImm left (16 * ls), .addImm right (16 * rs),
       .addImm out 512, .subImm count 1] y with pc := finishAt ls rs } rfl (by simp only [exec_status]; exact st)
     refine ⟨n + 4, ?_⟩
@@ -179,7 +180,7 @@ theorem loop (ls rs : Nat) (c : Nat) : ∀ s : State, s.pc = loopHead → s.stat
     · rw [cmem, tail_exec]; exact kept a (by omega) hf
     · obtain ⟨h1, h2, h3, h4, h5, h6, h7, h8⟩ := saved_ne hr hsp
       rw [cgpr, tail_exec]
-      simp only [assign, if_neg h8, if_neg hsp, if_neg h7, if_neg h3, if_neg h2, if_neg h1]
+      simp only [assign, ite_eq_right h8, ite_eq_right hsp, ite_eq_right h7, ite_eq_right h3, ite_eq_right h2, ite_eq_right h1]
       exact others r h1 h2 h3 h4 h5 h6
     · rw [cgpr, tail_exec]
       simp only [assign]
@@ -241,7 +242,7 @@ theorem loop (ls rs : Nat) (c : Nat) : ∀ s : State, s.pc = loopHead → s.stat
       rw [zcount', ycount, sub_toNat _ (by omega), counted]; rfl
     have zkeep : ∀ r, r ≠ left → r ≠ right → r ≠ out → r ≠ words → r ≠ consts → r ≠ blocks → r ≠ count →
         z.gpr r = s.gpr r := fun r h1 h2 h3 h4 h5 h6 h7 => by
-      rw [zgpr]; simp only [assign, if_neg h7, if_neg h3, if_neg h2, if_neg h1]; exact others r h1 h2 h3 h4 h5 h6
+      rw [zgpr]; simp only [assign, ite_eq_right h7, ite_eq_right h3, ite_eq_right h2, ite_eq_right h1]; exact others r h1 h2 h3 h4 h5 h6
     have zsp : z.gpr sp = s.gpr sp := zkeep _ (by decide) (by decide) (by decide) (by decide) (by decide) (by decide)
       (by decide)
     have ztbl : z.gpr tbl = s.gpr tbl := zkeep _ (by decide) (by decide) (by decide) (by decide) (by decide)
@@ -345,7 +346,7 @@ theorem program_correct (ls rs : Nat) (s : State) (start : s.pc = 0) (running : 
     ∃ steps,
       (run (program ls rs) steps s).status = .returned ∧
       (∀ p < n, ∀ k < 32, (run (program ls rs) steps s).mem ((s.gpr out).toNat + 32 * p + k) =
-        (Sha256.hash (pairMessage s.mem ((s.gpr left).toNat + ls * p) ((s.gpr right).toNat + rs * p))).get! k) ∧
+        (Cryptography.Hash.Sha256.hash (pairMessage s.mem ((s.gpr left).toNat + ls * p) ((s.gpr right).toNat + rs * p))).get! k) ∧
       (∀ a, ¬ ((s.gpr out).toNat ≤ a ∧ a < (s.gpr out).toNat + 32 * n) →
         a < (s.gpr sp).toNat - frame ∨ (s.gpr sp).toNat ≤ a → (run (program ls rs) steps s).mem a = s.mem a) ∧
       (∀ r ∈ calleeSaved, (run (program ls rs) steps s).gpr r = s.gpr r) ∧
@@ -358,7 +359,7 @@ theorem program_correct (ls rs : Nat) (s : State) (start : s.pc = 0) (running : 
     rw [og]; simp only [assign, ↓reduceIte]
     rw [UInt64.toNat_sub_of_le _ _ (by rw [UInt64.le_iff_toNat_le]; simp [frame]; omega)]
     simp [frame]
-  have xkeep : ∀ r, r ≠ sp → x.gpr r = s.gpr r := fun r h => by rw [og]; simp only [assign, if_neg h]
+  have xkeep : ∀ r, r ≠ sp → x.gpr r = s.gpr r := fun r h => by rw [og]; simp only [assign, ite_eq_right h]
   have xsaved : ∀ r ∈ calleeSaved, r ≠ sp → x.gpr r = s.gpr r := fun r _ h => xkeep r h
   have rspBack : x.gpr sp + frame.toUInt64 = s.gpr sp := by
     rw [og]; simp only [assign, ↓reduceIte]; exact sub_add_frame _ room
@@ -374,9 +375,9 @@ theorem program_correct (ls rs : Nat) (s : State) (start : s.pc = 0) (running : 
     refine ⟨st, fun p hp => absurd hp (by omega), fun a _ _ => by rw [mem, om], fun r hr => ?_, ?_⟩
     · rw [gpr]
       by_cases hsp : r = sp
-      · subst hsp; simp only [assign]; rw [if_neg (by decide)]; simp only [↓reduceIte]; exact rspBack
+      · subst hsp; simp only [assign]; rw [ite_eq_right (by decide)]; simp only [↓reduceIte]; exact rspBack
       · obtain ⟨-, -, -, -, -, -, -, h8⟩ := saved_ne hr hsp
-        simp only [assign, if_neg h8, if_neg hsp]; exact xkeep r hsp
+        simp only [assign, ite_eq_right h8, ite_eq_right hsp]; exact xkeep r hsp
     · rw [gpr]; simp [assign]
   | succ c =>
     -- At least one pair: the loop, from its head.
@@ -438,4 +439,4 @@ theorem leaf (ls rs : Nat) : Leaf (program ls rs) := by
     | simpa [notStraight] using List.all_eq_true.mp b4 _ h
     | simpa [notStraight] using List.all_eq_true.mp b5 _ h
 
-end Ssz.Native.Kernel.Avx512x2
+end EthLib.Consensus.Ssz.Native.Kernel.Avx512x2

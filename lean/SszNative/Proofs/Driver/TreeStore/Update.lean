@@ -9,9 +9,9 @@ After the pass at height h, every node up to that height is right too.
 Each pass moves the list of dirty nodes one height up and hashes them, so after the top, every node is right.
 -/
 
-namespace Ssz.Native.Driver
+namespace EthLib.Consensus.Ssz.Native.Driver
 
-open Ssz Ssz.Native.Asm Ssz.Native.Ir
+open EthLib.Consensus.Ssz EthLib.Consensus.Ssz.Native.Asm EthLib.Consensus.Ssz.Native.Ir
 
 /-- A node of a height has a rewritten leaf under it. -/
 def Dirty (idx : Nat → Nat) (c g j : Nat) : Prop :=
@@ -241,7 +241,7 @@ theorem update_ends {m : Module} {w : World} {sp : Nat} {mem : Memory}
       have tc : t < c := by
         by_cases hb : t < c
         · exact hb
-        · rw [if_neg hb] at hv; exact absurd hv nz
+        · rw [ite_eq_right hb] at hv; exact absurd hv nz
       have it : slotWord mm indices t = idx t := by
         rw [← idxAt t tc]; exact slotWord_congr fun r hr => fr _ (by omega)
       have ib := inside t tc
@@ -255,9 +255,9 @@ theorem update_ends {m : Module} {w : World} {sp : Nat} {mem : Memory}
           fun a ha => ?_⟩, ?_⟩))
       · rw [slotWord_store _ _ _ _ _ (by omega)]
         by_cases e' : i = t
-        · rw [if_pos e', e']
-        · rw [if_neg e']; exact words i (by omega)
-      · simp only [store]; rw [if_neg (by omega)]; exact fr a ha
+        · rw [ite_eq_left e', e']
+        · rw [ite_eq_right e']; exact words i (by omega)
+      · simp only [store]; rw [ite_eq_right (by omega)]; exact fr a ha
       · rw [assign_eq, tv, ofNat_toNat (by omega), ofNat_toNat (by omega)]
         omega
     rintro e1 mm1 ⟨⟨ag1, t, ht, tv, words, fr1⟩, done⟩
@@ -265,7 +265,7 @@ theorem update_ends {m : Module} {w : World} {sp : Nat} {mem : Memory}
       (by omega) (by omega)))
     have tc : t = c := by
       by_cases hb : t < c
-      · rw [if_pos hb] at done; exact absurd done (by decide)
+      · rw [ite_eq_left hb] at done; exact absurd done (by decide)
       · omega
     subst tc
     refine Ends.step (Runs.set _ _ _ _ _ _ _ _ (eval_var ((ag1 3 (by decide)).trans E3))) ?_
@@ -299,7 +299,7 @@ theorem update_ends {m : Module} {w : World} {sp : Nat} {mem : Memory}
         · exact hk
         · obtain ⟨x, hx, eq⟩ := lv.list.sound 0 lv.list.pos
           rw [show h = K by have := lv.height; omega, anc_top K _ (inside x hx)] at eq
-          rw [eq, if_neg (by decide)] at hv; exact absurd hv nz
+          rw [eq, ite_eq_right (by decide)] at hv; exact absurd hv nz
       exact Ends.mono (update_level okP pre kernels room inside lv below) fun e' mm' ⟨k', lv', dec⟩ =>
         ⟨⟨_, _, lv'⟩, dec⟩
     rintro e mm ⟨⟨h, k, lv⟩, done⟩
@@ -311,7 +311,7 @@ theorem update_ends {m : Module} {w : World} {sp : Nat} {mem : Memory}
       · obtain ⟨x, hx, eq⟩ := lv.list.sound 0 lv.list.pos
         have := (anc_bounds K h (idx x) (by omega) (inside x hx)).1
         have : 2 ≤ 2 ^ (K - h) := Nat.one_lt_two_pow (by omega)
-        rw [eq, if_pos (by omega)] at done; exact absurd done (by decide)
+        rw [eq, ite_eq_left (by omega)] at done; exact absurd done (by decide)
       · exact Nat.le_antisymm lv.height (by omega)
     subst top
     exact Ends.nil ⟨v15, fun g hg j hj => lv.upTo g hg j hj (Or.inl hg), lv.frame⟩
@@ -322,4 +322,4 @@ theorem update_ends {m : Module} {w : World} {sp : Nat} {mem : Memory}
     subst c0
     exact ⟨rfl, fun g hg j hj => start g hg j hj (Or.inr fun ⟨x, hx, _⟩ => absurd hx (by omega)), fun _ _ _ _ => rfl⟩
 
-end Ssz.Native.Driver
+end EthLib.Consensus.Ssz.Native.Driver

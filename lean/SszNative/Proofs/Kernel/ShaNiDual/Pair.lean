@@ -2,9 +2,10 @@ import SszNative.Proofs.Kernel.ShaNiDual.Rounds
 
 /-! One pair's message and initial state loaded into its registers, and its first feed-forward. -/
 
-namespace Ssz.Native.Kernel.ShaNiDual
+namespace EthLib.Consensus.Ssz.Native.Kernel.ShaNiDual
 
-open Ssz.Native.Asm Ssz.Sha256
+open EthLib.Consensus.Ssz.Native.Asm
+open EthLib.Cryptography.Hash.Sha256 hiding K IV
 open ShaNi (writes VecOnly exec_frame exec_vec step_frame Quad Packed Wm MaskReady load_lanes pairMessage_get read_table
   tableWord_iv quad_of_eq packed_add lane_padddMem lane_movdqa)
 
@@ -25,20 +26,20 @@ theorem source_word (s : State) (leftDisp rightDisp r l : Nat) (hr : r < 4) (hl 
       Wm (messageAt s leftDisp rightDisp) (4 * r + l) := by
   -- A schedule word below 16 is the message's big-endian word at four times its index.
   simp only [Wm, messageAt]
-  rw [getElem!_pos _ _ (by omega), schedule_input _ _ _ (by omega), wordAt]
-  simp only [Nat.zero_add]
+  rw [getElem!_pos _ _ (by omega), schedule_input _ _ _ (by omega), big32]
+  simp only [Nat.zero_add, getElem!_eq_get!]
   rw [pairMessage_get _ _ _ _ (by omega), pairMessage_get _ _ _ _ (by omega), pairMessage_get _ _ _ _ (by omega),
     pairMessage_get _ _ _ _ (by omega)]
   unfold sourceAt
   -- The first two vectors read the left node, the last two the right node.
   split
   · simp only [State.addr]
-    simp (disch := omega) only [if_pos]
+    simp (disch := omega) only [ite_eq_left]
     rw [show (s.gpr left).toNat + (leftDisp + 16 * r) + 4 * l = (s.gpr left).toNat + leftDisp + 4 * (4 * r + l) by
       omega]
     simp only [Nat.add_assoc]
   · simp only [State.addr]
-    simp (disch := omega) only [if_neg]
+    simp (disch := omega) only [ite_eq_right]
     rw [show 4 * (4 * r + l) - 32 = 16 * (r - 2) + 4 * l by omega,
       show 4 * (4 * r + l) + 1 - 32 = 16 * (r - 2) + 4 * l + 1 by omega,
       show 4 * (4 * r + l) + 2 - 32 = 16 * (r - 2) + 4 * l + 2 by omega,
@@ -86,7 +87,7 @@ theorem loadBlock_lane (g : Lane) (hg : Good g) (s t : State) (leftDisp rightDis
 theorem loadCode_spec (g : Lane) (hg : Good g) (s : State) (leftDisp rightDisp : Nat)
     (table : TableAt s.mem (s.gpr tbl).toNat) (mask : MaskReady s) :
     let t := exec (loadCode g leftDisp rightDisp) s
-    Packed (t.vec g.abef) (t.vec g.cdgh) initialState ∧
+    Packed (t.vec g.abef) (t.vec g.cdgh) Cryptography.Hash.Sha256.IV ∧
     ∀ r < 4, ∀ l : Fin 16, l.val < 4 → t.vec (g.msg r) l = Wm (messageAt s leftDisp rightDisp) (4 * r + l.val) := by
   intro t
   -- Every block keeps memory, the general registers, and the mask.
@@ -125,10 +126,10 @@ theorem loadCode_spec (g : Lane) (hg : Good g) (s : State) (leftDisp rightDisp :
     have ac := (state_apart g hg).1
     refine ⟨quad_of_eq _ _ (fun l hl => ?_) _ _ _ _ qa, quad_of_eq _ _ (fun l hl => ?_) _ _ _ _ qc⟩
     · have := read_table u tab ivAbef l.val (by decide) (by simp [ivAbef, tableSize]; omega)
-      simp only [ivLoads, exec_cons, exec_nil, exec1, assign, ac, ac.symm, if_false, if_true, low, hl]
+      simp only [ivLoads, exec_cons, exec_nil, exec1, assign, ac, ac.symm, ite_false, ite_true, low, hl]
       simpa [State.addr, tableEntry] using this
     · have := read_table u tab ivCdgh l.val (by decide) (by simp [ivCdgh, tableSize]; omega)
-      simp only [ivLoads, exec_cons, exec_nil, exec1, assign, if_true, low, hl]
+      simp only [ivLoads, exec_cons, exec_nil, exec1, assign, ite_true, low, hl]
       simpa [State.addr, tableEntry] using this
   · -- Vector r keeps its words through the loads after its own, and through the initial state's loads.
     obtain ⟨ma, mc, _, _, _⟩ := msg_apart g hg r
@@ -159,9 +160,9 @@ theorem middleCode_touches (g : Lane) (hg : Good g) : ∀ i ∈ middleCode g, �
 /-- A pair's first feed-forward adds the initial state, and a copy of the result is kept aside. -/
 theorem middleCode_spec (g : Lane) (hg : Good g) (s : State) (table : TableAt s.mem (s.gpr tbl).toNat)
     (r : Vector UInt32 8) (h : Packed (s.vec g.abef) (s.vec g.cdgh) r) :
-    Packed ((exec (middleCode g) s).vec g.abef) ((exec (middleCode g) s).vec g.cdgh) (initialState.zipWith (· + ·) r) ∧
+    Packed ((exec (middleCode g) s).vec g.abef) ((exec (middleCode g) s).vec g.cdgh) (Cryptography.Hash.Sha256.IV.zipWith (· + ·) r) ∧
     Packed ((exec (middleCode g) s).vec g.midAbef) ((exec (middleCode g) s).vec g.midCdgh)
-      (initialState.zipWith (· + ·) r) := by
+      (Cryptography.Hash.Sha256.IV.zipWith (· + ·) r) := by
   obtain ⟨ac, -, -, -, -, -, -⟩ := state_apart g hg
   obtain ⟨m0a, m0c, -, -, -⟩ := msg_apart g hg 0
   obtain ⟨m1a, m1c, -, -, -⟩ := msg_apart g hg 1
@@ -203,4 +204,4 @@ theorem middleCode_spec (g : Lane) (hg : Good g) (s : State) (table : TableAt s.
   obtain ⟨p1, p2⟩ := p
   exact ⟨quad_of_eq _ _ ma _ _ _ _ p1, quad_of_eq _ _ mc _ _ _ _ p2⟩
 
-end Ssz.Native.Kernel.ShaNiDual
+end EthLib.Consensus.Ssz.Native.Kernel.ShaNiDual

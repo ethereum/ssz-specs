@@ -2,9 +2,9 @@ import SszNative.Proofs.Root.Nodes
 
 /-! Byte-level facts about copying into buffers, and about nodes read byte by byte. -/
 
-namespace Ssz.Native
+namespace EthLib.Consensus.Ssz.Native
 
-open Ssz
+open EthLib.Consensus.Ssz
 
 /-- Copying a range inside both arrays keeps the destination's size. -/
 theorem copySlice_size (src dest : ByteArray) (so d len : Nat) (hs : so + len ≤ src.size) (hd : d + len ≤ dest.size) :
@@ -66,4 +66,4 @@ theorem nodeOf_get (a : ByteArray) (o k x : Nat) (inside : o + 32 * k + 32 ≤ a
   rw [getElem!_pos _ x (by rw [nodeOf_size a o k inside]; exact lx), Kernel.get!_eq _ _ (by omega)]
   simp only [nodeOf, ByteArray.data_extract, Array.getElem_extract, ByteArray.getElem_eq_getElem_data]
 
-end Ssz.Native
+end EthLib.Consensus.Ssz.Native

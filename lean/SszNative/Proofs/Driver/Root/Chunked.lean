@@ -9,14 +9,14 @@ The driver roots the chunks in order, each right after the ones before it, and i
 The proof takes what one call rooting a chunk does as a hypothesis, so it serves any element type.
 -/
 
-namespace Ssz.Native.Driver
+namespace EthLib.Consensus.Ssz.Native.Driver
 
-open Ssz.Native.Ir Ssz.Native.Ir.Expr Ssz.Native.Ir.Stmt Ssz.Native.Asm
+open EthLib.Consensus.Ssz.Native.Ir EthLib.Consensus.Ssz.Native.Ir.Expr EthLib.Consensus.Ssz.Native.Ir.Stmt EthLib.Consensus.Ssz.Native.Asm
 
 /-! ### The sequential join -/
 
 /-- Memory holding two buffers one after the other holds their join. -/
-theorem _root_.Ssz.Native.Holds.append {mem : Memory} {a : Nat} {x y : ByteArray} (hx : Holds mem a x)
+theorem _root_.EthLib.Consensus.Ssz.Native.Holds.append {mem : Memory} {a : Nat} {x y : ByteArray} (hx : Holds mem a x)
     (hy : Holds mem (a + x.size) y) : Holds mem a (x ++ y) := by
   intro i hi
   rw [ByteArray.size_append] at hi
@@ -61,7 +61,7 @@ theorem chunkedRoots_join (d : Desc) (b : ByteArray) (start stride count : Nat) 
     chunkedRoots d b start stride count =
       chunkJoin (fun done c => rootsOf d b (start + stride * done) stride c) count
         ((count + recordsPerChunk - 1) / recordsPerChunk) := by
-  rw [chunkedRoots, if_neg big]
+  rw [chunkedRoots, ite_eq_right big]
   simp only [List.foldl_map, chunkJoin, Nat.mul_assoc]
   rfl
 
@@ -116,14 +116,14 @@ theorem rootsChunked_calls {m : Module} {w : World} (hf : m.fns.lookup "ssz_root
     (eval_var (show E0 3 = UInt64.ofNat count from rfl)) (eval_cast _) (by omega) (by omega)
   by_cases few : count ≤ recordsPerChunk
   · -- One chunk: a single call roots the whole run.
-    rw [if_pos few] at small ⊢
+    rw [ite_eq_left few] at small ⊢
     obtain ⟨mem', c, held, keep⟩ := call mem0 0 count (fun _ _ _ => rfl) pos (Nat.zero_mod _) (by omega)
     simp only [Nat.mul_zero, Nat.add_zero] at c held keep
     refine ⟨mem', Calls.fn hf room rfl (Runs.ifElse_true 1 small (by decide) (Runs.block_cons (Runs.call
       (by simp only [List.mapM_cons, List.mapM_nil]; rfl) c) (Runs.block_nil _ _ _ _ _))) rfl, held,
       fun a o pd => keep a o pd⟩
   · -- Several chunks: the loop roots them in order, each after the ones before it.
-    rw [if_neg few] at small ⊢
+    rw [ite_eq_right few] at small ⊢
     let E1 := Asm.assign E0 6 (UInt64.ofNat 0)
     have args : ∀ y < 6, E1 y = E0 y := fun y hy => assign_ne (by omega)
     -- The chunks rooted so far are held in order, and memory is as at the start outside the region.
@@ -150,7 +150,7 @@ theorem rootsChunked_calls {m : Module} {w : World} (hf : m.fns.lookup "ssz_root
         have more : 1024 * k < count := by
           by_cases b : 1024 * k < count
           · exact b
-          · rw [if_neg b] at c'; cases c'; exact absurd rfl nz
+          · rw [ite_eq_right b] at c'; cases c'; exact absurd rfl nz
         -- The chunk's record count: what is left, at most one chunk.
         have s0 := Runs.set' (m := m) (w := w) (sp := sp') (mem := mm) (x := 7) (env := e)
           (e := RootsChunked.count - RootsChunked.done)
@@ -162,14 +162,14 @@ theorem rootsChunked_calls {m : Module} {w : World} (hf : m.fns.lookup "ssz_root
           have cc := eval_lt (w := w) (env := F1) (mem := mm) (a := ((recordsPerChunk : Nat) : Expr))
             (b := RootsChunked.c) (eval_cast _) (eval_var assign_eq) (by omega) (by omega)
           by_cases full : recordsPerChunk < count - 1024 * k
-          · rw [if_pos full] at cc
+          · rw [ite_eq_left full] at cc
             rw [Nat.min_eq_left (by omega)]
             have : Runs m w sp' F1 mm (when (lt (recordsPerChunk : Nat) RootsChunked.c)
                 [RootsChunked.c ::= (recordsPerChunk : Nat)]) (Asm.assign F1 7 (UInt64.ofNat recordsPerChunk)) mm :=
               Runs.when_true 1 cc (by decide) (Runs.block_cons (Runs.set' (eval_cast _)) (Runs.block_nil _ _ _ _ _))
             simp only [F1, assign_assign] at this
             exact this
-          · rw [if_neg full] at cc
+          · rw [ite_eq_right full] at cc
             rw [Nat.min_eq_right (by omega)]
             exact Runs.when_false cc
         let F2 := Asm.assign e 7 (UInt64.ofNat (min recordsPerChunk (count - 1024 * k)))
@@ -218,10 +218,10 @@ theorem rootsChunked_calls {m : Module} {w : World} (hf : m.fns.lookup "ssz_root
     rw [exit] at c'
     have last : k = (count + recordsPerChunk - 1) / recordsPerChunk := by
       by_cases b : 1024 * k < count
-      · rw [if_pos b] at c'; cases c'
+      · rw [ite_eq_left b] at c'; cases c'
       · simp only [recordsPerChunk]; omega
     subst last
     exact ⟨mm, Calls.fn hf room rfl (Runs.ifElse_false small (Runs.block_cons (Runs.set' (eval_lit 0)) run)) rfl,
       held, frame⟩
 
-end Ssz.Native.Driver
+end EthLib.Consensus.Ssz.Native.Driver

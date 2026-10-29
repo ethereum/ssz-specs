@@ -8,7 +8,7 @@ Every kernel is proved as a routine alone.
 This lifts each such proof into the image, where its return then pops the caller's address.
 -/
 
-namespace Ssz.Native.Asm
+namespace EthLib.Consensus.Ssz.Native.Asm
 
 /-- Whether a routine calls no other routine. -/
 def Leaf (program : Array Instr) : Prop :=
@@ -21,7 +21,7 @@ theorem image_step_plain (image : Image) (r : Nat) (s : State) (i : Instr)
   -- The step dispatches on the instruction, and only calls and returns leave the routine's own step.
   simp only [Image.step]
   by_cases running : s.status = .running
-  · simp only [running, bne_self_eq_false, Bool.false_eq_true, if_false, fetch]
+  · simp only [running, bne_self_eq_false, Bool.false_eq_true, ite_false, fetch]
     cases i <;> simp_all
   · -- A stopped machine stays put, and so does a stopped routine.
     simp [running, step]
@@ -30,7 +30,7 @@ theorem image_step_plain (image : Image) (r : Nat) (s : State) (i : Instr)
 theorem step_returned (program : Array Instr) (s : State) (i : Instr) (fetch : program[s.pc]? = some i)
     (notRet : i ≠ .ret) (running : s.status = .running) : (step program s).status ≠ .returned := by
   -- Every other instruction runs on, branches, or faults.
-  simp only [step, running, bne_self_eq_false, Bool.false_eq_true, if_false, fetch]
+  simp only [step, running, bne_self_eq_false, Bool.false_eq_true, ite_false, fetch]
   cases i <;> simp_all <;> split <;> simp
 
 /--
@@ -82,4 +82,4 @@ theorem lift_return (image : Image) (r : Nat) (leaf : Leaf (image.code r)) :
         obtain ⟨k, reach, atRet⟩ := ih (step (image.code r) s) still returned
         exact ⟨k + 1, by rw [Image.run, next, reach], atRet⟩
 
-end Ssz.Native.Asm
+end EthLib.Consensus.Ssz.Native.Asm

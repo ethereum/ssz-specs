@@ -2,9 +2,10 @@ import SszNative.Proofs.Kernel.ShaNiDual.Digest
 
 /-! One pass of the interleaved kernel's loop: two pairs' digests, written side by side at the output. -/
 
-namespace Ssz.Native.Kernel.ShaNiDual
+namespace EthLib.Consensus.Ssz.Native.Kernel.ShaNiDual
 
-open Ssz.Native.Asm Ssz.Sha256
+open EthLib.Consensus.Ssz.Native.Asm
+open EthLib.Cryptography.Hash.Sha256 hiding K IV
 open ShaNi (writes VecOnly exec_vec Packed Wm MaskReady Recurs rounds K P recurs_schedule compress_rounds
   exec_range_succ pairMessage_size)
 
@@ -153,10 +154,10 @@ theorem messageAt_size (s : State) (leftDisp rightDisp : Nat) : (messageAt s lef
 
 /-- What the two pairs' final registers hold: each pair's digest words in the order the stores read them. -/
 theorem final_ordered (g : Lane) (hg : Good g) (t : State) (M : ByteArray) (mask : MaskReady t)
-    (pad : Packed (t.vec g.abef) (t.vec g.cdgh) (rounds (compress initialState M 0) K P 64))
-    (mid : Packed (t.vec g.midAbef) (t.vec g.midCdgh) (compress initialState M 0)) :
+    (pad : Packed (t.vec g.abef) (t.vec g.cdgh) (rounds (compress Cryptography.Hash.Sha256.IV M 0) K P 64))
+    (mid : Packed (t.vec g.midAbef) (t.vec g.midCdgh) (compress Cryptography.Hash.Sha256.IV M 0)) :
     ShaNi.Ordered ((exec (finishRegs g) t).vec tmp) ((exec (finishRegs g) t).vec g.cdgh)
-      (compress (compress initialState M 0) paddingBlock 0) := by
+      (compress (compress Cryptography.Hash.Sha256.IV M 0) paddingBlock 0) := by
   -- The register work orders the second feed-forward, which is the second compression.
   have o := finishRegs_spec g hg t _ _ mask pad mid
   rwa [← compress_rounds] at o
@@ -164,8 +165,8 @@ theorem final_ordered (g : Lane) (hg : Good g) (t : State) (M : ByteArray) (mask
 /-- The bytes a pass writes: the first pair's digest, then the second pair's, and memory elsewhere unchanged. -/
 def passBytes (s : State) (ls rs x : Nat) : UInt8 :=
   let o := (s.gpr out).toNat
-  if o + 32 ≤ x ∧ x < o + 32 + 32 then (Sha256.hash (messageAt s ls rs)).get! (x - (o + 32))
-  else if o ≤ x ∧ x < o + 32 then (Sha256.hash (messageAt s 0 0)).get! (x - o)
+  if o + 32 ≤ x ∧ x < o + 32 + 32 then (Cryptography.Hash.Sha256.hash (messageAt s ls rs)).get! (x - (o + 32))
+  else if o ≤ x ∧ x < o + 32 then (Cryptography.Hash.Sha256.hash (messageAt s 0 0)).get! (x - o)
   else s.mem x
 
 /--
@@ -200,14 +201,14 @@ theorem pairs_spec (ls rs : Nat) (s : State) (table : TableAt s.mem (s.gpr tbl).
   have m₂ : messageAt t₁ ls rs = M₂ := by rw [← hM₂]; simp [messageAt, k1.gpr, k1.mem]
   rw [m₂] at l2
   have tab₂ : TableAt t₂.mem (t₂.gpr tbl).toNat := table_kept s t₂ (k2.gpr.trans k1.gpr) (k2.mem.trans k1.mem) table
-  have ready₁ : Ready first t₂ initialState (Wm M₁) 0 := by
+  have ready₁ : Ready first t₂ Cryptography.Hash.Sha256.IV (Wm M₁) 0 := by
     refine ⟨packed_kept second first first_apart t₁ t₂ k2 _ l1.1, fun j hj _ l hl => ?_⟩
     rw [k2.vec _ (first_apart _ (Or.inr (Or.inr ⟨_, rfl⟩))), ← hM₁]
     simpa using l1.2 j hj l hl
-  have ready₂ : Ready second t₂ initialState (Wm M₂) 0 :=
+  have ready₂ : Ready second t₂ Cryptography.Hash.Sha256.IV (Wm M₂) 0 :=
     ⟨l2.1, fun j hj _ l hl => by simpa using l2.2 j hj l hl⟩
   -- Phase 2: both pairs' first-block rounds.
-  obtain ⟨f₁, f₂, g3, m3, -⟩ := firstGroups_spec t₂ initialState _ _ tab₂ (recurs_schedule M₁)
+  obtain ⟨f₁, f₂, g3, m3, -⟩ := firstGroups_spec t₂ Cryptography.Hash.Sha256.IV _ _ tab₂ (recurs_schedule M₁)
     (recurs_schedule M₂) ready₁ ready₂ 16 (by omega)
   rw [h3] at f₁ f₂ g3 m3
   have tab₃ : TableAt t₃.mem (t₃.gpr tbl).toNat := table_kept t₂ t₃ g3 m3 tab₂
@@ -224,12 +225,12 @@ theorem pairs_spec (ls rs : Nat) (s : State) (table : TableAt s.mem (s.gpr tbl).
   obtain ⟨p₁, p₂, g6, m6, keep₁, keep₂, keep⟩ := paddingGroups_spec t₅ _ _ tab₅
     (packed_kept second first first_apart t₄ t₅ k5 _ mid₁.1) mid₂.1 16 (by omega)
   rw [h6] at p₁ p₂ g6 m6 keep₁ keep₂ keep
-  have midA : Packed (t₆.vec first.midAbef) (t₆.vec first.midCdgh) (compress initialState M₁ 0) := by
+  have midA : Packed (t₆.vec first.midAbef) (t₆.vec first.midCdgh) (compress Cryptography.Hash.Sha256.IV M₁ 0) := by
     have := mids_kept second first good_first first_apart t₄ t₅ k5 _ mid₁.2
     rw [good_first.mid_abef, good_first.mid_cdgh] at this ⊢
     rw [keep₁, keep₁]
     exact this
-  have midB : Packed (t₆.vec second.midAbef) (t₆.vec second.midCdgh) (compress initialState M₂ 0) := by
+  have midB : Packed (t₆.vec second.midAbef) (t₆.vec second.midCdgh) (compress Cryptography.Hash.Sha256.IV M₂ 0) := by
     have := mid₂.2
     rw [good_second.mid_abef, good_second.mid_cdgh] at this ⊢
     rw [keep₂, keep₂]
@@ -238,7 +239,7 @@ theorem pairs_spec (ls rs : Nat) (s : State) (table : TableAt s.mem (s.gpr tbl).
   have mask₆ : MaskReady t₆ := by
     have mask₅ := mask_kept second good_second t₄ t₅ k5 (mask_kept first good_first t₃ t₄ k4
       (fun l hl => by
-        rw [← h3, (firstGroups_spec t₂ initialState _ _ tab₂ (recurs_schedule M₁) (recurs_schedule M₂) ready₁ ready₂
+        rw [← h3, (firstGroups_spec t₂ Cryptography.Hash.Sha256.IV _ _ tab₂ (recurs_schedule M₁) (recurs_schedule M₂) ready₁ ready₂
           16 (by omega)).2.2.2.2 _ (bswap_untouched first good_first) (bswap_untouched second good_second)]
         exact mask_kept second good_second t₁ t₂ k2 (mask_kept first good_first s t₁ k1 mask) l hl))
     exact fun l hl => by
@@ -259,9 +260,9 @@ theorem pairs_spec (ls rs : Nat) (s : State) (table : TableAt s.mem (s.gpr tbl).
   have k8a := h8a ▸ kept_of second _ (finishRegs_touches second) t₇
   have mask₇ : MaskReady t₇ := fun l hl => by
     rw [sv₁]; exact mask_kept first good_first t₆ t₆' k7a mask₆ l hl
-  have p₂' : Packed (t₇.vec second.abef) (t₇.vec second.cdgh) (rounds (compress initialState M₂ 0) K P 64) := by
+  have p₂' : Packed (t₇.vec second.abef) (t₇.vec second.cdgh) (rounds (compress Cryptography.Hash.Sha256.IV M₂ 0) K P 64) := by
     rw [sv₁]; exact packed_kept first second second_apart t₆ t₆' k7a _ p₂
-  have midB' : Packed (t₇.vec second.midAbef) (t₇.vec second.midCdgh) (compress initialState M₂ 0) := by
+  have midB' : Packed (t₇.vec second.midAbef) (t₇.vec second.midCdgh) (compress Cryptography.Hash.Sha256.IV M₂ 0) := by
     rw [sv₁]; exact mids_kept first second good_second second_apart t₆ t₆' k7a _ midB
   have ord₂ := h8a ▸ final_ordered second good_second t₇ M₂ mask₇ p₂'
     midB'
@@ -282,4 +283,4 @@ theorem pairs_spec (ls rs : Nat) (s : State) (table : TableAt s.mem (s.gpr tbl).
       hash_pair M₁ (by rw [← hM₁]; exact messageAt_size _ _ _)]
     simp only [Nat.add_zero]
 
-end Ssz.Native.Kernel.ShaNiDual
+end EthLib.Consensus.Ssz.Native.Kernel.ShaNiDual

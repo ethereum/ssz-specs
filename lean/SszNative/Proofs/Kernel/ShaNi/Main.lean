@@ -6,9 +6,10 @@ The SHA-NI kernel computes SHA-256 of every pair it is given.
 The loop runs the pair's code once per pair, then moves the three addresses on and counts down.
 -/
 
-namespace Ssz.Native.Kernel.ShaNi
+namespace EthLib.Consensus.Ssz.Native.Kernel.ShaNi
 
-open Ssz.Native.Asm Ssz.Sha256
+open EthLib.Consensus.Ssz.Native.Asm
+open EthLib.Cryptography.Hash.Sha256 hiding K IV
 
 /-- The routine's opening: the empty-count check and the mask's load. -/
 def opening : List Instr := [.test count, .jz (loopHead + pairCode.length + 5), .movdqu bswap (tableEntry bswapShaNi)]
@@ -119,7 +120,7 @@ def Fits (s : State) (ls rs : Nat) : Prop :=
 def Expect (s : State) (ls rs k x : Nat) : UInt8 :=
   let o := (s.gpr out).toNat
   if o ≤ x ∧ x < o + 32 * k then
-    (Sha256.hash (pairMessage s.mem ((s.gpr left).toNat + ls * ((x - o) / 32))
+    (Cryptography.Hash.Sha256.hash (pairMessage s.mem ((s.gpr left).toNat + ls * ((x - o) / 32))
       ((s.gpr right).toNat + rs * ((x - o) / 32)))).get! ((x - o) % 32)
   else s.mem x
 
@@ -135,7 +136,7 @@ theorem expect_outside (s : State) (ls rs k x : Nat)
     (h : x < (s.gpr out).toNat ∨ (s.gpr out).toNat + 32 * k ≤ x) : Expect s ls rs k x = s.mem x := by
   -- The address lies outside the first k output slots.
   unfold Expect
-  rw [if_neg (by omega)]
+  rw [ite_eq_right (by omega)]
 
 /-- One pass of the loop body: pair k's digest written, the addresses moved on, and the count down by one. -/
 theorem iterate (ls rs k : Nat) (s u : State) (table₀ : TableAt s.mem (s.gpr tbl).toNat) (fits : Fits s ls rs)
@@ -180,12 +181,12 @@ theorem iterate (ls rs k : Nat) (s u : State) (table₀ : TableAt s.mem (s.gpr t
     simp only [v, e, am, memf, msg, ho, hmem]
     unfold Expect
     by_cases slot : (s.gpr out).toNat + 32 * k ≤ x ∧ x < (s.gpr out).toNat + 32 * k + 32
-    · rw [if_pos slot, if_pos (by omega), show (x - (s.gpr out).toNat) / 32 = k by omega,
+    · rw [ite_eq_left slot, ite_eq_left (by omega), show (x - (s.gpr out).toNat) / 32 = k by omega,
         show (x - (s.gpr out).toNat) % 32 = x - ((s.gpr out).toNat + 32 * k) by omega]
-    · rw [if_neg slot]
+    · rw [ite_eq_right slot]
       by_cases before : (s.gpr out).toNat ≤ x ∧ x < (s.gpr out).toNat + 32 * k
-      · rw [if_pos before, if_pos (by omega)]
-      · rw [if_neg before, if_neg (by omega)]
+      · rw [ite_eq_left before, ite_eq_left (by omega)]
+      · rw [ite_eq_right before, ite_eq_right (by omega)]
   -- The countdown's zero flag says whether this was the last pair.
   · simp only [v, e, az, g]
     rw [sub_one_zero _ (by omega), hc]
@@ -307,7 +308,7 @@ theorem program_correct (ls rs : Nat) (s : State) (start : s.pc = 0) (running : 
     ∃ steps, let f := run (program ls rs) steps s
       f.status = .returned ∧
       (∀ p < (s.gpr count).toNat, ∀ k < 32, f.mem ((s.gpr out).toNat + 32 * p + k) =
-        (Sha256.hash (pairMessage s.mem ((s.gpr left).toNat + ls * p) ((s.gpr right).toNat + rs * p))).get! k) ∧
+        (Cryptography.Hash.Sha256.hash (pairMessage s.mem ((s.gpr left).toNat + ls * p) ((s.gpr right).toNat + rs * p))).get! k) ∧
       (∀ a, ¬ ((s.gpr out).toNat ≤ a ∧ a < (s.gpr out).toNat + 32 * (s.gpr count).toNat) → f.mem a = s.mem a) ∧
       (∀ r ∈ calleeSaved, f.gpr r = s.gpr r) ∧ f.gpr .rax = 0 := by
   -- The hypotheses bundle into what the loop needs.
@@ -321,7 +322,7 @@ theorem program_correct (ls rs : Nat) (s : State) (start : s.pc = 0) (running : 
     refine ⟨steps, done, fun p hp k hk => ?_, fun a ha => ?_, hsaved, hrax⟩
     · rw [hmem]
       unfold Expect
-      rw [if_pos (by
+      rw [ite_eq_left (by
         have : 32 * p + 32 ≤ 32 * (s.gpr count).toNat := by omega
         omega), show ((s.gpr out).toNat + 32 * p + k - (s.gpr out).toNat) / 32 = p by omega,
         show ((s.gpr out).toNat + 32 * p + k - (s.gpr out).toNat) % 32 = k by omega]
@@ -391,4 +392,4 @@ theorem program_correct (ls rs : Nat) (s : State) (start : s.pc = 0) (running : 
     rw [run_add, r3]
     exact ⟨done, dmem, dsaved, drax⟩
 
-end Ssz.Native.Kernel.ShaNi
+end EthLib.Consensus.Ssz.Native.Kernel.ShaNi

@@ -5,9 +5,9 @@ The node set the compiled multiproof verifier folds: the leaves at their indices
 indices, written as entries.
 -/
 
-namespace Ssz.Native.Driver.BranchProof
+namespace EthLib.Consensus.Ssz.Native.Driver.BranchProof
 
-open Ssz.Native.Ir Ssz.Native.Asm
+open EthLib.Consensus.Ssz.Native.Ir EthLib.Consensus.Ssz.Native.Asm
 
 /-- One entry written from an index word and a node elsewhere: a store, a copy, then the next position. -/
 theorem entry_write {m : Module} {w : World} {sp : Nat} {env : Env} {mem : Memory} {Q : Env → Memory → Prop}
@@ -94,7 +94,7 @@ theorem build_loop {m : Module} {w : World} {sp : Nat} {mem : Memory} {Q : Env �
       (by rw [zv]; exact access_sub aN (by omega)) (by rw [xv, zv]; simp only [Apart]; omega)
       fun mem2 word node outside => Wp.cons (Wp.set (eval_add rfl rfl) (Wp.nil ⟨?_, ?_⟩))
     · simp only [assign, ↓reduceIte, next]
-      refine ⟨fun k hk => by rw [if_neg hk]; exact same k hk, by omega, fun a ha => ?_, ?_⟩
+      refine ⟨fun k hk => by rw [ite_eq_right hk]; exact same k hk, by omega, fun a ha => ?_, ?_⟩
       · rw [outside a (by rw [xv]; omega), frame a (by omega)]
       · rw [show o + ((env 14).toNat + 1) = o + (env 14).toNat + 1 by omega, entriesAt_succ,
           entriesAt_congr (mem := mem') (mem' := mem2) (fun k hk => outside _ (by omega)), entries,
@@ -154,20 +154,20 @@ theorem deepest_loop {m : Module} {w : World} (hl : m.fns.lookup "ssz_branch_lev
         simp only [assign, ↓reduceIte, Nat.reduceEqDiff, lvTo] at deeper
         by_cases h : (env 15).toNat < x.toNat.log2
         · exact h
-        · rw [if_neg h] at deeper; exact absurd rfl deeper
+        · rw [ite_eq_right h] at deeper; exact absurd rfl deeper
       refine Wp.cons (Wp.set rfl (Wp.nil (Wp.cons (Wp.set (eval_add rfl rfl) (Wp.nil ⟨⟨rfl, ?_, ?_, ?_⟩, ?_⟩)))))
       · intro k h14 h15 h16
-        simp only [assign, if_neg h14, if_neg h15, if_neg h16]
+        simp only [assign, ite_eq_right h14, ite_eq_right h15, ite_eq_right h16]
         exact keep k h14 h15 h16
       · simp only [assign, ↓reduceIte, Nat.reduceEqDiff, next]; omega
       · simp only [assign, ↓reduceIte, Nat.reduceEqDiff, next, lvTo, grow, ← deep]; omega
       · simp only [assign, ↓reduceIte, Nat.reduceEqDiff, next]; omega
     · have d' : ¬ (env 15).toNat < Nat.log2 x.toNat := by
         simp only [assign, ↓reduceIte, Nat.reduceEqDiff, lvTo] at shallower
-        intro h; rw [if_pos h] at shallower; exact absurd shallower (by decide)
+        intro h; rw [ite_eq_left h] at shallower; exact absurd shallower (by decide)
       refine Wp.skip (Wp.cons (Wp.set (eval_add rfl rfl) (Wp.nil ⟨⟨rfl, ?_, ?_, ?_⟩, ?_⟩)))
       · intro k h14 h15 h16
-        simp only [assign, if_neg h14, if_neg h16]
+        simp only [assign, ite_eq_right h14, ite_eq_right h16]
         exact keep k h14 h15 h16
       · simp only [assign, ↓reduceIte, Nat.reduceEqDiff, next]; omega
       · simp only [assign, ↓reduceIte, Nat.reduceEqDiff, next, grow, ← deep]; omega
@@ -176,4 +176,4 @@ theorem deepest_loop {m : Module} {w : World} (hl : m.fns.lookup "ssz_branch_lev
     rw [show (env 14).toNat = size.toNat by omega] at deep
     exact post env keep deep
 
-end Ssz.Native.Driver.BranchProof
+end EthLib.Consensus.Ssz.Native.Driver.BranchProof

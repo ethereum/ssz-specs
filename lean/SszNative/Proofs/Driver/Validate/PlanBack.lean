@@ -9,11 +9,11 @@ and it returned the address past them.
 The words may be anything: each one the check reads, it reads from a readable region that ends where the plan ends.
 -/
 
-namespace Ssz.Native.Driver.Validate
+namespace EthLib.Consensus.Ssz.Native.Driver.Validate
 
 set_option maxRecDepth 20000
 
-open Ssz Ssz.Native Ssz.Native.Ir Ssz.Native.Asm Ssz.Native.Ir.Stmt Ssz.Native.Ir.Expr
+open EthLib.Consensus.Ssz EthLib.Consensus.Ssz.Native EthLib.Consensus.Ssz.Native.Ir EthLib.Consensus.Ssz.Native.Asm EthLib.Consensus.Ssz.Native.Ir.Stmt EthLib.Consensus.Ssz.Native.Ir.Expr
 
 /-! Stepping through a run that happened. -/
 
@@ -326,7 +326,7 @@ theorem tag7_back {m : Module} {w : World} (hm : Loaded m) : TagBack m w 7 := by
   by_cases has : hasWidth e = true
   · have fw := fixedWidth_lt e se.fits has
     have hne : fixedWidth e ≠ 18446744073709551615 := by omega
-    simp only [widthWord, if_pos has]
+    simp only [widthWord, ite_eq_left has]
     by_cases prod : fixedWidth e * n < 2 ^ 32
     · psteps [hne, prod]
       exact post_some (.vector e n) ⟨wf, by simpa [named] using se.named,
@@ -337,7 +337,7 @@ theorem tag7_back {m : Module} {w : World} (hm : Loaded m) : TagBack m w 7 := by
         Nat.lt_of_lt_of_le (Nat.mul_lt_mul'' fw ok.2) (by decide)
       psteps [hne, prod']
       exact post_none (by wfin [])
-  · simp only [widthWord, if_neg has]
+  · simp only [widthWord, ite_eq_right has]
     psteps []
     exact post_some (.vector e n) ⟨wf, by simpa [named] using se.named,
         by simp [fitsNative, se.fits, has]; omega⟩ he'
@@ -727,7 +727,7 @@ theorem firstDuplicate_of_distinct : ∀ (l : List Nat), (∀ a < l.length, ∀ 
   | [], _ => rfl
   | x :: rest, h => by
     simp only [firstDuplicate]
-    rw [if_neg]
+    rw [ite_eq_right]
     · exact firstDuplicate_of_distinct rest fun a ha b hb => by
         simpa using h (a + 1) (by simp; omega) (b + 1) (by omega)
     · intro hc
@@ -1010,4 +1010,4 @@ theorem plan_back {m : Module} {w : World} (hm : Loaded m) (stop : Nat) : ∀ p,
       · exact tagOther_back hm t big t64
     exact go p stop sp mem r mem' hps hacc rt next call
 
-end Ssz.Native.Driver.Validate
+end EthLib.Consensus.Ssz.Native.Driver.Validate

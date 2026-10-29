@@ -2,9 +2,9 @@ import SszNative.Proofs.Driver.Branch.Select
 
 /-! The compiled helper indices answer what the specification's helper indices answer. -/
 
-namespace Ssz.Native.Driver.BranchProof
+namespace EthLib.Consensus.Ssz.Native.Driver.BranchProof
 
-open Ssz.Native.Ir Ssz.Native.Asm
+open EthLib.Consensus.Ssz.Native.Ir EthLib.Consensus.Ssz.Native.Asm
 
 /-- The word a helper-index computation answers: zero when it succeeds, or the code of its refusal. -/
 def helperCode : Except Err (List Nat) → UInt64
@@ -85,7 +85,7 @@ theorem helper_indices_calls {m : Module} {w : World} (fns : HelperFns m) {sp : 
       cases h : rejectRelated L with
       | ok u => rfl
       | error e =>
-        simp only [assign, ↓reduceIte, h, unitCode, if_neg (answerCode_error_ne_zero e)] at ok
+        simp only [assign, ↓reduceIte, h, unitCode, ite_eq_right (answerCode_error_ne_zero e)] at ok
         exact absurd rfl ok
     let P := L.flatMap pathOf
     have lenP : P.length ≤ 63 * count.toNat := by
@@ -140,4 +140,4 @@ theorem helper_indices_calls {m : Module} {w : World} (fns : HelperFns m) {sp : 
       · simp [assign, unitCode, helperCode, getHelperIndices_error accepted]
       · intro hs h; rw [getHelperIndices_error accepted] at h; cases h
 
-end Ssz.Native.Driver.BranchProof
+end EthLib.Consensus.Ssz.Native.Driver.BranchProof

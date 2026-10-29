@@ -6,11 +6,11 @@ Running a fixed-size type's probes on a value, read from its plan.
 The probes run field by field and record by record, in the order the probe list names them.
 -/
 
-namespace Ssz.Native.Driver.Validate
+namespace EthLib.Consensus.Ssz.Native.Driver.Validate
 
 set_option maxRecDepth 20000
 
-open Ssz Ssz.Native Ssz.Native.Ir Ssz.Native.Asm Ssz.Native.Ir.Stmt Ssz.Native.Ir.Expr
+open EthLib.Consensus.Ssz EthLib.Consensus.Ssz.Native EthLib.Consensus.Ssz.Native.Ir EthLib.Consensus.Ssz.Native.Asm EthLib.Consensus.Ssz.Native.Ir.Stmt EthLib.Consensus.Ssz.Native.Ir.Expr
 
 /-! The probes, in the order the native walk runs them. -/
 
@@ -231,7 +231,7 @@ theorem fieldsProbe_calls {m : Module} {w : World} (hm : Loaded m) (fs : List De
           (UInt64.ofNat (x.toWords[2]!)) (UInt64.ofNat (x.toWords[3]!))
         have width := width_calls hm fs[j] fitj _ (sp - 8 - 8 * 9) _ hpj' hroom
         have skip := skip_calls hm fs[j] fitj _ (sp - 8 - 8 * 9) _ hpj' hroom
-        simp only [widthWord, if_pos hasj] at width
+        simp only [widthWord, ite_eq_left hasj] at width
         simp only [res, after, wrote_eq] at step
         wcall step [h0, h1, h2, h3]
         wcall width [h0]
@@ -245,7 +245,7 @@ theorem fieldsProbe_calls {m : Module} {w : World} (hm : Loaded m) (fs : List De
       · rw [hX] at step
         have width := width_calls hm fs[j] fitj _ (sp - 8 - 8 * 9) _ hpj hroom
         have skip := skip_calls hm fs[j] fitj _ (sp - 8 - 8 * 9) _ hpj hroom
-        simp only [widthWord, if_pos hasj] at width
+        simp only [widthWord, ite_eq_left hasj] at width
         simp only [res, after] at step
         wcall step [h0, h1, h2, h3]
         wcall width [h0]
@@ -307,7 +307,7 @@ theorem checkProbes_bitVector (b : ByteArray) (s n : Nat) :
   · have pos : 0 < (n + 7) / 8 := by omega
     have shr := byte_shr (b.get! (s + ((n + 7) / 8 - 1))) (n % 8) (by omega)
     have hp : plan (.bitVector n) = [.padding ((n + 7) / 8 - 1) (n % 8)] := by simp [plan, h, pos]
-    rw [hp, if_neg h]
+    rw [hp, ite_eq_right h]
     simp only [checkProbes, Probe.check]
     by_cases z : (b.get! (s + ((n + 7) / 8 - 1))).toNat / 2 ^ (n % 8) = 0
     · have : b.get! (s + ((n + 7) / 8 - 1)) >>> UInt8.ofNat (n % 8) = 0 := by
@@ -443,7 +443,7 @@ theorem probe_calls {m : Module} {w : World} (hm : Loaded m) (d : Desc) : ProbeO
     wsteps [r0, a0, r1, a1]
     rw [plan_vector, checkProbes_repeat, Nat.zero_mul, Nat.add_zero]
     by_cases none : plan e = []
-    · simp only [probeBit, if_pos none] at probes
+    · simp only [probeBit, ite_eq_left none] at probes
       wcall probes []
       wsteps []
       have nil : ∀ s c, seqR b (fixedWidth e) [] s c = .ok () := by
@@ -453,10 +453,10 @@ theorem probe_calls {m : Module} {w : World} (hm : Loaded m) (d : Desc) : ProbeO
         | succ c ihc => simp only [seqR, checkProbes]; exact ihc _
       rw [none, nil]
       wfin [res, after]
-    · simp only [probeBit, if_neg none] at probes
+    · simp only [probeBit, ite_eq_right none] at probes
       have width := width_calls hm e fit.1.1 (p + 16) (sp - 8 - 8 * 15) mem he
         (by simp only [Room] at hroom ⊢; omega)
-      simp only [widthWord, if_pos has] at width
+      simp only [widthWord, ite_eq_left has] at width
       have recs := records_calls hm e ih fit.1.1 has (p + 16) (sp - 8 - 8 * 15) mem base b start n err (by omega)
         he ce hd cd ok (by rw [Nat.mul_comm]; omega) hroom
       wcall probes []
@@ -522,4 +522,4 @@ theorem probe_calls {m : Module} {w : World} (hm : Loaded m) (d : Desc) : ProbeO
   | byteList _ | bitList _ | progressiveBitList _ | list _ _ _ | progressiveList _ _ _ | compatibleUnion _ _ _ =>
     intro _ has; simp [hasWidth] at has
 
-end Ssz.Native.Driver.Validate
+end EthLib.Consensus.Ssz.Native.Driver.Validate

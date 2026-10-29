@@ -3,9 +3,9 @@ import SszNative.Proofs.Driver.Branch.Common
 
 /-! Powers of two and right shifts by a counted number of places, as calls. -/
 
-namespace Ssz.Native.Driver.ProveProof
+namespace EthLib.Consensus.Ssz.Native.Driver.ProveProof
 
-open Ssz.Native.Ir Ssz.Native.Asm Ssz.Native.Driver.BranchProof
+open EthLib.Consensus.Ssz.Native.Ir EthLib.Consensus.Ssz.Native.Asm EthLib.Consensus.Ssz.Native.Driver.BranchProof
 
 /-- Doubling a word a counted number of times gives two to that count, wrapped. -/
 theorem pow2_body (m : Module) (w : World) (sp : Nat) (k : UInt64) (mem : Memory) :
@@ -27,7 +27,7 @@ theorem pow2_body (m : Module) (w : World) (sp : Nat) (k : UInt64) (mem : Memory
       refine ⟨_, _, Runs.block_cons (Runs.set m w sp env mem' 1 _ _ rfl)
         (Runs.block_cons (Runs.set m w sp _ mem' 2 _ _ rfl) (Runs.block_nil m w sp _ mem')), ⟨same, ?_, ?_, ?_⟩, ?_⟩
       all_goals simp only [assign, show (1 : Nat) ≠ 2 by decide, show (2 : Nat) ≠ 1 by decide,
-        show (0 : Nat) ≠ 2 by decide, show (0 : Nat) ≠ 1 by decide, if_false, if_true, aluResult]
+        show (0 : Nat) ≠ 2 by decide, show (0 : Nat) ≠ 1 by decide, ite_false, ite_true, aluResult]
       · exact hk
       · rw [toNat_add_of_lt _ _ (by simp; have := k.toNat_lt; omega)]
         simp only [UInt64.reduceToNat]
@@ -76,7 +76,7 @@ theorem shr_body (m : Module) (w : World) (sp : Nat) (x k : UInt64) (mem : Memor
       refine ⟨_, _, Runs.block_cons (Runs.set m w sp env mem' 0 _ _ rfl)
         (Runs.block_cons (Runs.set m w sp _ mem' 2 _ _ rfl) (Runs.block_nil m w sp _ mem')), ⟨same, ?_, ?_, ?_⟩, ?_⟩
       all_goals simp only [assign, show (0 : Nat) ≠ 2 by decide, show (2 : Nat) ≠ 0 by decide,
-        show (1 : Nat) ≠ 2 by decide, show (1 : Nat) ≠ 0 by decide, if_false, if_true, aluResult]
+        show (1 : Nat) ≠ 2 by decide, show (1 : Nat) ≠ 0 by decide, ite_false, ite_true, aluResult]
       · exact hk
       · rw [toNat_add_of_lt _ _ (by simp; have := k.toNat_lt; omega)]
         simp only [UInt64.reduceToNat]
@@ -102,4 +102,4 @@ theorem shr_calls {m : Module} {w : World} (hf : m.fns.lookup "ssz_prove_shr" = 
   obtain ⟨env', run, quot⟩ := shr_body m w (sp - 8 - 8 * ProveShr.fn.frame) x k mem
   exact ⟨env' 0, quot, Calls.fn hf room rfl run (by simp [ProveShr.fn, eval])⟩
 
-end Ssz.Native.Driver.ProveProof
+end EthLib.Consensus.Ssz.Native.Driver.ProveProof

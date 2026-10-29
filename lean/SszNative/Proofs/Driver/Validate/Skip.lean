@@ -1,9 +1,9 @@
 import SszNative.Proofs.Driver.Validate.Basic
 
-namespace Ssz.Native.Driver.Validate
+namespace EthLib.Consensus.Ssz.Native.Driver.Validate
 
 set_option maxRecDepth 20000
-open Ssz Ssz.Native Ssz.Native.Ir Ssz.Native.Asm Ssz.Native.Ir.Stmt Ssz.Native.Ir.Expr
+open EthLib.Consensus.Ssz EthLib.Consensus.Ssz.Native EthLib.Consensus.Ssz.Native.Ir EthLib.Consensus.Ssz.Native.Asm EthLib.Consensus.Ssz.Native.Ir.Stmt EthLib.Consensus.Ssz.Native.Ir.Expr
 
 /-- What skipping a node computes: the address past its words, with memory untouched. -/
 def SkipOk (m : Module) (w : World) (d : Desc) : Prop :=
@@ -206,4 +206,4 @@ theorem skip_calls {m : Module} {w : World} (hm : Loaded m) (d : Desc) : SkipOk 
     wsteps []
     wfin [Plan.words, List.take_length, hl]
 
-end Ssz.Native.Driver.Validate
+end EthLib.Consensus.Ssz.Native.Driver.Validate

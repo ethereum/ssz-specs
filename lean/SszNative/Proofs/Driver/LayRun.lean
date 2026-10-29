@@ -1,5 +1,5 @@
 import SszNative.Proofs.Driver.Lay
-import Ssz.Proofs.Codec.Table
+import EthLib.Consensus.Proofs.Ssz.Codec.Table
 
 /-!
 The layout driver `ssz_lay_out` answers what `layOut` answers.
@@ -9,9 +9,9 @@ or a struct's fields in order.
 The checking loop runs first and the writing loop only once every check passed, so each loop is proved on its own.
 -/
 
-namespace Ssz.Native.Driver
+namespace EthLib.Consensus.Ssz.Native.Driver
 
-open Ssz.Native.Ir Ssz.Native.Asm Ssz.Native.Plan
+open EthLib.Consensus.Ssz.Native.Ir EthLib.Consensus.Ssz.Native.Asm EthLib.Consensus.Ssz.Native.Plan
 
 /--
 The types the parts are paired with, as the driver walks them along the plan.
@@ -153,7 +153,7 @@ theorem lay_check_pass (m : Module) (w : World) (linked : HasCodec m) (inner : N
         simp [env₃, env₂, env₁, assign, show k ≠ 9 by omega, show k ≠ 10 by omega, show k ≠ 11 by omega]
       · rw [keep₄ 7 (by decide) (by decide) (by decide)]; simp [env₃, env₂, env₁, assign]
       · rw [keep₄ 6 (by decide) (by decide) (by decide)]; simp [env₃, env₂, env₁, assign, e6]
-      · rw [next, lay_partFits_fixed _ _ width fixed, if_pos fits]; rfl
+      · rw [next, lay_partFits_fixed _ _ width fixed, ite_eq_left fits]; rfl
       · rw [keep₄ 11 (by decide) (by decide) (by decide)]; simp [env₃, assign]
       · rw [f12, headStep, bodyStep]; congr 1; omega
       · rw [headStep, bodyStep, show layHead ts ps i + ps[i].size + layBody ts ps i =
@@ -172,7 +172,7 @@ theorem lay_check_pass (m : Module) (w : World) (linked : HasCodec m) (inner : N
       · intro k hk
         simp [env₂, env₁, assign, show k ≠ 6 by omega, show k ≠ 9 by omega, show k ≠ 10 by omega]
       · simp [env₂, env₁, assign]
-      · rw [next, lay_partFits_fixed _ _ width fixed, if_neg fits]; rfl
+      · rw [next, lay_partFits_fixed _ _ width fixed, ite_eq_right fits]; rfl
   | none =>
     -- A variable part takes an offset in the fixed part, and its bytes among the bodies.
     have isBody : ts[i].isFixed = false := by simp [Desc.isFixed, show ts[i].fixedSize = none from fixed]
@@ -222,7 +222,7 @@ theorem lay_away_store {mem cur : Memory} {out cap : Nat} (away : layAway mem ou
     (g : Nat → UInt8) (lo : out ≤ a) (hi : a + n ≤ out + cap) : layAway mem out cap (store cur a n g) := by
   intro x far
   simp only [store]
-  rw [if_neg (by omega)]
+  rw [ite_eq_right (by omega)]
   exact away x far
 
 /-- A plan away from the output still reads as itself. -/
@@ -587,12 +587,12 @@ theorem lay_ok (m : Module) (w : World) (linked : HasCodec m) (sp : Nat) (mem : 
   have taken : eval w env₁ mem (Expr.eq (.var 6) 0) = some 1 := by simp [Expr.eq, eval, e6, Cond.holds]
   by_cases big : headWidth (laySlots ts ps) + bodyWidth (laySlots ts ps) ≥ 2 ^ 32
   · -- Past what a four-byte offset names.
-    rw [if_pos big]
+    rw [ite_eq_left big]
     refine head _ mem _ (Runs.ite_true 1 taken (by decide)
       (Runs.block_cons (Runs.set _ _ _ _ _ 6 _ _ rfl) (Runs.ite_false ?_ (Runs.skip _ _ _ _ _))))
       (by simp [assign, assembleOutcome, errCode])
-    rw [small, if_neg (by omega)]
-  rw [if_neg big]
+    rw [small, ite_eq_right (by omega)]
+  rw [ite_eq_right big]
   have fitsWord : headWidth (laySlots ts ps) + bodyWidth (laySlots ts ps) < 2 ^ 64 := by omega
   have sizeOut :
       (⟨headOf (headWidth (laySlots ts ps)) (laySlots ts ps) ++ bodiesOf (laySlots ts ps)⟩ : ByteArray).size =
@@ -609,17 +609,17 @@ theorem lay_ok (m : Module) (w : World) (linked : HasCodec m) (sp : Nat) (mem : 
       ofNat_le_iff _ _ fitsWord capSmall
     simp only [leIff]
   have within : eval w env₂ mem (.op .and (Expr.eq (.var 13) 0) (Expr.lt (.var 12) (.lit (offsetLimit : Nat).toUInt64)))
-      = some 1 := by rw [small, if_pos (by omega)]
+      = some 1 := by rw [small, ite_eq_left (by omega)]
   by_cases room' : headWidth (laySlots ts ps) + bodyWidth (laySlots ts ps) ≤ cap
   case neg =>
     -- Too big for the output.
-    simp only [assembleOutcome, sizeOut, if_neg room']
+    simp only [assembleOutcome, sizeOut, ite_eq_right room']
     refine head _ mem _ (Runs.ite_true 1 taken (by decide)
       (Runs.block_cons (Runs.set _ _ _ _ _ 6 _ _ rfl) (Runs.ite_true 1 within (by decide)
         (Runs.block_cons (Runs.set _ _ _ _ _ 6 _ _ rfl) (Runs.ite_false ?_ (Runs.skip _ _ _ _ _))))))
       (by simp [assign])
-    rw [capCheck, if_neg room']
-  simp only [assembleOutcome, sizeOut, if_pos room']
+    rw [capCheck, ite_eq_right room']
+  simp only [assembleOutcome, sizeOut, ite_eq_left room']
   -- The writing loop: after i parts, their fixed part and their bodies are written.
   let inv₂ : Env → Memory → Prop := fun env cur => (∀ k, k < 6 → env k = entryEnv args k) ∧
     ∃ i, i ≤ N ∧ env 7 = i.toUInt64 ∧ env 8 = (pos i).toUInt64 ∧ env 12 = (layHead ts ps i).toUInt64 ∧
@@ -669,7 +669,7 @@ theorem lay_ok (m : Module) (w : World) (linked : HasCodec m) (sp : Nat) (mem : 
   rw [← final]
   refine head _ _ _ (Runs.ite_true 1 taken (by decide)
     (Runs.block_cons (Runs.set _ _ _ _ _ 6 _ _ rfl) (Runs.ite_true 1 within (by decide)
-      (Runs.block_cons (Runs.set _ _ _ _ _ 6 _ _ rfl) (Runs.ite_true 1 (by rw [capCheck, if_pos room']) (by decide)
+      (Runs.block_cons (Runs.set _ _ _ _ _ 6 _ _ rfl) (Runs.ite_true 1 (by rw [capCheck, ite_eq_left room']) (by decide)
         (Runs.block_cons (Runs.set _ _ _ _ _ 7 _ _ rfl) (Runs.block_cons (Runs.set _ _ _ _ _ 8 _ _ ?_)
           (Runs.block_cons (Runs.set _ _ _ _ _ 12 _ _ rfl) (Runs.block_cons (Runs.set _ _ _ _ _ 15 _ _ ?_)
             (Runs.block_cons ran₂ (Runs.set _ _ _ _ _ 6 _ _ rfl))))))))))) ?_
@@ -731,4 +731,4 @@ theorem lay_fields (m : Module) (w : World) (linked : HasCodec m) (sp : Nat) (me
   rw [split i h, wordsAll_append, wordsAll] at all
   exact all.right.left
 
-end Ssz.Native.Driver
+end EthLib.Consensus.Ssz.Native.Driver

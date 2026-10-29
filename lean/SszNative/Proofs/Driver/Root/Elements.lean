@@ -9,9 +9,9 @@ Each element is rooted by the dispatcher on the element type, into its node, wit
 What that call does is a hypothesis, the induction on the type.
 -/
 
-namespace Ssz.Native.Driver
+namespace EthLib.Consensus.Ssz.Native.Driver
 
-open Ssz Ssz.Native.Ir Ssz.Native.Ir.Expr Ssz.Native.Ir.Stmt Ssz.Native.Asm
+open EthLib.Consensus.Ssz EthLib.Consensus.Ssz.Native.Ir EthLib.Consensus.Ssz.Native.Ir.Expr EthLib.Consensus.Ssz.Native.Ir.Stmt EthLib.Consensus.Ssz.Native.Asm
 
 /-! ### A child's needs -/
 
@@ -52,20 +52,20 @@ theorem elementRanges_getD (element : Desc) (b : ByteArray) (start stop count i 
       else (start + offsetAt b (start + i * bytesPerOffset),
         start + if i + 1 < count then offsetAt b (start + (i + 1) * bytesPerOffset) else stop - start) := by
   by_cases hw : hasWidth element = true
-  · rw [if_pos hw]
-    simp only [elementRanges, fixedSize_eq, hw, if_true]
+  · rw [ite_eq_left hw]
+    simp only [elementRanges, fixedSize_eq, hw, ite_true]
     simp [List.getD_eq_getElem?_getD, hi]
-  · rw [if_neg hw]
+  · rw [ite_eq_right hw]
     have hf : hasWidth element = false := by simpa using hw
-    simp only [elementRanges, fixedSize_eq, hf, Bool.false_eq_true, if_false]
+    simp only [elementRanges, fixedSize_eq, hf, Bool.false_eq_true, ite_false]
     simp only [bodyRanges, List.getD_eq_getElem?_getD, List.getElem?_map]
     rw [List.getElem?_eq_getElem (by simp; omega)]
     simp only [List.getElem_zip, List.getElem_map, List.getElem_range, Option.map_some, Option.getD_some]
     congr 2
     by_cases h : i + 1 < count
-    · rw [if_pos h, List.getElem_append_left (by simp; omega)]
+    · rw [ite_eq_left h, List.getElem_append_left (by simp; omega)]
       simp
-    · rw [if_neg h, List.getElem_append_right (by simp; omega)]
+    · rw [ite_eq_right h, List.getElem_append_right (by simp; omega)]
       simp
 
 /-- Four bytes a program may use, loaded. -/
@@ -232,7 +232,7 @@ theorem elemLoop_ends {m : Module} {w : World} {element : Desc} (ih : RootOfOk m
     have hlt : i < count := by
       by_cases h : i < count
       · exact h
-      · rw [if_neg h] at c; cases c; exact absurd rfl nz
+      · rw [ite_eq_right h] at c; cases c; exact absurd rfl nz
     obtain ⟨lo, ord, hiStop, accepted⟩ := pre.ranges i hlt
     -- The element's range, from its width or its offsets.
     obtain ⟨E1, run1, ev1, i1, s1, n1⟩ : ∃ E1, Runs m w sp e mm (ifElse RootElements.fx
@@ -246,7 +246,7 @@ theorem elemLoop_ends {m : Module} {w : World} {element : Desc} (ih : RootOfOk m
         E1 12 = UInt64.ofNat (base + (elemRange element b start stop count i).1) ∧ E1 13 = UInt64.ofNat ((elemRange element b start stop count i).2 - (elemRange element b start stop count i).1) := by
       have code := elementRanges_getD element b start stop count i hlt
       by_cases fx : hasWidth element
-      · rw [if_pos fx] at code
+      · rw [ite_eq_left fx] at code
         have hr : elemRange element b start stop count i = (start + i * fixedWidth element, start + (i + 1) * fixedWidth element) := code
         rw [hr] at lo ord hiStop
         have r1 := Runs.set' (m := m) (w := w) (sp := sp) (env := e) (mem := mm) (x := 12)
@@ -260,7 +260,7 @@ theorem elemLoop_ends {m : Module} {w : World} {element : Desc} (ih : RootOfOk m
           (ev'.write _ (by decide)).write _ (by decide), by rw [assign_ne (by decide), assign_ne (by decide), hi9],
           by rw [assign_ne (by decide), assign_eq, hr, Nat.mul_comm i]; congr 1; omega, ?_⟩
         rw [assign_eq, hr, Nat.succ_mul]; congr 1; omega
-      · rw [if_neg fx] at code
+      · rw [ite_eq_right fx] at code
         have hr : elemRange element b start stop count i = (start + offsetAt b (start + i * bytesPerOffset),
             start + if i + 1 < count then offsetAt b (start + (i + 1) * bytesPerOffset) else stop - start) := code
         rw [hr] at lo ord hiStop
@@ -283,7 +283,7 @@ theorem elemLoop_ends {m : Module} {w : World} {element : Desc} (ih : RootOfOk m
           have cc := eval_lt (w := w) (env := E) (mem := mm) (eval_add (eval_var iE) (eval_lit 1))
             (eval_var evE.countV) (by omega) cbound
           by_cases more : i + 1 < count
-          · rw [if_pos more] at cc
+          · rw [ite_eq_left more] at cc
             have ld1 : eval w E mm (ld4 (RootElements.src + 4 * RootElements.i + 4)) =
                 some (UInt64.ofNat (offsetAt b (start + (i + 1) * bytesPerOffset))) := by
               have mm0 : ∀ q < 4, mm (base + (start + 4 * (i + 1)) + q) = mem0 (base + (start + 4 * (i + 1)) + q) :=
@@ -293,11 +293,11 @@ theorem elemLoop_ends {m : Module} {w : World} {element : Desc} (ih : RootOfOk m
                 (eval_lit 4)) (access_sub pre.bAcc (by omega) (by omega)),
                 show base + start + 4 * i + 4 = base + (start + 4 * (i + 1)) by omega,
                 readLE_congr mm mem0 _ 4 mm0, readLE_offsetAt pre.holds pre.bAcc _ (by omega), Nat.mul_comm (i + 1)]
-            have : nxt = offsetAt b (start + (i + 1) * bytesPerOffset) := if_pos more
+            have : nxt = offsetAt b (start + (i + 1) * bytesPerOffset) := ite_eq_left more
             rw [this]
             exact Runs.ifElse_true 1 cc (by decide) (Runs.block_cons (Runs.set' ld1) (Runs.block_nil _ _ _ _ _))
-          · rw [if_neg more] at cc
-            have : nxt = stop - start := if_neg more
+          · rw [ite_eq_right more] at cc
+            have : nxt = stop - start := ite_eq_right more
             rw [this]
             exact Runs.ifElse_false cc (Runs.block_cons (Runs.set' (eval_var evE.sizeV)) (Runs.block_nil _ _ _ _ _))
         let F := Asm.assign E 11 (UInt64.ofNat nxt)
@@ -362,7 +362,7 @@ theorem elemLoop_ends {m : Module} {w : World} {element : Desc} (ih : RootOfOk m
     rw [eval_lt (eval_var hi9) (eval_var ev'.countV) (by omega) cbound] at exit
     have : i = count := by
       by_cases h : i < count
-      · rw [if_pos h] at exit; cases exit
+      · rw [ite_eq_left h] at exit; cases exit
       · omega
     subst this
     exact ⟨roots, frame⟩
@@ -410,4 +410,4 @@ theorem rootElements_calls {m : Module} {w : World} (fns : RangeFns m) {element 
     (Runs.block_cons r3 (Runs.block_cons r4 (Runs.block_cons run5 (Runs.block_nil _ _ _ _ _)))))) rfl, roots,
     pre.ready.within (o := out) (n := span) pre.rCtx pre.rTable pre.rZeros frame, frame⟩
 
-end Ssz.Native.Driver
+end EthLib.Consensus.Ssz.Native.Driver

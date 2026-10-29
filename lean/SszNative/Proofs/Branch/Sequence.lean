@@ -2,9 +2,9 @@ import SszNative.Proofs.Branch.Packed
 
 /-! Trees of sequences, as an encoding lays them out and as the decoded value does. -/
 
-namespace Ssz.Native.BranchProof
+namespace EthLib.Consensus.Ssz.Native.BranchProof
 
-open Ssz Ssz.Native
+open EthLib.Consensus.Ssz EthLib.Consensus.Ssz.Native
 
 /-- Each element's slot is the range the check accepted for it. -/
 theorem elementSlots_at (element : Desc) (b : ByteArray) (s e count : Nat) (r : Ranges)
@@ -16,7 +16,7 @@ theorem elementSlots_at (element : Desc) (b : ByteArray) (s e count : Nat) (r : 
   | some width =>
     -- Elements one width apart.
     refine ⟨(s + i * width, s + (i + 1) * width), by simp [h], ?_⟩
-    simp only [Slots.at, h, if_true, Option.some.injEq]
+    simp only [Slots.at, h, ite_true, Option.some.injEq]
     congr 3 <;> simp [Nat.mul_comm, Nat.mul_succ]
   | none =>
     -- Elements from their offsets.
@@ -60,16 +60,16 @@ theorem sequence_agrees (element : Desc) (sound : element.wellFormed = .ok ()) (
     have wrote := serializeEach_of_deserializeEach (serialize_of_deserialize element sound) slices values decoded
     refine ⟨⟨.packed (packBytes (slice b s e)), positions.map fun n => chunksForBytes (n * element.itemLength),
       mixinL⟩, ?_, ?_⟩
-    · simp only [sequenceLayout, basic, if_true, wrote, packs basic, Bind.bind, Except.bind, pure, Except.pure,
+    · simp only [sequenceLayout, basic, ite_true, wrote, packs basic, Bind.bind, Except.bind, pure, Except.pure,
         MerkleLayout.packing]
-    · simp only [encodedSequence, basic, if_true]
+    · simp only [encodedSequence, basic, ite_true]
       exact ⟨packRange_agrees b s e o i (by unfold RootProof.Small; omega), rfl, mixinEq,
         by simpa [EncodedLayout.count] using packed_fits b s e i (by unfold RootProof.Small; omega)⟩
   · -- Other elements are each a leaf of their own, read from their own range.
     have notBasic : element.isBasic = false := by simpa using basic
     refine ⟨⟨.nested (values.map fun v => some (element, v)), positions, mixinL⟩, ?_, ?_⟩
-    · simp only [sequenceLayout, notBasic, Bool.false_eq_true, if_false, MerkleLayout.nesting, pure, Except.pure]
-    · simp only [encodedSequence, notBasic, Bool.false_eq_true, if_false]
+    · simp only [sequenceLayout, notBasic, Bool.false_eq_true, ite_false, MerkleLayout.nesting, pure, Except.pure]
+    · simp only [encodedSequence, notBasic, Bool.false_eq_true, ite_false]
       refine ⟨⟨by rw [elementSlots_count, lengths, List.length_map], fun j hj => ?_,
         elementSlots_stride element b s e count⟩, rfl, mixinEq, ?_⟩
       · simp only [List.length_map] at hj
@@ -143,7 +143,7 @@ theorem vector_agrees (element : Desc) (length : Nat) (sound : (Desc.vector elem
       within rangesEq lengths decoded (vector_packs element length elementSound _ slices cut) few (some length)
       none none rfl
     refine ⟨_, L, rfl, ?_, c⟩
-    simp only [merkleLayout, ← lengths, bne_self_eq_false, Bool.false_eq_true, if_false, layout]
+    simp only [merkleLayout, ← lengths, bne_self_eq_false, Bool.false_eq_true, ite_false, layout]
 
 /-- A counted sequence lays out its tree as its encoding does, its count mixed in. -/
 theorem counted_agrees (element : Desc) (limit : Option Nat) (sound : element.wellFormed = .ok ())
@@ -191,7 +191,7 @@ theorem list_agrees (element : Desc) (limit : Nat) (sound : (Desc.list element l
   obtain ⟨_, L, layout, c⟩ := counted_agrees element (some limit) (wellFormed_list sound) b s e o i small slices
     values cut decoded (some limit)
   refine ⟨_, L, rfl, ?_, c⟩
-  simp only [merkleLayout, show ¬ values.length > limit by omega, if_false, layout]
+  simp only [merkleLayout, show ¬ values.length > limit by omega, ite_false, layout]
 
 /-- A progressive list lays out its tree as its encoding does. -/
 theorem progressiveList_agrees (element : Desc) (limit : Option Nat)
@@ -217,4 +217,4 @@ theorem progressiveList_agrees (element : Desc) (limit : Option Nat)
   refine ⟨_, L, rfl, ?_, c⟩
   simpa only [merkleLayout, bound, Bind.bind, Except.bind] using layout
 
-end Ssz.Native.BranchProof
+end EthLib.Consensus.Ssz.Native.BranchProof

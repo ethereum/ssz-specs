@@ -10,9 +10,9 @@ A vector or a container calls the driver on its element or field types.
 So the proof is an induction on the type, with the contract on the inner types as the hypothesis.
 -/
 
-namespace Ssz.Native.Driver
+namespace EthLib.Consensus.Ssz.Native.Driver
 
-open Ssz.Native.Ir Ssz.Native.Ir.Expr Ssz.Native.Ir.Stmt Ssz.Native.Asm
+open EthLib.Consensus.Ssz.Native.Ir EthLib.Consensus.Ssz.Native.Ir.Expr EthLib.Consensus.Ssz.Native.Ir.Stmt EthLib.Consensus.Ssz.Native.Asm
 
 /-! ### The body -/
 
@@ -69,9 +69,9 @@ theorem rootsOf_other_ok {m : Module} {w : World} (hash : HashingOk m w) (gmod :
   have s0 := Runs.set' (m := m) (sp := sp - 224) (x := RootsOf.tag.idx) (eval_tag pre.plan (eval_var ev.p))
   have ev1 := ev.write (Plan.tag d).toUInt64 (x := 6) (by decide)
   have c7 : eval w (Asm.assign env 6 (Plan.tag d).toUInt64) mem (eq RootsOf.tag 7) = some 0 := by
-    rw [eval_eq (eval_var assign_eq) (eval_lit 7) (by omega) (by decide), if_neg t7]
+    rw [eval_eq (eval_var assign_eq) (eval_lit 7) (by omega) (by decide), ite_eq_right t7]
   have c10 : eval w (Asm.assign env 6 (Plan.tag d).toUInt64) mem (eq RootsOf.tag 10) = some 0 := by
-    rw [eval_eq (eval_var assign_eq) (eval_lit 10) (by omega) (by decide), if_neg t10]
+    rw [eval_eq (eval_var assign_eq) (eval_lit 10) (by omega) (by decide), ite_eq_right t10]
   obtain ⟨env', mem', run, post⟩ := packedPath_runs hash gmod fns (sp := sp - 224) pre ok (by omega) (by omega) ev1
     (x := RootsOf.p) (eval_var ev1.p) (packs b start stride count) (need count)
   refine ⟨env', mem', ?_, post⟩
@@ -122,7 +122,7 @@ theorem rootsOf_vector_ok {m : Module} {w : World} (hash : HashingOk m w) (gmod 
     eval_le_tag (eval_tag planE (eval_var e38))
   by_cases basic : element.isBasic = true
   · -- Basic elements pack, read at the vector's node.
-    rw [if_pos basic] at c1
+    rw [ite_eq_left basic] at c1
     obtain ⟨env', mem', run, post⟩ := packedPath_runs hash gmod fns (sp := sp - 224) pre ⟨pl, wf, thin⟩ (by omega)
       (by omega) ev3 (x := RootsOf.p) (eval_var ev3.p) (by simp [rootsOf, basic]) (by simp [rootsNeed, basic, satWidth])
     refine ⟨env', mem', ?_, post⟩
@@ -131,7 +131,7 @@ theorem rootsOf_vector_ok {m : Module} {w : World} (hash : HashingOk m w) (gmod 
       (Runs.block_cons s2 (Runs.block_cons (Runs.ifElse_true 1 c1 (by decide) run) (Runs.block_nil _ _ _ _ _)))))
       (Runs.block_nil _ _ _ _ _))
   have nb : element.isBasic = false := by simpa using basic
-  rw [if_neg basic] at c1
+  rw [ite_eq_right basic] at c1
   -- The element's width.
   have width := planWidth_calls fns.plan element (p + 16) (sp - 224) mem planE se ne (by omega)
   have s3 := Runs.call (m := m) (sp := sp - 224) (env := E3) (mem := mem) (dst := 9) (args := [RootsOf.e])
@@ -155,7 +155,7 @@ theorem rootsOf_vector_ok {m : Module} {w : World} (hash : HashingOk m w) (gmod 
         (Runs.ifElse_true 1 cc (by decide) run) (Runs.block_nil _ _ _ _ _)))) (Runs.block_nil _ _ _ _ _)))))
       (Runs.block_nil _ _ _ _ _))
   · -- Several vectors: a column per element, then the tree across them.
-    rw [if_neg single] at cc
+    rw [ite_eq_right single] at cc
     obtain ⟨env', mem', run, post⟩ := vectorColumns_runs hash gmod fns (sp := sp - 224) pre ⟨pl, wf, thin⟩ nb single
       (ih nb) (by omega) (by omega) ev4 e47 e48 e49
     refine ⟨env', mem', ?_, post⟩
@@ -224,7 +224,7 @@ theorem rootsOf_container_ok {m : Module} {w : World} (hash : HashingOk m w) (gm
         (Runs.ifElse_true 1 cc (by decide) run) (Runs.block_nil _ _ _ _ _)))))))
       (Runs.block_nil _ _ _ _ _))) (Runs.block_nil _ _ _ _ _))
   · -- Several records: a column per field, then the tree across them.
-    rw [if_neg single] at cc
+    rw [ite_eq_right single] at cc
     obtain ⟨env', mem', run, post⟩ := containerColumns_runs hash gmod fns (sp := sp - 224) pre ok single ih room
       (by omega) (by omega) ev5 e57 e58 e515 e514
     refine ⟨env', mem', ?_, post⟩
@@ -272,4 +272,4 @@ theorem rootsOf_ok {m : Module} {w : World} (hash : HashingOk m w) (gmod : Gathe
     · subst here; exact ihHead ok
     · exact ihTail f later ok
 
-end Ssz.Native.Driver
+end EthLib.Consensus.Ssz.Native.Driver

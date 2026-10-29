@@ -1,4 +1,4 @@
-import Ssz.Type.Desc
+import EthLib.Consensus.Ssz.Type.Desc
 
 /-!
 A type, written as bytes that any language can produce and the native code can walk.
@@ -32,9 +32,9 @@ Those names are distinct, and two progressive containers name a shared position 
 legal.
 -/
 
-namespace Ssz.Native.Plan
+namespace EthLib.Consensus.Ssz.Native.Plan
 
-open Ssz
+open EthLib.Consensus.Ssz
 
 /-- The tag word of a type node. -/
 def tag : Desc → Nat
@@ -196,4 +196,4 @@ def decode (b : ByteArray) : Option Desc :=
     | some (d, []) => some d
     | _ => none
 
-end Ssz.Native.Plan
+end EthLib.Consensus.Ssz.Native.Plan

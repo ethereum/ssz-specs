@@ -11,9 +11,9 @@ A tree over one value's elements or fields is one node.
 A tree across columns keeps one node per value at every level.
 -/
 
-namespace Ssz.Native.Driver
+namespace EthLib.Consensus.Ssz.Native.Driver
 
-open Ssz.Native.Ir Ssz.Native.Asm
+open EthLib.Consensus.Ssz.Native.Ir EthLib.Consensus.Ssz.Native.Asm
 
 /-! ### Saturated products -/
 
@@ -167,7 +167,7 @@ theorem chunkedRoots_size (d : Desc) (sized : RootsSized d) (b : ByteArray) (sta
   have chunk : recordsPerChunk = 1024 := rfl
   by_cases few : count ≤ recordsPerChunk
   · -- One chunk: the roots of the whole run.
-    rw [chunkedRoots, if_pos few]
+    rw [chunkedRoots, ite_eq_left few]
     rw [Nat.min_eq_left few] at below
     exact sized b start stride count pos below
   · -- Several chunks: each at most a full chunk, joined in order.
@@ -213,11 +213,11 @@ theorem rootsOf_size (d : Desc) : Rootable d → USize.size = 2 ^ 64 → RootsSi
         (fun _ => by simp [rootsNeed, basic, satWidth])
     have nb : element.isBasic = false := by simpa using basic
     intro b start stride count pos below
-    simp only [rootsNeed, nb, Bool.false_eq_true, if_false] at below
+    simp only [rootsNeed, nb, Bool.false_eq_true, ite_false] at below
     by_cases single : count = 1
     · -- One value: the tree over its elements' roots, one node.
       subst single
-      rw [if_pos rfl] at below
+      rw [ite_eq_left rfl] at below
       have parts : smul 32 (sat length) < scratchCap ∧
           (if sat length ≤ recordsPerChunk then rootsNeed element (sat length)
             else sadd (smul 32 (sat length)) (rootsNeed element recordsPerChunk)) < scratchCap := by
@@ -235,15 +235,15 @@ theorem rootsOf_size (d : Desc) : Rootable d → USize.size = 2 ^ 64 → RootsSi
       have roots : (chunkedRoots element b start (fixedWidth element) length).size = 32 * length := by
         apply chunkedRoots_size element sized b start _ length nz
         by_cases few : length ≤ recordsPerChunk
-        · rw [Nat.min_eq_left few]; rw [if_pos few] at parts; exact parts.2
-        · rw [Nat.min_eq_right (by omega)]; rw [if_neg few] at parts
+        · rw [Nat.min_eq_left few]; rw [ite_eq_left few] at parts; exact parts.2
+        · rw [Nat.min_eq_right (by omega)]; rw [ite_eq_right few] at parts
           have := parts.2
           simp only [sadd, sat] at this; omega
       rw [code, (merkleizeDepth_spec _ length (depthFor length) (le_two_pow_depthFor _)
         (by rw [roots]; exact Nat.le_refl _)
         (by rw [roots]; omega)).1]
     · -- Several values: the tree across one column per element.
-      rw [if_neg single] at below
+      rw [ite_eq_right single] at below
       have parts : smul 32 count < scratchCap ∧ rootsNeed element count < scratchCap := by
         simp only [sadd, sat] at below; omega
       have wide := smul_of_lt parts.1
@@ -274,7 +274,7 @@ theorem rootsOf_size (d : Desc) : Rootable d → USize.size = 2 ^ 64 → RootsSi
     by_cases single : count = 1
     · -- One record: the tree over its field leaves, one node.
       subst single
-      rw [if_pos rfl] at below
+      rw [ite_eq_left rfl] at below
       have parts : smul 32 (sat fields.length) < scratchCap := by simp only [sadd, sat] at below ⊢; omega
       have satLen : sat fields.length = fields.length := by
         have := parts
@@ -291,7 +291,7 @@ theorem rootsOf_size (d : Desc) : Rootable d → USize.size = 2 ^ 64 → RootsSi
       rw [code, (merkleizeDepth_spec _ fields.length (depthFor fields.length) (le_two_pow_depthFor _)
         (by rw [ls, zs]; omega) (by rw [ls, zs]; omega)).1]
     · -- Several records: the tree across one column per field.
-      rw [if_neg single] at below
+      rw [ite_eq_right single] at below
       have parts : smul 32 count < scratchCap ∧ fieldsRootsNeed fields count 0 < scratchCap := by
         simp only [sadd, sat] at below; omega
       have wide := smul_of_lt parts.1
@@ -322,4 +322,4 @@ theorem RootsPre.sized {w : World} {mem : Memory} {d : Desc} {p base start strid
     (ok : Rootable d) : (rootsOf d b start stride count).size = 32 * count :=
   rootsOf_size d ok pre.usize b start stride count pre.pos pre.below
 
-end Ssz.Native.Driver
+end EthLib.Consensus.Ssz.Native.Driver

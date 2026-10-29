@@ -2,9 +2,9 @@ import SszNative.Proofs.Branch.Nested
 
 /-! Nodes, branches, and multiproofs read from an encoding are the specification's, read from the value it decodes to. -/
 
-namespace Ssz.Native.BranchProof
+namespace EthLib.Consensus.Ssz.Native.BranchProof
 
-open Ssz Ssz.Native
+open EthLib.Consensus.Ssz EthLib.Consensus.Ssz.Native
 
 /-- A bit list, bounded or progressive, lays out its tree as its encoding does. -/
 theorem bits_agrees (limit : Option Nat) (b : ByteArray) (s e : Nat) (o : s ≤ e) (i : e ≤ b.size)
@@ -33,7 +33,7 @@ theorem laysOut (d : Desc) : LaysOut d := by
     cases read
     have bound := unpackDelimited_bound decoded
     refine ⟨_, _, rfl, ?_, bits_agrees (some limit) b s e o i small bits decoded (some (chunksForBits limit))⟩
-    simp only [merkleLayout, show ¬ bits.size > limit by omega, if_false, MerkleLayout.packing, Bind.bind,
+    simp only [merkleLayout, show ¬ bits.size > limit by omega, ite_false, MerkleLayout.packing, Bind.bind,
       Except.bind, pure, Except.pure, throw, throwThe, MonadExceptOf.throw]
   | .progressiveBitList limit =>
     simp only [deserialize, Bind.bind, Except.bind, pure, Except.pure] at read
@@ -61,11 +61,11 @@ theorem nodeRootAt_whole (d : Desc) (sound : d.wellFormed = .ok ()) (b : ByteArr
   exact walk laysOut _ d b 0 b.size v index sound (by omega) (Nat.zero_le _) (Nat.le_refl _) small
     (by rw [whole]; exact read)
 
-end Ssz.Native.BranchProof
+end EthLib.Consensus.Ssz.Native.BranchProof
 
-namespace Ssz.Native
+namespace EthLib.Consensus.Ssz.Native
 
-open Ssz
+open EthLib.Consensus.Ssz
 
 /--
 The node at a generalized index read from an encoding is the node of the value it decodes to, or the same refusal.
@@ -146,4 +146,4 @@ theorem buildMultiproof_eq (d : Desc) (sound : d.wellFormed = .ok ()) (b : ByteA
         BranchProof.nodeRootAt_whole d sound b small v decoded node) nodes
       simpa [Except.map] using this
 
-end Ssz.Native
+end EthLib.Consensus.Ssz.Native

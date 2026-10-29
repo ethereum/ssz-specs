@@ -7,9 +7,9 @@ It reads the type's tag from the plan and hands the parts to the driver for that
 A type with no parts to lay out gets the code for a type assembly does not cover.
 -/
 
-namespace Ssz.Native.Driver
+namespace EthLib.Consensus.Ssz.Native.Driver
 
-open Ssz.Native.Ir Ssz.Native.Asm Ssz.Native.Plan
+open EthLib.Consensus.Ssz.Native.Ir EthLib.Consensus.Ssz.Native.Asm EthLib.Consensus.Ssz.Native.Plan
 
 /-- A bit list type's optional limit, or none for any other type. -/
 def bitsLimit : Desc → Option (Option Nat)
@@ -263,7 +263,7 @@ theorem assemble_ok (m : Module) (w : World) (linked : HasCodec m) (sp : Nat) (m
         · simp [assemble, boundCheck, limitWord, over, Bind.bind, Except.bind, show ps.length ≤ b by omega]
     rw [refEq]
     by_cases over : limitWord limit < ps.length
-    · rw [if_pos over]
+    · rw [ite_eq_left over]
       refine dispatch (assign env₃ 5 (codeCount : Nat).toUInt64) mem _ ?_
         (by simp [assign, assembleOutcome, errCode])
       unfold assembleDispatch assembleParts
@@ -272,7 +272,7 @@ theorem assemble_ok (m : Module) (w : World) (linked : HasCodec m) (sp : Nat) (m
       branches [e6, tag]
       refine Runs.seq bounded (Runs.ite_true 1 (by evaluate [f7, f2, ltIff, over]) (by decide)
         (Runs.set _ _ _ _ _ 5 _ _ rfl))
-    · rw [if_neg over]
+    · rw [ite_eq_right over]
       have callee := lay_seq m w linked inner mem element (p + 24) parts out cap ps ptrs
         (wellFormed_progressiveList sound) thin elementPlan
         (by simp [words, bound_length] at planApart; omega) at_ to (by simp only [inner]; omega)
@@ -525,4 +525,4 @@ theorem ssz_assemble_correct (m : Module) (w : World) (linked : HasCodec m) (sp 
     exact assemble_bits_ok m w linked sp mem d limit p parts out cap count packed ptr bits small smallCount plan at_
       to room
 
-end Ssz.Native.Driver
+end EthLib.Consensus.Ssz.Native.Driver

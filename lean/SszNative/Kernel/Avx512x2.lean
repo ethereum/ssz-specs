@@ -19,10 +19,10 @@ The schedule steps use registers 21 to 23 and 29.
 After the first block, each batch's state goes to the scratch area, kept for the second feed-forward.
 -/
 
-namespace Ssz.Native.Kernel.Avx512x2
+namespace EthLib.Consensus.Ssz.Native.Kernel.Avx512x2
 
-open Ssz.Native.Asm
-open Ssz.Native.Kernel.Avx512 (left right out count tbl home ring tmp tableEntry role roundCode loadCode
+open EthLib.Consensus.Ssz.Native.Asm
+open EthLib.Consensus.Ssz.Native.Kernel.Avx512 (left right out count tbl home ring tmp tableEntry role roundCode loadCode
   transposeIn swapIn transposeOut storeCode)
 
 /-- The stack pointer, the base of the scratch area. -/
@@ -184,4 +184,4 @@ def program (ls rs : Nat) : Array Instr :=
   (([.subImm sp frame, .test count, .jz finish] ++ body ls rs ++ tail ++
     [.addImm sp frame, .vzeroupper, .zeroReg .rax, .ret]) : List Instr).toArray
 
-end Ssz.Native.Kernel.Avx512x2
+end EthLib.Consensus.Ssz.Native.Kernel.Avx512x2

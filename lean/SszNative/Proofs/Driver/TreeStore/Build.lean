@@ -8,9 +8,9 @@ writes one level per pass, bottom up.
 A pass hashes the pairs over data in one call and fills the rest of the level with the zero tree of its height.
 -/
 
-namespace Ssz.Native.Driver
+namespace EthLib.Consensus.Ssz.Native.Driver
 
-open Ssz Ssz.Native.Asm Ssz.Native.Ir
+open EthLib.Consensus.Ssz EthLib.Consensus.Ssz.Native.Asm EthLib.Consensus.Ssz.Native.Ir
 
 /--
 What the build driver needs: its context, a tree buffer for the width, and the leaves.
@@ -307,7 +307,7 @@ theorem build_ends {m : Module} {w : World} {sp : Nat} {mem : Memory}
   -- The leaves are the nodes read from memory at the start.
   have leaf : ∀ j < count, subtreeAt (nodesFrom (bytesAt mem leaves (32 * count)) 0 count) 0 j =
       nodeAt mem (leaves + 32 * j) := fun j hj => by
-    rw [subtreeAt_leaf, nodesFrom_get?, if_pos hj, Option.getD_some, nodeOf_bytesAt _ _ _ _ hj]
+    rw [subtreeAt_leaf, nodesFrom_get?, ite_eq_left hj, Option.getD_some, nodeOf_bytesAt _ _ _ _ hj]
   have size : (nodesFrom (bytesAt mem leaves (32 * count)) 0 count).size = count := nodesFrom_size _ _ _
   generalize nodesFrom (bytesAt mem leaves (32 * count)) 0 count = arr at leaf size ⊢
   simp only [TreeBuild.fn]
@@ -328,7 +328,7 @@ theorem build_ends {m : Module} {w : World} {sp : Nat} {mem : Memory}
     have lt : 2 ^ k < count := by
       by_cases hb : 2 ^ k < count
       · exact hb
-      · rw [if_neg hb] at hv; exact absurd hv nz
+      · rw [ite_eq_right hb] at hv; exact absurd hv nz
     have kK : k < K := by
       by_cases hb : k < K
       · exact hb
@@ -346,7 +346,7 @@ theorem build_ends {m : Module} {w : World} {sp : Nat} {mem : Memory}
   have done := Option.some.inj (done.symm.trans (eval_lt (eval_var kv) (eval_var vs1.2.2.1) (by omega) (by omega)))
   have kK : k = K := by
     by_cases hb : k < K
-    · rw [if_pos (pre.least k hb)] at done; exact absurd done (by decide)
+    · rw [ite_eq_left (pre.least k hb)] at done; exact absurd done (by decide)
     · omega
   rw [kK] at kv
   obtain ⟨v0, v1, v2, v3, v4⟩ := vs1
@@ -446,7 +446,7 @@ theorem build_ends {m : Module} {w : World} {sp : Nat} {mem : Memory}
       · by_cases hk : h < K
         · exact hk
         · rw [show K - h = 0 by omega] at hb; exact absurd hb (by decide)
-      · rw [if_neg hb] at hv; exact absurd hv nz
+      · rw [ite_eq_right hb] at hv; exact absurd hv nz
     refine Ends.mono (build_level okP pre kernels room size lv below) fun e' mm' lv' => ⟨⟨_, _, lv'⟩, ?_⟩
     rw [lv'.heightV, lv.heightV, ofNat_toNat (by omega), ofNat_toNat (by omega)]
     omega
@@ -455,9 +455,9 @@ theorem build_ends {m : Module} {w : World} {sp : Nat} {mem : Memory}
   have done := Option.some.inj (done.symm.trans (eval_lt (eval_lit 1) (eval_var lv.widthV) (by decide) (by omega)))
   have hK : h = K := by
     by_cases hk : h < K
-    · rw [if_pos (Nat.one_lt_two_pow (by omega))] at done; exact absurd done (by decide)
+    · rw [ite_eq_left (Nat.one_lt_two_pow (by omega))] at done; exact absurd done (by decide)
     · exact Nat.le_antisymm lv.height (by omega)
   subst hK
   exact Ends.nil ⟨lv.status, fun g hg j hj => lv.nodes g hg j hj, lv.frame⟩
 
-end Ssz.Native.Driver
+end EthLib.Consensus.Ssz.Native.Driver

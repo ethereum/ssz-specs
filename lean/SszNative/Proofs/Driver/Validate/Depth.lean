@@ -8,11 +8,11 @@ The plan's own check then runs only on plans this walk accepts, so every walk of
 deepest a plan may be, and its stack is bounded by a constant.
 -/
 
-namespace Ssz.Native.Driver.Validate
+namespace EthLib.Consensus.Ssz.Native.Driver.Validate
 
 set_option maxRecDepth 20000
 
-open Ssz Ssz.Native Ssz.Native.Ir Ssz.Native.Asm Ssz.Native.Ir.Stmt Ssz.Native.Ir.Expr
+open EthLib.Consensus.Ssz EthLib.Consensus.Ssz.Native EthLib.Consensus.Ssz.Native.Ir EthLib.Consensus.Ssz.Native.Asm EthLib.Consensus.Ssz.Native.Ir.Stmt EthLib.Consensus.Ssz.Native.Ir.Expr
 
 /-- The nesting walk of one node is loaded. -/
 theorem Loaded.depth {m : Module} (hm : Loaded m) : m.fns.lookup "ssz_validate_depth" = some depthFn :=
@@ -241,4 +241,4 @@ theorem depth_calls {m : Module} {w : World} (hm : Loaded m) (d : Desc) : DepthO
     wsteps []
     wfin [hlen]
 
-end Ssz.Native.Driver.Validate
+end EthLib.Consensus.Ssz.Native.Driver.Validate

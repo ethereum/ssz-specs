@@ -6,9 +6,9 @@ A plan read back is the type it was written from, with its fields renamed by pos
 Every number a plan holds must fit a word, and every union must pair its selectors with its options.
 -/
 
-namespace Ssz.Native.Plan
+namespace EthLib.Consensus.Ssz.Native.Plan
 
-open Ssz
+open EthLib.Consensus.Ssz
 
 /-- Layout bits written as words and read back as flags are the bits. -/
 theorem bits_roundTrip (active : List Bool) :
@@ -157,9 +157,9 @@ theorem decode_encode (d : Desc) (ok : paired d = true) (fits : Fits d) : decode
     | nil => rfl
     | cons w rest ih => simp [wordBytes] at ih ⊢; omega
   unfold decode
-  rw [if_neg (by simp [size]), ws]
+  rw [ite_eq_right (by simp [size]), ws]
   have := readNode_words d ok (words d).length [] (Nat.le_refl _)
   simp only [List.append_nil] at this
   simp [this]
 
-end Ssz.Native.Plan
+end EthLib.Consensus.Ssz.Native.Plan

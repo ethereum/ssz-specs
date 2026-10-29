@@ -16,9 +16,9 @@ A call whose arguments break the theorem's hypotheses has no meaning, so the com
 The meanings return zero, and change only the output, which lies off the stack.
 -/
 
-namespace Ssz.Native.Ir
+namespace EthLib.Consensus.Ssz.Native.Ir
 
-open Ssz.Native.Asm
+open EthLib.Consensus.Ssz.Native.Asm
 
 /-- An instruction alone never changes the processor. -/
 theorem exec1_cpu (i : Instr) (s : State) : (exec1 i s).cpu = s.cpu := by
@@ -77,7 +77,7 @@ def hashed (mem : Memory) (out left right count ls rs : Nat) : Memory :=
   fun a =>
     if out ≤ a ∧ a < out + 32 * count then
       let p := (a - out) / 32
-      (Sha256.hash (pairMessage mem (left + ls * p) (right + rs * p))).get! ((a - out) % 32)
+      (Cryptography.Hash.Sha256.hash (pairMessage mem (left + ls * p) (right + rs * p))).get! ((a - out) % 32)
     else mem a
 
 /-- When hashing a count of pairs has a meaning: what the hashing kernels' theorems need, off the stack. -/
@@ -146,7 +146,7 @@ def HashRuns (w : World) (code : Array Instr) (batch ls rs : Nat) : Prop :=
       (s.gpr .r8).toNat →
     ∃ n, (run code n s).status = .returned ∧
       (∀ p < batch * (s.gpr .rcx).toNat, ∀ k < 32, (run code n s).mem ((s.gpr .rdi).toNat + 32 * p + k) =
-        (Sha256.hash (pairMessage s.mem ((s.gpr .rsi).toNat + ls * p) ((s.gpr .rdx).toNat + rs * p))).get! k) ∧
+        (Cryptography.Hash.Sha256.hash (pairMessage s.mem ((s.gpr .rsi).toNat + ls * p) ((s.gpr .rdx).toNat + rs * p))).get! k) ∧
       (∀ a, ¬ ((s.gpr .rdi).toNat ≤ a ∧ a < (s.gpr .rdi).toNat + 32 * (batch * (s.gpr .rcx).toNat)) →
         (run code n s).mem a = s.mem a) ∧
       (∀ r ∈ calleeSaved, (run code n s).gpr r = s.gpr r) ∧ (run code n s).gpr .rax = 0
@@ -175,14 +175,14 @@ theorem hash_leafOk {w : World} {code : Array Instr} {batch ls rs : Nat} (runs :
   · -- Byte k of digest p: the kernel hashed the same two nodes the meaning reads.
     obtain ⟨p, k, hp, hk, rfl⟩ : ∃ p k, p < batch * c.toNat ∧ k < 32 ∧ a = o.toNat + 32 * p + k :=
       ⟨(a - o.toNat) / 32, (a - o.toNat) % 32, by omega, by omega, by omega⟩
-    rw [if_pos inside, outs p hp k hk]
+    rw [ite_eq_left inside, outs p hp k hk]
     simp only [show (o.toNat + 32 * p + k - o.toNat) / 32 = p by omega,
       show (o.toNat + 32 * p + k - o.toNat) % 32 = k by omega]
     obtain ⟨al, ar⟩ := pre.inputsAccess p hp
     rw [Kernel.Avx512.pairMessage_congr s.mem ir _ _ (fun i hi => heap _ (access_off al i hi))
       (fun i hi => heap _ (access_off ar i hi))]
   · -- Any other byte is as the kernel found it.
-    rw [if_neg inside, frame a inside]
+    rw [ite_eq_right inside, frame a inside]
     exact heap a ha
 
 open Classical in
@@ -203,7 +203,7 @@ def HashFrameRuns (w : World) (code : Array Instr) (batch ls rs frame : Nat) : P
     w.stackLo + frame ≤ (s.gpr .rsp).toNat → (s.gpr .rsp).toNat ≤ w.stackHi → w.stackHi ≤ addressBound →
     ∃ n, (run code n s).status = .returned ∧
       (∀ p < batch * (s.gpr .rcx).toNat, ∀ k < 32, (run code n s).mem ((s.gpr .rdi).toNat + 32 * p + k) =
-        (Sha256.hash (pairMessage s.mem ((s.gpr .rsi).toNat + ls * p) ((s.gpr .rdx).toNat + rs * p))).get! k) ∧
+        (Cryptography.Hash.Sha256.hash (pairMessage s.mem ((s.gpr .rsi).toNat + ls * p) ((s.gpr .rdx).toNat + rs * p))).get! k) ∧
       (∀ a, ¬ ((s.gpr .rdi).toNat ≤ a ∧ a < (s.gpr .rdi).toNat + 32 * (batch * (s.gpr .rcx).toNat)) →
         ¬ ((s.gpr .rsp).toNat - frame ≤ a ∧ a < (s.gpr .rsp).toNat) → (run code n s).mem a = s.mem a) ∧
       (∀ r ∈ calleeSaved, (run code n s).gpr r = s.gpr r) ∧ (run code n s).gpr .rax = 0
@@ -240,14 +240,14 @@ theorem hashFrame_leafOk {w : World} {code : Array Instr} {batch ls rs frame : N
   · -- Byte k of digest p: the kernel hashed the same two nodes the meaning reads.
     obtain ⟨p, k, hp, hk, rfl⟩ : ∃ p k, p < batch * c.toNat ∧ k < 32 ∧ a = o.toNat + 32 * p + k :=
       ⟨(a - o.toNat) / 32, (a - o.toNat) % 32, by omega, by omega, by omega⟩
-    rw [if_pos inside, outs p hp k hk]
+    rw [ite_eq_left inside, outs p hp k hk]
     simp only [show (o.toNat + 32 * p + k - o.toNat) / 32 = p by omega,
       show (o.toNat + 32 * p + k - o.toNat) % 32 = k by omega]
     obtain ⟨al, ar⟩ := pre.inputsAccess p hp
     rw [Kernel.Avx512.pairMessage_congr s.mem ir _ _ (fun i hi => heap _ (access_off al i hi))
       (fun i hi => heap _ (access_off ar i hi))]
   · -- Any other byte is as the kernel found it: the scratch lies on the stack, and this byte off it.
-    rw [if_neg inside, frame' a inside (by omega)]
+    rw [ite_eq_right inside, frame' a inside (by omega)]
     exact heap a ha
 
 /-- The sixteen-lane kernel's theorem, in the shape the call contract reads. -/
@@ -511,13 +511,13 @@ theorem gather_leafOk_of {w : World} {code : Array Instr} {fixed : Option (Nat �
         Nat.mod_lt _ pos, by omega⟩
       apply Nat.lt_of_mul_lt_mul_left (a := wd.toNat + pd.toNat)
       omega
-    rw [if_pos inside, outs i hi k hk, Kernel.recordByte_at _ _ _ _ _ _ _ _ hk]
+    rw [ite_eq_left inside, outs i hi k hk, Kernel.recordByte_at _ _ _ _ _ _ _ _ hk]
     by_cases field : k < wd.toNat
-    · rw [if_pos field, if_pos field]
+    · rw [ite_eq_left field, ite_eq_left field]
       exact heap _ (access_off (pre.srcAccess i hi) k field)
-    · rw [if_neg field, if_neg field]
+    · rw [ite_eq_right field, ite_eq_right field]
   · -- Any other byte is as the kernel found it.
-    rw [if_neg inside, frame a inside]
+    rw [ite_eq_right inside, frame a inside]
     exact heap a ha
 
 /-- The general gathering kernel's theorem, in the shape the call contract reads. -/
@@ -599,4 +599,4 @@ theorem gatherNode_leaf (width : Nat) (h : width ∈ [1, 2, 4, 8, 16, 32]) : Lea
 theorem gatherKey_leaf : Leaf Kernel.gatherKey :=
   shape_leaf Kernel.key_shape
 
-end Ssz.Native.Ir
+end EthLib.Consensus.Ssz.Native.Ir

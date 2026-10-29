@@ -2,7 +2,7 @@ import SszNative.Asm.Semantics
 
 /-! The terms the kernels' correctness theorems are stated in. -/
 
-namespace Ssz.Native.Asm
+namespace EthLib.Consensus.Ssz.Native.Asm
 
 /-- The 64 bytes of a pair: 32 from the left address, then 32 from the right one. -/
 def pairMessage (mem : Nat → UInt8) (left right : Nat) : ByteArray :=
@@ -21,4 +21,4 @@ theorem assign_saved {r : Gpr} (hr : r ∈ calleeSaved) (g : Gpr → UInt64) (v 
   simp only [calleeSaved, List.mem_cons, List.not_mem_nil, or_false] at hr
   rcases hr with h | h | h | h | h | h | h <;> subst h <;> rfl
 
-end Ssz.Native.Asm
+end EthLib.Consensus.Ssz.Native.Asm

@@ -2,9 +2,9 @@ import SszNative.Proofs.Validate.Struct
 
 /-! The probes of a fixed-size type refusing a value of its width exactly as deserialization does. -/
 
-namespace Ssz.Native
+namespace EthLib.Consensus.Ssz.Native
 
-open Ssz
+open EthLib.Consensus.Ssz
 
 /-- The allocation-free width functions agree with the type's fixed size. -/
 theorem fixedSize_eq (d : Desc) : d.fixedSize = if hasWidth d then some (fixedWidth d) else none := by
@@ -130,7 +130,7 @@ theorem readSlots_fixed (data : Bytes) :
   | field :: fields, position, all, fits => by
     -- The first field is fixed, so it fits in place, and the rest follow it.
     simp only [allHaveWidth, Bool.and_eq_true] at all
-    have sized : field.fixedSize = some (fixedWidth field) := by rw [fixedSize_eq, if_pos all.1]
+    have sized : field.fixedSize = some (fixedWidth field) := by rw [fixedSize_eq, ite_eq_left all.1]
     simp only [fieldsWidth] at fits
     rw [readSlots, sized]
     simp only [show ¬ position + fixedWidth field > data.size by omega, ↓reduceIte,
@@ -144,4 +144,4 @@ theorem bodyStarts_fixedSlots (data : Bytes) :
   | [], _ => rfl
   | _ :: fields, position => by simp [fixedSlots, bodyStarts, bodyStarts_fixedSlots data fields]
 
-end Ssz.Native
+end EthLib.Consensus.Ssz.Native

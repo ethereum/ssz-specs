@@ -8,9 +8,9 @@ climbs one level per branch node.
 The climbing node alternates between the two halves of the scratch area, so a parent never overwrites its children.
 -/
 
-namespace Ssz.Native.Driver.BranchProof
+namespace EthLib.Consensus.Ssz.Native.Driver.BranchProof
 
-open Ssz.Native.Ir Ssz.Native.Asm
+open EthLib.Consensus.Ssz.Native.Ir EthLib.Consensus.Ssz.Native.Asm
 
 /-- Arrays compare equal exactly when they are. -/
 theorem beq_eq_decide (a b : ByteArray) : (a == b) = decide (a = b) := by
@@ -250,7 +250,7 @@ theorem climb_pass {m : Module} {w : World} {ctx : UInt64} {ready : Memory → P
       have nz : env 9 &&& 1 ≠ 0 := by
         intro z
         simp only [assign, ↓reduceIte, Nat.reduceEqDiff] at hset
-        rw [if_pos z] at hset
+        rw [ite_eq_left z] at hset
         exact hset rfl
       have : (env 9 &&& 1).toNat ≠ 0 := fun h => nz (UInt64.toNat_inj.mp (by rw [h]; rfl))
       have small := Nat.mod_lt (env 9).toNat (show 0 < 2 by decide)
@@ -260,21 +260,21 @@ theorem climb_pass {m : Module} {w : World} {ctx : UInt64} {ready : Memory → P
     obtain ⟨mem'', call, rd'', node, frame''⟩ := hash.pair_node rd deep outOk sibOk curOk outFree sibFree curFree sibApart curApart
     rw [← e1] at call
     refine Wp.call (values := [_, _, _, 1, _]) rfl ⟨0, mem'', call, rest mem'' rd'' frame'' ?_⟩
-    rw [node, bit, if_pos rfl, sibNode]
+    rw [node, bit, ite_eq_left rfl, sibNode]
   · -- A clear bit: the branch node on the right.
     have bit : gindexBit index.toNat (env 12).toNat = false := by
       rw [gindexBit_eq, ← bitVal]
       have : env 9 &&& 1 = 0 := by
         by_cases z : env 9 &&& 1 = 0
         · exact z
-        · simp only [assign, ↓reduceIte, Nat.reduceEqDiff, if_neg z] at hclr
+        · simp only [assign, ↓reduceIte, Nat.reduceEqDiff, ite_eq_right z] at hclr
           exact absurd hclr (by decide)
       rw [this]; simp
     obtain ⟨mem'', call, rd'', node, frame''⟩ :=
       hash.pair_node rd deep outOk curOk sibOk outFree curFree sibFree curApart sibApart
     rw [← e1] at call
     refine Wp.call (values := [_, _, _, 1, _]) rfl ⟨0, mem'', call, rest mem'' rd'' frame'' ?_⟩
-    rw [node, bit, if_neg (by decide), sibNode]
+    rw [node, bit, ite_eq_right (by decide), sibNode]
 
 /-- The verdict on a climbed branch, as the word the verifier answers. -/
 theorem answerCode_decide (p : Prop) [Decidable p] :
@@ -363,7 +363,7 @@ theorem verify_branch_calls {m : Module} {w : World} {ctx : UInt64} {ready : Mem
       rw [nodesAt_length]
       intro h
       simp only [assign, ↓reduceIte, Nat.reduceEqDiff, e4, e5] at differ
-      rw [if_pos (UInt64.toNat_inj.mp (by rw [toNat_ofNat_of_lt _ (by omega), h]))] at differ
+      rw [ite_eq_left (UInt64.toNat_inj.mp (by rw [toNat_ofNat_of_lt _ (by omega), h]))] at differ
       exact differ rfl
     refine Wp.cons (Wp.set rfl (Wp.nil (Wp.nil (Wp.nil (done _ 5 rfl ?_)))))
     simp only [verdict, verifyMerkleProof_length _ _ _ two ne, answerCode]
@@ -414,4 +414,4 @@ theorem verify_branch_calls {m : Module} {w : World} {ctx : UInt64} {ready : Mem
   rw [List.drop_of_length_le (by rw [nodesAt_length]; exact Nat.le_refl _), climbBranch_nil]
   simp only [assign, ↓reduceIte]
 
-end Ssz.Native.Driver.BranchProof
+end EthLib.Consensus.Ssz.Native.Driver.BranchProof

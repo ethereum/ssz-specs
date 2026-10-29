@@ -9,9 +9,9 @@ The fields driver writes the field roots, and each layout position takes the nex
 The progressive tree driver folds the leaves, and the layout's node is mixed in, one bit per position.
 -/
 
-namespace Ssz.Native.Driver
+namespace EthLib.Consensus.Ssz.Native.Driver
 
-open Ssz Ssz.Native.Ir Ssz.Native.Ir.Expr Ssz.Native.Ir.Stmt Ssz.Native.Asm
+open EthLib.Consensus.Ssz EthLib.Consensus.Ssz.Native.Ir EthLib.Consensus.Ssz.Native.Ir.Expr EthLib.Consensus.Ssz.Native.Ir.Stmt EthLib.Consensus.Ssz.Native.Asm
 
 /-! ### The leaves -/
 
@@ -145,7 +145,7 @@ theorem activeByte_step (active : List Bool) (j q : Nat) :
         else activeByte active j q)
     else activeByte active j q := by
   by_cases hq : q = j / 8
-  · rw [if_pos hq, activeByte, activeByte, ← orBits_set _ _ _ (Nat.mod_lt _ (by decide))]
+  · rw [ite_eq_left hq, activeByte, activeByte, ← orBits_set _ _ _ (Nat.mod_lt _ (by decide))]
     refine orBits_congr fun bit hb => ?_
     by_cases e : bit = j % 8
     · subst e
@@ -158,7 +158,7 @@ theorem activeByte_step (active : List Bool) (j q : Nat) :
         · simp [h, show 8 * q + bit < j + 1 by omega]
         · simp [h, show ¬ 8 * q + bit < j + 1 by omega]
       simp [same, e]
-  · rw [if_neg hq]
+  · rw [ite_eq_right hq]
     refine orBits_congr fun bit hb => ?_
     have ne : 8 * q + bit ≠ j := by omega
     have same : decide (8 * q + bit < j + 1) = decide (8 * q + bit < j) := by
@@ -251,7 +251,7 @@ theorem placeLoop_ends {m : Module} {w : World} {sp : Nat} {mem : Memory} {activ
     have hlt : j < active.length := by
       by_cases h : j < active.length
       · exact h
-      · rw [if_neg h] at c; cases c; exact absurd rfl nz
+      · rw [ite_eq_right h] at c; cases c; exact absurd rfl nz
     have plan' : WordsAt w mm bits (active.map fun b => if b then 1 else 0) :=
       planAt_congr pp.plan fun a lo hi => frame a (by simp at hi; omega)
     have word := eval_word (w := w) (env := e) (mem := mm) plan' j (by simpa using hlt)
@@ -272,7 +272,7 @@ theorem placeLoop_ends {m : Module} {w : World} {sp : Nat} {mem : Memory} {activ
       have cnd : eval w e mm (ne (ld (RootProgressiveContainer.bits + 8 * RootProgressiveContainer.j)) 0 &&&
           lt RootProgressiveContainer.idx RootProgressiveContainer.n) = some 1 := by
         rw [eval_and (eval_ne w1 (eval_lit 0)) (eval_lt (eval_var hidx) (eval_var e8) (by omega) nSmall),
-          if_neg (by decide), if_pos clt]
+          ite_eq_right (by decide), ite_eq_left clt]
         rfl
       have cp := copy32_runs (m := m) (sp := sp) (env := e) (mem := mm)
         (dst := RootProgressiveContainer.l + 32 * RootProgressiveContainer.j)
@@ -292,14 +292,14 @@ theorem placeLoop_ends {m : Module} {w : World} {sp : Nat} {mem : Memory} {activ
         (Runs.block_cons s1 (Runs.block_nil _ _ _ _ _)))) (Runs.block_cons s2 (Runs.block_nil _ _ _ _ _)),
         ⟨j + 1, by omega, fun x hx => ?_, assign_eq, ?_, fun i hi lt => ?_, fun a o => ?_⟩, measure _ assign_eq⟩
       · rw [assign_ne (by omega), assign_ne (by omega)]; exact same x hx
-      · rw [assign_ne (by decide), assign_eq, step, if_pos set]
+      · rw [assign_ne (by decide), assign_eq, step, ite_eq_left set]
       · by_cases ij : i = j
         · subst ij
           have copiedAt : nodeAt (copied mm (l + 32 * i) (r + 32 * (active.take i).countP id) 32) (l + 32 * i) =
               nodeAt mm (r + 32 * (active.take i).countP id) := by
             unfold nodeAt; congr 1; funext q; exact copied_in _ _ _ _ _ q.isLt
           rw [copiedAt, nodeAt_congr (m₂ := mem) fun q hq => frame _ (by omega),
-            pp.rootsAt _ clt, placeRoots_get active roots i hi, if_pos set, List.getD_eq_getElem?_getD,
+            pp.rootsAt _ clt, placeRoots_get active roots i hi, ite_eq_left set, List.getD_eq_getElem?_getD,
             List.getElem?_eq_getElem clt, Option.getD_some]
         · rw [nodeAt_congr (m₂ := mm) fun q hq => copied_out (by omega)]
           exact leaves i hi (by omega)
@@ -312,7 +312,7 @@ theorem placeLoop_ends {m : Module} {w : World} {sp : Nat} {mem : Memory} {activ
       have cnd : eval w e mm (ne (ld (RootProgressiveContainer.bits + 8 * RootProgressiveContainer.j)) 0 &&&
           lt RootProgressiveContainer.idx RootProgressiveContainer.n) = some 0 := by
         rw [eval_and (eval_ne w0 (eval_lit 0)) (eval_lt (eval_var hidx) (eval_var e8) (by omega) nSmall),
-          if_pos rfl, UInt64.zero_and]
+          ite_eq_left rfl, UInt64.zero_and]
       have z := zero32_at (m := m) (sp := sp) (env := e) (mem := mm)
         (dst := RootProgressiveContainer.l + 32 * RootProgressiveContainer.j)
         (fun _ => eval_add (eval_var e10) (eval_mul (eval_lit 32) (eval_var hj11))) acc
@@ -321,10 +321,10 @@ theorem placeLoop_ends {m : Module} {w : World} {sp : Nat} {mem : Memory} {activ
       refine ⟨_, _, Runs.block_cons (Runs.ifElse_false cnd z) (Runs.block_cons s2 (Runs.block_nil _ _ _ _ _)),
         ⟨j + 1, by omega, fun x hx => ?_, assign_eq, ?_, fun i hi lt => ?_, fun a o => ?_⟩, measure _ assign_eq⟩
       · rw [assign_ne (by omega)]; exact same x hx
-      · rw [assign_ne (by decide), hidx, step, if_neg set]; rfl
+      · rw [assign_ne (by decide), hidx, step, ite_eq_right set]; rfl
       · by_cases ij : i = j
         · subst ij
-          rw [nodeAt_zeroed, placeRoots_get active roots i hi, if_neg set]
+          rw [nodeAt_zeroed, placeRoots_get active roots i hi, ite_eq_right set]
         · rw [nodeAt_congr (m₂ := mm) fun q hq => zeroed_outside (by omega)]
           exact leaves i hi (by omega)
       · rw [zeroed_outside (by omega)]; exact frame a o
@@ -333,7 +333,7 @@ theorem placeLoop_ends {m : Module} {w : World} {sp : Nat} {mem : Memory} {activ
     rw [eval_lt (eval_var hj11) (eval_var ((same 6 (by omega)).trans k6)) (by omega) kSmall] at exit
     have : j = active.length := by
       by_cases h : j < active.length
-      · rw [if_pos h] at exit; cases exit
+      · rw [ite_eq_left h] at exit; cases exit
       · omega
     rw [this] at at_
     exact at_
@@ -383,7 +383,7 @@ theorem layoutLoop_ends {m : Module} {w : World} {sp : Nat} {mem : Memory} {acti
     have hlt : j < active.length := by
       by_cases h : j < active.length
       · exact h
-      · rw [if_neg h, UInt64.zero_and] at c; cases c; exact absurd rfl nz
+      · rw [ite_eq_right h, UInt64.zero_and] at c; cases c; exact absurd rfl nz
     have plan' : WordsAt w mm bits (active.map fun b => if b then 1 else 0) :=
       planAt_congr plan fun x lo hi => frame x (by simp at hi; omega)
     have word := eval_word (w := w) (env := e) (mem := mm) plan' j (by simpa using hlt)
@@ -404,7 +404,7 @@ theorem layoutLoop_ends {m : Module} {w : World} {sp : Nat} {mem : Memory} {acti
       · have w1 : eval w e mm (ld (RootProgressiveContainer.bits + 8 * RootProgressiveContainer.j)) =
             some (UInt64.ofNat 1) := by rw [word, set]; rfl
         have cnd := eval_ne (w := w) (env := e) (mem := mm) w1 (eval_lit 0)
-        rw [if_neg (by decide)] at cnd
+        rw [ite_eq_right (by decide)] at cnd
         have addr : ∀ mm', eval w e mm' (RootProgressiveContainer.scratch + 32 + RootProgressiveContainer.j / 8) =
             some (UInt64.ofNat (scratch + 32 + j / 8)) := fun mm' =>
           eval_add (eval_add (eval_var e4) (eval_lit 32))
@@ -418,18 +418,18 @@ theorem layoutLoop_ends {m : Module} {w : World} {sp : Nat} {mem : Memory} {acti
         rw [ofNat_toNat (by omega), show Width.bytes .b1 = 1 from rfl] at st
         refine ⟨_, Runs.when_true 1 cnd (by decide) (Runs.block_cons st (Runs.block_nil _ _ _ _ _)),
           fun q hq => ?_, fun x o => ?_⟩
-        · rw [store_one, activeByte_step, getJ, if_pos set]
+        · rw [store_one, activeByte_step, getJ, ite_eq_left set]
           by_cases hq' : q = j / 8
           · subst hq'
-            rw [if_pos rfl, if_pos rfl, byte_or_pow ⟨_, (mm (scratch + 32 + j / 8)).toNat_lt⟩ ⟨j % 8, Nat.mod_lt _
+            rw [ite_eq_left rfl, ite_eq_left rfl, byte_or_pow ⟨_, (mm (scratch + 32 + j / 8)).toNat_lt⟩ ⟨j % 8, Nat.mod_lt _
               (by decide)⟩, UInt8.ofNat_toNat, bytes _ hq]
-          · rw [if_neg (by omega), if_neg hq', bytes q hq]
-        · rw [store_one, if_neg (by omega)]; exact frame x o
+          · rw [ite_eq_right (by omega), ite_eq_right hq', bytes q hq]
+        · rw [store_one, ite_eq_right (by omega)]; exact frame x o
       · have set' : active[j] = false := by simpa using set
         have w0 : eval w e mm (ld (RootProgressiveContainer.bits + 8 * RootProgressiveContainer.j)) =
             some (UInt64.ofNat 0) := by rw [word, set']; rfl
         have cnd := eval_ne (w := w) (env := e) (mem := mm) w0 (eval_lit 0)
-        rw [if_pos rfl] at cnd
+        rw [ite_eq_left rfl] at cnd
         refine ⟨mm, Runs.when_false cnd, fun q hq => ?_, frame⟩
         rw [activeByte_step, getJ, set', bytes q hq]
         split <;> simp
@@ -450,12 +450,12 @@ theorem layoutLoop_ends {m : Module} {w : World} {sp : Nat} {mem : Memory} {acti
           [RootProgressiveContainer.pw ::= RootProgressiveContainer.pw + RootProgressiveContainer.pw]) E3 M ∧
         (∀ x < 11, E3 x = env x) ∧ E3 11 = UInt64.ofNat (j + 1) ∧ E3 13 = UInt64.ofNat (2 ^ ((j + 1) % 8)) := by
       by_cases wrap : (j + 1) % 8 = 0
-      · rw [if_pos wrap] at m8
+      · rw [ite_eq_left wrap] at m8
         refine ⟨_, Runs.ifElse_true 1 m8 (by decide) (Runs.block_cons (Runs.set' (eval_lit 1))
           (Runs.block_nil _ _ _ _ _)), fun x hx => ?_, by rw [assign_ne (by decide)] <;> exact j2, ?_⟩
         · rw [assign_ne (Nat.ne_of_lt (show x < 13 by omega)), assign_ne (by omega)]; exact same x hx
         · rw [assign_eq, wrap]
-      · rw [if_neg wrap] at m8
+      · rw [ite_eq_right wrap] at m8
         refine ⟨_, Runs.ifElse_false m8 (Runs.block_cons (Runs.set' (eval_add (eval_var pw2) (eval_var pw2)))
           (Runs.block_nil _ _ _ _ _)), fun x hx => ?_, by rw [assign_ne (by decide)] <;> exact j2, ?_⟩
         · rw [assign_ne (Nat.ne_of_lt (show x < 13 by omega)), assign_ne (by omega)]; exact same x hx
@@ -474,7 +474,7 @@ theorem layoutLoop_ends {m : Module} {w : World} {sp : Nat} {mem : Memory} {acti
       at exit
     have : j = active.length := by
       by_cases h : j < active.length
-      · rw [if_pos h, if_pos (by omega)] at exit; cases exit
+      · rw [ite_eq_left h, ite_eq_left (by omega)] at exit; cases exit
       · omega
     rw [this] at at_
     exact at_
@@ -779,7 +779,7 @@ theorem rootProgressiveContainer_ok {m : Module} {w : World} (hash : HashingOk m
   have at0 : LayoutAt E12 (zeroed mem3 (scratch + 32)) active (scratch + 32) E12 (zeroed mem3 (scratch + 32)) 0 :=
     ⟨Nat.zero_le _, fun _ _ => rfl, by simp only [E12]; rw [assign_ne (by decide), assign_eq],
       by simp only [E12]; rw [assign_eq],
-      fun q hq => by rw [activeByte_zero]; simp only [zeroed, Asm.store]; rw [if_pos ⟨by omega, by omega⟩],
+      fun q hq => by rw [activeByte_zero]; simp only [zeroed, Asm.store]; rw [ite_eq_left ⟨by omega, by omega⟩],
       fun _ _ => rfl⟩
   obtain ⟨E13, mem5, run13, -, same13, -, -, bytes13, frame13⟩ := layoutLoop_ends (m := m) (sp := sp')
     (planOf _ frame4) (by rw [hk]; exact apart_sub' (apart_sub sPlan (by omega) (by omega)) (by omega) (by omega))
@@ -841,4 +841,4 @@ theorem rootProgressiveContainer_ok {m : Module} {w : World} (hash : HashingOk m
     (merkleizeProgressive_spec _ k (by omega) (by rw [usize]; omega)).1 (by simp [activeFieldsNode, ByteArray.size]),
     tree]
 
-end Ssz.Native.Driver
+end EthLib.Consensus.Ssz.Native.Driver

@@ -1,13 +1,13 @@
 import SszNative.Proofs.Root.Variable.Children
-import Ssz.Proofs.Codec.Admits
-import Ssz.Proofs.Codec.DecodeFits
-import Ssz.Proofs.Codec.RoundTrip
+import EthLib.Consensus.Proofs.Ssz.Codec.Admits
+import EthLib.Consensus.Proofs.Ssz.Codec.DecodeFits
+import EthLib.Consensus.Proofs.Ssz.Codec.RoundTrip
 
 /-! Roots of vectors whose elements are not rooted as columns: one root per element, under a bounded tree. -/
 
-namespace Ssz.Native.RootProof
+namespace EthLib.Consensus.Ssz.Native.RootProof
 
-open Ssz Ssz.Native
+open EthLib.Consensus.Ssz EthLib.Consensus.Ssz.Native
 
 variable (facts : Facts)
 
@@ -105,11 +105,11 @@ theorem vector_root (element : Desc) (length : Nat) (ih : Agrees element)
       · simp [plain, plain_of_basic basic] at notPlain
     -- Both sides bound the tree by the vector's length, over the elements' roots.
     rw [hashTreeRoot_unfold]
-    simp only [merkleLayout, count, bne_self_eq_false, Bool.false_eq_true, if_false, sequenceLayout, notBasic,
+    simp only [merkleLayout, count, bne_self_eq_false, Bool.false_eq_true, ite_false, sequenceLayout, notBasic,
       MerkleLayout.nesting, leafChunks, finishLayout, Bind.bind, Except.bind, pure, Except.pure,
       elements_mapM element rooted]
     rw [rootOf]
-    simp only [notPlain, Bool.false_eq_true, if_false, rangesEq]
+    simp only [notPlain, Bool.false_eq_true, ite_false, rangesEq]
     have lengths : (variableRoots element b r.toList).length = length := by
       rw [← Each.length_eq rooted, count]
     -- The vector's length fits the encoding, so its buffers stay machine-sized.
@@ -119,4 +119,4 @@ theorem vector_root (element : Desc) (length : Nat) (ih : Agrees element)
     rw [lengths] at this
     rw [this]
 
-end Ssz.Native.RootProof
+end EthLib.Consensus.Ssz.Native.RootProof

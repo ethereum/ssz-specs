@@ -2,9 +2,9 @@ import SszNative.Proofs.Root.Variable.Facts
 
 /-! The ranges the root reads a sequence's elements from are the ranges the decoding check accepted. -/
 
-namespace Ssz.Native.RootProof
+namespace EthLib.Consensus.Ssz.Native.RootProof
 
-open Ssz Ssz.Native
+open EthLib.Consensus.Ssz EthLib.Consensus.Ssz.Native
 
 /-- Bodies opened by a valid offset table run from each offset to the next, the last to the end. -/
 theorem bodies_eq (start scope : Nat) : ∀ (offsets spans : List Nat), offsetSpans offsets scope = .ok spans →

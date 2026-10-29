@@ -1,4 +1,4 @@
-import Ssz.Hash.Sha256
+import EthLib.Cryptography.Hash.Sha256
 
 /-!
 Hashing pairs of nodes, the one operation every Merkle tree is built from.
@@ -7,7 +7,7 @@ Each definition here has a Lean body, which is the reference.
 Compiled code runs the native kernels in its place, which compute the same function.
 -/
 
-namespace Ssz.Native
+namespace EthLib.Consensus.Ssz.Native
 
 /--
 The parents of consecutive pairs of 32-byte nodes.
@@ -20,7 +20,7 @@ def hashPairsReference (src : ByteArray) (offset pairs : USize) : ByteArray := I
   let mut out := ByteArray.emptyWithCapacity (32 * pairs.toNat)
   for i in [0:pairs.toNat] do
     let start := offset.toNat + 64 * i
-    out := out ++ Sha256.hash (src.extract start (start + 64))
+    out := out ++ Cryptography.Hash.Sha256.hash (src.extract start (start + 64))
   return out
 
 /-- The parents of consecutive pairs of nodes, on the native kernels where the processor has them. -/
@@ -40,7 +40,7 @@ def hashColumnsReference (left : ByteArray) (leftOffset : USize) (right : ByteAr
   for i in [0:count.toNat] do
     let l := leftOffset.toNat + 32 * i
     let r := rightOffset.toNat + 32 * i
-    out := out ++ Sha256.hash (left.extract l (l + 32) ++ right.extract r (r + 32))
+    out := out ++ Cryptography.Hash.Sha256.hash (left.extract l (l + 32) ++ right.extract r (r + 32))
   return out
 
 /-- The parents of two columns of nodes, on the native kernels where the processor has them. -/
@@ -56,7 +56,7 @@ def hashFixedReference (left : ByteArray) (leftOffset : USize) (node : ByteArray
   let mut out := ByteArray.emptyWithCapacity (32 * count.toNat)
   for i in [0:count.toNat] do
     let l := leftOffset.toNat + 32 * i
-    out := out ++ Sha256.hash (left.extract l (l + 32) ++ node.extract 0 32)
+    out := out ++ Cryptography.Hash.Sha256.hash (left.extract l (l + 32) ++ node.extract 0 32)
   return out
 
 /-- The parents of a column of nodes against one fixed node, on the native kernels where the processor has them. -/
@@ -87,4 +87,4 @@ def gather (src : @& ByteArray) (start stride width count slot : USize) : ByteAr
 @[inline] def hashPair (left right : ByteArray) : ByteArray :=
   hashPairs (left ++ right) 0 1
 
-end Ssz.Native
+end EthLib.Consensus.Ssz.Native

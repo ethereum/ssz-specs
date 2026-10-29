@@ -8,9 +8,9 @@ The compiled functions come first, in order, and the outside routines follow the
 A check run before the image is trusted makes every name find its own routine, and keeps every routine addressable.
 -/
 
-namespace Ssz.Native.Ir
+namespace EthLib.Consensus.Ssz.Native.Ir
 
-open Ssz.Native.Asm
+open EthLib.Consensus.Ssz.Native.Asm
 
 /-- The image of a module: each function compiled under its name, then the outside routines. -/
 def Module.link (fns : List (String × Fn)) (externs : Image) : Image :=
@@ -27,4 +27,4 @@ def linkCheck (fns : List (String × Fn)) (externs : Image) : Bool :=
     fns.all (fun p => p.2.wf && decide ((compileFn p.2).size < 2 ^ 32)) &&
     decide ((Module.link fns externs).size < 2 ^ 31)
 
-end Ssz.Native.Ir
+end EthLib.Consensus.Ssz.Native.Ir

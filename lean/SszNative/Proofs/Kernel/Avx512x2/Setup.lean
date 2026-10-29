@@ -6,10 +6,11 @@ The thirty-two-lane kernel's setup: both batches' messages loaded, their input w
 After it, every lane meets the first-block invariant before round 0.
 -/
 
-namespace Ssz.Native.Kernel.Avx512x2
+namespace EthLib.Consensus.Ssz.Native.Kernel.Avx512x2
 
-open Ssz.Sha256 Ssz.Native.Asm
-open Ssz.Native.Kernel.Avx512 (left right out count tbl tableEntry loadCode transposeIn swapIn home ring tmp role W
+open EthLib.Cryptography.Hash.Sha256 hiding K IV
+open EthLib.Consensus.Ssz.Native.Asm
+open EthLib.Consensus.Ssz.Native.Kernel.Avx512 (left right out count tbl tableEntry loadCode transposeIn swapIn home ring tmp role W
   W_input prologue pairMessage_congr add_toNat home_eq_role roundsTo assign_apply range8)
 
 /-- Lane l's message in batch b: the pair 16b + l from the batch's node addresses. -/
@@ -85,17 +86,17 @@ set_option maxRecDepth 20000 in
 /-- The initial-state loads: both batches' working words start as the initial state. -/
 theorem ivCode_view (G : Gpr → UInt64) (T : Nat) (hT : (G tbl).toNat = T) (l : Fin 16) (v : View)
     (rows : TableRows T l v) (j : Nat) (hj : j < 8) :
-    (viewRun G (ivCode 0 ++ ivCode 1) v).regs (home j) = initialState[j]! ∧
-    (viewRun G (ivCode 0 ++ ivCode 1) v).regs (swapReg (home j)) = initialState[j]! := by
+    (viewRun G (ivCode 0 ++ ivCode 1) v).regs (home j) = Cryptography.Hash.Sha256.IV[j]! ∧
+    (viewRun G (ivCode 0 ++ ivCode 1) v).regs (swapReg (home j)) = Cryptography.Hash.Sha256.IV[j]! := by
   -- Each word is loaded from its table row.
-  have row : ∀ i < 8, v.mem ((G tbl).toNat + ivAvx512 i) = initialState[i]! := fun i hi => by
+  have row : ∀ i < 8, v.mem ((G tbl).toNat + ivAvx512 i) = Cryptography.Hash.Sha256.IV[i]! := fun i hi => by
     rw [hT, show ivAvx512 i = 64 * (128 + i) by simp only [ivAvx512]; omega, rows _ (by omega),
       Avx512.tableWord_iv i l.val hi l.isLt]
   have hj' : j = 0 ∨ j = 1 ∨ j = 2 ∨ j = 3 ∨ j = 4 ∨ j = 5 ∨ j = 6 ∨ j = 7 := by omega
   rcases hj' with rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl <;>
     simp only [ivCode, forBatch, range8, List.map_cons, List.map_nil, List.cons_append, List.nil_append, rename,
       viewRun, viewStep, addrOf,
-      tableEntry, if_true, home, swapReg] <;> simp [row, viewRun, viewStep, addrOf, assign]
+      tableEntry, ite_true, home, swapReg] <;> simp [row, viewRun, viewStep, addrOf, assign]
 
 /-- The initial-state loads store nothing. -/
 theorem ivCode_mem (G : Gpr → UInt64) (v : View) : (viewRun G (ivCode 0 ++ ivCode 1) v).mem = v.mem := by
@@ -260,10 +261,10 @@ theorem setup_spec (ls rs : Nat) (s : State) (pre : SetupPre ls rs s) :
     refine ⟨?_, ?_, fun b hb u hu _ => ?_, fun row hrow => ?_⟩
     · apply Vector.ext; intro j hj
       simp only [Vector.getElem_ofFn, roundsTo_zero]
-      rw [← home_eq_role j hj, reg6, (iv j hj).1, getElem!_pos initialState j hj]
+      rw [← home_eq_role j hj, reg6, (iv j hj).1, getElem!_pos Cryptography.Hash.Sha256.IV j hj]
     · apply Vector.ext; intro j hj
       simp only [Vector.getElem_ofFn, roundsTo_zero]
-      rw [← home_eq_role j hj, reg6, (iv j hj).2, getElem!_pos initialState j hj]
+      rw [← home_eq_role j hj, reg6, (iv j hj).2, getElem!_pos Cryptography.Hash.Sha256.IV j hj]
     · rw [mem6 _ (slotRow b u)]
       rcases (show b = 0 ∨ b = 1 by omega) with rfl | rfl
       · exact word0 u (by omega)
@@ -277,4 +278,4 @@ theorem setup_spec (ls rs : Nat) (s : State) (pre : SetupPre ls rs s) :
   · rw [cx, tbl6, tbl3]
   · rw [gx r h3 h4 h5, g6, g5, g4, g3 r h1 h2, g2, g1]
 
-end Ssz.Native.Kernel.Avx512x2
+end EthLib.Consensus.Ssz.Native.Kernel.Avx512x2

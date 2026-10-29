@@ -10,10 +10,11 @@ A store changes every row overlapping it, but a lane of a row that coincides wit
 So each of the four lanes runs alone over the rows that every store either coincides with or misses.
 -/
 
-namespace Ssz.Native.Kernel.Baseline
+namespace EthLib.Consensus.Ssz.Native.Kernel.Baseline
 
-open Ssz.Sha256 Ssz.Native.Asm
-open Ssz.Native.Kernel.Avx512x2 (View addrOf readWord_bytes)
+open EthLib.Cryptography.Hash.Sha256 hiding K IV
+open EthLib.Consensus.Ssz.Native.Asm
+open EthLib.Consensus.Ssz.Native.Kernel.Avx512x2 (View addrOf readWord_bytes)
 
 /-- Whether an instruction acts on each of the low four lanes alone, moving memory only in whole 16-byte rows. -/
 def rowwise : Instr → Bool
@@ -86,7 +87,7 @@ theorem readWord_store_other (mem : Nat → UInt8) (A a : Nat) (v : Lanes) (l : 
   have := l.isLt
   have far : a + 16 ≤ A ∨ A + 16 ≤ a := by omega
   simp only [readWord, store]
-  rw [if_neg (by omega), if_neg (by omega), if_neg (by omega), if_neg (by omega)]
+  rw [ite_eq_right (by omega), ite_eq_right (by omega), ite_eq_right (by omega), ite_eq_right (by omega)]
 
 /-- A rowwise instruction changes neither the general registers nor the flags. -/
 theorem exec1_rowwise_regs (i : Instr) (h : rowwise i) (s : State) :
@@ -129,14 +130,14 @@ theorem exec1_view (i : Instr) (h : rowwise i) (s : State) (V : Fin 4 → View) 
     · simp only [exec1, viewStep, hv]
     · simp only [exec1, viewStep, assign, State.addr]
       by_cases same : a = addrOf s.gpr m
-      · rw [if_pos same, same]
+      · rw [ite_eq_left same, same]
         exact (readWord_store_same _ _ _ l).trans (hv r l)
-      · rw [if_neg same, ← hm l a ha]
+      · rw [ite_eq_right same, ← hm l a ha]
         exact readWord_store_other _ _ _ _ l same (ha _ mine)
     · have := hx _ rfl
       simp only [addrOf] at this
       simp only [exec1, store, State.addr]
-      rw [if_neg (by omega)]
+      rw [ite_eq_right (by omega)]
 
 /-- The addresses a list stores to. -/
 def storesOf (gpr : Gpr → UInt64) (body : List Instr) : List Nat := body.filterMap (storeOf gpr)
@@ -232,4 +233,4 @@ theorem viewRun_mem_other (gpr : Gpr → UInt64) (body : List Instr) (v : View) 
     have hi := h i (by simp)
     cases i <;> simp only [storeOf, ne_eq, Option.some.injEq] at hi <;> simp [viewStep, assign, Ne.symm hi]
 
-end Ssz.Native.Kernel.Baseline
+end EthLib.Consensus.Ssz.Native.Kernel.Baseline

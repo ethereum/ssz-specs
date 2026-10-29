@@ -6,9 +6,9 @@ The code of every expression computes its value.
 It leaves the value in rax, keeps the frame matching the variables, and writes only the temporaries above its depth.
 -/
 
-namespace Ssz.Native.Ir
+namespace EthLib.Consensus.Ssz.Native.Ir
 
-open Ssz.Native.Asm
+open EthLib.Consensus.Ssz.Native.Asm
 
 /-- One straight instruction at a layout position. -/
 theorem Reaches.one (image : Image) (r : Nat) (pre post : List Instr) (i : Instr)
@@ -244,7 +244,7 @@ theorem operands_ok (c : Site) (fits : c.Fits) (a b : Expr) (iha : ExprOk c a) (
   · have e4 : s4.mem = s3.mem := by simp [s4, fetchBack, Asm.exec, exec1]
     rw [e4, m3 a (by omega)]
     have e2 : s2.mem a = s1.mem a := by
-      rw [mem2]; simp only [store]; rw [if_neg (by omega)]
+      rw [mem2]; simp only [store]; rw [ite_eq_right (by omega)]
     rw [e2, m1 a ha]
 
 /-- Two operands, then a finish that combines rax and rcx into the value. -/
@@ -342,7 +342,7 @@ theorem finish_div (c : Site) (env : Env) (ir : Memory) :
   simp only at layout ⊢
   by_cases nz : y = 0
   · simp [nz] at hz
-  simp only [beq_iff_eq, nz, if_false, Option.some.injEq] at hz; subst hz
+  simp only [beq_iff_eq, nz, ite_false, Option.some.injEq] at hz; subst hz
   obtain ⟨s', r, p, q, _, h, m⟩ := divide_ok c env ir pre post s x y (by simpa using layout) at_ holds hx hy nz
   exact ⟨s', r, by simp [p], q, h, m⟩
 
@@ -354,7 +354,7 @@ theorem finish_mod (c : Site) (env : Env) (ir : Memory) :
   simp only at layout ⊢
   by_cases nz : y = 0
   · simp [nz] at hz
-  simp only [beq_iff_eq, nz, if_false, Option.some.injEq] at hz; subst hz
+  simp only [beq_iff_eq, nz, ite_false, Option.some.injEq] at hz; subst hz
   obtain ⟨s2, r2, p2, _, rest, h2, m2⟩ :=
     divide_ok c env ir pre (.movReg .rax .rdx :: post) s x y (by simpa using layout) at_ holds hx hy nz
   have lay3 : (c.image.code c.routine).toList = (pre ++ [.zeroReg .rdx, .div .rcx]) ++ [.movReg .rax .rdx] ++ post := by
@@ -400,7 +400,7 @@ theorem finish_cmp (site : Site) (env : Env) (ir : Memory) (c : Cond) :
     let s2 := { s1 with pc := pre.length + 3 }
     have r2' : Reaches site.image site.routine s1 s2 := by
       have : (if c.holds s1.zf s1.cf then pre.length + 4 else s1.pc + 1) = pre.length + 3 := by
-        rw [flags.1, flags.2, if_neg holdsC]
+        rw [flags.1, flags.2, ite_eq_right holdsC]
       rw [this] at r2
       exact r2
     have h2 : site.Holds env ir s2 := h1.congr rfl rfl rfl rfl
@@ -450,4 +450,4 @@ theorem expr_ok (c : Site) (fits : c.Fits) : ∀ e : Expr, e.varsBelow c.vars �
     exact binary_ok c fits a b (expr_ok c fits a h.1) (expr_ok c fits b h.2) _ _ env ir (finish_cmp c env ir cc)
       d pc pre post s v layout hpre hpc holds (by simpa [Expr.temps] using room) (by simpa [eval] using ev)
 
-end Ssz.Native.Ir
+end EthLib.Consensus.Ssz.Native.Ir

@@ -1,7 +1,7 @@
 import SszNative.Proofs.Plan.RoundTrip
 import SszNative.Proofs.Driver.Validate.Compat
 import Std.Data.String.ToNat
-import Ssz.Proofs.Type.Equality
+import EthLib.Consensus.Proofs.Ssz.Type.Equality
 
 /-!
 What naming fields by position keeps.
@@ -12,9 +12,9 @@ Names stay unique, and inside a union two progressive containers name a shared p
 stays legal renamed.
 -/
 
-namespace Ssz.Native.Plan
+namespace EthLib.Consensus.Ssz.Native.Plan
 
-open Ssz Ssz.Native.Driver.Validate
+open EthLib.Consensus.Ssz EthLib.Consensus.Ssz.Native.Driver.Validate
 
 mutual
 
@@ -192,14 +192,14 @@ theorem layoutsAgree_rename {budget : Nat} (inner : RenameKeeps budget) (la lb :
   subst xn yn
   by_cases same : p = p'
   · subst same
-    simp only [beq_self_eq_true, if_true, Bool.true_and, Bool.and_eq_true] at orig ⊢
+    simp only [beq_self_eq_true, ite_true, Bool.true_and, Bool.and_eq_true] at orig ⊢
     simp only [renameAll_eq_map, List.getElem?_map]
     -- The original fields at the shared position are compatible, so their renamings are.
     cases ga : fa[o]? <;> cases gb : fb[o']? <;> simp only [ga, gb] at orig ⊢ <;> try (simp at orig; done)
     exact inner _ _ (allWellFormed_mem fa wa _ (List.mem_of_getElem? ga))
       (allWellFormed_mem fb wb _ (List.mem_of_getElem? gb)) orig.2
   · -- Two positions are named by two different numbers.
-    simp only [beq_iff_eq, same, if_false, bne_iff_ne, ne_eq]
+    simp only [beq_iff_eq, same, ite_false, bne_iff_ne, ne_eq]
     exact fun e => same (Nat.repr_inj.mp e)
 
 /-- A legal progressive container has a name for every position its layout sets. -/
@@ -221,7 +221,7 @@ theorem compatibleAt_rename (budget : Nat) : RenameKeeps budget := by
     have orig : a ≠ b := fun e => same (by rw [e])
     rw [compatibleAt.eq_def] at h ⊢
     simp only [show (a == b) = false by simp [orig], show (rename a == rename b) = false by simp [same],
-      Bool.false_eq_true, if_false, byteSequence_rename] at h ⊢
+      Bool.false_eq_true, ite_false, byteSequence_rename] at h ⊢
     -- A byte-array spelling compares the same way renamed, since renaming keeps it.
     cases ha : a.byteSequence <;> cases hb : b.byteSequence <;> simp only [ha, hb] at h ⊢ <;> try exact h
     cases a <;> cases b <;> simp only [rename, Bool.false_eq_true] at h ⊢ <;> try exact h
@@ -324,4 +324,4 @@ theorem wellFormed_rename_union :
       compatibleAt, layoutsAgree, layoutPairAgree, placedOrdinals, placedFields, firstDuplicate, Desc.nesting,
       Desc.deepestNesting, Desc.byteSequence, Bind.bind, Except.bind])
 
-end Ssz.Native.Plan
+end EthLib.Consensus.Ssz.Native.Plan

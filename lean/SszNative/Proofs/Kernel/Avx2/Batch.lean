@@ -9,11 +9,12 @@ with a feed-forward between the second and third loops, and ends with the stores
 Each piece below is one of those, or one pass of a loop's body.
 -/
 
-namespace Ssz.Native.Kernel.Avx2
+namespace EthLib.Consensus.Ssz.Native.Kernel.Avx2
 
-open Ssz.Sha256 Ssz.Native.Asm
-open Ssz.Native.Kernel.Avx512x2 (View addrOf)
-open Ssz.Native.Kernel.Avx512 (assign_apply)
+open EthLib.Cryptography.Hash.Sha256 hiding K IV
+open EthLib.Consensus.Ssz.Native.Asm
+open EthLib.Consensus.Ssz.Native.Kernel.Avx512x2 (View addrOf)
+open EthLib.Consensus.Ssz.Native.Kernel.Avx512 (assign_apply)
 
 /-- The scratch area's address: the stack pointer, after the frame is made. -/
 abbrev scratch (s : State) : Nat := (s.gpr sp).toNat
@@ -58,8 +59,8 @@ theorem view_row (mem : Nat → UInt8) (T : Nat) (table : TableAt mem T) (row : 
   exact readWord_table _ _ table _ (by simp only [tableSize]; omega)
 
 /-- The initial-state loads, lane by lane: register j holds word j of the initial state. -/
-theorem ivCode_view (G : Gpr → UInt64) (v : View) (hiv : ∀ j < 8, v.mem ((G tbl).toNat + ivAvx512 j) = initialState[j]!) :
-    (∀ j < 8, (viewRun G ivCode v).regs (home j) = initialState[j]!) ∧ (viewRun G ivCode v).mem = v.mem := by
+theorem ivCode_view (G : Gpr → UInt64) (v : View) (hiv : ∀ j < 8, v.mem ((G tbl).toNat + ivAvx512 j) = Cryptography.Hash.Sha256.IV[j]!) :
+    (∀ j < 8, (viewRun G ivCode v).regs (home j) = Cryptography.Hash.Sha256.IV[j]!) ∧ (viewRun G ivCode v).mem = v.mem := by
   refine ⟨fun j hj => ?_, by funext a; exact viewRun_mem_other _ _ _ _ (by simp [ivCode, storeOf])⟩
   -- Each of the eight loads writes its own register.
   have hj' : j = 0 ∨ j = 1 ∨ j = 2 ∨ j = 3 ∨ j = 4 ∨ j = 5 ∨ j = 6 ∨ j = 7 := by omega
@@ -131,7 +132,7 @@ theorem setup_spec (ls rs : Nat) (s : State) (ctx : Ctx ls rs s) :
   obtain ⟨v3, m3, f3, g3, -, -⟩ := exec_view ivCode (by simp [ivCode, rowwise]) x2 (by simp [readsOf, ivCode, readOf,
     storesOf, storeOf, Clear])
   let x3 := exec ivCode x2
-  have iv3 : ∀ j < 8, ∀ l : Fin 8, x3.vec (home j) (lane l) = initialState[j]! := fun j hj l => by
+  have iv3 : ∀ j < 8, ∀ l : Fin 8, x3.vec (home j) (lane l) = Cryptography.Hash.Sha256.IV[j]! := fun j hj l => by
     rw [v3]
     refine (ivCode_view x2.gpr (view x2 l) fun j hj => ?_).1 j hj
     simp only [view, ivAvx512, gs2]
@@ -153,7 +154,7 @@ theorem setup_spec (ls rs : Nat) (s : State) (ctx : Ctx ls rs s) :
     intro j hj
     simp only [Vector.getElem_ofFn, Avx512.roundsTo, List.range_zero, List.foldl_nil, view, xvec]
     rw [show role 0 j = home j by apply Fin.ext; simp only [role, home]; omega, iv3 j hj l,
-      getElem!_pos initialState j hj]
+      getElem!_pos Cryptography.Hash.Sha256.IV j hj]
   · -- The input words: the left node's below 8, the right node's from 8.
     simp only [view, xmem, mem3]
     rw [Avx512.W_input _ u (by omega), msg, Avx512.pairMessage_word _ _ _ u (by omega)]
@@ -165,13 +166,13 @@ theorem setup_spec (ls rs : Nat) (s : State) (ctx : Ctx ls rs s) :
         simp only [readWord]
         rw [outside1 _ (by simp only [Outside]; omega), outside1 _ (by simp only [Outside]; omega),
           outside1 _ (by simp only [Outside]; omega), outside1 _ (by simp only [Outside]; omega)]
-      rw [w2' t (by omega) l, if_neg (by omega), show (8 + t) % 8 = t by omega, same]
+      rw [w2' t (by omega) l, ite_eq_right (by omega), show (8 + t) % 8 = t by omega, same]
     · obtain ⟨q, hq⟩ := wordSlot_mod u (by omega)
       have keep := k2' q l fun t ht e => by
         simp only [wordSlot, frame] at e hq; omega
-      rw [hq, keep, ← hq, w1' u (by omega) l, if_pos (by omega), Nat.mod_eq_of_lt (by omega : u < 8)]
+      rw [hq, keep, ← hq, w1' u (by omega) l, ite_eq_left (by omega), Nat.mod_eq_of_lt (by omega : u < 8)]
   · rw [xmem, mem3]; exact outside2 a ha
-  · rw [xgpr]; simp only [assign, if_true, if_neg (show words ≠ blocks by decide), if_neg (show words ≠ consts by decide)]
+  · rw [xgpr]; simp only [assign, ite_true, ite_eq_right (show words ≠ blocks by decide), ite_eq_right (show words ≠ consts by decide)]
     simp only [UInt64.toNat_add, wordsBase, scratch, addressBound] at bound ⊢
     simp
     omega
@@ -362,7 +363,7 @@ theorem PadInv.congr {S : Nat} {mid : Vector UInt32 8} {t : Nat} {v w : View} (i
   rw [← roles]; simp only [regs]
 
 /-- Lane l's state after the first block. -/
-def middle (s : State) (ls rs l : Nat) : Vector UInt32 8 := compress initialState (msg s ls rs l) 0
+def middle (s : State) (ls rs l : Nat) : Vector UInt32 8 := compress Cryptography.Hash.Sha256.IV (msg s ls rs l) 0
 
 /-- One pass of the padding loop: every lane's invariant eight rounds on, and the pointer and count updated. -/
 theorem padBlock_spec (ls rs : Nat) (s : State) (ctx : Ctx ls rs s) (i : Nat) (hi : i < 8) (x : State)
@@ -442,12 +443,12 @@ theorem feed_view (G : Gpr → UInt64) (v : View) (S T : Nat) (hS : (G sp).toNat
         simp
       · have ne : home j ≠ home n := fun e => last (home_inj j n (by omega) (by omega) e)
         have ne' : S + midSlot j ≠ S + midSlot n := by simp only [midSlot]; omega
-        simp only [ne, ne', if_false]
+        simp only [ne, ne', ite_false]
         exact done j (by omega)
     · have ne : home j ≠ home n := fun e => by have := home_inj j n hj8 (by omega) e; omega
-      simp only [ne, if_false]
+      simp only [ne, ite_false]
       exact rest j (by omega) hj8
-    · rw [if_neg (far n (by omega) k hk)]
+    · rw [ite_eq_right (far n (by omega) k hk)]
       exact ivs k hk
 
 /-- The stored-state rows share the 32-byte grid. -/
@@ -501,13 +502,13 @@ theorem iv_far (S T : Nat) (apart : Apart (S, frame) (T, tableSize)) :
 /-- Lane l of the first block's result. -/
 theorem middle_get (s : State) (ls rs l : Nat) (v : View)
     (roles : (Vector.ofFn fun j : Fin 8 => v.regs (role 64 j)) =
-      Avx512.roundsTo initialState Avx512.K (Avx512.W (msg s ls rs l)) 64) (j : Nat) (hj : j < 8) :
-    (middle s ls rs l)[j] = v.regs (home j) + initialState[j]! := by
+      Avx512.roundsTo Cryptography.Hash.Sha256.IV Avx512.K (Avx512.W (msg s ls rs l)) 64) (j : Nat) (hj : j < 8) :
+    (middle s ls rs l)[j] = v.regs (home j) + Cryptography.Hash.Sha256.IV[j]! := by
   -- The first compression is the initial state plus the working words after sixty-four rounds.
   have := congrArg (·[j]) roles
   simp only [Vector.getElem_ofFn] at this
   rw [middle, Avx512.compress_rounds, Vector.getElem_zipWith, ← this,
-    show role 64 j = home j by apply Fin.ext; simp only [role, home]; omega, getElem!_pos initialState j hj,
+    show role 64 j = home j by apply Fin.ext; simp only [role, home]; omega, getElem!_pos Cryptography.Hash.Sha256.IV j hj,
     UInt32.add_comm]
 
 /-- Setting a general register leaves memory and the vector registers alone. -/
@@ -557,7 +558,7 @@ theorem middle_spec (ls rs : Nat) (s : State) (ctx : Ctx ls rs s) (x : State)
   · obtain ⟨roles, -⟩ := inv l
     obtain ⟨fed, -, -⟩ := feed_view x.gpr (view x l) (scratch s) (tableAt s) hS hT (iv_far _ _ apart) 8 (Nat.le_refl _)
     rw [← feedCode_eq] at fed
-    have ivRow : ∀ j < 8, (view x l).mem (tableAt s + ivAvx512 j) = initialState[j]! := fun j hj => by
+    have ivRow : ∀ j < 8, (view x l).mem (tableAt s + ivAvx512 j) = Cryptography.Hash.Sha256.IV[j]! := fun j hj => by
       simp only [view, ivAvx512]
       rw [show tableAt s + (8192 + 64 * j) + 4 * l.val = tableAt s + 64 * (128 + j) + 4 * l.val by omega,
         view_row _ _ table _ (by omega), Avx512.tableWord_iv j l.val hj (by omega)]
@@ -617,7 +618,7 @@ theorem output_full (ls rs : Nat) (s : State) (ctx : Ctx ls rs s) (x : State)
     (inv : ∀ l : Fin 8, PadInv (scratch s) (middle s ls rs l.val) 64 (view x l))
     (outside : ∀ a, Outside (scratch s) a → x.mem a = s.mem a) :
     let y := exec outputCode x
-    (∀ p < 8, ∀ k < 32, y.mem ((x.gpr out).toNat + 32 * p + k) = (Sha256.hash (msg s ls rs p)).get! k) ∧
+    (∀ p < 8, ∀ k < 32, y.mem ((x.gpr out).toNat + 32 * p + k) = (Cryptography.Hash.Sha256.hash (msg s ls rs p)).get! k) ∧
     (∀ a, ¬ ((x.gpr out).toNat ≤ a ∧ a < (x.gpr out).toNat + 256) → y.mem a = x.mem a) ∧ y.gpr = x.gpr := by
   intro y
   have table : TableAt x.mem (tableAt s) := table_kept _ _ _ _ ctx.table ctx.tableApart outside
@@ -644,4 +645,4 @@ theorem output_full (ls rs : Nat) (s : State) (ctx : Ctx ls rs s) (x : State)
   rw [this, spAt, mids j hj, Avx512.compress_rounds, Vector.getElem_zipWith, getElem!_pos _ j hj, UInt32.add_comm]
   rfl
 
-end Ssz.Native.Kernel.Avx2
+end EthLib.Consensus.Ssz.Native.Kernel.Avx2

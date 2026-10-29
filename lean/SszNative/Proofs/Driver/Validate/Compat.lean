@@ -1,8 +1,8 @@
-import Ssz.Proofs.Type.CompatibilityBudget
-import Ssz.Proofs.Type.Legality
+import EthLib.Consensus.Proofs.Ssz.Type.CompatibilityBudget
+import EthLib.Consensus.Proofs.Ssz.Type.Legality
 import SszNative.Proofs.Driver.Validate.PlanCheck
 import SszNative.Proofs.Plan.RoundTrip
-import Ssz.Proofs.Type.Equality
+import EthLib.Consensus.Proofs.Ssz.Type.Equality
 import Std.Data.String.ToNat
 
 /-!
@@ -15,9 +15,9 @@ computes it.
 Two layouts named by position agree exactly when every position both set holds compatible fields.
 -/
 
-namespace Ssz.Native.Driver.Validate
+namespace EthLib.Consensus.Ssz.Native.Driver.Validate
 
-open Ssz Ssz.Native
+open EthLib.Consensus.Ssz EthLib.Consensus.Ssz.Native
 
 mutual
 
@@ -343,7 +343,7 @@ theorem layoutsAgree_named (budget : Nat) (la lb : List Bool) (fa fb : List Desc
     have pair := all (k, toString k, setBefore la k) ((mem_placedOrdinals_named la _).mpr ⟨ha, rfl, rfl⟩)
       (k, toString k, setBefore lb k) ((mem_placedOrdinals_named lb _).mpr ⟨hb, rfl, rfl⟩)
     rw [layoutPairAgree.eq_def] at pair
-    simp only [beq_self_eq_true, if_true, Bool.true_and] at pair
+    simp only [beq_self_eq_true, ite_true, Bool.true_and] at pair
     unfold sharedAgree
     revert pair
     cases fa[setBefore la k]? <;> cases fb[setBefore lb k]? <;> simp
@@ -358,10 +358,10 @@ theorem layoutsAgree_named (budget : Nat) (la lb : List Bool) (fa fb : List Desc
       have := all p ha hb
       unfold sharedAgree at this
       revert this
-      simp only [beq_self_eq_true, if_true, Bool.true_and]
+      simp only [beq_self_eq_true, ite_true, Bool.true_and]
       cases fa[setBefore la p]? <;> cases fb[setBefore lb p]? <;> simp
     · -- Two positions are named by two different numbers.
-      simp only [beq_iff_eq, same, if_false, bne_iff_ne, ne_eq]
+      simp only [beq_iff_eq, same, ite_false, bne_iff_ne, ne_eq]
       exact fun e => same (Nat.repr_inj.mp e)
 
-end Ssz.Native.Driver.Validate
+end EthLib.Consensus.Ssz.Native.Driver.Validate

@@ -10,9 +10,9 @@ The contract is stated once here, and each driver's proof shows its call keeps i
 The value's root is the Lean root of the range, which the root proofs show is the specification's root.
 -/
 
-namespace Ssz.Native.Driver
+namespace EthLib.Consensus.Ssz.Native.Driver
 
-open Ssz Ssz.Native.Ir Ssz.Native.Ir.Expr Ssz.Native.Ir.Stmt Ssz.Native.Asm
+open EthLib.Consensus.Ssz EthLib.Consensus.Ssz.Native.Ir EthLib.Consensus.Ssz.Native.Ir.Expr EthLib.Consensus.Ssz.Native.Ir.Stmt EthLib.Consensus.Ssz.Native.Asm
 
 /-! ### The contract -/
 
@@ -260,14 +260,14 @@ theorem nodeAt_lengthStores (mem : Memory) (a n : Nat) (hn : n < 2 ^ 64) :
     have hi : i < 32 := by simpa [nodeAt] using h1
     simp only [nodeAt, Array.getElem_ofFn, lengthNode, Array.getElem_map, Array.getElem_range, Asm.store]
     by_cases q3 : a + 24 ≤ a + i ∧ a + i < a + 24 + 8
-    · rw [if_pos q3, qwordByte_of_zero, lengthNode_high n hn i (by omega)]
-    rw [if_neg q3]
+    · rw [ite_eq_left q3, qwordByte_of_zero, lengthNode_high n hn i (by omega)]
+    rw [ite_eq_right q3]
     by_cases q2 : a + 16 ≤ a + i ∧ a + i < a + 16 + 8
-    · rw [if_pos q2, qwordByte_of_zero, lengthNode_high n hn i (by omega)]
-    rw [if_neg q2]
+    · rw [ite_eq_left q2, qwordByte_of_zero, lengthNode_high n hn i (by omega)]
+    rw [ite_eq_right q2]
     by_cases q1 : a + 8 ≤ a + i ∧ a + i < a + 8 + 8
-    · rw [if_pos q1, qwordByte_of_zero, lengthNode_high n hn i (by omega)]
-    rw [if_neg q1, if_pos (by omega), qwordByte_ofNat n hn _ (by omega)]
+    · rw [ite_eq_left q1, qwordByte_of_zero, lengthNode_high n hn i (by omega)]
+    rw [ite_eq_right q1, ite_eq_left (by omega), qwordByte_ofNat n hn _ (by omega)]
     congr 2
     omega
 
@@ -340,7 +340,7 @@ theorem mixin_ends {m : Module} {w : World} (hash : HashingOk m w) {sp : Nat} (r
   have keep4 : ∀ x, ¬ (a ≤ x ∧ x < a + 32) → m4 x = mem x := by
     intro x hx
     simp only [m4, m3, m2, m1, Asm.store]
-    rw [if_neg (by omega), if_neg (by omega), if_neg (by omega), if_neg (by omega)]
+    rw [ite_eq_right (by omega), ite_eq_right (by omega), ite_eq_right (by omega), ite_eq_right (by omega)]
   have node4 : nodeAt m4 a = (lengthNode n).data := nodeAt_lengthStores mem a n nSmall
   have ready4 := ready.within (o := a) (n := 32) (by simp only [Apart]; omega) (by simp only [Apart]; omega)
     (by simp only [Apart]; omega) fun x o _ => keep4 x o
@@ -393,9 +393,9 @@ theorem zero32_at {m : Module} {w : World} {sp : Nat} {env : Env} {mem : Memory}
     ofNat_toNat (show a + 16 < 2 ^ 64 by omega), ofNat_toNat (show a + 24 < 2 ^ 64 by omega), Width.bytes,
     qwordByte_of_zero]
   by_cases h0 : a ≤ x ∧ x < a + 32
-  · rw [if_pos h0]; repeat' split
+  · rw [ite_eq_left h0]; repeat' split
     all_goals first | rfl | omega
-  · rw [if_neg h0, if_neg (by omega), if_neg (by omega), if_neg (by omega), if_neg (by omega)]
+  · rw [ite_eq_right h0, ite_eq_right (by omega), ite_eq_right (by omega), ite_eq_right (by omega), ite_eq_right (by omega)]
 
 /-- A node of zeros reads as the zero node. -/
 theorem nodeAt_zeroed (mem : Memory) (a : Nat) : nodeAt (zeroed mem a) a = zeroNode.data := by
@@ -406,7 +406,7 @@ theorem nodeAt_zeroed (mem : Memory) (a : Nat) : nodeAt (zeroed mem a) a = zeroN
 
 /-- A node of zeros changes memory only in its own bytes. -/
 theorem zeroed_outside {mem : Memory} {a x : Nat} (h : ¬ (a ≤ x ∧ x < a + 32)) : zeroed mem a x = mem x := by
-  simp only [zeroed, Asm.store]; rw [if_neg h]
+  simp only [zeroed, Asm.store]; rw [ite_eq_right h]
 
 /--
 One pair of adjacent nodes hashed into an output apart from them.
@@ -466,4 +466,4 @@ theorem merkleizeAt_of_holds {mem : Memory} {a s n depth : Nat} {x : ByteArray} 
       have := Nat.mul_le_mul_left 32 (show s + i + 1 ≤ s + n by omega); omega),
       show 32 * s = 0 + 32 * s by omega, nodeOf_shift]
 
-end Ssz.Native.Driver
+end EthLib.Consensus.Ssz.Native.Driver

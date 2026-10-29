@@ -1,5 +1,5 @@
 import SszNative.Branch
-import Ssz.Type.Valid
+import EthLib.Consensus.Ssz.Type.Valid
 
 /-!
 Declarations compiled once, so that each value read against them skips walking the declaration again.
@@ -9,9 +9,9 @@ Its root is then a handful of copies and one hashing call per tree level.
 Every other declaration keeps the general path.
 -/
 
-namespace Ssz.Native
+namespace EthLib.Consensus.Ssz.Native
 
-open Ssz
+open EthLib.Consensus.Ssz
 
 /-- Where one leaf of a fixed-size struct comes from. -/
 inductive Leaf where
@@ -178,4 +178,4 @@ It agrees with the specification for an encoding with `64 * b.size + 128 < USize
 @[inline] def Checked.hashTreeRoot (c : Checked) (b : ByteArray) : Except Err ByteArray :=
   c.schema.hashTreeRoot b
 
-end Ssz.Native
+end EthLib.Consensus.Ssz.Native

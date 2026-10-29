@@ -12,9 +12,9 @@ The driver calls itself on the element or field types, so the proof is an induct
 What one call does is a contract, stated here once and proved for every plain type.
 -/
 
-namespace Ssz.Native.Driver
+namespace EthLib.Consensus.Ssz.Native.Driver
 
-open Ssz.Native.Ir Ssz.Native.Ir.Expr Ssz.Native.Ir.Stmt Ssz.Native.Asm
+open EthLib.Consensus.Ssz.Native.Ir EthLib.Consensus.Ssz.Native.Ir.Expr EthLib.Consensus.Ssz.Native.Ir.Stmt EthLib.Consensus.Ssz.Native.Asm
 
 /-! ### The contract -/
 
@@ -261,4 +261,4 @@ theorem packedPath_runs {m : Module} {w : World} (hash : HashingOk m w) (gmod : 
   · intro a o pd
     exact keep a (by rw [span]; exact o) pd
 
-end Ssz.Native.Driver
+end EthLib.Consensus.Ssz.Native.Driver

@@ -1,11 +1,11 @@
 import SszNative.Proofs.Driver.Prove.Small
-import Ssz.Codec.Proof
+import EthLib.Consensus.Ssz.Codec.Proof
 
 /-! The compiled walk down a progressive spine stops where the Lean walk stops, or refuses as it refuses. -/
 
-namespace Ssz.Native.Driver.ProveProof
+namespace EthLib.Consensus.Ssz.Native.Driver.ProveProof
 
-open Ssz.Native.Ir Ssz.Native.Asm Ssz.Native.Driver.BranchProof
+open EthLib.Consensus.Ssz.Native.Ir EthLib.Consensus.Ssz.Native.Asm EthLib.Consensus.Ssz.Native.Driver.BranchProof
 
 /-- A word and a power of two keep that power exactly when the word's bit there is set. -/
 theorem and_two_pow (n i : Nat) : n &&& 2 ^ i = if n.testBit i then 2 ^ i else 0 := by
@@ -149,7 +149,7 @@ theorem spine_walk_calls {m : Module} {w : World}
       · -- The level's first leaf is past the data: the walk refuses.
         have hpast : count.toNat ≤ (env 3).toNat := by
           rw [← e0]; exact flag_ne past
-        simp only [spineWalk, show (env 3).toNat ≥ count.toNat from hpast, if_true] at walk
+        simp only [spineWalk, show (env 3).toNat ≥ count.toNat from hpast, ite_true] at walk
         subst walk
         refine Wp.cons (Wp.set rfl (Wp.cons (Wp.set rfl ?_)))
         repeat refine Wp.nil ?_
@@ -162,7 +162,7 @@ theorem spine_walk_calls {m : Module} {w : World}
       · have hin : (env 3).toNat < count.toNat := by
           have := flag_eq past
           rw [e0] at this; omega
-        simp only [spineWalk, show ¬ ((env 3).toNat ≥ count.toNat) by omega, if_false] at walk
+        simp only [spineWalk, show ¬ ((env 3).toNat ≥ count.toNat) by omega, ite_false] at walk
         have dec : (env 2 - 1).toNat = d := by
           rw [UInt64.toNat_sub_of_le _ _ (by rw [UInt64.le_iff_toNat_le]; simp; omega)]; simp; omega
         have pc := pow2_calls (w := w) hp (sp := sp - 8 - 8 * ProveSpineWalk.fn.frame) (by omega) (env 2 - 1) mem'
@@ -178,7 +178,7 @@ theorem spine_walk_calls {m : Module} {w : World}
             have : ¬ (index &&& UInt64.ofNat (2 ^ d) ≠ 0) := fun h => h z
             rw [bit] at this
             simpa using this
-          simp only [clear, gindexBit, Bool.not_false, if_true] at walk
+          simp only [clear, gindexBit, Bool.not_false, ite_true] at walk
           subst walk
           refine Wp.cons (Wp.set rfl (Wp.cons (Wp.set rfl ?_)))
           repeat refine Wp.nil ?_
@@ -234,4 +234,4 @@ theorem spine_walk_calls {m : Module} {w : World}
     rw [store_outside _ _ _ _ _ (by omega), store_outside _ _ _ _ _ (by omega), store_outside _ _ _ _ _ (by omega),
       store_outside _ _ _ _ _ (by omega)]
 
-end Ssz.Native.Driver.ProveProof
+end EthLib.Consensus.Ssz.Native.Driver.ProveProof

@@ -3,9 +3,9 @@ import SszNative.Proofs.Root.Fixed
 
 /-! A compiled struct's leaves are the leaves the general root writes. -/
 
-namespace Ssz.Native
+namespace EthLib.Consensus.Ssz.Native
 
-open Ssz
+open EthLib.Consensus.Ssz
 
 /-- One step of writing a struct's leaves: the next leaf copied into the next node. -/
 def fillStep (b : ByteArray) (acc : ByteArray × Nat) (leaf : Leaf) : ByteArray × Nat :=
@@ -35,12 +35,12 @@ theorem foldl_leavesOf (b : ByteArray) :
     -- The first field is written the same way, then the rest from the next node.
     rw [leavesOf, List.foldl_cons, fieldLeaves]
     by_cases packs : packsIntoNode field = true
-    · simp only [packs, if_true, fillStep, Nat.zero_add]
+    · simp only [packs, ite_true, fillStep, Nat.zero_add]
       rw [foldl_leavesOf b rest]
       simp only [List.length_cons]
       congr 1
       omega
-    · simp only [packs, Bool.false_eq_true, if_false, fillStep, Nat.zero_add]
+    · simp only [packs, Bool.false_eq_true, ite_false, fillStep, Nat.zero_add]
       rw [foldl_leavesOf b rest]
       simp only [List.length_cons]
       congr 1
@@ -82,4 +82,4 @@ theorem leafBuffer_eq (count : Nat) (small : 32 * count + 32 < USize.size) :
       simpa [ByteArray.getElem_eq_getElem_data] using zero
   · rfl
 
-end Ssz.Native
+end EthLib.Consensus.Ssz.Native

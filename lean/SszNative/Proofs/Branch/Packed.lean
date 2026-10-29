@@ -2,9 +2,9 @@ import SszNative.Proofs.Branch.Walk
 
 /-! Trees of packed bytes, as an encoding lays them out and as the decoded value does. -/
 
-namespace Ssz.Native.BranchProof
+namespace EthLib.Consensus.Ssz.Native.BranchProof
 
-open Ssz Ssz.Native
+open EthLib.Consensus.Ssz EthLib.Consensus.Ssz.Native
 
 /-- Packed nodes of a range agree with the specification's packing of the slice. -/
 theorem packRange_agrees (b : ByteArray) (s e : Nat) (o : s ≤ e) (i : e ≤ b.size) (small : RootProof.Small b) :
@@ -72,7 +72,7 @@ theorem byteList_agrees (limit : Nat) (b : ByteArray) (s e : Nat) (v : Value) (o
   cases read
   refine ⟨_, ⟨.packed (packBytes (slice b s e)), some (chunksForBytes limit), some (lengthWord (slice b s e).size)⟩,
     rfl, ?_, ⟨packRange_agrees b s e o i small, rfl, ?_, by simpa [EncodedLayout.count] using packed_fits b s e i small⟩⟩
-  · simp only [merkleLayout, bound, if_false, MerkleLayout.packing, Bind.bind, Except.bind, pure, Except.pure,
+  · simp only [merkleLayout, bound, ite_false, MerkleLayout.packing, Bind.bind, Except.bind, pure, Except.pure,
       throw, throwThe, MonadExceptOf.throw]
   · simp only [Option.map_some, slice_size b s e i, RootProof.facts_hold.lengthNode]
 
@@ -94,7 +94,7 @@ theorem bitVector_agrees (length : Nat) (sound : (Desc.bitVector length).wellFor
       injection wrote with packed
       refine ⟨_, ⟨.packed (packBytes (slice b s e)), some (chunksForBits length), none⟩, rfl, ?_,
         ⟨packRange_agrees b s e o i small, rfl, rfl, by simpa [EncodedLayout.count] using packed_fits b s e i small⟩⟩
-      simp only [merkleLayout, beq_iff_eq.mp sized, bne_self_eq_false, Bool.false_eq_true, if_false,
+      simp only [merkleLayout, beq_iff_eq.mp sized, bne_self_eq_false, Bool.false_eq_true, ite_false,
         MerkleLayout.packing, Bind.bind, Except.bind, pure, Except.pure, packedBits]
       rw [packed]
     · cases wrote
@@ -114,4 +114,4 @@ theorem bitList_agrees (limit : Option Nat) (b : ByteArray) (s e : Nat) (bits : 
   rw [counted]
   refine ⟨⟨nodes, by omega, by rw [sized]; simp only [nodesFor]; omega⟩, by simp only [nodesFor]; omega, rfl⟩
 
-end Ssz.Native.BranchProof
+end EthLib.Consensus.Ssz.Native.BranchProof

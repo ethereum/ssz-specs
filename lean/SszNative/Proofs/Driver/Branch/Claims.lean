@@ -6,9 +6,9 @@ The compiled claim check refuses exactly what the specification's index checks r
 The check runs in three loops: one for repeats, one over the claims, and one inside it over a claim's ancestors.
 -/
 
-namespace Ssz.Native.Driver.BranchProof
+namespace EthLib.Consensus.Ssz.Native.Driver.BranchProof
 
-open Ssz.Native.Ir Ssz.Native.Asm
+open EthLib.Consensus.Ssz.Native.Ir EthLib.Consensus.Ssz.Native.Asm
 
 /-- The word a check answers: zero when it passes, or the code of its refusal. -/
 def unitCode : Except Err Unit → UInt64
@@ -17,9 +17,9 @@ def unitCode : Except Err Unit → UInt64
 
 /-- A key is found among some words exactly when its value is one of them. -/
 theorem firstAt_words_lt_iff (mem : Memory) (a n : Nat) (key : UInt64) :
-    firstAt (wordAt mem a 8) key n < n ↔ key.toNat ∈ wordsAt mem a n := by
+    firstAt (big32 mem a 8) key n < n ↔ key.toNat ∈ wordsAt mem a n := by
   rw [firstAt_lt_iff]
-  simp only [wordAt, wordsAt, List.mem_map, List.mem_range]
+  simp only [big32, wordsAt, List.mem_map, List.mem_range]
   constructor
   · intro ⟨j, hj, e⟩; exact ⟨j, hj, by rw [e]⟩
   · intro ⟨j, hj, e⟩; exact ⟨j, hj, UInt64.toNat_inj.mp e⟩
@@ -45,14 +45,14 @@ theorem word_addr {w : World} {a : UInt64} {n : Nat} (acc : w.access a.toNat (8 
 theorem find_words {m : Module} {w : World} (hf : m.fns.lookup "ssz_branch_find" = some Find.fn) {sp : Nat}
     (room : w.stackLo + 80 ≤ sp) {a : UInt64} {n : Nat} (acc : w.access a.toNat (8 * n) = true) (count : UInt64)
     (le : count.toNat ≤ n) (key : UInt64) (mem : Memory) :
-    Calls m w "ssz_branch_find" sp [a, 8, count, key] mem (firstAt (wordAt mem a.toNat 8) key count.toNat).toUInt64 mem :=
+    Calls m w "ssz_branch_find" sp [a, 8, count, key] mem (firstAt (big32 mem a.toNat 8) key count.toNat).toUInt64 mem :=
   find_calls hf room a 8 count key mem fun j hj => access_sub acc (by simp at *; omega)
 
 /-- The first match among some words, as a word, is the count exactly when the key is not among them. -/
 theorem firstAt_words_eq_count (mem : Memory) (a : Nat) (count key : UInt64) :
-    (firstAt (wordAt mem a 8) key count.toNat).toUInt64 = count ↔ key.toNat ∉ wordsAt mem a count.toNat := by
+    (firstAt (big32 mem a 8) key count.toNat).toUInt64 = count ↔ key.toNat ∉ wordsAt mem a count.toNat := by
   rw [← firstAt_words_lt_iff]
-  have le := firstAt_le (wordAt mem a 8) key count.toNat
+  have le := firstAt_le (big32 mem a 8) key count.toNat
   have := count.toNat_lt
   constructor
   · intro h
@@ -98,10 +98,10 @@ theorem ancestors_loop {m : Module} {w : World} (hf : m.fns.lookup "ssz_branch_f
     refine Wp.cons (Wp.ite (eval_ne rfl rfl) (fun found => ?_) (fun missing => ?_))
     · -- A claimed ancestor refuses the claim, and stops the walk.
       have member : (env' 6).toNat ∈ L := by
-        have : ¬ (firstAt (wordAt mem' indices.toNat 8) (env' 6) count.toNat).toUInt64 = count := by
+        have : ¬ (firstAt (big32 mem' indices.toNat 8) (env' 6) count.toNat).toUInt64 = count := by
           intro h
           simp only [assign, ↓reduceIte, Nat.reduceEqDiff, f0, f1] at found
-          rw [if_pos h] at found
+          rw [ite_eq_left h] at found
           exact found rfl
         rw [firstAt_words_eq_count] at this
         exact Classical.not_not.mp this
@@ -112,11 +112,11 @@ theorem ancestors_loop {m : Module} {w : World} (hf : m.fns.lookup "ssz_branch_f
       · simp; omega
     · -- An unclaimed ancestor passes, and the walk goes on from its parent.
       have outside : (env' 6).toNat ∉ L := by
-        have : (firstAt (wordAt mem' indices.toNat 8) (env' 6) count.toNat).toUInt64 = count := by
-          by_cases h : (firstAt (wordAt mem' indices.toNat 8) (env' 6) count.toNat).toUInt64 = count
+        have : (firstAt (big32 mem' indices.toNat 8) (env' 6) count.toNat).toUInt64 = count := by
+          by_cases h : (firstAt (big32 mem' indices.toNat 8) (env' 6) count.toNat).toUInt64 = count
           · exact h
           · simp only [assign, ↓reduceIte, Nat.reduceEqDiff, f0, f1] at missing
-            rw [if_neg h] at missing
+            rw [ite_eq_right h] at missing
             exact absurd missing (by decide)
         exact (firstAt_words_eq_count _ _ _ _).mp this
       refine Wp.cons (Wp.set (eval_shr1 rfl) (Wp.nil (Wp.nil ⟨⟨rfl, ?_⟩, ?_⟩))) <;>
@@ -214,10 +214,10 @@ theorem check_claims_calls {m : Module} {w : World} (hc : m.fns.lookup "ssz_bran
     refine Wp.cons (Wp.ite (eval_ne rfl rfl) (fun found => ?_) (fun missing => ?_))
     · -- An earlier copy of this claim: a repeat.
       have repeat_ : k.toNat ∈ wordsAt mem' indices.toNat (env 2).toNat := by
-        have hne : ¬ (firstAt (wordAt mem' indices.toNat 8) k (env 2).toNat).toUInt64 = env 2 := by
+        have hne : ¬ (firstAt (big32 mem' indices.toNat 8) k (env 2).toNat).toUInt64 = env 2 := by
           intro h
           simp only [assign, ↓reduceIte, Nat.reduceEqDiff] at found
-          rw [if_pos h] at found
+          rw [ite_eq_left h] at found
           exact found rfl
         exact Classical.not_not.mp (mt (firstAt_words_eq_count _ _ _ _).mpr hne)
       have dup : ¬ (wordsAt mem' indices.toNat count.toNat).Nodup := by
@@ -231,11 +231,11 @@ theorem check_claims_calls {m : Module} {w : World} (hc : m.fns.lookup "ssz_bran
       · rw [e1]; omega
     · -- No earlier copy: the claims so far stay distinct.
       have fresh : k.toNat ∉ wordsAt mem' indices.toNat (env 2).toNat := by
-        have : (firstAt (wordAt mem' indices.toNat 8) k (env 2).toNat).toUInt64 = env 2 := by
-          by_cases h : (firstAt (wordAt mem' indices.toNat 8) k (env 2).toNat).toUInt64 = env 2
+        have : (firstAt (big32 mem' indices.toNat 8) k (env 2).toNat).toUInt64 = env 2 := by
+          by_cases h : (firstAt (big32 mem' indices.toNat 8) k (env 2).toNat).toUInt64 = env 2
           · exact h
           · simp only [assign, ↓reduceIte, Nat.reduceEqDiff] at missing
-            rw [if_neg h] at missing
+            rw [ite_eq_right h] at missing
             exact absurd missing (by decide)
         exact (firstAt_words_eq_count _ _ _ _).mp this
       have next : (env 2 + 1).toNat = (env 2).toNat + 1 := by
@@ -258,7 +258,7 @@ theorem check_claims_calls {m : Module} {w : World} (hc : m.fns.lookup "ssz_bran
       · rwa [show (env 2).toNat = count.toNat by omega] at nd
       · rw [s] at quiet; exact absurd quiet (by decide)
     have related : rejectRelated L = rejectClaimPaths L L := by
-      rw [rejectRelated_eq, if_neg nonempty, if_neg (not_not_intro nodup)]
+      rw [rejectRelated_eq, ite_eq_right nonempty, ite_eq_right (not_not_intro nodup)]
     refine Wp.cons ?_
     refine Wp.loop (ClaimInv mem' indices count) (fun env _ => count.toNat - (env 2).toNat)
       ⟨rfl, by simp [assign, e0], by simp [assign, e1], by simp [assign],
@@ -291,7 +291,7 @@ theorem check_claims_calls {m : Module} {w : World} (hc : m.fns.lookup "ssz_bran
         have cz : c = 0 := by
           by_cases h : c = 0
           · exact h
-          · simp only [assign, ↓reduceIte, if_neg h] at zero
+          · simp only [assign, ↓reduceIte, ite_eq_right h] at zero
             exact absurd rfl zero
         refine Wp.cons (Wp.set rfl (Wp.cons (Wp.set rfl (Wp.nil (Wp.nil ⟨⟨rfl, ?_⟩, ?_⟩))))) <;>
           simp only [assign, ↓reduceIte, Nat.reduceEqDiff]
@@ -308,7 +308,7 @@ theorem check_claims_calls {m : Module} {w : World} (hc : m.fns.lookup "ssz_bran
         have c1 : c = 1 := by
           by_cases h : c = 1
           · exact h
-          · simp only [assign, ↓reduceIte, if_neg h] at one
+          · simp only [assign, ↓reduceIte, ite_eq_right h] at one
             exact absurd rfl one
         refine Wp.cons (Wp.set rfl (Wp.cons (Wp.set rfl (Wp.nil (Wp.nil ⟨⟨rfl, ?_⟩, ?_⟩))))) <;>
           simp only [assign, ↓reduceIte, Nat.reduceEqDiff]
@@ -334,7 +334,7 @@ theorem check_claims_calls {m : Module} {w : World} (hc : m.fns.lookup "ssz_bran
         refine Wp.cons (Wp.set rfl (Wp.nil (Wp.nil (Wp.nil ⟨⟨rfl, ?_⟩, ?_⟩)))) <;>
           simp only [assign, ↓reduceIte, Nat.reduceEqDiff]
         · refine ⟨g0, g1, by rw [g1]; exact Nat.le_refl _, .inr ⟨by rw [loud.1]; decide, by rw [g1], ?_⟩⟩
-          rw [loud.1, total, rejectClaimPaths_cons, if_neg c0', if_neg c1', if_pos loud.2]; rfl
+          rw [loud.1, total, rejectClaimPaths_cons, ite_eq_right c0', ite_eq_right c1', ite_eq_left loud.2]; rfl
         · rw [g1]; omega
       · -- No claimed ancestor: this claim passes, and the next one is checked.
         have quiet' : env' 5 = 0 ∧ ((pathOf (c.toNat / 2)).any fun x => L.contains x) = false := by
@@ -347,7 +347,7 @@ theorem check_claims_calls {m : Module} {w : World} (hc : m.fns.lookup "ssz_bran
           rw [wordsAt_succ, rejectClaimPaths_append, running.2]
           rw [hc]
           show rejectClaimPaths L [c.toNat] = _
-          rw [rejectClaimPaths_cons, if_neg c0', if_neg c1', quiet'.2]; rfl
+          rw [rejectClaimPaths_cons, ite_eq_right c0', ite_eq_right c1', quiet'.2]; rfl
         · omega
     · -- Every claim was checked: the answer is the first refusal, or zero.
       have done : ¬ (env2 2).toNat < count.toNat := by
@@ -370,4 +370,4 @@ theorem check_claims_calls {m : Module} {w : World} (hc : m.fns.lookup "ssz_bran
     refine Wp.skip (Wp.nil (Wp.nil ⟨_, rfl, ?_, rfl⟩))
     simp [assign, loud, rejectRelated_eq, nonempty, dup, unitCode, answerCode, L]
 
-end Ssz.Native.Driver.BranchProof
+end EthLib.Consensus.Ssz.Native.Driver.BranchProof

@@ -3,9 +3,9 @@ import SszNative.Proofs.Reference
 
 /-! The native verifiers answer exactly what the specification's verifiers answer. -/
 
-namespace Ssz.Native
+namespace EthLib.Consensus.Ssz.Native
 
-open Ssz.Native.Kernel
+open EthLib.Consensus.Ssz.Native.Kernel
 
 /-- Two arrays agree when their sizes and bytes agree. -/
 private theorem ext_get! (a b : ByteArray) (size : a.size = b.size)
@@ -29,9 +29,9 @@ theorem combine_eq (left right : ByteArray) : (combine left right).data = Ssz.co
   · rename_i whole
     simp only [Bool.and_eq_true, beq_iff_eq] at whole
     -- One parent of one pair is the digest of the two nodes, byte for byte.
-    have parent : hashColumns left 0 right 0 1 = Sha256.hash (left ++ right) := by
+    have parent : hashColumns left 0 right 0 1 = Cryptography.Hash.Sha256.hash (left ++ right) := by
       apply ext_get!
-      · simp only [hashColumns, hashColumnsReference_size, Sha256.hash_size, USize.toNat_one]
+      · simp only [hashColumns, hashColumnsReference_size, Cryptography.Hash.Sha256.hash_size, USize.toNat_one]
       · intro i within
         have bound : i < 32 := by
           simpa only [hashColumns, hashColumnsReference_size, USize.toNat_one] using within
@@ -203,4 +203,4 @@ theorem verifyMerkleMultiproof_eq (leaves proof : List ByteArray) (indices : Lis
       · simp [leafCount, proofCount, bind, Except.bind, throw, throwThe, MonadExceptOf.throw]
   · simp [leafCount, bind, Except.bind, throw, throwThe, MonadExceptOf.throw]
 
-end Ssz.Native
+end EthLib.Consensus.Ssz.Native

@@ -7,9 +7,9 @@ A type rooted as fixed-size records is rooted as a column of one, into the scrat
 Every other type is passed to its own driver, whose call is a hypothesis here.
 -/
 
-namespace Ssz.Native.Driver
+namespace EthLib.Consensus.Ssz.Native.Driver
 
-open Ssz Ssz.Native.Ir Ssz.Native.Ir.Expr Ssz.Native.Ir.Stmt Ssz.Native.Asm
+open EthLib.Consensus.Ssz EthLib.Consensus.Ssz.Native.Ir EthLib.Consensus.Ssz.Native.Ir.Expr EthLib.Consensus.Ssz.Native.Ir.Stmt EthLib.Consensus.Ssz.Native.Asm
 
 /-- The driver the dispatcher passes a type to when the type is not rooted as fixed-size records. -/
 def rangeDriver : Desc → String
@@ -250,4 +250,4 @@ theorem rootOf_dispatch {m : Module} {w : World} (hash : HashingOk m w) (gmod : 
         (by simp [eval, Asm.assign, bitOf, hp]) (by decide) run
       exact ⟨_, mem', (Runs.ifElse_false (by tag_eval t1) (Runs.block_cons (Runs.ifElse_false (by tag_eval t1) (Runs.block_cons (Runs.ifElse_false (by tag_eval t1) (Runs.block_cons (Runs.ifElse_false (by tag_eval t1) (Runs.block_cons (Runs.ifElse_false (by tag_eval t1) (Runs.block_cons (Runs.ifElse_true 1 (by tag_eval t1) (by decide) (Runs.block_cons r1 (Runs.block_cons inner (Runs.block_nil _ _ _ _ _)))) (Runs.block_nil _ _ _ _ _))) (Runs.block_nil _ _ _ _ _))) (Runs.block_nil _ _ _ _ _))) (Runs.block_nil _ _ _ _ _))) (Runs.block_nil _ _ _ _ _))), post⟩
 
-end Ssz.Native.Driver
+end EthLib.Consensus.Ssz.Native.Driver

@@ -3,9 +3,9 @@ import SszNative.Proofs.Root.Main
 
 /-! The leaves of a span of a tree, read from an encoding, are the specification's leaves of the decoded value. -/
 
-namespace Ssz.Native.BranchProof
+namespace EthLib.Consensus.Ssz.Native.BranchProof
 
-open Ssz Ssz.Native
+open EthLib.Consensus.Ssz EthLib.Consensus.Ssz.Native
 
 /-- One position, as an encoding holds it and as the decoded value holds it: two gaps, or a range decoding to the value. -/
 def SlotAgrees (b : ByteArray) : Option (Desc × Nat × Nat) → Option (Desc × Value) → Prop
@@ -173,7 +173,7 @@ theorem stride_span (b : ByteArray) (small : RootProof.Small b) (budget : Nat) (
       deserialize element (slice b (start + width * (first + i)) (start + width * (first + i + 1))) = .ok v := by
     intro i h
     obtain ⟨x, tableEntry, agrees⟩ := each (first + i) (by omega)
-    simp only [Slots.at, show first + i < cnt by omega, if_true, Option.some.injEq] at tableEntry
+    simp only [Slots.at, show first + i < cnt by omega, ite_true, Option.some.injEq] at tableEntry
     subst tableEntry
     revert agrees
     cases values[first + i]'(by omega) with
@@ -188,7 +188,7 @@ theorem stride_span (b : ByteArray) (small : RootProof.Small b) (budget : Nat) (
   · -- Plain records are rooted as columns.
     rename_i isPlain
     have width_eq : width = fixedWidth element := by
-      rw [fixedSize_eq, if_pos (RootProof.hasWidth_of_plain element isPlain)] at fixed
+      rw [fixedSize_eq, ite_eq_left (RootProof.hasWidth_of_plain element isPlain)] at fixed
       exact (Option.some.inj fixed).symm
     by_cases empty : min last cnt - first = 0
     · refine ⟨?_, rfl, by omega, Or.inl empty⟩
@@ -314,4 +314,4 @@ theorem span_agrees (b : ByteArray) (small : RootProof.Small b) (budget : Nat) (
     exact listed_span b small budget slots values limitL mixinL limitE mixinE counted each
       (fun d v m => deep values rfl d v m) fits first last
 
-end Ssz.Native.BranchProof
+end EthLib.Consensus.Ssz.Native.BranchProof

@@ -5,7 +5,7 @@ import SszNative.Asm.Semantics
 
 namespace Tests.Native
 
-open Ssz Ssz.Native Ssz.Native.Asm
+open EthLib.Consensus.Ssz EthLib.Consensus.Ssz.Native EthLib.Consensus.Ssz.Native.Asm
 
 private def expect (label : String) (holds : Bool) : IO Unit := do
   -- Stop at the first disagreement, naming the case.

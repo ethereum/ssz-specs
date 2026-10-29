@@ -8,11 +8,11 @@ Every pair of a union's options is judged by the compatibility routine; what tha
 premise, stated on its own, and proved where the routine is.
 -/
 
-namespace Ssz.Native.Driver.Validate
+namespace EthLib.Consensus.Ssz.Native.Driver.Validate
 
 set_option maxRecDepth 20000
 
-open Ssz Ssz.Native Ssz.Native.Ir Ssz.Native.Asm Ssz.Native.Ir.Stmt Ssz.Native.Ir.Expr
+open EthLib.Consensus.Ssz EthLib.Consensus.Ssz.Native EthLib.Consensus.Ssz.Native.Ir EthLib.Consensus.Ssz.Native.Asm EthLib.Consensus.Ssz.Native.Ir.Stmt EthLib.Consensus.Ssz.Native.Ir.Expr
 
 mutual
 
@@ -157,10 +157,10 @@ theorem wf_union (sels : List Nat) (opts : List Desc) (h : (Desc.compatibleUnion
   simp only [Desc.wellFormed] at h
   by_cases e : (sels.isEmpty || opts.isEmpty) = true
   · simp [e, throw, throwThe, MonadExceptOf.throw, Bind.bind, Except.bind] at h
-  simp only [e, Bool.false_eq_true, if_false] at h
+  simp only [e, Bool.false_eq_true, ite_false] at h
   by_cases l : (sels.length != opts.length) = true
   · simp [l, throw, throwThe, MonadExceptOf.throw, Bind.bind, Except.bind] at h
-  simp only [l, Bool.false_eq_true, if_false] at h
+  simp only [l, Bool.false_eq_true, ite_false] at h
   cases hd : firstDuplicate sels with
   | some s => simp [hd, throw, throwThe, MonadExceptOf.throw, Bind.bind, Except.bind] at h
   | none =>
@@ -335,7 +335,7 @@ theorem plan_calls {m : Module} {w : World} (hm : Loaded m) (d : Desc) : PlanOk 
     have n32 : n < 4294967296 := fit.1.2
     have qne : p + 16 + 8 * (Plan.words e).length ≠ 18446744073709551615 := by omega
     by_cases has : hasWidth e = true
-    · simp only [widthWord, if_pos has] at width
+    · simp only [widthWord, ite_eq_left has] at width
       have fw := fixedWidth_lt e fit.1.1 has
       have hne : fixedWidth e ≠ 18446744073709551615 := by omega
       have prod : fixedWidth e * n < 4294967296 := by
@@ -348,7 +348,7 @@ theorem plan_calls {m : Module} {w : World} (hm : Loaded m) (d : Desc) : PlanOk 
       wcall width []
       wsteps [hne, prod]
       wfin [Plan.words]
-    · simp only [widthWord, if_neg has] at width
+    · simp only [widthWord, ite_eq_right has] at width
       wsteps [r0, a0, s8, r1, a1, s16, wf.1, n32]
       wcall step []
       wsteps [qne]
@@ -469,7 +469,7 @@ theorem plan_calls {m : Module} {w : World} (hm : Loaded m) (d : Desc) : PlanOk 
         rw [List.take_add_one, List.getElem?_eq_getElem hia, getElem!_pos active i hia]
         cases active[i] <;> simp
       -- Each bit is zero or one, so the flag for a wrong bit stays up.
-      cases hb : active[i]! <;> simp only [hb, if_true, Bool.false_eq_true, if_false, Nat.add_zero] at rb succ
+      cases hb : active[i]! <;> simp only [hb, ite_true, Bool.false_eq_true, ite_false, Nat.add_zero] at rb succ
       all_goals
         wsteps [h0, h7, h8, rb, ab, h9]
         exact ⟨⟨trivial, i + 1, by omega, by wfin [], by wfin [h8, succ], by wfin [h0], by wfin [h1], by wfin [h4],
@@ -584,4 +584,4 @@ theorem plan_calls {m : Module} {w : World} (hm : Loaded m) (d : Desc) : PlanOk 
       wsteps []
       wfin [hlen, h3]
 
-end Ssz.Native.Driver.Validate
+end EthLib.Consensus.Ssz.Native.Driver.Validate

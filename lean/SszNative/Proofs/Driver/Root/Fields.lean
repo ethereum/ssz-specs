@@ -11,9 +11,9 @@ each field from its range.
 Each field is rooted by the dispatcher on the field's type, a hypothesis of the induction on the type.
 -/
 
-namespace Ssz.Native.Driver
+namespace EthLib.Consensus.Ssz.Native.Driver
 
-open Ssz Ssz.Native.Ir Ssz.Native.Ir.Expr Ssz.Native.Ir.Stmt Ssz.Native.Asm
+open EthLib.Consensus.Ssz EthLib.Consensus.Ssz.Native.Ir EthLib.Consensus.Ssz.Native.Ir.Expr EthLib.Consensus.Ssz.Native.Ir.Stmt EthLib.Consensus.Ssz.Native.Asm
 
 /-! ### The field ranges -/
 
@@ -102,7 +102,7 @@ theorem fieldRg_fixed {fields : List Desc} {b : ByteArray} {start stop j : Nat} 
   have hr : j < (rangesOf start (stop - start) (placesFrom fields b start 0)).length := by
     rw [rangesOf_length]; exact hp
   simp only [fieldRg, List.getD_eq_getElem?_getD, List.getElem?_eq_getElem hr, Option.getD_some]
-  rw [rangesOf_get start _ _ j hp, placesFrom_getElem fields b start j hj, if_pos fx]
+  rw [rangesOf_get start _ _ j hp, placesFrom_getElem fields b start j hj, ite_eq_left fx]
 
 /-- A variable field's range runs from its offset to the next body's start, or to the end. -/
 theorem fieldRg_body {fields : List Desc} {b : ByteArray} {start stop j : Nat} (hj : j < fields.length)
@@ -113,7 +113,7 @@ theorem fieldRg_body {fields : List Desc} {b : ByteArray} {start stop j : Nat} (
   have hr : j < (rangesOf start (stop - start) (placesFrom fields b start 0)).length := by
     rw [rangesOf_length]; exact hp
   simp only [fieldRg, List.getD_eq_getElem?_getD, List.getElem?_eq_getElem hr, Option.getD_some]
-  rw [rangesOf_get start _ _ j hp, placesFrom_getElem fields b start j hj, if_neg (by simp [fx])]
+  rw [rangesOf_get start _ _ j hp, placesFrom_getElem fields b start j hj, ite_eq_right (by simp [fx])]
 
 /-- The next body after a field: its own when it has one, or the next body after it. -/
 theorem nextBody_step {fields : List Desc} {b : ByteArray} {start stop j : Nat} (hj : j < fields.length) :
@@ -428,7 +428,7 @@ theorem fwdBody_ends {m : Module} {w : World} (fns : RangeFns m) {fields : List 
     · have fxv : E2 9 = 1 := by rw [fx2, fx]; rfl
       have rg := fieldRg_fixed (start := start) (stop := stop) (b := b) hlt fx
       have lw1 : Desc.leadingWidth (fields.take (j + 1)) = Desc.leadingWidth (fields.take j) + fixedWidth fields[j] := by
-        rw [lwStep, fixedSize_eq, if_pos fx]; rfl
+        rw [lwStep, fixedSize_eq, ite_eq_left fx]; rfl
       have widthC := planWidth_calls fns.roots.plan fields[j] (fieldPlan fa fields j) sp M1 (planOf M1 frame1) soundJ
         thinJ stackJ
       have s1 := Runs.call (m := m) (sp := sp) (env := E2) (mem := M1) (dst := 10) (args := [RootFields.q])
@@ -476,7 +476,7 @@ theorem fwdBody_ends {m : Module} {w : World} (fns : RangeFns m) {fields : List 
       have fxv : E2 9 = 0 := by rw [fx2, fxf]; rfl
       have rg := fieldRg_body (start := start) (stop := stop) (b := b) hlt fxf
       have lw1 : Desc.leadingWidth (fields.take (j + 1)) = Desc.leadingWidth (fields.take j) + 4 := by
-        rw [lwStep, fixedSize_eq, if_neg fx]; rfl
+        rw [lwStep, fixedSize_eq, ite_eq_right fx]; rfl
       have offIn : start + Desc.leadingWidth (fields.take j) + 4 ≤ b.size := by omega
       have ld : eval w E2 M1 (ld4 (RootFields.src + RootFields.pos)) =
           some (UInt64.ofNat (offsetAt b (start + Desc.leadingWidth (fields.take j)))) := by
@@ -547,7 +547,7 @@ theorem fwdLoop_ends {m : Module} {w : World} (fns : RangeFns m) {fields : List 
     have hlt : j < fields.length := by
       by_cases h : j < fields.length
       · exact h
-      · rw [if_neg h] at c; cases c; exact absurd rfl nz
+      · rw [ite_eq_right h] at c; cases c; exact absurd rfl nz
     refine (fwdBody_ends fns room pre at_ hlt).mono fun e' mm' at' => ⟨⟨j + 1, at'⟩, ?_⟩
     rw [at'.2.2.2.1, hj8, ofNat_toNat (by omega), ofNat_toNat (by omega)]
     omega
@@ -556,7 +556,7 @@ theorem fwdLoop_ends {m : Module} {w : World} (fns : RangeFns m) {fields : List 
     rw [eval_lt (eval_var hj8) (eval_var ev.nV) (by omega) nSmall] at exit
     have : j = fields.length := by
       by_cases h : j < fields.length
-      · rw [if_pos h] at exit; cases exit
+      · rw [ite_eq_left h] at exit; cases exit
       · omega
     rw [this] at at_
     exact at_
@@ -621,9 +621,9 @@ theorem bwdBody_ends {m : Module} {w : World} {fields : List Desc} {sp : Nat} {m
   · -- A fixed field has its end already, and leaves the next body's start alone.
     have kind' : eval w E2 mm (ld (RootFields.ent + 16)) = some (UInt64.ofNat 1) := by rw [kind, fx]; rfl
     have c := eval_eq (w := w) (env := E2) (mem := mm) (b := 0) kind' (eval_lit 0) (by decide) (by decide)
-    rw [if_neg (by decide)] at c
+    rw [ite_eq_right (by decide)] at c
     refine ⟨_, mm, Runs.block_cons r1 (Runs.block_cons r2 (Runs.block_cons (Runs.when_false c)
-      (Runs.block_nil _ _ _ _ _))), by omega, ev2, j2, by rw [n2, step, if_pos fx], fun k hk lt => ?_, frame⟩
+      (Runs.block_nil _ _ _ _ _))), by omega, ev2, j2, by rw [n2, step, ite_eq_left fx], fun k hk lt => ?_, frame⟩
     obtain ⟨b0, b2, b1⟩ := tab k hk lt
     refine ⟨b0, b2, fun h => b1 ?_⟩
     rcases h with h | h
@@ -636,7 +636,7 @@ theorem bwdBody_ends {m : Module} {w : World} {fields : List Desc} {sp : Nat} {m
     have rg := fieldRg_body (b := b) (start := start) (stop := stop) hlt fxf
     have kind' : eval w E2 mm (ld (RootFields.ent + 16)) = some (UInt64.ofNat 0) := by rw [kind, fxf]; rfl
     have c := eval_eq (w := w) (env := E2) (mem := mm) (b := 0) kind' (eval_lit 0) (by decide) (by decide)
-    rw [if_pos rfl] at c
+    rw [ite_eq_left rfl] at c
     have s1 := Runs.st8 (m := m) (sp := sp) (env := E2) (mem := mm) (eval_add (eval_var ent2) (eval_lit 8))
       (eval_var n2) (acc 8 (by omega))
     have ld0 := eval_ld (w := w) (env := E2)
@@ -649,7 +649,7 @@ theorem bwdBody_ends {m : Module} {w : World} {fields : List Desc} {sp : Nat} {m
       (Runs.when_true 1 c (by decide) (Runs.block_cons s1 (Runs.block_cons s2 (Runs.block_nil _ _ _ _ _))))
       (Runs.block_nil _ _ _ _ _))), by omega, ev2.write _ (by decide), ?_, ?_, fun k hk lt => ?_, fun a o => ?_⟩
     · rw [assign_ne (by decide)]; exact j2
-    · rw [assign_eq, step, if_neg fx, Nat.add_assoc]
+    · rw [assign_eq, step, ite_eq_right fx, Nat.add_assoc]
     · obtain ⟨b0, b2, b1⟩ := tab k hk lt
       by_cases kj : k = j
       · subst kj
@@ -684,7 +684,7 @@ theorem bwdLoop_ends {m : Module} {w : World} {fields : List Desc} {sp : Nat} {m
     obtain ⟨i, rfl⟩ : ∃ i, j = i + 1 := by
       by_cases h : 0 < j
       · exact ⟨j - 1, by omega⟩
-      · rw [if_neg h] at c; cases c; exact absurd rfl nz
+      · rw [ite_eq_right h] at c; cases c; exact absurd rfl nz
     refine (bwdBody_ends pre at_).mono fun e' mm' at' => ⟨⟨i, at'⟩, ?_⟩
     rw [at'.2.2.1, hj8, ofNat_toNat (by omega), ofNat_toNat (by omega)]
     omega
@@ -693,7 +693,7 @@ theorem bwdLoop_ends {m : Module} {w : World} {fields : List Desc} {sp : Nat} {m
     rw [eval_lt (eval_lit 0) (eval_var hj8) (by decide) (by omega)] at exit
     have : j = 0 := by
       by_cases h : 0 < j
-      · rw [if_pos h] at exit; cases exit
+      · rw [ite_eq_left h] at exit; cases exit
       · omega
     rw [this] at at_
     exact at_
@@ -840,7 +840,7 @@ theorem finLoop_ends {m : Module} {w : World} (fns : RangeFns m) {fields : List 
     have hlt : j < fields.length := by
       by_cases h : j < fields.length
       · exact h
-      · rw [if_neg h] at c; cases c; exact absurd rfl nz
+      · rw [ite_eq_right h] at c; cases c; exact absurd rfl nz
     refine (finBody_ends fns ih room pre at_ hlt).mono fun e' mm' at' => ⟨⟨j + 1, at'⟩, ?_⟩
     rw [at'.2.2.1, hj8, ofNat_toNat (by omega), ofNat_toNat (by omega)]
     omega
@@ -849,7 +849,7 @@ theorem finLoop_ends {m : Module} {w : World} (fns : RangeFns m) {fields : List 
     rw [eval_lt (eval_var hj8) (eval_var ev.nV) (by omega) nSmall] at exit
     have : j = fields.length := by
       by_cases h : j < fields.length
-      · rw [if_pos h] at exit; cases exit
+      · rw [ite_eq_left h] at exit; cases exit
       · omega
     rw [this] at at_
     exact at_
@@ -922,4 +922,4 @@ theorem rootFields_calls {m : Module} {w : World} (fns : RangeFns m) {fields : L
   exact ⟨M8, Calls.fn fns.fields (by rw [fieldsFrame]; exact roomF) rfl body rfl, fun k hk => roots8 k hk hk,
     pre.ready.within (o := out) (n := span) pre.rCtx pre.rTable pre.rZeros frame8, frame8⟩
 
-end Ssz.Native.Driver
+end EthLib.Consensus.Ssz.Native.Driver

@@ -8,7 +8,7 @@ A chunk of records needs at most what a full chunk does, so every chunk of a lon
 A plain type's saturated width is its width, as long as the width stays below the cap.
 -/
 
-namespace Ssz.Native.Driver
+namespace EthLib.Consensus.Ssz.Native.Driver
 
 /-! ### Saturation -/
 
@@ -66,7 +66,7 @@ theorem rootsNeed_chunk (d : Desc) {c : Nat} (h : c ≤ recordsPerChunk) :
     · by_cases one : c = 1
       · -- One record against a full chunk: every part of the full chunk's bound is linear in the length.
         subst one
-        rw [if_pos rfl, if_neg (show ¬ (1024 : Nat) = 1 by decide)]
+        rw [ite_eq_left rfl, ite_eq_right (show ¬ (1024 : Nat) = 1 by decide)]
         have small : ∀ x, x ≤ recordsPerChunk → rootsNeed element x ≤ rootsNeed element recordsPerChunk :=
           fun x hx => rootsNeed_chunk element hx
         have satLen : sat length ≤ scratchCap := sat_le _
@@ -84,7 +84,7 @@ theorem rootsNeed_chunk (d : Desc) {c : Nat} (h : c ≤ recordsPerChunk) :
         simp only [treeNeed, sadd, smul, sat, RootProgressive.spineBytes, zeroHeights, m32, m64] at chunks ⊢
         generalize scratchCap = C at *
         omega
-      · rw [if_neg one, if_neg (show ¬ (1024 : Nat) = 1 by decide)]
+      · rw [ite_eq_right one, ite_eq_right (show ¬ (1024 : Nat) = 1 by decide)]
         exact sadd_mono (sadd_mono (smul_mono (Nat.le_refl _) h)
           (smul_mono (smul_mono (Nat.le_refl _) h) (Nat.le_refl _)))
           (max_mono ih (smul_mono (smul_mono (Nat.le_refl _) h) (Nat.le_refl _)))
@@ -95,13 +95,13 @@ theorem rootsNeed_chunk (d : Desc) {c : Nat} (h : c ≤ recordsPerChunk) :
     by_cases one : c = 1
     · -- One record against a full chunk: every part of the full chunk's bound is linear in the field count.
       subst one
-      rw [if_pos rfl, if_neg (show ¬ (1024 : Nat) = 1 by decide)]
+      rw [ite_eq_left rfl, ite_eq_right (show ¬ (1024 : Nat) = 1 by decide)]
       have satLen : sat fields.length ≤ scratchCap := sat_le _
       generalize sat fields.length = n at *
       have mostLe := fieldsRootsNeed_le fields 1 0 (Nat.zero_le _)
       simp only [treeNeed, sadd, smul, sat, chunk, RootProgressive.spineBytes, zeroHeights, m32, m64] at most top mostLe ⊢
       omega
-    · rw [if_neg one, if_neg (show ¬ (1024 : Nat) = 1 by decide)]
+    · rw [ite_eq_right one, ite_eq_right (show ¬ (1024 : Nat) = 1 by decide)]
       exact sadd_mono (sadd_mono (smul_mono (Nat.le_refl _) h)
         (smul_mono (smul_mono (Nat.le_refl _) h) (Nat.le_refl _)))
         (max_mono most (smul_mono (smul_mono (Nat.le_refl _) h) (Nat.le_refl _)))
@@ -241,4 +241,4 @@ theorem satFieldsWidth_plain : (fs : List Desc) → plainAll fs = true → ∀ a
 
 end
 
-end Ssz.Native.Driver
+end EthLib.Consensus.Ssz.Native.Driver

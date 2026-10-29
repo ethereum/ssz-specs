@@ -1,6 +1,6 @@
 import SszNative.Proofs.Root.Merkle
 import SszNative.Root
-import Ssz.Proofs.Merkle.Merkleize
+import EthLib.Consensus.Proofs.Ssz.Merkle.Merkleize
 
 /-!
 Trees over columns: one tree per record, built level by level across all records at once.
@@ -9,9 +9,9 @@ Column c holds, for every record, the root of that record's subtree at position 
 Hashing columns pairwise is hashing every record's level at once.
 -/
 
-namespace Ssz.Native
+namespace EthLib.Consensus.Ssz.Native
 
-open Ssz
+open EthLib.Consensus.Ssz
 
 /--
 Columns at a height: column c holds, for each record i, the root of its subtree of that height at position c.
@@ -117,7 +117,7 @@ theorem columnTree_spec (count n : Nat) (leaves : Nat → Array Bytes) (small : 
       have up := pairUp_spec count height n leaves small equal (a :: b :: rest) 0 (by simpa using tableEntry)
         (by simpa using covers)
       have halve : depthFor (a :: b :: rest).length = depthFor (((a :: b :: rest).length + 1) / 2) + 1 := by
-        rw [depthFor, if_neg (by simp)]
+        rw [depthFor, ite_eq_right (by simp)]
       have := columnTree_spec count n leaves small equal fuel (columnTree.pairUp count height (a :: b :: rest))
         (height + 1) (by simpa using up.2) (by rw [up.1]; simp; omega) (by
           rw [up.1, up_index]
@@ -176,4 +176,4 @@ theorem columnTreeTo_spec (columns : List ByteArray) (count depth : Nat) (leaves
   rw [show depthFor columns.length + (depth - depthFor columns.length) = depth by omega] at this
   exact this
 
-end Ssz.Native
+end EthLib.Consensus.Ssz.Native

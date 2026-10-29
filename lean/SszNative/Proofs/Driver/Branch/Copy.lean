@@ -2,9 +2,9 @@ import SszNative.Proofs.Driver.Branch.FoldSpec
 
 /-! Copying a node eight bytes at a time, as the drivers do. -/
 
-namespace Ssz.Native.Driver.BranchProof
+namespace EthLib.Consensus.Ssz.Native.Driver.BranchProof
 
-open Ssz.Native.Ir Ssz.Native.Asm
+open EthLib.Consensus.Ssz.Native.Ir EthLib.Consensus.Ssz.Native.Asm
 
 /-- The digit of a number spelled by bytes is the byte at that position. -/
 theorem bytesNat_digit (mem : Memory) : ∀ (a n k : Nat), k < n → bytesNat mem a n / 256 ^ k % 256 = (mem (a + k)).toNat
@@ -41,7 +41,7 @@ theorem copy8_wp {m : Module} {w : World} {sp : Nat} {env : Env} {mem : Memory} 
   · intro b hb
     rw [dAddr, sAddr]
     simp only [store, show d.toNat + o ≤ d.toNat + o + b by omega, show d.toNat + o + b < d.toNat + o + Width.bytes .b8 by
-      simp [Width.bytes]; omega, and_self, if_true, show d.toNat + o + b - (d.toNat + o) = b by omega]
+      simp [Width.bytes]; omega, and_self, ite_true, show d.toNat + o + b - (d.toNat + o) = b by omega]
     exact qwordByte_readLE _ _ _ hb
   · intro a ha
     rw [dAddr]
@@ -90,4 +90,4 @@ theorem copy32_wp {m : Module} {w : World} {sp : Nat} {env : Env} {mem : Memory}
   · intro a ha
     rw [f4 _ (by omega), f3 _ (by omega), f2 _ (by omega), f1 _ (by omega)]
 
-end Ssz.Native.Driver.BranchProof
+end EthLib.Consensus.Ssz.Native.Driver.BranchProof

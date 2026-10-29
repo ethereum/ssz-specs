@@ -1,4 +1,4 @@
-import Ssz.Hash.Sha256
+import EthLib.Cryptography.Hash.Sha256
 
 /-!
 The constants the SHA-256 kernels read, laid out as one table.
@@ -6,9 +6,9 @@ The constants the SHA-256 kernels read, laid out as one table.
 Every entry comes from the specification's own constants, so the kernels and the specification share them.
 -/
 
-namespace Ssz.Native.Kernel
+namespace EthLib.Consensus.Ssz.Native.Kernel
 
-open Ssz.Sha256 (roundConstants initialState schedule)
+open EthLib.Cryptography.Hash.Sha256 (schedule)
 
 /--
 The second block of every 64-byte message: a set bit, zeros, then the bit length 512.
@@ -20,7 +20,7 @@ def paddingBlock : ByteArray :=
 
 /-- Round t's constant plus the padding block's schedule word t. -/
 def paddingWK (t : Nat) : UInt32 :=
-  roundConstants[t % 64]! + (schedule paddingBlock 0)[t % 64]!
+  Cryptography.Hash.Sha256.K[t % 64]! + (schedule paddingBlock 0)[t % 64]!
 
 /-- Byte offset of round t's constant, repeated in all sixteen lanes. -/
 def kAvx512 (t : Nat) : Nat := 64 * t
@@ -73,16 +73,16 @@ def laneMask (k l : Nat) : UInt32 :=
 
 /-- The table's 32-bit word w, at byte offset 4w. -/
 def tableWord (w : Nat) : UInt32 :=
-  let iv := fun j => initialState[j % 8]!
+  let iv := fun j => Cryptography.Hash.Sha256.IV[j % 8]!
   -- Sixteen-lane constants: one 64-byte row per entry.
-  if w < 1024 then roundConstants[w / 16 % 64]!
+  if w < 1024 then Cryptography.Hash.Sha256.K[w / 16 % 64]!
   else if w < 2048 then paddingWK ((w - 1024) / 16)
   else if w < 2176 then iv ((w - 2048) / 16)
   else if w < 2192 then reverseLane (w - 2176)
   else if w < 2224 then quadMask ((w - 2192) / 16) (w - 2192)
   else if w < 2256 then laneMask ((w - 2224) / 16) (w - 2224)
   -- Four-lane constants for the SHA instructions.
-  else if w < 2320 then roundConstants[(w - 2256) % 64]!
+  else if w < 2320 then Cryptography.Hash.Sha256.K[(w - 2256) % 64]!
   else if w < 2384 then paddingWK (w - 2320)
   -- ABEF and CDGH hold A, B, E, F and C, D, G, H from the highest lane down.
   else if w < 2388 then iv (#[5, 4, 1, 0][(w - 2384) % 4]!)
@@ -93,4 +93,4 @@ def tableWord (w : Nat) : UInt32 :=
 def table : ByteArray :=
   ⟨Array.ofFn (n := tableSize) fun i => (tableWord (i / 4) >>> (8 * (i.val % 4)).toUInt32).toUInt8⟩
 
-end Ssz.Native.Kernel
+end EthLib.Consensus.Ssz.Native.Kernel

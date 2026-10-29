@@ -7,9 +7,9 @@ A statement runs from some variables and memory to others when some fuel gives i
 More fuel never changes a meaning, so runs compose: the fuel of the whole is the larger of the parts.
 -/
 
-namespace Ssz.Native.Ir
+namespace EthLib.Consensus.Ssz.Native.Ir
 
-open Ssz.Native.Asm
+open EthLib.Consensus.Ssz.Native.Asm
 
 /-- A statement runs from variables and memory to others, with some fuel, from a stack pointer. -/
 def Runs (m : Module) (w : World) (sp : Nat) (env : Env) (mem : Memory) (s : Stmt) (env' : Env) (mem' : Memory) :
@@ -77,7 +77,7 @@ theorem Runs.loop_step {m : Module} {w : World} {sp : Nat} {env₁ env₂ env₃
   refine ⟨max fb fl + 1, ?_⟩
   rw [exec]; simp only [hc, bind, Option.bind]
   have : (v == 0) = false := by simpa using nz
-  simp only [this, Bool.false_eq_true, if_false]
+  simp only [this, Bool.false_eq_true]
   rw [exec_le m w eb (Nat.le_max_left _ _)]
   exact exec_le m w el (Nat.le_max_right _ _)
 
@@ -152,4 +152,4 @@ theorem Calls.ext {m : Module} {w : World} {f : String} {sp : Nat} {args : List 
     (run : e.run w sp args mem = some (r, mem')) : Calls m w f sp args mem r mem' :=
   ⟨0, by simp [callSpec, hf, he, room, run]⟩
 
-end Ssz.Native.Ir
+end EthLib.Consensus.Ssz.Native.Ir

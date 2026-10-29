@@ -7,9 +7,9 @@ Each pass scans every candidate for the largest one below the last written, and 
 A pass that finds none ends the selection, every candidate having been written.
 -/
 
-namespace Ssz.Native.Driver.BranchProof
+namespace EthLib.Consensus.Ssz.Native.Driver.BranchProof
 
-open Ssz.Native.Ir Ssz.Native.Asm
+open EthLib.Consensus.Ssz.Native.Ir EthLib.Consensus.Ssz.Native.Asm
 
 /-- The scan of one pass: the largest qualifying candidate so far, if any qualified. -/
 theorem scan_loop {m : Module} {w : World} {sp : Nat} {mem : Memory} {cands count : UInt64}
@@ -57,8 +57,8 @@ theorem scan_loop {m : Module} {w : World} {sp : Nat} {mem : Memory} {cands coun
         if j < (env' 7).toNat then (readLE mem' (cands.toNat + 8 * j) 8).toNat else c.toNat := by
       intro j hj
       by_cases early : j < (env' 7).toNat
-      · rw [if_pos early]
-      · rw [if_neg early, show j = (env' 7).toNat by omega, hc]
+      · rw [ite_eq_left early]
+      · rw [ite_eq_right early, show j = (env' 7).toNat by omega, hc]
     have flag1 := eval_or (eval_eq (a := Ir.Expr.var 3) (b := (0 : Ir.Expr)) (env := assign env' 8 c) (w := w)
       (mem := mem') rfl rfl) (eval_lt (a := Ir.Expr.var 8) (b := Ir.Expr.var 4) rfl rfl)
     rw [or_flags] at flag1
@@ -68,7 +68,7 @@ theorem scan_loop {m : Module} {w : World} {sp : Nat} {mem : Memory} {cands coun
         have : (assign env' 8 c 3 = 0 ∨ (assign env' 8 c 8).toNat < (assign env' 8 c 4).toNat) := by
           by_cases h : (assign env' 8 c 3 = 0 ∨ (assign env' 8 c 8).toNat < (assign env' 8 c 4).toNat)
           · exact h
-          · rw [if_neg h] at q; exact absurd rfl q
+          · rw [ite_eq_right h] at q; exact absurd rfl q
         simp only [assign, ↓reduceIte, Nat.reduceEqDiff] at this
         rw [f3, f4] at this; exact this
       have flag2 := eval_or (eval_eq (a := Ir.Expr.var 5) (b := (0 : Ir.Expr)) (env := assign env' 8 c) (w := w)
@@ -78,7 +78,7 @@ theorem scan_loop {m : Module} {w : World} {sp : Nat} {mem : Memory} {cands coun
       · have better : env' 5 = 0 ∨ (env' 6).toNat < c.toNat := by
           by_cases h : (assign env' 8 c 5 = 0 ∨ (assign env' 8 c 6).toNat < (assign env' 8 c 8).toNat)
           · simpa [assign] using h
-          · rw [if_neg h] at better; exact absurd rfl better
+          · rw [ite_eq_right h] at better; exact absurd rfl better
         refine Wp.cons (Wp.set rfl (Wp.cons (Wp.set rfl (Wp.nil (Wp.nil (Wp.cons (Wp.set (eval_add rfl rfl)
           (Wp.nil ⟨⟨rfl, ?_⟩, ?_⟩)))))))) <;>
           simp only [assign, ↓reduceIte, Nat.reduceEqDiff, next]
@@ -86,7 +86,7 @@ theorem scan_loop {m : Module} {w : World} {sp : Nat} {mem : Memory} {cands coun
           rw [extend j hj] at qj ⊢
           split
           · rename_i early
-            rw [if_pos early] at qj
+            rw [ite_eq_left early] at qj
             rcases state with ⟨_, none⟩ | ⟨s1, _, _, below⟩
             · exact absurd qj (none j early)
             · have := below j early qj
@@ -97,7 +97,7 @@ theorem scan_loop {m : Module} {w : World} {sp : Nat} {mem : Memory} {cands coun
         · omega
       · have worse : ¬ (env' 5 = 0 ∨ (env' 6).toNat < c.toNat) := by
           intro h
-          rw [if_pos (by simpa [assign] using h)] at worse
+          rw [ite_eq_left (by simpa [assign] using h)] at worse
           exact absurd worse (by decide)
         refine Wp.skip (Wp.nil (Wp.cons (Wp.set (eval_add rfl rfl) (Wp.nil ⟨⟨rfl, ?_⟩, ?_⟩)))) <;>
           simp only [assign, ↓reduceIte, Nat.reduceEqDiff, next]
@@ -107,15 +107,15 @@ theorem scan_loop {m : Module} {w : World} {sp : Nat} {mem : Memory} {cands coun
             rw [extend j hj] at qj ⊢
             split
             · rename_i early
-              rw [if_pos early] at qj
+              rw [ite_eq_left early] at qj
               exact below j early qj
-            · rw [if_neg (by assumption)] at qj
+            · rw [ite_eq_right (by assumption)] at qj
               omega
         · omega
     · -- A candidate that does not qualify changes nothing.
       have nq : ¬ qual c.toNat := by
         intro h
-        rw [if_pos (by simp only [assign, ↓reduceIte, Nat.reduceEqDiff]; rw [f3, f4]; exact h)] at nq
+        rw [ite_eq_left (by simp only [assign, ↓reduceIte, Nat.reduceEqDiff]; rw [f3, f4]; exact h)] at nq
         exact absurd nq (by decide)
       refine Wp.skip (Wp.cons (Wp.set (eval_add rfl rfl) (Wp.nil ⟨⟨rfl, ?_⟩, ?_⟩))) <;>
         simp only [assign, ↓reduceIte, Nat.reduceEqDiff, next]
@@ -129,8 +129,8 @@ theorem scan_loop {m : Module} {w : World} {sp : Nat} {mem : Memory} {cands coun
         · refine .inr ⟨s, qb, mb, fun j hj qj => ?_⟩
           rw [extend j hj] at qj ⊢
           split
-          · rename_i early; rw [if_pos early] at qj; exact below j early qj
-          · rename_i late; rw [if_neg late] at qj; exact absurd qj nq
+          · rename_i early; rw [ite_eq_left early] at qj; exact below j early qj
+          · rename_i late; rw [ite_eq_right late] at qj; exact absurd qj nq
       · omega
   · -- Every candidate was scanned.
     have done : ¬ (env' 7).toNat < count.toNat := by rw [← f1]; simpa [Cond.holds, UInt64.lt_iff_toNat_lt] using z
@@ -304,4 +304,4 @@ theorem select_calls {m : Module} {w : World} (hs : m.fns.lookup "ssz_branch_sel
     apply UInt64.toNat_inj.mp
     rw [toNat_ofNat_of_lt _ (by have := count.toNat_lt; omega)]
 
-end Ssz.Native.Driver.BranchProof
+end EthLib.Consensus.Ssz.Native.Driver.BranchProof

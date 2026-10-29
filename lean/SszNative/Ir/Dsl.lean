@@ -6,9 +6,9 @@ Notation for writing programs of the small language as readable code.
 Variables are named values of their own type, so a number in an expression is always a constant.
 -/
 
-namespace Ssz.Native.Ir
+namespace EthLib.Consensus.Ssz.Native.Ir
 
-open Ssz.Native.Asm (Alu Cond Width)
+open EthLib.Consensus.Ssz.Native.Asm (Alu Cond Width)
 
 /-- A variable of a function, by its number. -/
 structure Var where
@@ -82,4 +82,4 @@ end Stmt
 
 @[inherit_doc Stmt.assign] infix:25 " ::= " => Stmt.assign
 
-end Ssz.Native.Ir
+end EthLib.Consensus.Ssz.Native.Ir

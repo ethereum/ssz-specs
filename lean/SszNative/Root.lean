@@ -1,6 +1,6 @@
 import SszNative.Tree
 import SszNative.Validate
-import Ssz.Codec.Layout
+import EthLib.Consensus.Ssz.Codec.Layout
 
 /-!
 The root of an encoded value, computed from its bytes.
@@ -13,9 +13,9 @@ Column j holds field j's root for every record, from one gather or one slice.
 Columns are then hashed pairwise, level by level, until one column holds every record's root.
 -/
 
-namespace Ssz.Native
+namespace EthLib.Consensus.Ssz.Native
 
-open Ssz
+open EthLib.Consensus.Ssz
 
 /-- A buffer of zero bytes: one empty field in a slot of that size. -/
 def zeros (size : Nat) : ByteArray :=
@@ -295,4 +295,4 @@ def hashTreeRoot (d : Desc) (b : ByteArray) : Except Err ByteArray := do
   validate d b
   return rootOf d b 0 b.size
 
-end Ssz.Native
+end EthLib.Consensus.Ssz.Native

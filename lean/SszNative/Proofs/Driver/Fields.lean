@@ -7,9 +7,9 @@ The reference reads the fixed part into places, checks the offsets as a table, t
 Here the same ranges are described field by field, which is how the driver writes them.
 -/
 
-namespace Ssz.Native.Driver
+namespace EthLib.Consensus.Ssz.Native.Driver
 
-open Ssz.Native.Ir Ssz.Native.Asm Ssz.Native.Plan
+open EthLib.Consensus.Ssz.Native.Ir EthLib.Consensus.Ssz.Native.Asm EthLib.Consensus.Ssz.Native.Plan
 
 /-- The places of fields from a position of a struct's fixed part, when all of it lies inside the struct. -/
 def placesFrom : List Desc → ByteArray → Nat → Nat → List Place
@@ -148,7 +148,7 @@ theorem fieldRanges_accepted (fields : List Desc) (b : ByteArray) (start stop : 
     | none => simp [fixed] at budget; simp [show ¬ stop - start < Desc.leadingWidth fields by omega]
     | some width => simp [fixed] at budget; simp [budget]
   have read := readPlaces_inside b start (stop - start) fields 0 inside
-  simp only [fieldRanges, fieldPlaces, small, if_false, budgetRead, read, throw, throwThe, MonadExceptOf.throw,
+  simp only [fieldRanges, fieldPlaces, small, ite_false, budgetRead, read, throw, throwThe, MonadExceptOf.throw,
     Bind.bind, Except.bind, pure, Except.pure, Nat.zero_add, ge_iff_le]
   simp only [placeRanges]
   rcases table with none_ | ⟨head, ordered⟩
@@ -174,7 +174,7 @@ theorem fieldRanges_refused (fields : List Desc) (b : ByteArray) (start stop : N
   intro x h
   apply refused
   -- An accepted struct passed every check, so its budget and its table were accepted.
-  simp only [fieldRanges, fieldPlaces, small, if_false, throw, throwThe, MonadExceptOf.throw, Bind.bind,
+  simp only [fieldRanges, fieldPlaces, small, ite_false, throw, throwThe, MonadExceptOf.throw, Bind.bind,
     Except.bind, ge_iff_le] at h
   cases budgetRead : structBudget fields (stop - start) with
   | error e => simp [budgetRead] at h
@@ -197,7 +197,7 @@ theorem fieldRanges_refused (fields : List Desc) (b : ByteArray) (start stop : N
     by_cases none_ : placeStarts (placesFrom fields b start 0) = []
     · exact Or.inl none_
     · right
-      simp only [none_, List.isEmpty_iff, if_false] at h
+      simp only [none_, List.isEmpty_iff, ite_false] at h
       split at h
       · simp [throw, throwThe, MonadExceptOf.throw, Bind.bind, Except.bind] at h
       · rename_i first
@@ -257,7 +257,7 @@ theorem rangesOf_get (start size : Nat) : ∀ (places : List Place) (j : Nat) (s
     exact rangesOf_get start size rest j (by simpa using small)
 
 /-- Whether a place holds an offset to a body. -/
-def _root_.Ssz.Native.Place.isBody : Place → Bool
+def _root_.EthLib.Consensus.Ssz.Native.Place.isBody : Place → Bool
   | .inline _ _ => false
   | .body _ => true
 
@@ -827,10 +827,10 @@ theorem viewWord_get (ranges : List (Nat × Nat)) (j : Nat) (small : j < ranges.
     viewWord ranges (1 + 2 * j) = ranges[j].1.toUInt64 ∧ viewWord ranges (2 + 2 * j) = ranges[j].2.toUInt64 := by
   constructor
   · simp only [viewWord]
-    rw [if_neg (by omega), if_pos (by omega), show (1 + 2 * j - 1) / 2 = j by omega]
+    rw [ite_eq_right (by omega), ite_eq_left (by omega), show (1 + 2 * j - 1) / 2 = j by omega]
     simp [List.getD_eq_getElem?_getD, small]
   · simp only [viewWord]
-    rw [if_neg (by omega), if_neg (by omega), show (2 + 2 * j - 1) / 2 = j by omega]
+    rw [ite_eq_right (by omega), ite_eq_right (by omega), show (2 + 2 * j - 1) / 2 = j by omega]
     simp [List.getD_eq_getElem?_getD, small]
 
 /-- The first body after some places in place is the body that follows them, whatever the default. -/
@@ -1478,7 +1478,7 @@ theorem fields_ok (m : Module) (w : World) (linked : HasCodec m) (sp : Nat) (mem
         have le := ofNat_le_iff fields.length cap (by omega) at_.smallCap
         by_cases c : fields.length ≤ cap <;> simp [c, le]
       by_cases fits : fields.length ≤ cap
-      · simp only [fits, if_true]
+      · simp only [fits, ite_true]
         let env₇ := assign (assign (assign (assign env₆ 10 0) 11 (env₆ 0)) 13 0) 15 (indexWord none)
         have k7 : ∀ k, k < 10 → env₇ k = env₆ k := by
           intro k hk; simp [env₇, assign, show k ≠ 10 by omega, show k ≠ 11 by omega, show k ≠ 13 by omega,
@@ -1569,7 +1569,7 @@ theorem fields_ok (m : Module) (w : World) (linked : HasCodec m) (sp : Nat) (mem
           (by decide) (Runs.block_cons (Runs.set _ _ _ _ _ 6 _ _ rfl) (Runs.ite_true 1 (by rw [room']; simp [fits])
             (by decide) (Runs.block_join _ _ (by simp) setup₂ (Runs.block_cons ranWrite closing))))))) (by
               simp [assign])
-      · simp only [fits, if_false]
+      · simp only [fits, ite_false]
         refine finish _ _ _ (through _ _ (Runs.block_cons ranLast (Runs.ite_true 1 (by simp [eval, up₅])
           (by decide) (Runs.block_cons (Runs.set _ _ _ _ _ 6 _ _ rfl) (Runs.ite_false (by rw [room']; simp [fits])
             (Runs.skip _ _ _ _ _)))))) (by simp [env₆, assign])
@@ -1586,4 +1586,4 @@ theorem fields_ok (m : Module) (w : World) (linked : HasCodec m) (sp : Nat) (mem
     rw [kept₄ 6 (by decide), k3 6 (by decide), kept₂ 6 (by decide)]
     simp [env₁, assign]
 
-end Ssz.Native.Driver
+end EthLib.Consensus.Ssz.Native.Driver

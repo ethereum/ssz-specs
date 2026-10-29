@@ -14,9 +14,9 @@ A plan read back names its fields by position, so what the native code computes 
 specification computes on the type it was written from.
 -/
 
-namespace Ssz.Native.Plan
+namespace EthLib.Consensus.Ssz.Native.Plan
 
-open Ssz Ssz.Native
+open EthLib.Consensus.Ssz EthLib.Consensus.Ssz.Native
 
 /-! Facts about one level of a type. -/
 
@@ -731,7 +731,7 @@ theorem allFitNative_rename : ∀ ds : List Desc, allFitNative (renameAll ds) = 
 
 end
 
-open Ssz.Native.Ir Ssz.Native.Driver.Validate in
+open EthLib.Consensus.Ssz.Native.Ir EthLib.Consensus.Ssz.Native.Driver.Validate in
 /--
 The native decoding check, for a type whose fields carry any names, against that type's plan.
 
@@ -754,4 +754,4 @@ theorem validate_calls_named {m : Module} {w : World} (hm : Loaded m) (d : Desc)
 
 end Decoded
 
-end Ssz.Native.Plan
+end EthLib.Consensus.Ssz.Native.Plan

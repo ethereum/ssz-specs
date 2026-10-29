@@ -4,11 +4,11 @@ import SszNative.Proofs.Driver.Validate.Delimited
 A table of offsets, checked as a whole: each offset no earlier than the one before, and the last within the size.
 -/
 
-namespace Ssz.Native.Driver.Validate
+namespace EthLib.Consensus.Ssz.Native.Driver.Validate
 
 set_option maxRecDepth 20000
 
-open Ssz Ssz.Native Ssz.Native.Ir Ssz.Native.Asm Ssz.Native.Ir.Stmt Ssz.Native.Ir.Expr
+open EthLib.Consensus.Ssz EthLib.Consensus.Ssz.Native EthLib.Consensus.Ssz.Native.Ir EthLib.Consensus.Ssz.Native.Asm EthLib.Consensus.Ssz.Native.Ir.Stmt EthLib.Consensus.Ssz.Native.Ir.Expr
 
 /-- An offset fits below 2^32. -/
 theorem offsetAt_lt (b : ByteArray) (i : Nat) : offsetAt b i < 2 ^ 32 := by
@@ -68,7 +68,7 @@ theorem spans_unordered : ∀ (l : List Nat) (size i : Nat), 0 < i → i < l.len
     by_cases i1 : i = 1
     · subst i1; simp at lt; simp [lt]
     · have sn : s ≤ n := by have := ord 1 (by omega) (by omega) (by simp); simpa using this
-      rw [if_neg (by omega)]
+      rw [ite_eq_right (by omega)]
       refine spans_unordered (n :: rest) size (i - 1) (by omega) (by simp at h ⊢; omega) ?_ ?_
       · intro k kp ki kl
         have := ord (k + 1) (by omega) (by omega) (by simp at kl ⊢; omega)
@@ -90,7 +90,7 @@ theorem spans_ordered : ∀ (l : List Nat) (size : Nat), OrdUpTo l l.length →
   | s :: n :: rest, size, ord => by
     rw [spans_cons_cons]
     have sn : s ≤ n := by have := ord 1 (by omega) (by simp) (by simp); simpa using this
-    rw [if_neg (by omega), spans_ordered (n :: rest) size ?_]
+    rw [ite_eq_right (by omega), spans_ordered (n :: rest) size ?_]
     · simp
     · intro k kp ki kl
       have := ord (k + 1) (by omega) (by simp at ki ⊢; omega) (by simp at kl ⊢; omega)
@@ -195,4 +195,4 @@ theorem spans_calls {m : Module} {w : World} (hm : Loaded m) (mem : Memory) (bas
     wsteps [h4]
     wfin [bad, res, after]
 
-end Ssz.Native.Driver.Validate
+end EthLib.Consensus.Ssz.Native.Driver.Validate

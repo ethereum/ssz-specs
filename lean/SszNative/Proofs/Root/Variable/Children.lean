@@ -2,9 +2,9 @@ import SszNative.Proofs.Root.Variable.Ranges
 
 /-! Roots of nested values, one per range, agreeing with the specification's root of each decoded value. -/
 
-namespace Ssz.Native.RootProof
+namespace EthLib.Consensus.Ssz.Native.RootProof
 
-open Ssz Ssz.Native
+open EthLib.Consensus.Ssz EthLib.Consensus.Ssz.Native
 
 /-- Whether the root of every valid range of an encoding is the specification's root of the value it holds. -/
 def Agrees (d : Desc) : Prop :=
@@ -127,4 +127,4 @@ theorem fields_mapM :
     simp only [List.map_cons, List.mapM_cons, slotRoot, FieldRooted] at head ⊢
     simp only [head, Bind.bind, Except.bind, fields_mapM tail, pure, Except.pure]
 
-end Ssz.Native.RootProof
+end EthLib.Consensus.Ssz.Native.RootProof

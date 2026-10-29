@@ -8,9 +8,9 @@ The second keeps the entries off the level, in order.
 A node set lives in memory as 40-byte entries: an index word, then a node.
 -/
 
-namespace Ssz.Native.Driver.BranchProof
+namespace EthLib.Consensus.Ssz.Native.Driver.BranchProof
 
-open Ssz.Native.Ir Ssz.Native.Asm
+open EthLib.Consensus.Ssz.Native.Ir EthLib.Consensus.Ssz.Native.Asm
 
 /-- The parents one level of a node set folds into, in order, or the first refusal. -/
 def levelParents (depth : Nat) (nodes : List (Nat × ByteArray)) :
@@ -127,7 +127,7 @@ theorem entriesAt_succ (mem : Memory) (a n : Nat) :
 /-- The node held at an index is the node of the first entry the search finds, if it finds one. -/
 theorem nodeAt_entriesAt (mem : Memory) (a : Nat) (key : UInt64) :
     ∀ n, nodeAt (entriesAt mem a n) key.toNat =
-      if firstAt (wordAt mem a 40) key n < n then some (readNode mem (a + 40 * firstAt (wordAt mem a 40) key n + 8))
+      if firstAt (big32 mem a 40) key n < n then some (readNode mem (a + 40 * firstAt (big32 mem a 40) key n + 8))
       else none
   | 0 => by simp [entriesAt, nodeAt, firstAt]
   | n + 1 => by
@@ -135,23 +135,23 @@ theorem nodeAt_entriesAt (mem : Memory) (a : Nat) (key : UInt64) :
     simp only [nodeAt] at ih ⊢
     rw [entriesAt_succ, List.find?_append]
     simp only [firstAt]
-    by_cases early : firstAt (wordAt mem a 40) key n < n
+    by_cases early : firstAt (big32 mem a 40) key n < n
     · -- The match lies among the earlier entries.
-      rw [if_pos early] at ih
+      rw [ite_eq_left early] at ih
       have found : (entriesAt mem a n).find? (fun x => x.1 == key.toNat) ≠ none := by
         intro h; rw [h] at ih; simp at ih
       obtain ⟨x, hx⟩ := Option.ne_none_iff_exists'.mp found
       rw [hx] at ih ⊢
-      have lt : firstAt (wordAt mem a 40) key n < n + 1 := by omega
-      simp only [Option.map_some, if_pos early, if_pos lt] at ih ⊢
+      have lt : firstAt (big32 mem a 40) key n < n + 1 := by omega
+      simp only [Option.map_some, ite_eq_left early, ite_eq_left lt] at ih ⊢
       exact ih
-    · rw [if_neg early] at ih
+    · rw [ite_eq_right early] at ih
       have none_ : (entriesAt mem a n).find? (fun x => x.1 == key.toNat) = none := by
         cases h : (entriesAt mem a n).find? (fun x => x.1 == key.toNat) with
         | none => rfl
         | some x => rw [h] at ih; simp at ih
-      simp only [none_, if_neg early, Option.none_or, List.find?_cons, List.find?_nil]
-      by_cases hit : wordAt mem a 40 n = key
+      simp only [none_, ite_eq_right early, Option.none_or, List.find?_cons, List.find?_nil]
+      by_cases hit : big32 mem a 40 n = key
       · have : ((readLE mem (a + 40 * n) 8).toNat == key.toNat) = true := by
           simp only [beq_iff_eq]; rw [← hit]; rfl
         simp [this, hit]
@@ -160,4 +160,4 @@ theorem nodeAt_entriesAt (mem : Memory) (a : Nat) (key : UInt64) :
           intro e; exact hit (UInt64.toNat_inj.mp e)
         simp [this, hit]
 
-end Ssz.Native.Driver.BranchProof
+end EthLib.Consensus.Ssz.Native.Driver.BranchProof

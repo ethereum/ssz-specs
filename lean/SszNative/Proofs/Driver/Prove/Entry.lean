@@ -6,9 +6,9 @@ The exported proving drivers answer what the Lean node, branch, and multiproof a
 Each takes the walk to one node from its proof for every type, on an encoding validation accepts.
 -/
 
-namespace Ssz.Native.Driver.ProveProof
+namespace EthLib.Consensus.Ssz.Native.Driver.ProveProof
 
-open Ssz Ssz.Native.Ir Ssz.Native.Asm Ssz.Native.Driver.BranchProof
+open EthLib.Consensus.Ssz EthLib.Consensus.Ssz.Native.Ir EthLib.Consensus.Ssz.Native.Asm EthLib.Consensus.Ssz.Native.Driver.BranchProof
 
 /-- An accepted encoding's node is the walk to it. -/
 theorem nodeRoot_eq {d : Desc} {b : ByteArray} (valid : validate d b = .ok ()) (index : Nat) :
@@ -165,4 +165,4 @@ theorem prove_multiproof_ok {m : Module} {w : World} (fns : ProveFns m) (hash : 
         mem' a = mem a :=
   prove_multiproof_calls hf helpers (nodeAtOk_of fns hash st) st.valid deep job indices count out scr mem r0 j jobPad
 
-end Ssz.Native.Driver.ProveProof
+end EthLib.Consensus.Ssz.Native.Driver.ProveProof

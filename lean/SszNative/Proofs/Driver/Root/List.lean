@@ -10,9 +10,9 @@ the elements one by one.
 The nodes are then rooted at the limit's depth, or on a progressive spine, and the count is mixed in.
 -/
 
-namespace Ssz.Native.Driver
+namespace EthLib.Consensus.Ssz.Native.Driver
 
-open Ssz Ssz.Native.Ir Ssz.Native.Ir.Expr Ssz.Native.Ir.Stmt Ssz.Native.Asm
+open EthLib.Consensus.Ssz EthLib.Consensus.Ssz.Native.Ir EthLib.Consensus.Ssz.Native.Ir.Expr EthLib.Consensus.Ssz.Native.Ir.Stmt EthLib.Consensus.Ssz.Native.Asm
 
 /-! ### The nodes -/
 
@@ -134,12 +134,12 @@ theorem listBasic_runs {m : Module} {w : World} (gmod : GatherModule m) {sp : Na
     have md := eval_mod (eval_var l2) kEval hL (by omega) (by omega)
     have ne' := eval_ne md (eval_lit 0)
     by_cases z : L % (32 / width) = 0
-    · rw [if_pos z]
-      rw [if_pos (by rw [z])] at ne'
+    · rw [ite_eq_left z]
+      rw [ite_eq_left (by rw [z])] at ne'
       have := eval_add dv ne'
       simpa using this
-    · rw [if_neg z]
-      rw [if_neg (fun e => z ((ofNat_inj (by have := Nat.mod_lt L kpos; omega) (by decide)).mp e))] at ne'
+    · rw [ite_eq_right z]
+      rw [ite_eq_right (fun e => z ((ofNat_inj (by have := Nat.mod_lt L kpos; omega) (by decide)).mp e))] at ne'
       exact eval_add dv ne'
   have s3 := Runs.set' (m := m) (w := w) (sp := sp) (env := E2) (mem := mem1) (x := 11) capEval
   have s4 := Runs.set' (m := m) (w := w) (sp := sp) (env := Asm.assign E2 11 (UInt64.ofNat (nodesFor (L * width))))
@@ -168,7 +168,7 @@ theorem nodeOf_joinNodes {rs : List ByteArray} (sized : ∀ r ∈ rs, r.size = 3
 
 /-- A narrow type of a fixed size is far below the word size. -/
 theorem width_lt_of_narrow {d : Desc} (thin : narrow d = true) (fx : hasWidth d = true) : fixedWidth d < 2 ^ 62 := by
-  have size : d.fixedSize = some (fixedWidth d) := by rw [fixedSize_eq, if_pos fx]
+  have size : d.fixedSize = some (fixedWidth d) := by rw [fixedSize_eq, ite_eq_left fx]
   cases d with
   | bitVector n => simp only [narrow, decide_eq_true_eq] at thin; simp only [fixedWidth]; omega
   | bool => simp [fixedWidth]
@@ -326,10 +326,10 @@ theorem listComposite_runs {m : Module} {w : World} (hash : HashingOk m w) (gmod
         (Runs.block_nil _ _ _ _ _))
       have c := eval_eq (w := w) (env := E1) (mem := mem) (eval_var k1.2.2.2.1) (eval_lit 0) wsmall (by decide)
       by_cases z : fixedWidth element = 0
-      · rw [if_pos z] at c
+      · rw [ite_eq_left z] at c
         rw [show count = 0 from zero z]
         exact Runs.ifElse_true 1 c (by decide) (Runs.block_cons (Runs.set' (eval_lit 0)) (Runs.block_nil _ _ _ _ _))
-      · rw [if_neg z] at c
+      · rw [ite_eq_right z] at c
         have q : (stop - start) / fixedWidth element = count := by
           rw [← fill]; exact Nat.mul_div_cancel _ (Nat.pos_of_ne_zero z)
         refine Runs.ifElse_false c (Runs.block_cons (Runs.set' ?_) (Runs.block_nil _ _ _ _ _))
@@ -339,10 +339,10 @@ theorem listComposite_runs {m : Module} {w : World} (hash : HashingOk m w) (gmod
       refine Runs.ifElse_false (eval_var (by rw [fx1, fx']; rfl)) (Runs.block_cons ?_ (Runs.block_nil _ _ _ _ _))
       have c := eval_eq (w := w) (env := E1) (mem := mem) (eval_var k1.1.size) (eval_lit 0) (by omega) (by decide)
       rcases pre.varCount fx' with ⟨hz, hc⟩ | ⟨four, hc, tab⟩
-      · rw [if_pos hz] at c
+      · rw [ite_eq_left hz] at c
         rw [hc]
         exact Runs.ifElse_true 1 c (by decide) (Runs.block_cons (Runs.set' (eval_lit 0)) (Runs.block_nil _ _ _ _ _))
-      · rw [if_neg (by omega)] at c
+      · rw [ite_eq_right (by omega)] at c
         refine Runs.ifElse_false c (Runs.block_cons (Runs.set' ?_) (Runs.block_nil _ _ _ _ _))
         rw [hc]
         have ld := eval_ld4_of (w := w) (env := E1) (mem := mem) (a := RootList.src) (eval_var k1.1.src)
@@ -399,13 +399,13 @@ theorem listComposite_runs {m : Module} {w : World} (hash : HashingOk m w) (gmod
     by_cases c0 : count = 0
     · -- No records: nothing to root.
       have cc := eval_lt (w := w) (env := E5) (mem := mem) (eval_lit 0) (eval_var c5) (by decide) (by omega)
-      rw [if_neg (by omega)] at cc
+      rw [ite_eq_right (by omega)] at cc
       exact ⟨E5, mem, lead (Runs.ifElse_true 1 (eval_var (by rw [p5, pl]; rfl)) (by decide)
         (Runs.block_cons (Runs.when_false cc) (Runs.block_nil _ _ _ _ _))), k5.1, k5.2.1, k5.2.2.2.2.1, k5.2.2.2.2.2,
         frameReady mem (fun _ _ _ => rfl),
         ⟨fun i hi => absurd hi (by omega), by omega, .inl c0, n5, l5, c5, fun _ _ _ => rfl⟩⟩
     · have cc := eval_lt (w := w) (env := E5) (mem := mem) (eval_lit 0) (eval_var c5) (by decide) (by omega)
-      rw [if_pos (by omega)] at cc
+      rw [ite_eq_left (by omega)] at cc
       have cnt1 : 1 ≤ count := by omega
       have sizedE := rootsOf_size element okE pre.usize
       -- A chunk's needs lie inside the region.
@@ -472,7 +472,7 @@ theorem listComposite_runs {m : Module} {w : World} (hash : HashingOk m w) (gmod
           chunkedRoots element b start (fixedWidth element) count := by
         split
         · rename_i few
-          rw [chunkedRoots, if_pos few]
+          rw [chunkedRoots, ite_eq_left few]
           simp only [Nat.mul_zero, Nat.add_zero]
         · rename_i many
           rw [chunkedRoots_join _ _ _ _ _ many]
@@ -829,7 +829,7 @@ theorem rootList_body {m : Module} {w : World} (hash : HashingOk m w) (gmod : Ga
       RangeEnv E2 p (base + start) (stop - start) out scratch ctx ∧ E2 6 = (Plan.tag d).toUInt64 ∧
       E2 7 = UInt64.ofNat L ∧ E2 8 = UInt64.ofNat ea := by
     rcases tag89 with h8 | h9
-    · rw [if_pos h8] at c8
+    · rw [ite_eq_left h8] at c8
       obtain ⟨⟨acc, rd⟩, hea, -⟩ := bnd h8
       have lw : eval w E1 mem (ld (RootList.p + 8)) = some (UInt64.ofNat L) := by
         rw [eval_ld_of (eval_add (eval_var ev1.p) (eval_lit 8)) (by have := access_end acc; omega) acc, rd]
@@ -841,7 +841,7 @@ theorem rootList_body {m : Module} {w : World} (hash : HashingOk m w) (gmod : Ga
         (Runs.block_nil _ _ _ _ _))), (ev1.write _ (by decide)).write _ (by decide),
         by rw [assign_ne (by decide), assign_ne (by decide)]; exact t1,
         by rw [assign_ne (by decide), assign_eq], by rw [assign_eq, hea]⟩
-    · rw [if_neg (by omega)] at c8
+    · rw [ite_eq_right (by omega)] at c8
       obtain ⟨hL0, hea⟩ := prg h9
       have r1 := Runs.set' (m := m) (w := w) (sp := sp) (env := E1) (mem := mem) (x := 7) (eval_lit 0)
       have r2 := Runs.set' (m := m) (w := w) (sp := sp) (env := Asm.assign E1 7 (UInt64.ofNat 0)) (mem := mem) (x := 8)
@@ -880,12 +880,12 @@ theorem rootList_body {m : Module} {w : World} (hash : HashingOk m w) (gmod : Ga
         (32 + 32 * nB + max E (2560 + 2048 + 32 * nB)) pad ∧ (sequenceNodes element b start stop L).2.1 ≤ nB := by
     have cb := eval_le_tag (e := element) (eval_tag (e := RootList.e) planE (eval_var e4))
     by_cases basic : element.isBasic = true
-    · rw [if_pos basic] at cb
+    · rw [ite_eq_left basic] at cb
       have hw := basic_width basic soundE
       have fx : hasWidth element = true := by cases element <;> simp_all [Desc.isBasic, hasWidth]
       have wpos : 0 < fixedWidth element := by omega
       have nBeq : nB = nodesFor (stop - start) := by
-        simp only [nB, nodesBound, basic, if_true, sat]; simp only [nodesFor] at nBsize ⊢; omega
+        simp only [nB, nodesBound, basic, ite_true, sat]; simp only [nodesFor] at nBsize ⊢; omega
       obtain ⟨E5, mem1, run, ev5, -, b5, z5, ln⟩ := listBasic_runs (pad := pad) gmod (sp := sp) (by omega) pre.holds
         pre.bAcc ordered inside small usize hw hL (access_sub sAcc (by omega) (by rw [← nBeq]; omega))
         (apart_sub sB (by omega) (by rw [← nBeq]; omega)) ev4 l4 w4 b4
@@ -893,7 +893,7 @@ theorem rootList_body {m : Module} {w : World} (hash : HashingOk m w) (gmod : Ga
           nodesFor (L * fixedWidth element)) := by
         rw [sequenceNodes]; simp [basic, basic_itemLength basic]
       have cnt : elementCount element b start stop = (stop - start) / fixedWidth element := by
-        simp only [elementCount, fixedSize_eq, fx, if_true]; simp; omega
+        simp only [elementCount, fixedSize_eq, fx, ite_true]; simp; omega
       rw [seq, cnt]
       refine ⟨E5, mem1, Runs.ifElse_true 1 cb (by decide) run, ev5, by rw [z5]; exact t4, b5,
         pre.ready.within (o := scratch + 64) (n := 32 * nodesFor (stop - start) + 32)
@@ -901,17 +901,17 @@ theorem rootList_body {m : Module} {w : World} (hash : HashingOk m w) (gmod : Ga
           (apart_sub sZeros (by omega) (by rw [← nBeq]; omega)) ln.frame,
         { ln with frame := fun a o pd => ln.frame a (fun h => o ⟨h.1, by rw [← nBeq] at h; omega⟩) pd },
         by rw [nBeq]; exact Nat.le_refl _⟩
-    · rw [if_neg basic] at cb
+    · rw [ite_eq_right basic] at cb
       have nb : element.isBasic = false := by simpa using basic
       -- The count is at most the node bound.
       have cntLe : slices.length ≤ nB := by
-        simp only [nB, nodesBound, nb, Bool.false_eq_true, if_false]
+        simp only [nB, nodesBound, nb, Bool.false_eq_true, ite_false]
         by_cases fx : hasWidth element = true
         · obtain ⟨fill, zero⟩ := fixedFill fx
-          rw [if_pos fx]
+          rw [ite_eq_left fx]
           by_cases z : satWidth element = 0
-          · rw [if_pos z, zero (width_zero_of_sat element z)]; exact Nat.zero_le _
-          · rw [if_neg z]
+          · rw [ite_eq_left z, zero (width_zero_of_sat element z)]; exact Nat.zero_le _
+          · rw [ite_eq_right z]
             have le := satWidth_le_width element
             have : slices.length ≤ (stop - start) / satWidth element := by
               rw [← fill]
@@ -919,7 +919,7 @@ theorem rootList_body {m : Module} {w : World} (hash : HashingOk m w) (gmod : Ga
                 (Nat.div_le_div_left le (by omega))
             have : slices.length ≤ stop - start := by rw [← fill]; exact Nat.le_mul_of_pos_right _ (by omega)
             simp only [sat]; omega
-        · rw [if_neg fx]
+        · rw [ite_eq_right fx]
           rcases varCount (by simpa using fx) with ⟨_, h⟩ | ⟨_, _, h⟩
           · omega
           · simp only [sat, bytesPerOffset]; omega
@@ -946,7 +946,7 @@ theorem rootList_body {m : Module} {w : World} (hash : HashingOk m w) (gmod : Ga
         (by omega) cpre ev4 l4 e4 w4 b4
       have seq : sequenceNodes element b start stop L = (compNodes element b start stop slices.length,
           slices.length, L) := by
-        rw [sequenceNodes]; simp only [nb, Bool.false_eq_true, if_false, counted, compNodes]
+        rw [sequenceNodes]; simp only [nb, Bool.false_eq_true, ite_false, counted, compNodes]
         split <;> rfl
       rw [seq, counted]
       exact ⟨E5, mem1, Runs.ifElse_false cb run, ev5, by rw [z5]; exact t4, b5, ready1, ln, cntLe⟩
@@ -965,7 +965,7 @@ theorem rootList_body {m : Module} {w : World} (hash : HashingOk m w) (gmod : Ga
       ∀ a, ¬ (scratch ≤ a ∧ a < scratch + (96 + 32 * nB + max E (2560 + 2048 + 32 * nB))) →
         ¬ (pad ≤ a ∧ a < pad + 1536) → mem2 a = mem1 a := by
     rcases tag89 with h8 | h9
-    · rw [if_pos h8] at c8' ⊢
+    · rw [ite_eq_left h8] at c8' ⊢
       have lc := limEq h8
       have cntL : cnt ≤ L := by rw [← hcnt, counted]; exact capsL L lc
       -- The nodes fit the capacity's tree.
@@ -1034,7 +1034,7 @@ theorem rootList_body {m : Module} {w : World} (hash : HashingOk m w) (gmod : Ga
         · rw [h0]; simp [merkleizeCapacity, merkleizeDepth, merkleizeAt, zeroRoot_size]
         · exact (merkleizeDepth_spec X N _ fitsTree nodes.inside hs).1
       · exact keep2 a (fun h => o ⟨by omega, by omega⟩) pd (fun h => o ⟨h.1, by omega⟩)
-    · rw [if_neg (by omega)] at c8' ⊢
+    · rw [ite_eq_right (by omega)] at c8' ⊢
       have pspan : progressiveSpan N = 4608 + 32 * N := rfl
       have ppre : ProgPre w mem1 (scratch + 64) N scratch (scratch + 64 + 32 * N + 32) ctx table zeros pad mask
           (bytesAt mem1 (scratch + 64) (32 * N)) :=
@@ -1093,9 +1093,9 @@ theorem rootList_body {m : Module} {w : World} (hash : HashingOk m w) (gmod : Ga
   · -- The root: the tree over the nodes, with the count mixed in.
     rw [root7, root6, rootEq]
     split
-    · rename_i h8; rw [if_pos h8] at sz6
+    · rename_i h8; rw [ite_eq_left h8] at sz6
       rw [RootProof.hashPair_data _ _ sz6 (by simp [lengthNode, ByteArray.size])]
-    · rename_i h8; rw [if_neg h8] at sz6
+    · rename_i h8; rw [ite_eq_right h8] at sz6
       rw [RootProof.hashPair_data _ _ sz6 (by simp [lengthNode, ByteArray.size])]
   · rw [need] at s
     rw [keep7 a (fun h => s ⟨by omega, by omega⟩) o pd]
@@ -1118,4 +1118,4 @@ theorem rootList_ok {m : Module} {w : World} (hash : HashingOk m w) (gmod : Gath
     (by rw [listFrame]; omega) pre (rangeEnv_entry _ _ _ _ _ _)
   exact ⟨mem', Calls.fn fns.list (by rw [listFrame]; omega) rfl run rfl, post⟩
 
-end Ssz.Native.Driver
+end EthLib.Consensus.Ssz.Native.Driver

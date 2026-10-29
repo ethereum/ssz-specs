@@ -2,7 +2,7 @@ import SszNative.Ir.Dsl
 import SszNative.Ir.Wf
 import SszNative.Validate
 import SszNative.Plan
-import Ssz.Type.Valid
+import EthLib.Consensus.Ssz.Type.Valid
 
 /-!
 The decoding check, as functions of the small language walking a plan.
@@ -31,7 +31,7 @@ Before any byte is read, the plan itself is checked: it must read back as one ty
 that every width the check computes fits a word.
 -/
 
-namespace Ssz
+namespace EthLib.Consensus.Ssz
 
 /-- The numbers a refusal carries, in order. -/
 def Err.payload : Err → List Nat
@@ -53,11 +53,11 @@ Words past the numbers are zero.
 def Err.toWords (e : Err) : List Nat :=
   (e.ctorIdx :: e.payload ++ [0, 0, 0]).take 4
 
-end Ssz
+end EthLib.Consensus.Ssz
 
-namespace Ssz.Native
+namespace EthLib.Consensus.Ssz.Native
 
-open Ssz
+open EthLib.Consensus.Ssz
 
 mutual
 
@@ -90,11 +90,11 @@ def allFitNative : List Desc → Bool
 
 end
 
-end Ssz.Native
+end EthLib.Consensus.Ssz.Native
 
-namespace Ssz.Native.Driver.Validate
+namespace EthLib.Consensus.Ssz.Native.Driver.Validate
 
-open Ssz.Native.Ir Ssz.Native.Ir.Expr Ssz.Native.Ir.Stmt
+open EthLib.Consensus.Ssz.Native.Ir EthLib.Consensus.Ssz.Native.Ir.Expr EthLib.Consensus.Ssz.Native.Ir.Stmt
 
 /-- The word standing for no width, and for a refused plan: no address or width reaches it. -/
 def none_ : Expr := .lit 18446744073709551615
@@ -876,4 +876,4 @@ def fns : List (String × Fn) :=
 /-- Every function fits the compiler's assumptions. -/
 theorem fns_wf : fns.all (fun p => p.2.wf) = true := by decide +kernel
 
-end Ssz.Native.Driver.Validate
+end EthLib.Consensus.Ssz.Native.Driver.Validate

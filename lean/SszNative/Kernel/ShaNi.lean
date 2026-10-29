@@ -14,9 +14,9 @@ Registers 8 and 9 keep the state between the two blocks.
 Register 10 holds the byte-reversal mask.
 -/
 
-namespace Ssz.Native.Kernel.ShaNi
+namespace EthLib.Consensus.Ssz.Native.Kernel.ShaNi
 
-open Ssz.Native.Asm
+open EthLib.Consensus.Ssz.Native.Asm
 
 /-- The output address, the first argument. -/
 abbrev out : Gpr := .rdi
@@ -109,4 +109,4 @@ def program (ls rs : Nat) : Array Instr :=
   let finish := loopHead + pairCode.length + tail.length
   (([.test count, .jz finish, .movdqu bswap (tableEntry bswapShaNi)] ++ pairCode ++ tail ++ [.zeroReg .rax, .ret]) : List Instr).toArray
 
-end Ssz.Native.Kernel.ShaNi
+end EthLib.Consensus.Ssz.Native.Kernel.ShaNi

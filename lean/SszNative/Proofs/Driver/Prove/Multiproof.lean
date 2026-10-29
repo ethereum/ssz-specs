@@ -7,9 +7,9 @@ The compiled multiproof builder walks to each helper node, as the Lean multiproo
 The helper indices come from the compiled helper-index computation, and each node from the contract of the walk.
 -/
 
-namespace Ssz.Native.Driver.ProveProof
+namespace EthLib.Consensus.Ssz.Native.Driver.ProveProof
 
-open Ssz Ssz.Native.Ir Ssz.Native.Asm Ssz.Native.Driver.BranchProof
+open EthLib.Consensus.Ssz EthLib.Consensus.Ssz.Native.Ir EthLib.Consensus.Ssz.Native.Asm EthLib.Consensus.Ssz.Native.Driver.BranchProof
 
 /-- A refusal of a request's indices, which comes before any walk. -/
 def ClaimErr (e : Err) : Prop :=
@@ -467,4 +467,4 @@ theorem prove_multiproof_calls {m : Module} {w : World} {d : Desc} {b : ByteArra
       | error e => exact .inr ⟨e, by rw [rc, hw]; rfl, by rw [mapM_take_succ _ _ _ more, pre, hw]; rfl⟩
     · rw [hI1]; omega
 
-end Ssz.Native.Driver.ProveProof
+end EthLib.Consensus.Ssz.Native.Driver.ProveProof

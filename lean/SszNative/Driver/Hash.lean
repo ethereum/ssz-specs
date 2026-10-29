@@ -19,9 +19,9 @@ Without AVX-512 either, whole batches of eight go to the AVX2 kernel, and the re
 Without AVX2 either, the SSE2 kernel every x86-64 processor runs takes batches of four, then one padded batch.
 -/
 
-namespace Ssz.Native.Driver
+namespace EthLib.Consensus.Ssz.Native.Driver
 
-open Ssz.Native.Ir Ssz.Native.Ir.Expr Ssz.Native.Ir.Stmt
+open EthLib.Consensus.Ssz.Native.Ir EthLib.Consensus.Ssz.Native.Ir.Expr EthLib.Consensus.Ssz.Native.Ir.Stmt
 
 /-- The three ways a run of pairs is laid out, by the strides of its left and right nodes. -/
 inductive Layout where
@@ -120,4 +120,4 @@ def hashRun (layout : Layout) : Fn :=
             (batches (kernel "baseline") 2 ls rs ++ padded "ssz_sha256_baseline_pairs" ls rs)]]] }
 end
 
-end Ssz.Native.Driver
+end EthLib.Consensus.Ssz.Native.Driver

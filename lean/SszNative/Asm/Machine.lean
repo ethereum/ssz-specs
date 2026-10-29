@@ -14,7 +14,7 @@ Feature detection follows the Intel manual, volume 1, sections 13.2 and 15.2:
 an extension is usable when cpuid reports it and the operating system saves its registers.
 -/
 
-namespace Ssz.Native.Asm
+namespace EthLib.Consensus.Ssz.Native.Asm
 
 /-- An instruction set extension a routine may need, beyond the 64-bit baseline with SSE2. -/
 inductive Feature where
@@ -148,4 +148,4 @@ def Image.run (image : Image) : (steps : Nat) → Machine → Machine
   | 0, m => m
   | steps + 1, m => image.run steps (image.step m)
 
-end Ssz.Native.Asm
+end EthLib.Consensus.Ssz.Native.Asm

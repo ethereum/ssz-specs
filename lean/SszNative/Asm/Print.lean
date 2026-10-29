@@ -2,7 +2,7 @@ import SszNative.Asm.Valid
 
 /-! Printing programs as Intel-syntax GNU assembler, for Linux and macOS on x86-64. -/
 
-namespace Ssz.Native.Asm
+namespace EthLib.Consensus.Ssz.Native.Asm
 
 /-- The register's assembler name. -/
 def Gpr.name : Gpr → String
@@ -204,4 +204,4 @@ def file (routines : List (String × Array Instr)) (data : List (String × ByteA
   String.join (data.map fun (name, bytes) => renderData name bytes) ++
   "#if defined(__linux__)\n\t.section .note.GNU-stack,\"\",@progbits\n#endif\n#endif\n"
 
-end Ssz.Native.Asm
+end EthLib.Consensus.Ssz.Native.Asm

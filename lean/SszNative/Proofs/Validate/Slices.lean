@@ -1,11 +1,11 @@
 import SszNative.Validate
-import Ssz.Proofs.Codec.DecodeFits
+import EthLib.Consensus.Proofs.Ssz.Codec.DecodeFits
 
 /-! Ranges of an encoding read as the slices deserialization cuts out of it. -/
 
-namespace Ssz.Native
+namespace EthLib.Consensus.Ssz.Native
 
-open Ssz
+open EthLib.Consensus.Ssz
 
 /-- The bytes of a range, as deserialization would see them. -/
 def slice (b : ByteArray) (start stop : Nat) : Bytes :=
@@ -24,7 +24,7 @@ theorem slice_getElem? (b : ByteArray) (start stop i : Nat) (inside : stop ≤ b
   -- A position inside the range reads the array at the shifted position.
   have h : start + i < b.data.size := by rw [ByteArray.size_data]; omega
   simp only [slice, Array.getElem?_extract]
-  rw [if_pos (by rw [ByteArray.size_data]; omega)]
+  rw [ite_eq_left (by rw [ByteArray.size_data]; omega)]
   cases b with
   | mk data => simp [ByteArray.get!, getElem!_pos data (start + i) h, getElem?_pos data (start + i) h]
 
@@ -128,4 +128,4 @@ theorem offsetSpans_bound : ∀ (offsets spans : List Nat) (scope : Nat),
             omega
         · exact bound pair later
 
-end Ssz.Native
+end EthLib.Consensus.Ssz.Native

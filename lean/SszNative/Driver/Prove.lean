@@ -53,9 +53,9 @@ The tree of one value is described by a layout record, written into the scratch:
 Positions are byte offsets into the encoding, so a range of the encoding is its address plus a start and a stop.
 -/
 
-namespace Ssz.Native.Driver
+namespace EthLib.Consensus.Ssz.Native.Driver
 
-open Ssz.Native.Ir Ssz.Native.Ir.Expr Ssz.Native.Ir.Stmt
+open EthLib.Consensus.Ssz.Native.Ir EthLib.Consensus.Ssz.Native.Ir.Expr EthLib.Consensus.Ssz.Native.Ir.Stmt
 
 /-- The bytes of a layout record before its field ranges. -/
 abbrev layoutBytes : Nat := 144
@@ -859,4 +859,4 @@ def proveFns : List (String × Fn) :=
 theorem proveFns_wf : proveFns.all (fun f => f.2.wf) = true := by
   decide +kernel
 
-end Ssz.Native.Driver
+end EthLib.Consensus.Ssz.Native.Driver

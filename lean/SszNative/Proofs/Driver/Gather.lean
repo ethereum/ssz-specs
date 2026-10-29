@@ -12,9 +12,9 @@ handles, when the mask says the processor runs it, and the general one otherwise
 So whichever kernel runs, the memory after is the gathered memory.
 -/
 
-namespace Ssz.Native.Driver
+namespace EthLib.Consensus.Ssz.Native.Driver
 
-open Ssz.Native.Ir Ssz.Native.Ir.Expr Ssz.Native.Ir.Stmt Ssz.Native.Asm
+open EthLib.Consensus.Ssz.Native.Ir EthLib.Consensus.Ssz.Native.Ir.Expr EthLib.Consensus.Ssz.Native.Ir.Stmt EthLib.Consensus.Ssz.Native.Asm
 
 /-- The field widths with an AVX gather into 32-byte slots. -/
 abbrev narrowWidths : List Nat := [1, 2, 4, 8, 16, 32]
@@ -72,7 +72,7 @@ theorem gather_call {name : String} {code : Array Instr} {fixed : Option (Nat ×
     (pre : GatherPre w out.toNat src.toNat count.toNat width.toNat skip.toNat pad.toNat) (room : w.stackLo + 8 ≤ sp) :
     Calls m w name sp [out, src, count, width, skip, pad] mem 0
       (gathered mem out.toNat src.toNat count.toNat width.toNat skip.toNat pad.toNat) :=
-  Calls.ext h.1 h.2 room (by simp only [gatherExtern]; rw [if_pos ⟨runs, fix, pre⟩])
+  Calls.ext h.1 h.2 room (by simp only [gatherExtern]; rw [ite_eq_left ⟨runs, fix, pre⟩])
 
 /-- The variables a gather's call reads, as the dispatcher loads them. -/
 structure GatherEnv (env : Env) (out src count width skip pad : UInt64) : Prop where
@@ -141,9 +141,9 @@ theorem narrow_runs (mod : GatherModule m) {sp : Nat} {out src count width skip 
       have tail := narrow_runs mod cpu slot pre room rest (fun j hj => sub j (by simp [hj])) nd'.2
         (Asm.assign (Asm.assign env 9 0) 8 1)
         (gathered mem out.toNat src.toNat count.toNat width.toNat skip.toNat pad.toNat) ((he.write 0 (Or.inr rfl)).write 1 (Or.inl rfl))
-      rw [if_neg miss, if_neg miss] at tail
+      rw [ite_eq_right miss, ite_eq_right miss] at tail
       have mem' : width.toNat ∈ k :: rest := by simp [hit]
-      rw [if_pos mem', if_pos mem']
+      rw [ite_eq_left mem', ite_eq_left mem']
       exact Runs.block_cons (Runs.when_true 1 (by simp [eval, Cond.holds, he.width, eqw]) (by decide) step) tail
     · -- Another width: nothing runs, and the rest decide.
       have nev : width ≠ UInt64.ofNat k := by
@@ -186,31 +186,31 @@ theorem avxPart_runs (mod : GatherModule m) {sp : Nat} {env : Env} {mem : Memory
   · -- A narrow width into a 32-byte slot: its own routine, and the key test fails.
     have narrow := narrow_runs mod cpu.1 hit.1 pre room narrowWidths (fun _ h => h) (by decide) env
       mem he
-    rw [if_pos hit.2, if_pos hit.2] at narrow
+    rw [ite_eq_left hit.2, ite_eq_left hit.2] at narrow
     have small : width.toNat ≤ 32 := by have := hit.2; simp [narrowWidths] at this; omega
     have n48 : ¬ (width = 48 ∧ pad = 16) := by
       intro h; have := congrArg UInt64.toNat h.1; simp at this; omega
     have he' := (he.write 0 (Or.inr rfl)).write 1 (Or.inl rfl)
     refine ⟨_, _, Runs.when_true 1 avxOn (by decide) (Runs.block_cons
       (Runs.when_true 1 (by simp [eval, Cond.holds, he.width, he.pad, hit.1]) (by decide) narrow)
-      (Runs.block_cons (Runs.when_false (by rw [eval_key he'.width he'.pad, if_neg n48]))
+      (Runs.block_cons (Runs.when_false (by rw [eval_key he'.width he'.pad, ite_eq_right n48]))
         (Runs.block_nil _ _ _ _ _))), Or.inr ⟨by simp [Asm.assign], rfl⟩⟩
   by_cases key : width = 48 ∧ pad = 16
   · -- A key into a 64-byte slot: the key routine.
     have n32 : width + pad ≠ 32 := by rw [key.1, key.2]; decide
     refine ⟨_, _, Runs.when_true 1 avxOn (by decide) (Runs.block_cons
       (Runs.when_false (by simp [eval, Cond.holds, he.width, he.pad, n32]))
-      (Runs.block_cons (Runs.when_true 1 (by rw [eval_key he.width he.pad, if_pos key]) (by decide)
+      (Runs.block_cons (Runs.when_true 1 (by rw [eval_key he.width he.pad, ite_eq_left key]) (by decide)
         (gatherCall_runs mod.key cpu.2 (by simp [key.1, key.2]) pre room he))
         (Runs.block_nil _ _ _ _ _))), Or.inr ⟨by simp [Asm.assign], rfl⟩⟩
   -- Any other shape: no AVX routine runs.
   have keyOff := Runs.when_false (m := m) (w := w) (sp := sp) (mem := mem) (body := [GatherVars.gatherCall "ssz_gather_key",
-    GatherVars.path ::= 1]) (by rw [eval_key he.width he.pad, if_neg key])
+    GatherVars.path ::= 1]) (by rw [eval_key he.width he.pad, ite_eq_right key])
   by_cases slot : width + pad = 32
   · have miss : width.toNat ∉ narrowWidths := fun h => hit ⟨slot, h⟩
     have narrow := narrow_runs mod cpu.1 slot pre room narrowWidths (fun _ h => h) (by decide) env
       mem he
-    rw [if_neg miss, if_neg miss] at narrow
+    rw [ite_eq_right miss, ite_eq_right miss] at narrow
     exact ⟨_, _, Runs.when_true 1 avxOn (by decide) (Runs.block_cons
       (Runs.when_true 1 (by simp [eval, Cond.holds, he.width, he.pad, slot]) (by decide) narrow)
       (Runs.block_cons keyOff (Runs.block_nil _ _ _ _ _))), Or.inl ⟨h8, rfl, he⟩⟩
@@ -309,4 +309,4 @@ theorem gatherModule_append (fns : List (String × Fn)) (ext : List (String × E
   · rw [lookup_append, lookup_append, fresh _ (by simp)]; rfl
   · rw [lookup_append, lookup_append]; rfl
 
-end Ssz.Native.Driver
+end EthLib.Consensus.Ssz.Native.Driver

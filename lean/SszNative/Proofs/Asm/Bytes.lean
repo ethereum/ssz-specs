@@ -2,7 +2,7 @@ import SszNative.Asm.Semantics
 
 /-! Little-endian loads and stores of up to eight bytes, as numbers. -/
 
-namespace Ssz.Native.Asm
+namespace EthLib.Consensus.Ssz.Native.Asm
 
 /-- Bytes from an address as a little-endian natural number. -/
 def bytesNat (mem : Nat → UInt8) (a : Nat) : Nat → Nat
@@ -58,7 +58,7 @@ theorem bytesNat_digits (f : Nat → UInt8) (a v j n : Nat)
 theorem readLE_store (mem : Nat → UInt8) (a w : Nat) (hw : w ≤ 8) (v : UInt64) :
     (readLE (store mem a w (qwordByte v)) a w).toNat = v.toNat % 256 ^ w := by
   rw [readLE_toNat _ _ _ hw, bytesNat_digits _ a v.toNat 0 w (fun k hk => by
-    simp only [store, show a ≤ a + k by omega, show a + k < a + w by omega, and_self, if_true,
+    simp only [store, show a ≤ a + k by omega, show a + k < a + w by omega, and_self, ite_true,
       Nat.add_sub_cancel_left, Nat.zero_add]
     exact qwordByte_toNat v k (by omega))]
   simp
@@ -69,4 +69,4 @@ theorem readLE_store8 (mem : Nat → UInt8) (a : Nat) (v : UInt64) : readLE (sto
   rw [readLE_store _ _ _ (by decide)]
   exact Nat.mod_eq_of_lt v.toNat_lt
 
-end Ssz.Native.Asm
+end EthLib.Consensus.Ssz.Native.Asm

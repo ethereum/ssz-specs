@@ -2,12 +2,13 @@ import SszNative.Proofs.Kernel.ShaNi.Basic
 
 /-! The SHA-NI kernel's round groups: four rounds per group, and the schedule kept sixteen words ahead. -/
 
-namespace Ssz.Native.Kernel.ShaNi
+namespace EthLib.Consensus.Ssz.Native.Kernel.ShaNi
 
-open Ssz.Native.Asm Ssz.Sha256
+open EthLib.Consensus.Ssz.Native.Asm
+open EthLib.Cryptography.Hash.Sha256 hiding K IV
 
 /-- Round constant i. -/
-abbrev K (i : Nat) : UInt32 := roundConstants[i]!
+abbrev K (i : Nat) : UInt32 := Cryptography.Hash.Sha256.K[i]!
 
 /-- Two rounds of the SHA instruction are two rounds of the specification, its word plus constant split back apart. -/
 theorem rounds2_packed (abef cdgh : Lanes) (st : Vector UInt32 8) (k₀ w₀ k₁ w₁ : UInt32)
@@ -42,7 +43,7 @@ theorem loadWK (r : Nat) (hr : r < 16) (s : State) (table : TableAt s.mem (s.gpr
     (w : Nat → UInt32) (h : ∀ l : Fin 16, l.val < 4 → s.vec (msg r) l = w (4 * r + l.val))
     (l : Fin 16) (hl : l.val < 4) :
     (exec [.movdqa wk (msg r), .padddMem wk (tableEntry (kShaNi r))] s).vec wk l = K (4 * r + l.val) + w (4 * r + l.val) := by
-  simp only [exec_cons, exec_nil, exec1, assign, low, hl, if_true]
+  simp only [exec_cons, exec_nil, exec1, assign, low, hl, ite_true]
   -- The constant's address is the table's register plus the group's offset.
   have addr : ({ s with vec := assign s.vec wk (low (s.vec wk) (s.vec (msg r))) } : State).addr (tableEntry (kShaNi r)) =
       s.addr ⟨tbl, kShaNi r⟩ := rfl
@@ -58,10 +59,10 @@ theorem schedule_step (a b c d : Vreg) (ac : a ≠ c) (ad : a ≠ d) (tableEntry
     let B := s.vec b
     let C := s.vec c
     let D := s.vec d
-    s'.vec a 0 = A 0 + sigma0 (A 1) + C 1 + sigma1 (D 2) ∧
-    s'.vec a 1 = A 1 + sigma0 (A 2) + C 2 + sigma1 (D 3) ∧
-    s'.vec a 2 = A 2 + sigma0 (A 3) + C 3 + sigma1 (A 0 + sigma0 (A 1) + C 1 + sigma1 (D 2)) ∧
-    s'.vec a 3 = A 3 + sigma0 (B 0) + D 0 + sigma1 (A 1 + sigma0 (A 2) + C 2 + sigma1 (D 3)) := by
+    s'.vec a 0 = A 0 + smallSigma0 (A 1) + C 1 + smallSigma1 (D 2) ∧
+    s'.vec a 1 = A 1 + smallSigma0 (A 2) + C 2 + smallSigma1 (D 3) ∧
+    s'.vec a 2 = A 2 + smallSigma0 (A 3) + C 3 + smallSigma1 (A 0 + smallSigma0 (A 1) + C 1 + smallSigma1 (D 2)) ∧
+    s'.vec a 3 = A 3 + smallSigma0 (B 0) + D 0 + smallSigma1 (A 1 + smallSigma0 (A 2) + C 2 + smallSigma1 (D 3)) := by
   intro s' A B C D
   -- The rotated window: words 9 to 12 of the sixteen, from the third and fourth vectors.
   generalize h3 : exec1 (.palignr tmp c 4) (exec1 (.movdqa tmp d) (exec1 (.sha256msg1 a b) s)) = s₃
@@ -95,7 +96,7 @@ theorem schedule_step (a b c d : Vreg) (ac : a ≠ c) (ad : a ≠ d) (tableEntry
 
 /-- Whether a function of indices satisfies the schedule's four-term recurrence. -/
 def Recurs (w : Nat → UInt32) : Prop :=
-  ∀ c, 16 ≤ c → c < 64 → w c = w (c - 16) + sigma0 (w (c - 15)) + w (c - 7) + sigma1 (w (c - 2))
+  ∀ c, 16 ≤ c → c < 64 → w c = w (c - 16) + smallSigma0 (w (c - 15)) + w (c - 7) + smallSigma1 (w (c - 2))
 
 /-- The registers before group r of the first block: the state after 4r rounds, and the next sixteen words. -/
 def Ready (s : State) (st : Vector UInt32 8) (w : Nat → UInt32) (r : Nat) : Prop :=
@@ -297,7 +298,7 @@ theorem paddingRounds_spec (r : Nat) (hr : r < 16) (s : State) (st : Vector UInt
     have lane : ∀ l : Fin 16, l.val < 4 →
         (exec1 (.movdqu wk (tableEntry (padShaNi r))) s).vec wk l = K (4 * r + l.val) + P (4 * r + l.val) := by
       intro l hl
-      simp only [exec1, assign, low, hl, if_true]
+      simp only [exec1, assign, low, hl, ite_true]
       rw [show s.addr (tableEntry (padShaNi r)) = s.addr ⟨tbl, padShaNi r⟩ from rfl,
         read_table s table _ _ (by simp [padShaNi]; omega) (by simp [padShaNi, tableSize]; omega),
         tableWord_pad r l hr hl, paddingWK, Nat.mod_eq_of_lt (by omega)]
@@ -320,4 +321,4 @@ theorem paddingAll (s : State) (st : Vector UInt32 8) (table : TableAt s.mem (s.
       exact paddingRounds_spec m (by omega) _ st (by rw [g, mem]; exact table) (ih (by omega))
   exact all 16 (by omega)
 
-end Ssz.Native.Kernel.ShaNi
+end EthLib.Consensus.Ssz.Native.Kernel.ShaNi

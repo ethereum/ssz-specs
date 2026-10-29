@@ -17,9 +17,9 @@ A parent places each child's output where it wants the roots, in increasing orde
 covers bytes the parent fills later.
 -/
 
-namespace Ssz.Native.Driver
+namespace EthLib.Consensus.Ssz.Native.Driver
 
-open Ssz.Native.Ir Ssz.Native.Ir.Expr Ssz.Native.Ir.Stmt
+open EthLib.Consensus.Ssz.Native.Ir EthLib.Consensus.Ssz.Native.Ir.Expr EthLib.Consensus.Ssz.Native.Ir.Stmt
 
 /-- The quotient rounded up, for a constant divisor, without the overflow of adding to the dividend. -/
 def ceilDiv (a : Expr) (k : Nat) : Expr :=
@@ -1322,4 +1322,4 @@ def rootFns : List (String × Fn) :=
 theorem rootFns_wf : rootFns.all (fun f => f.2.wf) = true := by
   decide +kernel
 
-end Ssz.Native.Driver
+end EthLib.Consensus.Ssz.Native.Driver

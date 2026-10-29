@@ -10,9 +10,9 @@ The column tree then roots across the columns, and its root column lands at the 
 What one call on an element or field type does is a hypothesis, so these proofs serve the induction on the type.
 -/
 
-namespace Ssz.Native.Driver
+namespace EthLib.Consensus.Ssz.Native.Driver
 
-open Ssz.Native.Ir Ssz.Native.Ir.Expr Ssz.Native.Ir.Stmt Ssz.Native.Asm
+open EthLib.Consensus.Ssz.Native.Ir EthLib.Consensus.Ssz.Native.Ir.Expr EthLib.Consensus.Ssz.Native.Ir.Stmt EthLib.Consensus.Ssz.Native.Asm
 
 /-! ### Exact bounds -/
 
@@ -74,7 +74,7 @@ theorem vectorNeed_eq {e : Desc} {len count : Nat} (basic : e.isBasic = false) (
       32 * count + 32 * (count * len) + max (rootsNeed e count) (64 * (count * len)) := by
   have hN : rootsNeed (.vector e len) count = sadd (sadd (smul 32 count) (smul (smul 32 count) (sat len)))
       (max (rootsNeed e count) (smul (smul 64 count) (sat len))) := by
-    simp only [rootsNeed, basic, Bool.false_eq_true, if_false, if_neg many]
+    simp only [rootsNeed, basic, Bool.false_eq_true, ite_false, ite_eq_right many]
   rw [hN] at below ⊢
   exact columnsNeed_eq lpos pos below
 
@@ -86,7 +86,7 @@ theorem containerNeed_eq {names : List String} {fields : List Desc} {count : Nat
   have hN : rootsNeed (.container names fields) count =
       sadd (sadd (smul 32 count) (smul (smul 32 count) (sat fields.length)))
         (max (fieldsRootsNeed fields count 0) (smul (smul 64 count) (sat fields.length))) := by
-    simp only [rootsNeed, if_neg many]
+    simp only [rootsNeed, ite_eq_right many]
   rw [hN] at below ⊢
   exact columnsNeed_eq lpos pos below
 
@@ -208,7 +208,7 @@ theorem vectorColumns_runs {m : Module} {w : World} (hash : HashingOk m w) (gmod
       have more : k < length := by
         by_cases h : k < length
         · exact h
-        · rw [if_neg h] at hv; cases hv; exact absurd rfl nz
+        · rw [ite_eq_right h] at hv; cases hv; exact absurd rfl nz
       -- Column k lies inside the output region, after the columns before it.
       have step := step_le (c := 32 * count) more
       rw [Nat.mul_assoc 32 count length] at step
@@ -260,7 +260,7 @@ theorem vectorColumns_runs {m : Module} {w : World} (hash : HashingOk m w) (gmod
   rw [eval_lt (eval_var e14) (eval_var e7) (by omega) lenSmall] at exit
   have last : k = length := by
     by_cases h : k < length
-    · rw [if_pos h] at exit; cases exit
+    · rw [ite_eq_left h] at exit; cases exit
     · omega
   subst last
   have rd := pre.readyAfter agree
@@ -461,7 +461,7 @@ theorem containerColumns_runs {m : Module} {w : World} (hash : HashingOk m w) (g
       have more : k < fields.length := by
         by_cases h : k < fields.length
         · exact h
-        · rw [if_neg h] at hv; cases hv; exact absurd rfl nz
+        · rw [ite_eq_right h] at hv; cases hv; exact absurd rfl nz
       have member : fields[k] ∈ fields := List.getElem_mem more
       -- Field k's plan, inside the container's.
       have fp := fieldPlan_at fields (p + 16) k more planF
@@ -572,7 +572,7 @@ theorem containerColumns_runs {m : Module} {w : World} (hash : HashingOk m w) (g
   rw [eval_lt (eval_var e14) (eval_var e7) (by omega) lenSmall] at exit
   have last : k = fields.length := by
     by_cases h : k < fields.length
-    · rw [if_pos h] at exit; cases exit
+    · rw [ite_eq_left h] at exit; cases exit
     · omega
   have rd := pre.readyAfter agree
   -- The depth for the fields.
@@ -625,4 +625,4 @@ theorem containerColumns_runs {m : Module} {w : World} (hash : HashingOk m w) (g
     (Runs.block_nil _ _ _ _ _)))), by rw [code]; exact held, ready, fun a o pd => ?_⟩
   rw [keep a o pd, agree a o pd]
 
-end Ssz.Native.Driver
+end EthLib.Consensus.Ssz.Native.Driver

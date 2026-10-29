@@ -2,9 +2,9 @@ import SszNative.Proofs.Branch.Sequence
 
 /-! Trees of structs and unions, as an encoding lays them out and as the decoded value does. -/
 
-namespace Ssz.Native.BranchProof
+namespace EthLib.Consensus.Ssz.Native.BranchProof
 
-open Ssz Ssz.Native
+open EthLib.Consensus.Ssz EthLib.Consensus.Ssz.Native
 
 /-- Each field of a successful decoding decodes from its own slice. -/
 theorem deserializeFields_get :
@@ -168,7 +168,7 @@ theorem container_agrees (names : List String) (fields : List Desc)
     ⟨.nested ((fields.zip values).map some), some fields.length, none⟩,
     by simp only [layoutOf, ranged, Bind.bind, Except.bind, pure, Except.pure], ?_,
     ⟨listed_agrees b _ _ agreeing, rfl, rfl, ?_⟩⟩
-  · simp only [merkleLayout, lengths, bne_self_eq_false, Bool.false_eq_true, if_false, MerkleLayout.nesting,
+  · simp only [merkleLayout, lengths, bne_self_eq_false, Bool.false_eq_true, ite_false, MerkleLayout.nesting,
       pure, Except.pure]
   · unfold RootProof.Small at small
     simp only [EncodedLayout.count, Slots.count, List.length_map, List.length_zip]
@@ -200,7 +200,7 @@ theorem progressiveContainer_agrees (active : List Bool) (names : List String) (
     ⟨.nested slots, none, some (activeFieldsWord active)⟩,
     by simp only [layoutOf, ranged, Bind.bind, Except.bind, pure, Except.pure], ?_,
     ⟨listed_agrees b _ _ positions, rfl, by simp only [Option.map_some, RootProof.facts_hold.activeFields], ?_⟩⟩
-  · simp only [merkleLayout, layoutSlots, lengths, cv, bne_self_eq_false, Bool.false_eq_true, if_false, placed,
+  · simp only [merkleLayout, layoutSlots, lengths, cv, bne_self_eq_false, Bool.false_eq_true, ite_false, placed,
       MerkleLayout.nesting, Bind.bind, Except.bind, pure, Except.pure, throw, throwThe, MonadExceptOf.throw]
   · -- One position per bit of the layout, at most one node's worth.
     simp only [EncodedLayout.count, Slots.count, placeFields_length]
@@ -243,4 +243,4 @@ theorem union_agrees (selectors : List Nat) (options : List Desc)
     have := USize.le_size
     omega
 
-end Ssz.Native.BranchProof
+end EthLib.Consensus.Ssz.Native.BranchProof

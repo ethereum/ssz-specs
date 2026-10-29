@@ -11,11 +11,11 @@ A layout record holds the values under its tree in one of five ways, each a kind
 The reader answers one with the value's plan node and range, or zero for a gap or a position past the end.
 -/
 
-namespace Ssz.Native.Driver.ProveProof
+namespace EthLib.Consensus.Ssz.Native.Driver.ProveProof
 
 set_option maxRecDepth 20000
 
-open Ssz Ssz.Native Ssz.Native.Ir Ssz.Native.Asm Ssz.Native.Ir.Stmt Ssz.Native.Ir.Expr Ssz.Native.Plan
+open EthLib.Consensus.Ssz EthLib.Consensus.Ssz.Native EthLib.Consensus.Ssz.Native.Ir EthLib.Consensus.Ssz.Native.Asm EthLib.Consensus.Ssz.Native.Ir.Stmt EthLib.Consensus.Ssz.Native.Ir.Expr EthLib.Consensus.Ssz.Native.Plan
 
 /-- Types that each nest at most some levels nest at most that many at their deepest. -/
 theorem deepest_le (k : Nat) : ∀ (ds : List Desc), (∀ d ∈ ds, d.nesting ≤ k) → Desc.deepestNesting ds ≤ k
@@ -258,7 +258,7 @@ theorem slot_calls {m : Module} {w : World} (linked : HasCodec m)
   | stride element start width count q kind counted first plan wide planned inPlan small =>
     simp only [Slots.at]
     by_cases inside : i < count
-    · simp only [inside, if_true, SlotDone]
+    · simp only [inside, ite_true, SlotDone]
       refine ⟨q, planned, inPlan.1, inPlan.2, Calls.of_wp hf (by simp only [slotRoom] at room; omega) rfl ?_⟩
       rw [hinner]
       simp only [ProveSlot.fn]
@@ -268,7 +268,7 @@ theorem slot_calls {m : Module} {w : World} (linked : HasCodec m)
       wonly [written3]
       -- The value stops one width past where it starts.
       simp only [Nat.mul_succ, Nat.add_assoc]
-    · simp only [inside, if_false, SlotDone]
+    · simp only [inside, ite_false, SlotDone]
       refine Calls.of_wp hf (by simp only [slotRoom] at room; omega) rfl ?_
       rw [hinner]
       simp only [ProveSlot.fn]
@@ -286,7 +286,7 @@ theorem slot_calls {m : Module} {w : World} (linked : HasCodec m)
       refine Wp.mono (slot_store (by wev []) (by wev []) writable) fun env' mem' ⟨r, same⟩ => ⟨r, ?_⟩
       rw [same]
       wonly [written3]
-    · simp only [List.getElem?_cons, zero, if_false, List.getElem?_nil, SlotDone]
+    · simp only [List.getElem?_cons, zero, ite_false, List.getElem?_nil, SlotDone]
       refine Calls.of_wp hf (by simp only [slotRoom] at room; omega) rfl ?_
       rw [hinner]
       simp only [ProveSlot.fn]
@@ -317,13 +317,13 @@ theorem slot_calls {m : Module} {w : World} (linked : HasCodec m)
         have nextAcc : w.access (data + start + 4 * i + 4) 4 = true := by
           rw [show data + start + 4 * i + 4 = data + (start + 4 * i + 4) by omega]
           exact BranchProof.access_sub readable (by omega)
-        simp only [more, if_true]
+        simp only [more, ite_true]
         wsteps [acc, acc0, kind, counted, encoding, first, plan, within, offset, offsetAcc, next, nextAcc, more]
         refine Wp.mono (slot_store (by wev []) (by wev []) writable) fun env' mem' ⟨r, same⟩ => ⟨r, ?_⟩
         rw [same]
         wonly [written3]
       · -- The last body runs to the end.
-        simp only [more, if_false, Nat.add_sub_cancel' ordered]
+        simp only [more, ite_false, Nat.add_sub_cancel' ordered]
         wsteps [acc, acc0, kind, counted, encoding, first, last, plan, within, offset, offsetAcc, more]
         refine Wp.mono (slot_store (by wev []) (by wev []) writable) fun env' mem' ⟨r, same⟩ => ⟨r, ?_⟩
         rw [same]
@@ -372,8 +372,8 @@ theorem slot_calls {m : Module} {w : World} (linked : HasCodec m)
       · -- A set position: its field is the one after those of the set positions before it.
         generalize hc : (active.take i).count true = c
         have cle : c ≤ i := hc ▸ count_take_le active i
-        rw [if_pos on] at bitVal
-        simp only [on, if_true]
+        rw [ite_eq_left on] at bitVal
+        simp only [on, ite_true]
         -- The run up to the loop counting the set positions before this one.
         have toLoop : ∀ (Q : Env → Memory → Prop), (∀ env, env 11 = UInt64.ofNat i → env 12 = UInt64.ofNat c →
             env 0 = UInt64.ofNat lay → env 1 = UInt64.ofNat i → env 2 = UInt64.ofNat out → env 4 = 0 →
@@ -399,11 +399,11 @@ theorem slot_calls {m : Module} {w : World} (linked : HasCodec m)
             have jb := BranchProof.access_bound jAcc
             have step := count_take_succ active jj (by omega)
             by_cases jOn : active[jj] = true
-            · simp only [jOn, if_true] at jVal step
+            · simp only [jOn, ite_true] at jVal step
               wsteps [h11, h12, h13, jAcc, jVal]
               exact ⟨⟨trivial, jj + 1, by omega, by wev [h11], by wev [h12, step], by wev [h0], by wev [h1],
                 by wev [h2], by wev [h4], by wev [h13]⟩, by wonly [h11]; omega⟩
-            · simp only [jOn, Bool.false_eq_true, if_false] at jVal step
+            · simp only [jOn, Bool.false_eq_true, ite_false] at jVal step
               wsteps [h11, h12, h13, jAcc, jVal]
               exact ⟨⟨trivial, jj + 1, by omega, by wev [h11], by wev [h12, step], by wev [h0], by wev [h1],
                 by wev [h2], by wev [h4], by wev [h13]⟩, by wonly [h11]; omega⟩
@@ -433,8 +433,8 @@ theorem slot_calls {m : Module} {w : World} (linked : HasCodec m)
           wsteps [h12, h0, h4, fieldCount, acc144, has]
           exact ⟨by wev [ProveSlot.fn, h4], trivial⟩
       · -- A clear position is a gap.
-        rw [if_neg on] at bitVal
-        simp only [on, Bool.false_eq_true, if_false, SlotDone]
+        rw [ite_eq_right on] at bitVal
+        simp only [on, Bool.false_eq_true, ite_false, SlotDone]
         refine Calls.of_wp hf (by simp only [slotRoom] at room; omega) rfl ?_
         rw [hinner]
         simp only [ProveSlot.fn]
@@ -448,4 +448,4 @@ theorem slot_calls {m : Module} {w : World} (linked : HasCodec m)
       wsteps [acc, acc0, kind, counted, within]
       exact ⟨by wev [], trivial⟩
 
-end Ssz.Native.Driver.ProveProof
+end EthLib.Consensus.Ssz.Native.Driver.ProveProof

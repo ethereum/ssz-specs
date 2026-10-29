@@ -2,9 +2,9 @@ import SszNative.Proofs.Driver.Branch.Copy
 
 /-! The compiled second pass of a fold level keeps the entries off the level, in order. -/
 
-namespace Ssz.Native.Driver.BranchProof
+namespace EthLib.Consensus.Ssz.Native.Driver.BranchProof
 
-open Ssz.Native.Ir Ssz.Native.Asm
+open EthLib.Consensus.Ssz.Native.Ir EthLib.Consensus.Ssz.Native.Asm
 
 /-- An entry address inside a usable node set does not wrap. -/
 theorem entry_addr {w : World} {a : UInt64} {n : Nat} (acc : w.access a.toNat (40 * n) = true) (i : UInt64)
@@ -106,7 +106,7 @@ theorem fold_kept_calls {m : Module} {w : World} (hk : m.fns.lookup "ssz_branch_
       have offLevel : Nat.log2 x.toNat ≠ depth.toNat := by
         intro h
         simp only [assign, ↓reduceIte, Nat.reduceEqDiff, e3] at off
-        rw [if_pos (UInt64.toNat_inj.mp (by rw [toNat_ofNat_of_lt _ (by omega), h]))] at off
+        rw [ite_eq_left (UInt64.toNat_inj.mp (by rw [toNat_ofNat_of_lt _ (by omega), h]))] at off
         exact off rfl
       obtain ⟨daddr, dacc⟩ := entry_addr ad (env 6) (by omega)
       have nodeSrc : (env 0 + 40 * env 4 + 8).toNat = src.toNat + 40 * (env 4).toNat + 8 := by
@@ -150,20 +150,20 @@ theorem fold_kept_calls {m : Module} {w : World} (hk : m.fns.lookup "ssz_branch_
             rw [copied j hj, store_outside _ _ _ _ _ far, s1]
           rw [entriesAt_write mem' mem2 dst.toNat (env 6).toNat x _ keepEq wordEq nodeEq, kept, levelKept_succ, hx]
           have this : (levelOf x.toNat != depth.toNat) = true := by simpa [levelOf] using offLevel
-          rw [if_pos this]
+          rw [ite_eq_left this]
       · simp only [assign, ↓reduceIte, Nat.reduceEqDiff, next]; omega
     · -- An entry on the level is left for the first pass.
       have onLevel : Nat.log2 x.toNat = depth.toNat := by
         by_cases h : (Nat.log2 x.toNat).toUInt64 = depth
         · rw [← h, toNat_ofNat_of_lt _ (by omega)]
-        · simp only [assign, ↓reduceIte, Nat.reduceEqDiff, e3, if_neg h] at on
+        · simp only [assign, ↓reduceIte, Nat.reduceEqDiff, e3, ite_eq_right h] at on
           exact absurd on (by decide)
       refine Wp.skip (Wp.cons (Wp.set (eval_add rfl rfl) (Wp.nil ⟨?_, ?_⟩)))
       · simp only [KeptInv, assign, ↓reduceIte, Nat.reduceEqDiff, next]
         refine ⟨e0, e1, e2, e3, by omega, frame, ?_⟩
         rw [kept, levelKept_succ, hx]
         have this : (levelOf x.toNat != depth.toNat) = false := by simpa [levelOf] using onLevel
-        rw [if_neg (by rw [this]; decide), List.append_nil]
+        rw [ite_eq_right (by rw [this]; decide), List.append_nil]
       · simp only [assign, ↓reduceIte, Nat.reduceEqDiff, next]; omega
   · -- Every entry was read.
     have done : ¬ (env 4).toNat < count.toNat := by rw [← e1]; simpa [Cond.holds, UInt64.lt_iff_toNat_lt] using z
@@ -175,4 +175,4 @@ theorem fold_kept_calls {m : Module} {w : World} (hk : m.fns.lookup "ssz_branch_
     apply UInt64.toNat_inj.mp
     rw [len, toNat_ofNat_of_lt _ (by have := count.toNat_lt; omega)]
 
-end Ssz.Native.Driver.BranchProof
+end EthLib.Consensus.Ssz.Native.Driver.BranchProof

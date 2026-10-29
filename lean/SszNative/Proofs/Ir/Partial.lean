@@ -11,9 +11,9 @@ A statement meets a condition after every run of it when each step does.
 Unlike reaching a condition, this asks nothing of fuel or of the stack: a run that has no meaning is no run.
 -/
 
-namespace Ssz.Native.Ir
+namespace EthLib.Consensus.Ssz.Native.Ir
 
-open Ssz.Native.Asm
+open EthLib.Consensus.Ssz.Native.Asm
 
 /-! One meaning. -/
 
@@ -38,7 +38,7 @@ theorem callSpec_le (m : Module) (w : World) {fuel fuel' : Nat} {f : String} {sp
       · simp at h
       · rename_i heq
         rw [exec_le m w heq le]
-        rw [if_pos (by assumption)]
+        rw [ite_eq_left (by assumption)]
         exact h
     · simp at h
   · exact h
@@ -101,8 +101,8 @@ theorem exec_sp_mono (m : Module) (w : World) (names : List String) (closed : Cl
       | some v =>
         simp only [hc] at h ⊢
         by_cases hv : (v != 0) = true
-        · simp only [hv, if_true] at h ⊢; exact ih _ _ _ _ _ _ (fun g hg => calls g (Or.inl hg)) le h
-        · simp only [hv, Bool.false_eq_true, if_false] at h ⊢
+        · simp only [hv, ite_true] at h ⊢; exact ih _ _ _ _ _ _ (fun g hg => calls g (Or.inl hg)) le h
+        · simp only [hv, Bool.false_eq_true, ite_false] at h ⊢
           exact ih _ _ _ _ _ _ (fun g hg => calls g (Or.inr hg)) le h
     | loop c body =>
       rw [exec] at h ⊢; simp only [bind, Option.bind] at h ⊢
@@ -111,8 +111,8 @@ theorem exec_sp_mono (m : Module) (w : World) (names : List String) (closed : Cl
       | some v =>
         simp only [hc] at h ⊢
         by_cases hz : (v == 0) = true
-        · simp only [hz, if_true] at h ⊢; exact h
-        · simp only [hz, Bool.false_eq_true, if_false] at h ⊢
+        · simp only [hz, ite_true] at h ⊢; exact h
+        · simp only [hz, Bool.false_eq_true, ite_false] at h ⊢
           cases hb : exec m w n sp env mem body with
           | none => simp [hb] at h
           | some p =>
@@ -129,16 +129,16 @@ theorem exec_sp_mono (m : Module) (w : World) (names : List String) (closed : Cl
       | some values =>
         simp only [hv, hf] at h ⊢
         by_cases room : (decide (w.stackLo + 8 + 8 * fn.frame ≤ sp) && values.length == fn.params) = true
-        · simp only [room, if_true] at h
+        · simp only [room, ite_true] at h
           simp only [Bool.and_eq_true, decide_eq_true_eq] at room
-          rw [if_pos (by simp only [Bool.and_eq_true, decide_eq_true_eq]; exact ⟨by omega, room.2⟩)]
+          rw [ite_eq_left (by simp only [Bool.and_eq_true, decide_eq_true_eq]; exact ⟨by omega, room.2⟩)]
           cases hb : exec m w n (sp - 8 - 8 * fn.frame) (entryEnv values) mem fn.body with
           | none => simp [hb] at h
           | some p =>
             simp only [hb] at h
             rw [ih (sp - 8 - 8 * fn.frame) (sp' - 8 - 8 * fn.frame) _ _ _ _ inner (by omega) hb]
             exact h
-        · simp only [room, Bool.false_eq_true, if_false] at h; simp at h
+        · simp only [room, Bool.false_eq_true, ite_false] at h; simp at h
 
 /-- A call to a closed name keeps its meaning with a higher stack pointer. -/
 theorem Calls.sp_mono {m : Module} {w : World} {names : List String} (closed : Closed m names) {f : String}
@@ -149,9 +149,9 @@ theorem Calls.sp_mono {m : Module} {w : World} {names : List String} (closed : C
   refine ⟨fuel, ?_⟩
   simp only [callSpec, look] at e ⊢
   by_cases room : (decide (w.stackLo + 8 + 8 * fn.frame ≤ sp) && args.length == fn.params) = true
-  · simp only [room, if_true] at e
+  · simp only [room, ite_true] at e
     simp only [Bool.and_eq_true, decide_eq_true_eq] at room
-    rw [if_pos (by simp only [Bool.and_eq_true, decide_eq_true_eq]; exact ⟨by omega, room.2⟩)]
+    rw [ite_eq_left (by simp only [Bool.and_eq_true, decide_eq_true_eq]; exact ⟨by omega, room.2⟩)]
     simp only [bind, Option.bind] at e ⊢
     cases hb : exec m w fuel (sp - 8 - 8 * fn.frame) (entryEnv args) mem fn.body with
     | none => simp [hb] at e
@@ -159,7 +159,7 @@ theorem Calls.sp_mono {m : Module} {w : World} {names : List String} (closed : C
       simp only [hb] at e
       rw [exec_sp_mono m w names closed _ _ (sp' - 8 - 8 * fn.frame) _ _ _ _ inner (by omega) hb]
       exact e
-  · simp only [room, Bool.false_eq_true, if_false] at e; simp at e
+  · simp only [room, Bool.false_eq_true, ite_false] at e; simp at e
 
 /-- A call to a closed name that happened returns what any other run of it, from any stack pointer, returns. -/
 theorem Calls.agree {m : Module} {w : World} {names : List String} (closed : Closed m names) {f : String}
@@ -222,8 +222,8 @@ theorem exec_keeps (m : Module) (w : World) (names : List String) (keeps : Keeps
       | some v =>
         simp only [hc] at h
         by_cases hv : (v != 0) = true
-        · simp only [hv, if_true] at h; exact ih _ _ _ _ _ ps.1 (fun g hg => calls g (Or.inl hg)) h
-        · simp only [hv, Bool.false_eq_true, if_false] at h
+        · simp only [hv, ite_true] at h; exact ih _ _ _ _ _ ps.1 (fun g hg => calls g (Or.inl hg)) h
+        · simp only [hv, Bool.false_eq_true, ite_false] at h
           exact ih _ _ _ _ _ ps.2 (fun g hg => calls g (Or.inr hg)) h
     | loop c body =>
       have pb : body.stores = false := by simpa [Stmt.stores] using ps
@@ -234,8 +234,8 @@ theorem exec_keeps (m : Module) (w : World) (names : List String) (keeps : Keeps
       | some v =>
         simp only [hc] at h
         by_cases hz : (v == 0) = true
-        · simp only [hz, if_true, pure, Option.some.injEq] at h; rw [← h]
-        · simp only [hz, Bool.false_eq_true, if_false] at h
+        · simp only [hz, ite_true, pure, Option.some.injEq] at h; rw [← h]
+        · simp only [hz, Bool.false_eq_true, ite_false] at h
           cases hb : exec m w n sp env mem body with
           | none => simp [hb] at h
           | some p =>
@@ -251,7 +251,7 @@ theorem exec_keeps (m : Module) (w : World) (names : List String) (keeps : Keeps
       | some values =>
         simp only [hv, hf] at h
         by_cases room : (decide (w.stackLo + 8 + 8 * fn.frame ≤ sp) && values.length == fn.params) = true
-        · simp only [room, if_true] at h
+        · simp only [room, ite_true] at h
           cases hb : exec m w n (sp - 8 - 8 * fn.frame) (entryEnv values) mem fn.body with
           | none => simp [hb] at h
           | some p =>
@@ -262,7 +262,7 @@ theorem exec_keeps (m : Module) (w : World) (names : List String) (keeps : Keeps
               simp only [hr, pure, Option.some.injEq] at h
               rw [← h]
               exact ih _ _ _ _ p fpure inner hb
-        · simp only [room, Bool.false_eq_true, if_false] at h; simp at h
+        · simp only [room, Bool.false_eq_true, ite_false] at h; simp at h
 
 /-- A call to a name that keeps memory leaves memory as it was. -/
 theorem Calls.keeps {m : Module} {w : World} {names : List String} (keeps : Keeps m names) {f : String}
@@ -295,7 +295,7 @@ namespace Pc
 
 variable {m : Module} {w : World} {sp : Nat} {env : Env} {mem : Memory} {Q : Env → Memory → Prop}
 
-open Ssz.Native.Ir.Stmt
+open EthLib.Consensus.Ssz.Native.Ir.Stmt
 
 /-- A run is a run that reaches its own end. -/
 theorem wp_of_runs {s : Stmt} {env' : Env} {mem' : Memory} (h : Runs m w sp env mem s env' mem') :
@@ -349,10 +349,10 @@ theorem ite {c : Expr} {t e : Stmt}
   intro e' m' r
   obtain ⟨v, hv, k⟩ := (wp_ite c t e env mem _).mp (wp_of_runs r)
   by_cases z : v = 0
-  · simp only [z, ne_eq, not_true_eq_false, if_false] at k
+  · simp only [z, ne_eq, not_true_eq_false, ite_false] at k
     obtain ⟨_, _, rr, rfl, rfl⟩ := k
     exact (h v hv).2 z _ _ rr
-  · simp only [ne_eq, z, not_false_eq_true, if_true] at k
+  · simp only [ne_eq, z, not_false_eq_true, ite_true] at k
     obtain ⟨_, _, rr, rfl, rfl⟩ := k
     exact (h v hv).1 z _ _ rr
 
@@ -433,12 +433,12 @@ theorem loop_inv {c : Expr} {body : Stmt} (inv : Env → Memory → Prop) (start
     | some v =>
       simp only [hc] at h
       by_cases hz : (v == 0) = true
-      · simp only [hz, if_true, pure, Option.some.injEq, Prod.mk.injEq] at h
+      · simp only [hz, ite_true, pure, Option.some.injEq, Prod.mk.injEq] at h
         obtain ⟨rfl, rfl⟩ := h
         have : v = 0 := by simpa using hz
         subst this
         exact exit _ _ start hc
-      · simp only [hz, Bool.false_eq_true, if_false] at h
+      · simp only [hz, Bool.false_eq_true, ite_false] at h
         cases hb : exec m w n sp env mem body with
         | none => simp [hb] at h
         | some p =>
@@ -491,4 +491,4 @@ theorem Calls.of_pc {m : Module} {w : World} {f : String} {sp : Nat} {args : Lis
         exact h p.1 p.2 ⟨fuel, hb⟩ v hr
   · simp at e
 
-end Ssz.Native.Ir
+end EthLib.Consensus.Ssz.Native.Ir

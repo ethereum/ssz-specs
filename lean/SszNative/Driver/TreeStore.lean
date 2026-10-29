@@ -21,9 +21,9 @@ The first 32 bytes, where node 0 would be, are the drivers' own scratch.
 Above the stored tree, the root climbs to the declared depth against zero trees, then mixes a word in.
 -/
 
-namespace Ssz.Native.Driver
+namespace EthLib.Consensus.Ssz.Native.Driver
 
-open Ssz.Native.Ir Ssz.Native.Ir.Expr Ssz.Native.Ir.Stmt
+open EthLib.Consensus.Ssz.Native.Ir EthLib.Consensus.Ssz.Native.Ir.Expr EthLib.Consensus.Ssz.Native.Ir.Stmt
 
 namespace TreeBuild
 /-- The tree buffer. -/
@@ -223,4 +223,4 @@ def treeStoreFns : List (String × Fn) :=
 theorem treeStoreFns_wf : treeStoreFns.all (fun f => f.2.wf) = true := by
   decide +kernel
 
-end Ssz.Native.Driver
+end EthLib.Consensus.Ssz.Native.Driver

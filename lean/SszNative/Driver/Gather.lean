@@ -10,9 +10,9 @@ with one load and one store per record, which need AVX.
 Every other shape takes the general byte copy.
 -/
 
-namespace Ssz.Native.Driver
+namespace EthLib.Consensus.Ssz.Native.Driver
 
-open Ssz.Native.Ir Ssz.Native.Ir.Expr Ssz.Native.Ir.Stmt
+open EthLib.Consensus.Ssz.Native.Ir EthLib.Consensus.Ssz.Native.Ir.Expr EthLib.Consensus.Ssz.Native.Ir.Stmt
 
 namespace GatherVars
 /-- The output address. -/
@@ -47,7 +47,7 @@ Gather a field of each record: arguments out, src, count, shape, ctx.
 
 Returns which routine ran: zero for the general copy, one for an AVX routine.
 -/
-def _root_.Ssz.Native.Driver.gatherField : Fn :=
+def _root_.EthLib.Consensus.Ssz.Native.Driver.gatherField : Fn :=
   -- The AVX routines by width, each for a 32-byte slot.
   let narrow : List Stmt := [1, 2, 4, 8, 16, 32].map fun w =>
     when (eq width (w : Nat)) [gatherCall s!"ssz_gather_{w}", path ::= 1]
@@ -59,4 +59,4 @@ def _root_.Ssz.Native.Driver.gatherField : Fn :=
       when (eq path 0) [gatherCall "ssz_gather"]] }
 end GatherVars
 
-end Ssz.Native.Driver
+end EthLib.Consensus.Ssz.Native.Driver

@@ -9,9 +9,9 @@ Halving every entry gives the parents, and since the list is sorted, equal paren
 keeping an entry only when it differs from the last one kept leaves each parent once, still sorted.
 -/
 
-namespace Ssz.Native.Driver
+namespace EthLib.Consensus.Ssz.Native.Driver
 
-open Ssz Ssz.Native.Asm Ssz.Native.Ir
+open EthLib.Consensus.Ssz EthLib.Consensus.Ssz.Native.Asm EthLib.Consensus.Ssz.Native.Ir
 
 /-! ## Words in memory -/
 
@@ -34,13 +34,13 @@ theorem slotWord_store (mem : Memory) (a j i v : Nat) (hv : v < 2 ^ 64) :
     slotWord (store mem (a + 8 * j) 8 (qwordByte (UInt64.ofNat v))) a i = if i = j then v else slotWord mem a i := by
   by_cases h : i = j
   · subst h
-    rw [if_pos rfl]
+    rw [ite_eq_left rfl]
     unfold slotWord
     rw [readLE_store8, ofNat_toNat hv]
-  · rw [if_neg h]
+  · rw [ite_eq_right h]
     exact slotWord_congr fun q hq => by
       simp only [store]
-      rw [if_neg (by omega)]
+      rw [ite_eq_right (by omega)]
 
 /-- Loading the word at an index computed from an address and an index variable. -/
 theorem eval_slotWord {w : World} {env : Env} {mem : Memory} {L T : Expr} {a i : Nat}
@@ -192,7 +192,7 @@ theorem parents_ends {m : Module} {w : World} {sp : Nat} {mem : Memory} {list K 
   have w1 : ∀ i, slotWord mem1 list i = if i = 0 then ps 0 / 2 else ps i := fun i => by
     rw [← hm1, slotWord_store mem list 0 i (ps 0 / 2) (by omega), ← hps]
   have f1 : ∀ a, ¬ (list ≤ a ∧ a < list + 8 * c) → mem1 a = mem a := fun a ha => by
-    rw [← hm1]; simp only [store]; rw [if_neg (by omega)]
+    rw [← hm1]; simp only [store]; rw [ite_eq_right (by omega)]
   refine Ends.cons (Ends.loop (fun e' mm' => (∀ y, y ≠ 10 → y ≠ 11 → y ≠ 12 → y ≠ 13 → e' y = e y) ∧
       ∃ t n, 1 ≤ n ∧ n ≤ t ∧ t ≤ k ∧ e' 10 = UInt64.ofNat t ∧ e' 11 = UInt64.ofNat n ∧
       e' 12 = UInt64.ofNat (slotWord mm' list (n - 1)) ∧ (∀ i, t ≤ i → i < k → slotWord mm' list i = ps i) ∧
@@ -202,10 +202,10 @@ theorem parents_ends {m : Module} {w : World} {sp : Nat} {mem : Memory} {list K 
     (fun e' _ => k - (e' 10).toNat)
     ⟨fun y a b c' _ => by rw [assign_ne a, assign_ne b, assign_ne c'], 1, 1, Nat.le_refl _, Nat.le_refl _, k1,
       assign_eq, by rw [assign_ne (by decide), assign_eq],
-      by rw [assign_ne (by decide), assign_ne (by decide), assign_eq, w1, if_pos rfl],
-      fun i hi _ => by rw [w1, if_neg (by omega)], fun i j _ hj => absurd hj (by omega),
-      by rw [w1, if_pos rfl], fun i hi => ⟨0, by omega, by rw [show i = 0 by omega, w1, if_pos rfl]⟩,
-      fun i' hi => ⟨0, by omega, by rw [show i' = 0 by omega, w1, if_pos rfl]⟩, f1⟩ ?_ ?_) ?_
+      by rw [assign_ne (by decide), assign_ne (by decide), assign_eq, w1, ite_eq_left rfl],
+      fun i hi _ => by rw [w1, ite_eq_right (by omega)], fun i j _ hj => absurd hj (by omega),
+      by rw [w1, ite_eq_left rfl], fun i hi => ⟨0, by omega, by rw [show i = 0 by omega, w1, ite_eq_left rfl]⟩,
+      fun i' hi => ⟨0, by omega, by rw [show i' = 0 by omega, w1, ite_eq_left rfl]⟩, f1⟩ ?_ ?_) ?_
   · rintro e' mm' ⟨ag, t, n, _, _, tk, tv, _⟩
     exact ⟨_, eval_lt (eval_var tv) (eval_var ((ag 9 (by decide) (by decide) (by decide) (by decide)).trans kv))
       (by omega) (by omega)⟩
@@ -216,7 +216,7 @@ theorem parents_ends {m : Module} {w : World} {sp : Nat} {mem : Memory} {list K 
     have tk' : t < k := by
       by_cases hb : t < k
       · exact hb
-      · rw [if_neg hb] at hv; exact absurd hv nz
+      · rw [ite_eq_right hb] at hv; exact absurd hv nz
     have pt := small t tk'
     have mono : ps (t - 1) / 2 ≤ ps t / 2 := Nat.div_le_div_right (Nat.le_of_lt (sorted _ _ (by omega) tk'))
     -- The parent of the next entry.
@@ -249,29 +249,29 @@ theorem parents_ends {m : Module} {w : World} {sp : Nat} {mem : Memory} {list K 
           rw [assign_ne c', assign_ne b, assign_ne d]; exact ag y a b c' d,
         by rw [assign_ne (by decide), assign_ne (by decide), assign_ne (by decide)]; exact tv,
         n + 1, by omega, by omega, by rw [assign_ne (by decide), assign_eq],
-        by rw [assign_eq, Nat.add_sub_cancel, w2, if_pos rfl], fun i hi hk => by
-          rw [w2, if_neg (by omega)]; exact unread i (by omega) hk, fun i j hij hj => ?_,
-        by rw [Nat.add_sub_cancel, w2, if_pos rfl], fun i hi => ?_, fun i' hi => ?_, fun a ha => ?_⟩
-      · rw [w2, w2, if_neg (by omega)]
+        by rw [assign_eq, Nat.add_sub_cancel, w2, ite_eq_left rfl], fun i hi hk => by
+          rw [w2, ite_eq_right (by omega)]; exact unread i (by omega) hk, fun i j hij hj => ?_,
+        by rw [Nat.add_sub_cancel, w2, ite_eq_left rfl], fun i hi => ?_, fun i' hi => ?_, fun a ha => ?_⟩
+      · rw [w2, w2, ite_eq_right (by omega)]
         by_cases jn : j = n
-        · rw [if_pos jn]
+        · rw [ite_eq_left jn]
           by_cases i1 : i = n - 1
           · rw [i1, last]; exact gt
           · have := srt i (n - 1) (by omega) (by omega)
             rw [last] at this; omega
-        · rw [if_neg jn]; exact srt i j hij (by omega)
+        · rw [ite_eq_right jn]; exact srt i j hij (by omega)
       · rw [w2]
         by_cases jn : i = n
-        · rw [if_pos jn]; exact ⟨t, by omega, rfl⟩
-        · rw [if_neg jn]
+        · rw [ite_eq_left jn]; exact ⟨t, by omega, rfl⟩
+        · rw [ite_eq_right jn]
           obtain ⟨i', hi', eq⟩ := snd i (by omega)
           exact ⟨i', by omega, eq⟩
       · by_cases it : i' = t
-        · exact ⟨n, by omega, by rw [w2, if_pos rfl, it]⟩
+        · exact ⟨n, by omega, by rw [w2, ite_eq_left rfl, it]⟩
         · obtain ⟨i, hi, eq⟩ := cpl i' (by omega)
-          exact ⟨i, by omega, by rw [w2, if_neg (by omega)]; exact eq⟩
+          exact ⟨i, by omega, by rw [w2, ite_eq_right (by omega)]; exact eq⟩
       · simp only [store]
-        rw [if_neg (by omega)]
+        rw [ite_eq_right (by omega)]
         exact fr a ha
     · -- The same parent as the last one: nothing to keep.
       have eq : ps t / 2 = slotWord mm' list (n - 1) := by
@@ -300,7 +300,7 @@ theorem parents_ends {m : Module} {w : World} {sp : Nat} {mem : Memory} {list K 
     have done := Option.some.inj (done.symm.trans (eval_lt (eval_var tv) (eval_var kv') (by omega) (by omega)))
     have tk' : t = k := by
       by_cases hb : t < k
-      · rw [if_pos hb] at done; exact absurd done (by decide)
+      · rw [ite_eq_left hb] at done; exact absurd done (by decide)
       · omega
     subst tk'
     -- The count of parents kept is the new count.
@@ -314,4 +314,4 @@ theorem parents_ends {m : Module} {w : World} {sp : Nat} {mem : Memory} {list K 
       obtain ⟨i, hi, eq⟩ := cpl i' hi'
       exact ⟨i, hi, by rw [eq, ex, anc_up K h _ below]⟩
 
-end Ssz.Native.Driver
+end EthLib.Consensus.Ssz.Native.Driver

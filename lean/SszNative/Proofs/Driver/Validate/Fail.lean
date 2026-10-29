@@ -7,11 +7,11 @@ Writing a refusal, and the memory it leaves alone.
 A refusal is written once, at its own four words, which the plan and the encoding never share.
 -/
 
-namespace Ssz.Native.Driver.Validate
+namespace EthLib.Consensus.Ssz.Native.Driver.Validate
 
 set_option maxRecDepth 20000
 
-open Ssz Ssz.Native Ssz.Native.Ir Ssz.Native.Asm Ssz.Native.Ir.Stmt Ssz.Native.Ir.Expr
+open EthLib.Consensus.Ssz EthLib.Consensus.Ssz.Native EthLib.Consensus.Ssz.Native.Ir EthLib.Consensus.Ssz.Native.Asm EthLib.Consensus.Ssz.Native.Ir.Stmt EthLib.Consensus.Ssz.Native.Ir.Expr
 
 /-- A byte away from the four words is the byte before. -/
 theorem wrote4_far (mem : Memory) (err : Nat) (a b c d : UInt64) (x : Nat) (far : x < err ∨ err + 32 ≤ x) :
@@ -73,4 +73,4 @@ macro "wfail" "[" args:Lean.Parser.Tactic.simpLemma,* "]" : tactic =>
     first | focus ((wev [$args,*]); done) | skip
     focus (simp only [Room] at room; omega)))
 
-end Ssz.Native.Driver.Validate
+end EthLib.Consensus.Ssz.Native.Driver.Validate

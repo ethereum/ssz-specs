@@ -9,9 +9,9 @@ Each lane then holds a starting lane, that lane byte-reversed, or a table consta
 Following those sources over a fixed list of instructions is a finite computation the kernel can check.
 -/
 
-namespace Ssz.Native.Asm
+namespace EthLib.Consensus.Ssz.Native.Asm
 
-open Ssz.Native.Kernel
+open EthLib.Consensus.Ssz.Native.Kernel
 
 /-- A word with its four bytes in reverse order. -/
 def bswap (w : UInt32) : UInt32 :=
@@ -384,4 +384,4 @@ theorem agrees_start (s : State) : Agrees s.vec Abs.start s := by
   intro r l _
   rfl
 
-end Ssz.Native.Asm
+end EthLib.Consensus.Ssz.Native.Asm

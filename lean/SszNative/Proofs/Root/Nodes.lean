@@ -1,14 +1,14 @@
 import SszNative.Tree
 import SszNative.Proofs.Reference
-import Ssz.Proofs.Merkle.Tree
-import Ssz.Proofs.Merkle.Widths
-import Ssz.Proofs.Merkle.Authentication
+import EthLib.Consensus.Proofs.Ssz.Merkle.Tree
+import EthLib.Consensus.Proofs.Ssz.Merkle.Widths
+import EthLib.Consensus.Proofs.Ssz.Merkle.Authentication
 
 /-! Buffers of 32-byte nodes read as the specification's arrays of nodes, and the hashing kernels on them. -/
 
-namespace Ssz.Native
+namespace EthLib.Consensus.Ssz.Native
 
-open Ssz
+open EthLib.Consensus.Ssz
 
 /-- Node i of a buffer, counting from a byte offset. -/
 def nodeOf (b : ByteArray) (offset i : Nat) : Bytes :=
@@ -92,15 +92,15 @@ theorem hashPairs_node (src : ByteArray) (offset pairs p : Nat) (pair : p < pair
   have hn := toUSize_toNat pairs (by omega)
   -- The reference writes the digest of pair p as its node p.
   have node : (hashPairs src offset.toUSize pairs.toUSize).extract (32 * p) (32 * p + 32) =
-      Sha256.hash (src.extract (offset + 64 * p) (offset + 64 * p + 64)) := by
+      Cryptography.Hash.Sha256.hash (src.extract (offset + 64 * p) (offset + 64 * p + 64)) := by
     have := extract_of_get (hashPairs src offset.toUSize pairs.toUSize)
-      (Sha256.hash (src.extract (offset + 64 * p) (offset + 64 * p + 64))) (32 * p)
-      (by simp only [Sha256.hash_size, hashPairs, hashPairsReference_size, hn]; omega)
+      (Cryptography.Hash.Sha256.hash (src.extract (offset + 64 * p) (offset + 64 * p + 64))) (32 * p)
+      (by simp only [Cryptography.Hash.Sha256.hash_size, hashPairs, hashPairsReference_size, hn]; omega)
       (fun k within => by
-        simp only [Sha256.hash_size] at within
+        simp only [Cryptography.Hash.Sha256.hash_size] at within
         simp only [hashPairs]
         rw [hashPairsReference_get _ _ _ p k (by omega) within, ho])
-    simpa only [Sha256.hash_size] using this
+    simpa only [Cryptography.Hash.Sha256.hash_size] using this
   -- The parent is the specification's combination of the two adjacent nodes.
   simp only [nodeOf, Nat.zero_add, node, combine]
   rw [show offset + 32 * (2 * p) = offset + 64 * p by omega,
@@ -122,15 +122,15 @@ theorem hashFixed_node (left : ByteArray) (offset count p : Nat) (node : ByteArr
     rw [← this, Array.extract_size]
   -- The reference writes the digest of node p and the fixed node as its node p.
   have parent : (hashFixed left offset.toUSize node count.toUSize).extract (32 * p) (32 * p + 32) =
-      Sha256.hash (left.extract (offset + 32 * p) (offset + 32 * p + 32) ++ node.extract 0 32) := by
+      Cryptography.Hash.Sha256.hash (left.extract (offset + 32 * p) (offset + 32 * p + 32) ++ node.extract 0 32) := by
     have := extract_of_get (hashFixed left offset.toUSize node count.toUSize)
-      (Sha256.hash (left.extract (offset + 32 * p) (offset + 32 * p + 32) ++ node.extract 0 32)) (32 * p)
-      (by simp only [Sha256.hash_size, hashFixed, hashFixedReference_size, hn]; omega)
+      (Cryptography.Hash.Sha256.hash (left.extract (offset + 32 * p) (offset + 32 * p + 32) ++ node.extract 0 32)) (32 * p)
+      (by simp only [Cryptography.Hash.Sha256.hash_size, hashFixed, hashFixedReference_size, hn]; omega)
       (fun k within => by
-        simp only [Sha256.hash_size] at within
+        simp only [Cryptography.Hash.Sha256.hash_size] at within
         simp only [hashFixed]
         rw [hashFixedReference_get _ _ _ _ p k (by omega) within, ho])
-    simpa only [Sha256.hash_size] using this
+    simpa only [Cryptography.Hash.Sha256.hash_size] using this
   -- The parent is the specification's combination of the node and the fixed node.
   simp only [nodeOf, Nat.zero_add, parent, combine, whole]
   congr 2
@@ -149,16 +149,16 @@ theorem hashColumns_node (left : ByteArray) (lo : Nat) (right : ByteArray) (ro c
   have hn := toUSize_toNat count (by omega)
   -- The reference writes the digest of the two nodes p as its node p.
   have parent : (hashColumns left lo.toUSize right ro.toUSize count.toUSize).extract (32 * p) (32 * p + 32) =
-      Sha256.hash (left.extract (lo + 32 * p) (lo + 32 * p + 32) ++ right.extract (ro + 32 * p) (ro + 32 * p + 32)) := by
+      Cryptography.Hash.Sha256.hash (left.extract (lo + 32 * p) (lo + 32 * p + 32) ++ right.extract (ro + 32 * p) (ro + 32 * p + 32)) := by
     have := extract_of_get (hashColumns left lo.toUSize right ro.toUSize count.toUSize)
-      (Sha256.hash (left.extract (lo + 32 * p) (lo + 32 * p + 32) ++ right.extract (ro + 32 * p) (ro + 32 * p + 32)))
+      (Cryptography.Hash.Sha256.hash (left.extract (lo + 32 * p) (lo + 32 * p + 32) ++ right.extract (ro + 32 * p) (ro + 32 * p + 32)))
       (32 * p)
-      (by simp only [Sha256.hash_size, hashColumns, hashColumnsReference_size, hn]; omega)
+      (by simp only [Cryptography.Hash.Sha256.hash_size, hashColumns, hashColumnsReference_size, hn]; omega)
       (fun k within => by
-        simp only [Sha256.hash_size] at within
+        simp only [Cryptography.Hash.Sha256.hash_size] at within
         simp only [hashColumns]
         rw [hashColumnsReference_get _ _ _ _ _ p k (by omega) within, hl, hr])
-    simpa only [Sha256.hash_size] using this
+    simpa only [Cryptography.Hash.Sha256.hash_size] using this
   -- The parent is the specification's combination of the two nodes.
   simp only [nodeOf, Nat.zero_add, parent, combine]
   congr 2
@@ -202,4 +202,4 @@ theorem nodeOf_append_right (a b : ByteArray) (i : Nat) (whole : a.size = 32 * i
   rw [w, Array.extract_eq_empty_of_le (by rw [w]; omega), Array.empty_append, Nat.sub_self,
     show 32 * i + 32 - 32 * i = 32 by omega]
 
-end Ssz.Native
+end EthLib.Consensus.Ssz.Native

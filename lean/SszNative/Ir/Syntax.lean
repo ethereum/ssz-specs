@@ -10,9 +10,9 @@ A function has numbered variables, its parameters first.
 Memory is the machine's own, byte-addressed.
 -/
 
-namespace Ssz.Native.Ir
+namespace EthLib.Consensus.Ssz.Native.Ir
 
-open Ssz.Native.Asm (Alu Cond Width)
+open EthLib.Consensus.Ssz.Native.Asm (Alu Cond Width)
 
 /-- An expression, evaluated to one 64-bit word. -/
 inductive Expr where
@@ -72,4 +72,4 @@ def Stmt.block : List Stmt → Stmt
   | [s] => s
   | s :: rest => .seq s (Stmt.block rest)
 
-end Ssz.Native.Ir
+end EthLib.Consensus.Ssz.Native.Ir

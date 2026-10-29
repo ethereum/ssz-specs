@@ -10,9 +10,9 @@ The frame holds each variable in its slot, memory off the stack is the program's
 values the caller gave them.
 -/
 
-namespace Ssz.Native.Ir
+namespace EthLib.Consensus.Ssz.Native.Ir
 
-open Ssz.Native.Asm
+open EthLib.Consensus.Ssz.Native.Asm
 
 /-- Where a compiled function runs. -/
 structure Site where
@@ -99,9 +99,9 @@ theorem Site.Holds.setSlot {c : Site} {env : Env} {ir : Memory} {s : State} (h :
     apply readLE_congr
     intro j hj
     simp only [store]
-    rw [if_neg (by omega)]
+    rw [ite_eq_right (by omega)]
   · simp only [store]
-    rw [if_neg (by have := fits.low; have := fits.high; omega)]
+    rw [ite_eq_right (by have := fits.low; have := fits.high; omega)]
     exact h.heap a ha
 
 /-- Two 8-byte slots at different indices share no byte. -/
@@ -122,9 +122,9 @@ theorem Site.Holds.setVar {c : Site} {env : Env} {ir : Memory} {s : State} (h : 
       apply readLE_congr
       intro k hk
       simp only [store]
-      rw [if_neg (by omega)]
+      rw [ite_eq_right (by omega)]
   · simp only [store]
-    rw [if_neg (by have := fits.low; have := fits.high; have := fits.vars; omega)]
+    rw [ite_eq_right (by have := fits.low; have := fits.high; have := fits.vars; omega)]
     exact h.heap a ha
 
-end Ssz.Native.Ir
+end EthLib.Consensus.Ssz.Native.Ir

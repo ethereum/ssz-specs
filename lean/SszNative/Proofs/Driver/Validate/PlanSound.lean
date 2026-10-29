@@ -8,11 +8,11 @@ names its fields by position, and nests no deeper than a plan may be.
 With room on the stack for the deepest plan, it returns zero for every such plan.
 -/
 
-namespace Ssz.Native.Driver.Validate
+namespace EthLib.Consensus.Ssz.Native.Driver.Validate
 
 set_option maxRecDepth 20000
 
-open Ssz Ssz.Native Ssz.Native.Ir Ssz.Native.Asm Ssz.Native.Ir.Stmt Ssz.Native.Ir.Expr
+open EthLib.Consensus.Ssz EthLib.Consensus.Ssz.Native EthLib.Consensus.Ssz.Native.Ir EthLib.Consensus.Ssz.Native.Asm EthLib.Consensus.Ssz.Native.Ir.Stmt EthLib.Consensus.Ssz.Native.Ir.Expr
 
 /-! Words back to bytes. -/
 
@@ -148,4 +148,4 @@ theorem checkPlan_iff {m : Module} {w : World} (hm : Loaded m) (plan len sp : Na
     have := checkPlan_calls hm d wf fit nm deep plan sp mem bytes (by simp only [Room] at room ⊢; omega)
     rwa [size] at this
 
-end Ssz.Native.Driver.Validate
+end EthLib.Consensus.Ssz.Native.Driver.Validate

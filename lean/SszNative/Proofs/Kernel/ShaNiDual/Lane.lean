@@ -3,9 +3,9 @@ import SszNative.Kernel.ShaNiDual
 
 /-! The two register sets of the interleaved kernel: what each one holds, and that they never meet. -/
 
-namespace Ssz.Native.Kernel.ShaNiDual
+namespace EthLib.Consensus.Ssz.Native.Kernel.ShaNiDual
 
-open Ssz.Native.Asm
+open EthLib.Consensus.Ssz.Native.Asm
 
 /-- The shared registers' numbers. -/
 theorem wk_val : wk.val = 0 := rfl
@@ -161,4 +161,4 @@ theorem state_apart (g : Lane) (hg : Good g) :
   refine ⟨fun e => ?_, fun e => ?_, fun e => ?_, fun e => ?_, fun e => ?_, fun e => ?_, fun e => ?_⟩ <;>
     (have := congrArg Fin.val e; (try simp only [wk_val, tmp_val, bswap_val] at this); omega)
 
-end Ssz.Native.Kernel.ShaNiDual
+end EthLib.Consensus.Ssz.Native.Kernel.ShaNiDual

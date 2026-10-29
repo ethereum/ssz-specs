@@ -29,7 +29,7 @@ def benchmark() -> Path:
 def evaluate(benchmark: Path, tmp_path: Path, body: str) -> subprocess.CompletedProcess[str]:
     """Import Bench itself; never copy its definitions into the control."""
     probe = tmp_path / "BenchmarkControl.lean"
-    probe.write_text(f"import Bench\nopen Ssz Ssz.Native\n\n#eval ({body} : IO Unit)\n")
+    probe.write_text(f"import Bench\nopen EthLib.Consensus.Ssz EthLib.Consensus.Ssz.Native\n\n#eval ({body} : IO Unit)\n")
     return subprocess.run(
         ["lake", "env", "lean", str(probe)],
         cwd=benchmark,
@@ -66,7 +66,7 @@ def evaluate(benchmark: Path, tmp_path: Path, body: str) -> subprocess.Completed
         (
             "do let bytes : ByteArray := ⟨#[2]⟩; "
             'time "malformed-bool" (← IO.mkRef bytes) (rooted .bool)',
-            "malformed-bool: Ssz.Err.notABit 2",
+            "malformed-bool: EthLib.Consensus.Ssz.Err.notABit 2",
         ),
     ],
     ids=["refused-root", "short-root", "refused-work", "short-work", "false-proof", "bad-bool"],

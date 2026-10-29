@@ -1,13 +1,13 @@
 import SszNative.Proofs.Root.Variable.Basics
-import Ssz.Proofs.Codec.RootUnfold
-import Ssz.Proofs.Merkle.Merkleize
-import Ssz.Proofs.Merkle.Widths
+import EthLib.Consensus.Proofs.Ssz.Codec.RootUnfold
+import EthLib.Consensus.Proofs.Ssz.Merkle.Merkleize
+import EthLib.Consensus.Proofs.Ssz.Merkle.Widths
 
 /-! What the trees and the fixed-size roots are proved to compute, gathered as the facts the remaining roots rest on. -/
 
-namespace Ssz.Native.RootProof
+namespace EthLib.Consensus.Ssz.Native.RootProof
 
-open Ssz Ssz.Native
+open EthLib.Consensus.Ssz EthLib.Consensus.Ssz.Native
 
 /-- Whether an encoding is small enough that every buffer its root builds has machine-sized offsets. -/
 def Small (b : ByteArray) : Prop :=
@@ -85,7 +85,7 @@ theorem bounded_root (nodes : ByteArray) (count capacity : Nat) (chunks : Array 
   -- The buffer holds exactly the count of nodes, which the capacity's tree has room for.
   have sized : chunks.size = count := by rw [← same]; simp [nodesFrom]
   have fits : count ≤ 2 ^ depthFor capacity := Nat.le_trans room (le_two_pow_depthFor capacity)
-  simp only [merkleizeBoundedUnchecked, sized, show ¬ capacity < count by omega, if_false, Bind.bind, Except.bind,
+  simp only [merkleizeBoundedUnchecked, sized, show ¬ capacity < count by omega, ite_false, Bind.bind, Except.bind,
     pure, Except.pure, merkleizeCapacity, merkleizeDepth]
   -- The native tree is the specification's tree over those nodes.
   rw [facts.merkleizeAt nodes 0 count _ fits (by omega) small, same]
@@ -99,4 +99,4 @@ theorem progressive_root (nodes : ByteArray) (count : Nat) (chunks : Array Bytes
   -- The native spine is the specification's spine over those nodes.
   rw [facts.progressive nodes count inside small, same]
 
-end Ssz.Native.RootProof
+end EthLib.Consensus.Ssz.Native.RootProof

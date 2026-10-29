@@ -1,6 +1,6 @@
 import SszNative.Branch
 import SszNative.Proofs.Root.Record
-import Ssz.Proofs.Codec.Admits
+import EthLib.Consensus.Proofs.Ssz.Codec.Admits
 
 /-!
 The Lean walk to a node reads the same answer at every budget that covers the type's nesting.
@@ -9,9 +9,9 @@ The drivers walk with no budget at all, so this is what ties them to the walk wi
 Each step into a value under a tree spends one unit, and that value nests one level less than its tree.
 -/
 
-namespace Ssz.Native.Driver.ProveProof
+namespace EthLib.Consensus.Ssz.Native.Driver.ProveProof
 
-open Ssz Ssz.Native
+open EthLib.Consensus.Ssz EthLib.Consensus.Ssz.Native
 
 /-- Every value a layout lists under its tree nests at most a number of levels. -/
 def Within (n : Nat) (layout : EncodedLayout) : Prop :=
@@ -201,4 +201,4 @@ theorem walkNode_nesting (d : Desc) (b : ByteArray) (index : Nat) :
     nodeRootAt (d.nesting + index) d b 0 b.size index = nodeRootAt d.nesting d b 0 b.size index :=
   nodeRootAt_budget d b 0 b.size index (by omega) (Nat.le_refl _)
 
-end Ssz.Native.Driver.ProveProof
+end EthLib.Consensus.Ssz.Native.Driver.ProveProof

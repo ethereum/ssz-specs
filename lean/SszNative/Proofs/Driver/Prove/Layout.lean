@@ -8,11 +8,11 @@ The compiled layout driver writes the record of the tree a range of an accepted 
 Lean layout describes it.
 -/
 
-namespace Ssz.Native.Driver.ProveProof
+namespace EthLib.Consensus.Ssz.Native.Driver.ProveProof
 
 set_option maxRecDepth 20000
 
-open Ssz Ssz.Native Ssz.Native.Ir Ssz.Native.Asm Ssz.Native.Ir.Stmt Ssz.Native.Ir.Expr Ssz.Native.Plan
+open EthLib.Consensus.Ssz EthLib.Consensus.Ssz.Native EthLib.Consensus.Ssz.Native.Ir EthLib.Consensus.Ssz.Native.Asm EthLib.Consensus.Ssz.Native.Ir.Stmt EthLib.Consensus.Ssz.Native.Ir.Expr EthLib.Consensus.Ssz.Native.Plan
 
 /-- Packed bytes of a range, with one bit of the last byte cleared when a position is given. -/
 def packedNodes (b : ByteArray) (a e : Nat) : Option Nat → ByteArray
@@ -27,7 +27,7 @@ theorem bitNodes_packed (b : ByteArray) (start count : Nat) :
       (if count % 8 = 0 then none else some (count % 8)) := by
   by_cases whole : count % 8 = 0
   · simp [bitNodes, packedNodes, whole]
-  · simp only [bitNodes, packedNodes, whole, if_false, beq_iff_eq]
+  · simp only [bitNodes, packedNodes, whole, ite_false, beq_iff_eq]
     rw [show start + (count + 7) / 8 - start - 1 = count / 8 by omega]
 
 /--
@@ -87,7 +87,7 @@ theorem readNode_lengthWritten (mem : Memory) (a c : Nat) (small : c < 2 ^ 64) :
     intro i hi
     simp only [lengthWritten, Asm.store]
     by_cases low : i < 8
-    · rw [if_neg (by omega), if_neg (by omega), if_neg (by omega), if_pos (by omega)]
+    · rw [ite_eq_right (by omega), ite_eq_right (by omega), ite_eq_right (by omega), ite_eq_left (by omega)]
       apply UInt8.toNat_inj.mp
       simp only [qwordByte, Nat.add_sub_cancel_left, UInt64.toNat_toUInt8, UInt64.toNat_shiftRight,
         Nat.toUInt64_eq]
@@ -99,10 +99,10 @@ theorem readNode_lengthWritten (mem : Memory) (a c : Nat) (small : c < 2 ^ 64) :
         exact Nat.div_eq_of_lt (Nat.lt_of_lt_of_le small (Nat.pow_le_pow_right (by decide) (by omega)))
       rw [zero]
       by_cases r3 : 24 ≤ i
-      · rw [if_pos (by omega)]; simp [qwordByte]
+      · rw [ite_eq_left (by omega)]; simp [qwordByte]
       by_cases r2 : 16 ≤ i
-      · rw [if_neg (by omega), if_pos (by omega)]; simp [qwordByte]
-      · rw [if_neg (by omega), if_neg (by omega), if_pos (by omega)]; simp [qwordByte]
+      · rw [ite_eq_right (by omega), ite_eq_left (by omega)]; simp [qwordByte]
+      · rw [ite_eq_right (by omega), ite_eq_right (by omega), ite_eq_left (by omega)]; simp [qwordByte]
   unfold BranchProof.readNode lengthNode
   rw [ByteArray.mk.injEq]
   apply Array.ext (by simp)
@@ -125,17 +125,17 @@ theorem readNode_count {mem : Memory} {a c : Nat} (small : c < 2 ^ 64)
 /-- A store leaves every byte outside it as it was. -/
 theorem store_out {mem : Memory} {b n : Nat} {f : Nat → UInt8} {a : Nat} (h : ¬ (b ≤ a ∧ a < b + n)) :
     store mem b n f a = mem a := by
-  simp only [Asm.store]; rw [if_neg h]
+  simp only [Asm.store]; rw [ite_eq_right h]
 
 /-- A store sets every byte inside it. -/
 theorem store_in {mem : Memory} {b n : Nat} {f : Nat → UInt8} {a : Nat} (h : b ≤ a ∧ a < b + n) :
     store mem b n f a = f (a - b) := by
-  simp only [Asm.store]; rw [if_pos h]
+  simp only [Asm.store]; rw [ite_eq_left h]
 
 /-- A store elsewhere leaves eight bytes as they were. -/
 theorem read_store_apart (mem : Memory) (a b n : Nat) (f : Nat → UInt8) (h : a + 8 ≤ b ∨ b + n ≤ a) :
     readLE (store mem b n f) a 8 = readLE mem a 8 :=
-  readLE_congr _ _ a 8 fun k _ => by simp only [Asm.store]; rw [if_neg (by omega)]
+  readLE_congr _ _ a 8 fun k _ => by simp only [Asm.store]; rw [ite_eq_right (by omega)]
 
 /-- A function's body reaching its result and memory meeting a condition is a call leaving such a memory. -/
 theorem calls_of_wp {m : Module} {w : World} {sp : Nat} {f : String} {args : List UInt64} {mem : Memory} {fn : Fn}
@@ -230,10 +230,10 @@ macro "basicRun" "[" args:Lean.Parser.Tactic.simpLemma,* "]" : tactic =>
         refine readNode_count (by omega) fun i hi => ?_
         -- Each byte falls in one of the four words the node was written as.
         rcases (show i < 8 ∨ (8 ≤ i ∧ i < 16) ∨ (16 ≤ i ∧ i < 24) ∨ 24 ≤ i by omega) with r | r | r | r
-        · simp (disch := omega) only [store_out, store_in, r, if_true]
+        · simp (disch := omega) only [store_out, store_in, r, ite_true]
           rw [show lay + 40 + i - (lay + 40) = i by omega]
         all_goals
-          simp (disch := omega) only [store_out, store_in, show ¬ i < 8 by omega, if_false]
+          simp (disch := omega) only [store_out, store_in, show ¬ i < 8 by omega, ite_false]
           simp [qwordByte]
     · rd
     · exact LeavesAt.packed start stop none (by rd) (by rd) (by rd) (by rd) (fun k hk => by cases hk)
@@ -341,7 +341,7 @@ theorem halve_loop {m : Module} {w : World} {sp : Nat} {env0 : Env} {mem0 : Memo
 /-- A store elsewhere leaves a byte as it was. -/
 theorem read1_store_apart (mem : Memory) (a b n : Nat) (f : Nat → UInt8) (h : a + 1 ≤ b ∨ b + n ≤ a) :
     readLE (store mem b n f) a 1 = readLE mem a 1 :=
-  readLE_congr _ _ a 1 fun k _ => by simp only [Asm.store]; rw [if_neg (by omega)]
+  readLE_congr _ _ a 1 fun k _ => by simp only [Asm.store]; rw [ite_eq_right (by omega)]
 
 /-- A small word divided by eight. -/
 theorem div8 (a : Nat) (ha : a < 2 ^ 64) : UInt64.ofNat a / 8 = UInt64.ofNat (a / 8) := by
@@ -418,10 +418,10 @@ macro "bitRun" "[" args:Lean.Parser.Tactic.simpLemma,* "]" : tactic =>
       cases hy
       refine readNode_count (by omega) fun i hi => ?_
       rcases (show i < 8 ∨ (8 ≤ i ∧ i < 16) ∨ (16 ≤ i ∧ i < 24) ∨ 24 ≤ i by omega) with r | r | r | r
-      · simp (disch := omega) only [store_out, store_in, r, if_true]
+      · simp (disch := omega) only [store_out, store_in, r, ite_true]
         rw [show lay + 40 + i - (lay + 40) = i by omega]
       all_goals
-        simp (disch := omega) only [store_out, store_in, show ¬ i < 8 by omega, if_false]
+        simp (disch := omega) only [store_out, store_in, show ¬ i < 8 by omega, ite_false]
         simp [qwordByte]
     · rd
     · -- The bytes up to the last bit, the delimiter's bit cleared where it shares the last of them.
@@ -436,13 +436,13 @@ macro "bitRun" "[" args:Lean.Parser.Tactic.simpLemma,* "]" : tactic =>
       · rw [r8] at hk
         by_cases z : top = 0
         · simp [z] at hk
-        · simp only [z, if_false, Option.some.injEq] at hk
+        · simp only [z, ite_false, Option.some.injEq] at hk
           subst hk
           rd
       · rw [r8] at hk
         by_cases z : top = 0
         · simp [z] at hk
-        · simp only [z, if_false, Option.some.injEq] at hk
+        · simp only [z, ite_false, Option.some.injEq] at hk
           exact ⟨by omega, by omega⟩
     · rd
     · simp only [recordBytes, layoutBytes] at ha
@@ -545,7 +545,7 @@ def sequenceOf (b : ByteArray) (start stop : Nat) : Desc → Option (Desc × Nat
 /-- A store elsewhere leaves four bytes as they were. -/
 theorem read4_store_apart (mem : Memory) (a b n : Nat) (f : Nat → UInt8) (h : a + 4 ≤ b ∨ b + n ≤ a) :
     readLE (store mem b n f) a 4 = readLE mem a 4 :=
-  readLE_congr _ _ a 4 fun k _ => by simp only [Asm.store]; rw [if_neg (by omega)]
+  readLE_congr _ _ a 4 fun k _ => by simp only [Asm.store]; rw [ite_eq_right (by omega)]
 
 /-- An offset is four bytes, so it stays below 2^32. -/
 theorem offsetAt_lt (b : ByteArray) (x : Nat) : offsetAt b x < 2 ^ 32 := by
@@ -559,11 +559,11 @@ macro "countWord" : tactic =>
   `(tactic| (
     refine readNode_count (by omega) fun i hi => ?_
     rcases (show i < 8 ∨ (8 ≤ i ∧ i < 16) ∨ (16 ≤ i ∧ i < 24) ∨ 24 ≤ i by omega) with r | r | r | r
-    · simp (disch := omega) only [store_out, store_in, r, if_true]
+    · simp (disch := omega) only [store_out, store_in, r, ite_true]
       rw [show lay + 40 + i - (lay + 40) = i by omega]
       try rfl
     all_goals
-      simp (disch := omega) only [store_out, store_in, show ¬ i < 8 by omega, if_false]
+      simp (disch := omega) only [store_out, store_in, show ¬ i < 8 by omega, ite_false]
       simp [qwordByte]))
 
 /-- What an accepted encoding of a sequence tells the layout driver: its offset table fits in it. -/
@@ -725,18 +725,18 @@ theorem layout_sequence {m : Module} {w : World} (fns : PlanFns m)
     by_cases basic : element.isBasic = true
     · -- Basic elements: their bytes packed, the capacity the length's bytes take.
       have ⟨wd, items, hw⟩ := basic_width basic eSound
-      simp only [basic, if_true]
+      simp only [basic, ite_true]
       packedFinish bound []
     have nb : element.isBasic = false := by simpa using basic
-    simp only [nb, Bool.false_eq_true, if_false]
+    simp only [nb, Bool.false_eq_true, ite_false]
     by_cases hw : hasWidth element = true
     · -- Fixed-size elements: one width apart, rooted as columns when plain.
-      simp only [fixedSize_eq, hw, if_true]
-      have fw := narrow_width element eThin _ (by rw [fixedSize_eq, if_pos hw])
+      simp only [fixedSize_eq, hw, ite_true]
+      have fw := narrow_width element eThin _ (by rw [fixedSize_eq, ite_eq_left hw])
       lsteps [acc, acc0, te, ae, tag_le_one, nb, bitOf, hw, read_store_apart, Nat.add_assoc]
       strideFinish (p + 16) (by omega)
     · have hw' : hasWidth element = false := by simpa using hw
-      have none_ : element.fixedSize = none := by rw [fixedSize_eq, if_neg hw]
+      have none_ : element.fixedSize = none := by rw [fixedSize_eq, ite_eq_right hw]
       have tIn := tableIn none_
       simp only [none_]
       lsteps [acc, acc0, te, ae, tag_le_one, nb, bitOf, hw', read_store_apart, Nat.add_assoc]
@@ -760,27 +760,27 @@ theorem layout_sequence {m : Module} {w : World} (fns : PlanFns m)
       have ec : elementCount element b start stop = (stop - start) / element.itemLength := by
         simp [elementCount, fixedSize_eq, hw, wd, il]
       have cs : (stop - start) / element.itemLength ≤ stop - start := Nat.div_le_self _ _
-      simp only [basic, if_true, ec]
+      simp only [basic, ite_true, ec]
       packedFinish bound [il]
     have nb : element.isBasic = false := by simpa using basic
-    simp only [nb, Bool.false_eq_true, if_false]
+    simp only [nb, Bool.false_eq_true, ite_false]
     by_cases hw : hasWidth element = true
     · -- Fixed-size elements: as many as fit, one width apart.
-      have fw := narrow_width element eThin _ (by rw [fixedSize_eq, if_pos hw])
+      have fw := narrow_width element eThin _ (by rw [fixedSize_eq, ite_eq_left hw])
       by_cases wz : fixedWidth element = 0
       · have ec : elementCount element b start stop = 0 := by simp [elementCount, fixedSize_eq, hw, wz]
-        simp only [fixedSize_eq, hw, if_true, ec, wz]
+        simp only [fixedSize_eq, hw, ite_true, ec, wz]
         lsteps [acc, acc0, te, ae, tag_le_one, nb, bitOf, hw, wz, read_store_apart, Nat.add_assoc]
         strideFinish (p + 16) (by omega)
       · have ec : elementCount element b start stop = (stop - start) / fixedWidth element := by
           simp [elementCount, fixedSize_eq, hw, wz]
         have cs : (stop - start) / fixedWidth element ≤ stop - start := Nat.div_le_self _ _
-        simp only [fixedSize_eq, hw, if_true, ec, wz]
+        simp only [fixedSize_eq, hw, ite_true, ec, wz]
         lsteps [acc, acc0, te, ae, tag_le_one, nb, bitOf, hw, wz, read_store_apart, Nat.add_assoc]
         strideFinish (p + 16) (by omega)
     · -- Elements of no fixed size: as many as the first offset counts.
       have hw' : hasWidth element = false := by simpa using hw
-      have none_ : element.fixedSize = none := by rw [fixedSize_eq, if_neg hw]
+      have none_ : element.fixedSize = none := by rw [fixedSize_eq, ite_eq_right hw]
       have tIn := tableIn none_
       by_cases sz : stop - start = 0
       · have ec : elementCount element b start stop = 0 := by simp [elementCount, none_, sz]
@@ -816,27 +816,27 @@ theorem layout_sequence {m : Module} {w : World} (fns : PlanFns m)
       have ec : elementCount element b start stop = (stop - start) / element.itemLength := by
         simp [elementCount, fixedSize_eq, hw, wd, il]
       have cs : (stop - start) / element.itemLength ≤ stop - start := Nat.div_le_self _ _
-      simp only [basic, if_true, ec]
+      simp only [basic, ite_true, ec]
       packedFinish 0 [il]
     have nb : element.isBasic = false := by simpa using basic
-    simp only [nb, Bool.false_eq_true, if_false]
+    simp only [nb, Bool.false_eq_true, ite_false]
     by_cases hw : hasWidth element = true
     · -- Fixed-size elements: as many as fit, one width apart.
-      have fw := narrow_width element eThin _ (by rw [fixedSize_eq, if_pos hw])
+      have fw := narrow_width element eThin _ (by rw [fixedSize_eq, ite_eq_left hw])
       by_cases wz : fixedWidth element = 0
       · have ec : elementCount element b start stop = 0 := by simp [elementCount, fixedSize_eq, hw, wz]
-        simp only [fixedSize_eq, hw, if_true, ec, wz]
+        simp only [fixedSize_eq, hw, ite_true, ec, wz]
         lsteps [acc, acc0, te, ae, tag_le_one, nb, bitOf, hw, wz, read_store_apart, Nat.add_assoc]
         strideFinish (p + 24) (by omega)
       · have ec : elementCount element b start stop = (stop - start) / fixedWidth element := by
           simp [elementCount, fixedSize_eq, hw, wz]
         have cs : (stop - start) / fixedWidth element ≤ stop - start := Nat.div_le_self _ _
-        simp only [fixedSize_eq, hw, if_true, ec, wz]
+        simp only [fixedSize_eq, hw, ite_true, ec, wz]
         lsteps [acc, acc0, te, ae, tag_le_one, nb, bitOf, hw, wz, read_store_apart, Nat.add_assoc]
         strideFinish (p + 24) (by omega)
     · -- Elements of no fixed size: as many as the first offset counts.
       have hw' : hasWidth element = false := by simpa using hw
-      have none_ : element.fixedSize = none := by rw [fixedSize_eq, if_neg hw]
+      have none_ : element.fixedSize = none := by rw [fixedSize_eq, ite_eq_right hw]
       have tIn := tableIn none_
       by_cases sz : stop - start = 0
       · have ec : elementCount element b start stop = 0 := by simp [elementCount, none_, sz]
@@ -1031,7 +1031,7 @@ def layoutByte (active : List Bool) (j : Nat) : Nat → UInt8
 theorem layoutByte_before (active : List Bool) (j : Nat) : ∀ i, i ≤ 8 * j → layoutByte active j i = 0
   | 0, _ => rfl
   | i + 1, h => by
-    simp only [layoutByte, layoutByte_before active j i (by omega), show ¬ i / 8 = j by omega, false_and, if_false]
+    simp only [layoutByte, layoutByte_before active j i (by omega), show ¬ i / 8 = j by omega, false_and, ite_false]
     decide
 
 /-- A byte's bits from its first position on, as the node's definition folds them. -/
@@ -1053,7 +1053,7 @@ theorem layoutByte_after (active : List Bool) (j : Nat) : ∀ i, 8 * j + 8 ≤ i
   | i + 1, h => by
     rcases Nat.lt_or_ge i (8 * j + 8) with lt | ge
     · rw [show i + 1 = 8 * j + 8 by omega]
-    · simp only [layoutByte, layoutByte_after active j i ge, show ¬ i / 8 = j by omega, false_and, if_false]
+    · simp only [layoutByte, layoutByte_after active j i ge, show ¬ i / 8 = j by omega, false_and, ite_false]
       simp
 
 /-- No position past the layout's end sets a bit. -/
@@ -1153,7 +1153,7 @@ theorem active_loop {m : Module} {w : World} {sp : Nat} {env0 : Env} {mem0 : Mem
     have unchanged : ∀ j, j ≠ i / 8 → layoutByte active j (i + 1) = layoutByte active j i := fun j hj => by
       simp [layoutByte, Ne.symm hj]
     by_cases on : active[i] = true
-    · simp only [on, if_true] at bit
+    · simp only [on, ite_true] at bit
       have grown : layoutByte active (i / 8) (i + 1) =
           layoutByte active (i / 8) i ||| ((1 : UInt8) <<< UInt8.ofNat (i % 8)) := by
         simp [layoutByte, List.getD_eq_getElem?_getD, List.getElem?_eq_getElem more, on]
@@ -1174,7 +1174,7 @@ theorem active_loop {m : Module} {w : World} {sp : Nat} {env0 : Env} {mem0 : Mem
             exact bytes j hj
         · wonly [e19]
           omega
-    · simp only [on, Bool.false_eq_true, if_false] at bit
+    · simp only [on, Bool.false_eq_true, ite_false] at bit
       lsteps [s4, s17, e19, e16, bit, bAcc]
       rcases Decidable.em ((i + 1) % 8 = 0) with z | z
       all_goals
@@ -1594,4 +1594,4 @@ theorem layout_calls {m : Module} {w : World} (fns : PlanFns m)
   | progressiveContainer _ _ _ => exact layout_progressive fns.codec hf room laid input sound thin accepted
   | compatibleUnion _ _ => exact layout_union fns.codec hf room laid input sound accepted
 
-end Ssz.Native.Driver.ProveProof
+end EthLib.Consensus.Ssz.Native.Driver.ProveProof

@@ -19,7 +19,7 @@ import SszNative.Ir.Link
 
 /-! The native kernels and their constant table, as the one assembler file the native library is built from. -/
 
-namespace Ssz.Native
+namespace EthLib.Consensus.Ssz.Native
 
 /-- The drivers written in the language, each under its exported name. -/
 def shippedFns : List (String × Ir.Fn) :=
@@ -77,4 +77,4 @@ theorem routines_distinct : (routines.map (·.1)).Nodup := by
 def assembly : String :=
   Asm.file routines [("ssz_sha256_table", Kernel.table), ("ssz_zero_roots", Driver.zeroRootsTable)] routines_valid
 
-end Ssz.Native
+end EthLib.Consensus.Ssz.Native

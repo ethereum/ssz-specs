@@ -6,11 +6,11 @@ Whether a type leaves probes, read from its plan.
 A type whose values decode from any bytes of their width needs no byte of them looked at.
 -/
 
-namespace Ssz.Native.Driver.Validate
+namespace EthLib.Consensus.Ssz.Native.Driver.Validate
 
 set_option maxRecDepth 20000
 
-open Ssz Ssz.Native Ssz.Native.Ir Ssz.Native.Asm Ssz.Native.Ir.Stmt Ssz.Native.Ir.Expr
+open EthLib.Consensus.Ssz EthLib.Consensus.Ssz.Native EthLib.Consensus.Ssz.Native.Ir EthLib.Consensus.Ssz.Native.Asm EthLib.Consensus.Ssz.Native.Ir.Stmt EthLib.Consensus.Ssz.Native.Ir.Expr
 
 /-- One when a type leaves probes, and zero otherwise. -/
 def probeBit (d : Desc) : Nat := if plan d = [] then 0 else 1
@@ -86,7 +86,7 @@ theorem anyProbes_calls {m : Module} {w : World} (hm : Loaded m) (fs : List Desc
       have step := ih fs[j] (List.getElem_mem hjf) (fits_getElem fs fit j hjf) _ _ mem' hpj hroom
       have skip := skip_calls hm fs[j] (fits_getElem fs fit j hjf) _ _ mem' hpj hroom
       by_cases has : plan fs[j] = []
-      · simp only [probeBit, if_pos has] at step
+      · simp only [probeBit, ite_eq_left has] at step
         wcall step [h0]
         wsteps [h0, h1, h2]
         wcall skip [h0]
@@ -102,7 +102,7 @@ theorem anyProbes_calls {m : Module} {w : World} (hm : Loaded m) (fs : List Desc
         · wfin []
         · wfin []
         · wfin [h1]
-      · simp only [probeBit, if_neg has] at step
+      · simp only [probeBit, ite_eq_right has] at step
         wcall step [h0]
         wsteps [h0, h1, h2]
         refine ⟨⟨trivial, Or.inr ⟨by wfin [], by wfin [], fun all => has (all _ (List.getElem_mem hjf))⟩⟩, ?_⟩
@@ -113,7 +113,7 @@ theorem anyProbes_calls {m : Module} {w : World} (hm : Loaded m) (fs : List Desc
         · omega
       subst hjk
       simp only [List.take_length] at none
-      exact Wp.done ⟨by simp only [anyBit, if_pos none]; wonly [h2], rfl⟩
+      exact Wp.done ⟨by simp only [anyBit, ite_eq_left none]; wonly [h2], rfl⟩
   · refine ⟨0, by wonly [h1], fun nz => absurd rfl nz, fun _ => Wp.done ⟨by wonly [anyBit, some, h2], rfl⟩⟩
 
 /-- Reading whether a node leaves probes gives one exactly when it does. -/
@@ -215,4 +215,4 @@ theorem hasProbes_calls {m : Module} {w : World} (hm : Loaded m) (d : Desc) : Pr
     wfin [probeBit, anyBit, plan, fieldsPlan_eq_nil]
     all_goals congr 1
 
-end Ssz.Native.Driver.Validate
+end EthLib.Consensus.Ssz.Native.Driver.Validate

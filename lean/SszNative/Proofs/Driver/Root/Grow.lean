@@ -7,9 +7,9 @@ A parent roots each child in the scratch its own bound leaves, which is the chil
 A child's range is never larger than its parent's, so a bound that grows with the size covers every child.
 -/
 
-namespace Ssz.Native.Driver
+namespace EthLib.Consensus.Ssz.Native.Driver
 
-open Ssz
+open EthLib.Consensus.Ssz
 
 /-! ### The fixed-size bound in the count -/
 
@@ -23,12 +23,12 @@ theorem rootsNeed_zero (d : Desc) : rootsNeed d 0 = 0 := by
     simp only [rootsNeed]
     split
     · simp [packedNeed, sadd, smul, sat]
-    · rw [if_neg (by decide)]
+    · rw [ite_eq_right (by decide)]
       simp [ih, sadd, smul, sat]
   | .container _ fields =>
     have most := fieldsRootsNeed_zero fields 0 rfl
     simp only [rootsNeed]
-    rw [if_neg (by decide)]
+    rw [ite_eq_right (by decide)]
     simp [most, sadd, smul, sat]
   | .bool | .uint _ | .byteVector _ | .bitVector _ | .byteList _ | .bitList _ => simp [rootsNeed, packedNeed, sadd, smul, sat]
   | .progressiveBitList _ | .list _ _ | .progressiveList _ _ | .progressiveContainer _ _ _ =>
@@ -55,14 +55,14 @@ theorem rootsNeed_grow (d : Desc) {c c' : Nat} (two : 2 ≤ c) (h : c ≤ c') : 
     simp only [rootsNeed]
     split
     · exact packedNeed_mono _ h
-    · rw [if_neg (by omega), if_neg (by omega)]
+    · rw [ite_eq_right (by omega), ite_eq_right (by omega)]
       exact sadd_mono (sadd_mono (smul_mono (Nat.le_refl _) h)
         (smul_mono (smul_mono (Nat.le_refl _) h) (Nat.le_refl _)))
         (max_mono ih (smul_mono (smul_mono (Nat.le_refl _) h) (Nat.le_refl _)))
   | .container _ fields =>
     have most := fieldsRootsNeed_grow fields two h 0 0 (Nat.le_refl _)
     simp only [rootsNeed]
-    rw [if_neg (by omega), if_neg (by omega)]
+    rw [ite_eq_right (by omega), ite_eq_right (by omega)]
     exact sadd_mono (sadd_mono (smul_mono (Nat.le_refl _) h)
       (smul_mono (smul_mono (Nat.le_refl _) h) (Nat.le_refl _)))
       (max_mono most (smul_mono (smul_mono (Nat.le_refl _) h) (Nat.le_refl _)))
@@ -183,4 +183,4 @@ theorem fieldsVarNeed_mem : ∀ (fs : List Desc) (size most : Nat), ∀ f ∈ fs
       exact Nat.le_trans (Nat.le_max_left _ _) (fieldsVarNeed_ge rest size _)
     · exact fieldsVarNeed_mem rest size _ f mem
 
-end Ssz.Native.Driver
+end EthLib.Consensus.Ssz.Native.Driver

@@ -19,9 +19,9 @@ A statement leaves no value in any register, so a call clobbering every caller-s
 The code touches only caller-saved registers, so it keeps every register the convention keeps.
 -/
 
-namespace Ssz.Native.Ir
+namespace EthLib.Consensus.Ssz.Native.Ir
 
-open Ssz.Native.Asm
+open EthLib.Consensus.Ssz.Native.Asm
 
 /-- The frame slot holding a word, by its index from the base. -/
 def slot (k : Nat) : Asm.Mem :=
@@ -121,4 +121,4 @@ def compileFn (f : Fn) : Array Instr :=
   let result := compileExpr f.vars (entry.length + body.length) f.result 0
   (entry ++ body ++ result ++ [Instr.addImm .rsp (8 * f.frame), Instr.ret]).toArray
 
-end Ssz.Native.Ir
+end EthLib.Consensus.Ssz.Native.Ir

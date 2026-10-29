@@ -9,9 +9,9 @@ A compiled declaration gives the same verdicts and roots as its declaration.
 Its roots are therefore the specification's roots of the values the encodings decode to.
 -/
 
-namespace Ssz.Native
+namespace EthLib.Consensus.Ssz.Native
 
-open Ssz
+open EthLib.Consensus.Ssz
 
 /-- Copying into a range that ends inside the destination keeps the destination's size. -/
 theorem copySlice_size_within (src dest : ByteArray) (so d len : Nat) (hd : d + len ≤ dest.size) :
@@ -64,7 +64,7 @@ theorem leavesOf_length : ∀ (fields : List Desc) (offset : Nat), (leavesOf fie
 theorem leaves_height_zero (nodes : ByteArray) (count : Nat) :
     ∀ j < count, nodeOf nodes 0 j = subtreeAt (nodesFrom nodes 0 count) 0 (j * 2 ^ 0) := by
   intro j lt
-  rw [Nat.pow_zero, Nat.mul_one, subtreeAt_leaf, nodesFrom_get?, if_pos lt]
+  rw [Nat.pow_zero, Nat.mul_one, subtreeAt_leaf, nodesFrom_get?, ite_eq_left lt]
   rfl
 
 /-- A compiled struct's root, once its encoding has the struct's width, is the general root. -/
@@ -109,7 +109,7 @@ theorem Schema.rootOf_struct (names : List String) (fields : List Desc)
   rw [filled, count]
   -- The general root of a single struct is the tree over the same leaves.
   have general : Native.rootOf (.container names fields) b 0 b.size = merkleizeDepth buffer n (depthFor n) := by
-    rw [Native.rootOf, if_pos p, rootsOf, if_pos (show (1 == 1) = true from rfl)]
+    rw [Native.rootOf, ite_eq_left p, rootsOf, ite_eq_left (show (1 == 1) = true from rfl)]
   rw [general]
   -- Both are the specification's tree over the buffer's leaves.
   have spec := merkleizeDepth_spec buffer n (depthFor n) (le_two_pow_depthFor n) (by omega) (by omega)
@@ -130,7 +130,7 @@ theorem Schema.rootOf_compile (d : Desc) (sound : d.wellFormed = .ok ()) (b : By
     · -- A struct of fixed-size fields: its valid encodings have its width.
       rename_i p
       have sized : b.size = fixedWidth (.container names fields) := by
-        rw [Native.validate, validateRange, if_pos (plain_hasWidth _ p), validateFixed_whole] at valid
+        rw [Native.validate, validateRange, ite_eq_left (plain_hasWidth _ p), validateFixed_whole] at valid
         split at valid
         · simp at valid
         · split at valid
@@ -176,4 +176,4 @@ theorem Checked.hashTreeRoot_eq (c : Checked) (b : ByteArray) (small : 64 * b.si
   subst compiled
   exact Schema.hashTreeRoot_eq d sound b small
 
-end Ssz.Native
+end EthLib.Consensus.Ssz.Native

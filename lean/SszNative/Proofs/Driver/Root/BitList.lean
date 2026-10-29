@@ -9,9 +9,9 @@ when it shares a byte with them.
 The nodes are then rooted at the limit's depth, or on a progressive spine, and the bit count is mixed in.
 -/
 
-namespace Ssz.Native.Driver
+namespace EthLib.Consensus.Ssz.Native.Driver
 
-open Ssz Ssz.Native.Ir Ssz.Native.Ir.Expr Ssz.Native.Ir.Stmt Ssz.Native.Asm
+open EthLib.Consensus.Ssz EthLib.Consensus.Ssz.Native.Ir EthLib.Consensus.Ssz.Native.Ir.Expr EthLib.Consensus.Ssz.Native.Ir.Stmt EthLib.Consensus.Ssz.Native.Asm
 
 /-! ### Bytes and bits -/
 
@@ -42,8 +42,8 @@ theorem store_one (mem : Memory) (a : Nat) (f : Nat → UInt8) (x : Nat) :
     store mem a 1 f x = if x = a then f 0 else mem x := by
   simp only [Asm.store]
   by_cases h : x = a
-  · subst h; rw [if_pos ⟨Nat.le_refl _, by omega⟩, if_pos rfl, Nat.sub_self]
-  · rw [if_neg (by omega), if_neg h]
+  · subst h; rw [ite_eq_left ⟨Nat.le_refl _, by omega⟩, ite_eq_left rfl, Nat.sub_self]
+  · rw [ite_eq_right (by omega), ite_eq_right h]
 
 /-- Setting a byte of a buffer, then reading it back. -/
 theorem get!_set!_self (x : ByteArray) (i : Nat) (v : UInt8) (h : i < x.size) : (x.set! i v).get! i = v := by
@@ -154,7 +154,7 @@ theorem bitsHead_runs {m : Module} {w : World} (gmod : GatherModule m) {sp : Nat
       have big : 1 < x.toNat / 2 ^ h := by
         by_cases g : 1 < x.toNat / 2 ^ h
         · exact g
-        · rw [if_neg g] at c; cases c; exact absurd rfl nz'
+        · rw [ite_eq_right g] at c; cases c; exact absurd rfl nz'
       obtain ⟨h8', one'⟩ := halve_table ⟨x.toNat, xs⟩ ⟨h, h8⟩ big
       have half : x.toNat / 2 ^ h / 2 = x.toNat / 2 ^ (h + 1) := by rw [Nat.div_div_eq_div_mul, Nat.pow_succ]
       have pw : 2 ^ h + 2 ^ h = 2 ^ (h + 1) := by rw [Nat.pow_succ]; omega
@@ -186,7 +186,7 @@ theorem bitsHead_runs {m : Module} {w : World} (gmod : GatherModule m) {sp : Nat
   rw [eval_lt (eval_lit 1) (eval_var hv) (by decide) (by omega)] at exit
   have isOne : x.toNat / 2 ^ h = 1 := by
     by_cases g : 1 < x.toNat / 2 ^ h
-    · rw [if_pos g] at exit; cases exit
+    · rw [ite_eq_left g] at exit; cases exit
     · omega
   have top : highestBit x = h := by
     have := highestBit_table ⟨x.toNat, xs⟩ ⟨h, h8⟩ isOne
@@ -275,15 +275,15 @@ theorem bitsHead_runs {m : Module} {w : World} (gmod : GatherModule m) {sp : Nat
   have hmod : count % 8 = h := by omega
   by_cases whole : count % 8 = 0
   · -- The closing bit has a byte of its own.
-    rw [if_pos (by rw [whole])] at cm
+    rw [ite_eq_left (by rw [whole])] at cm
     refine ⟨E9, mem1, lead (Runs.block_cons (Runs.when_false cm) (Runs.block_nil _ _ _ _ _)), ev9, c9, ?_, b9,
       ?_, fun a o => keep1 a (fun h => o ⟨h.1, by omega⟩)⟩
     · rw [n9, ← hn, ← hy]
     · have code : bitNodes b start count = packRange b start (start + (count + 7) / 8) := by
-        simp only [bitNodes]; rw [if_pos (by simpa using whole)]
+        simp only [bitNodes]; rw [ite_eq_left (by simpa using whole)]
       rw [code, hy]; exact held1
   · -- The closing bit is cleared from the last byte the bits fill.
-    rw [if_neg (fun e => whole ((ofNat_inj (by omega) (by decide)).mp e))] at cm
+    rw [ite_eq_right (fun e => whole ((ofNat_inj (by omega) (by decide)).mp e))] at cm
     have j8 : count / 8 < bytes := by omega
     have aj : w.access (scratch + 64 + count / 8) 1 = true :=
       access_sub bufAcc (by omega) (by omega)
@@ -312,16 +312,16 @@ theorem bitsHead_runs {m : Module} {w : World} (gmod : GatherModule m) {sp : Nat
         simp [qwordByte]
       have code : bitNodes b start count = (packRange b start (start + bytes)).set! (count / 8)
           (old &&& ~~~((1 : UInt8) <<< UInt8.ofNat (count % 8))) := by
-        simp only [bitNodes, old]; rw [if_neg (by simpa using whole), hy]
+        simp only [bitNodes, old]; rw [ite_eq_right (by simpa using whole), hy]
       rw [code]
       intro i hi
       rw [size_set!] at hi
       rw [store_one]
       by_cases at_ : i = count / 8
       · subst at_
-        rw [if_pos rfl, newByte, get!_set!_self _ _ _ hi]
-      · rw [if_neg (by omega), held1 i hi, get!_set!_ne _ _ _ _ at_]
-    · rw [store_one, if_neg (by omega)]
+        rw [ite_eq_left rfl, newByte, get!_set!_self _ _ _ hi]
+      · rw [ite_eq_right (by omega), held1 i hi, get!_set!_ne _ _ _ _ at_]
+    · rw [store_one, ite_eq_right (by omega)]
       exact keep1 a (fun h => o ⟨h.1, by omega⟩)
 
 
@@ -439,7 +439,7 @@ theorem rootBits_body {m : Module} {w : World} (hash : HashingOk m w) (gmod : Ga
       (apart_sub sZeros (by omega) (by omega)) fun a o _ => keep1 a o
     rcases shape with ⟨limit, rfl⟩ | ⟨lim, rfl⟩
     · -- A bounded list: the tree at the limit's depth.
-      rw [if_pos (by simp [Plan.tag])] at cTag
+      rw [ite_eq_left (by simp [Plan.tag])] at cTag
       have limitSmall : limit < 2 ^ 64 := pre.fits limit (by simp [Plan.words])
       have few : count ≤ limit := by rw [counted]; exact capped limit rfl
       have lw : eval w E1 mem1 (ld (RootBits.p + 8)) = some (UInt64.ofNat limit) :=
@@ -495,7 +495,7 @@ theorem rootBits_body {m : Module} {w : World} (hash : HashingOk m w) (gmod : Ga
           merkleizeCapacity, hd]
       · exact keep2 a (fun h => o ⟨by omega, by omega⟩) pd (fun h => o ⟨h.1, by omega⟩)
     · -- A progressive list: the spine.
-      rw [if_neg (by simp [Plan.tag])] at cTag
+      rw [ite_eq_right (by simp [Plan.tag])] at cTag
       have pspan : progressiveSpan n = 4608 + 32 * n := rfl
       have ppre : ProgPre w mem1 (scratch + 64) n scratch (scratch + 64 + 32 * n + 32) ctx table zeros pad mask
           (bitNodes b start count) :=
@@ -573,4 +573,4 @@ theorem rootBitsProgressive_ok {m : Module} {w : World} (hash : HashingOk m w) (
     (sp := sp - 8 - 8 * RootBits.fn.frame) (by rw [frame]; omega) pre (rangeEnv_entry _ _ _ _ _ _)
   exact ⟨mem', Calls.fn fns.bits (by rw [frame]; omega) rfl run rfl, post⟩
 
-end Ssz.Native.Driver
+end EthLib.Consensus.Ssz.Native.Driver

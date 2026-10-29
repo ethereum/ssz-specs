@@ -5,9 +5,10 @@ import SszNative.Kernel.ShaNi
 
 /-! Facts the SHA-NI kernel's proof leans on: register frames, byte shuffles, table words, and rounds. -/
 
-namespace Ssz.Native.Kernel.ShaNi
+namespace EthLib.Consensus.Ssz.Native.Kernel.ShaNi
 
-open Ssz.Native.Asm Ssz.Sha256
+open EthLib.Consensus.Ssz.Native.Asm
+open EthLib.Cryptography.Hash.Sha256 hiding K IV
 
 /-- The vector register an instruction writes, when it writes one and touches nothing else. -/
 def writes : Instr → Option Vreg
@@ -142,12 +143,12 @@ theorem read_table (s : State) (table : TableAt s.mem (s.gpr tbl).toNat) (off l 
 
 /-- The table's four-lane round constants. -/
 theorem tableWord_k (r l : Nat) (hr : r < 16) (hl : l < 4) :
-    tableWord (kShaNi r / 4 + l) = roundConstants[4 * r + l]! := by
+    tableWord (kShaNi r / 4 + l) = Cryptography.Hash.Sha256.K[4 * r + l]! := by
   -- The offset falls in the four-lane constants' part of the table.
   unfold kShaNi
   unfold tableWord
-  simp (disch := omega) only [if_neg, if_pos]
-  exact congrArg (roundConstants[·]!) (by omega)
+  simp (disch := omega) only [ite_eq_right, ite_eq_left]
+  exact congrArg (Cryptography.Hash.Sha256.K[·]!) (by omega)
 
 /-- The table's four-lane padding words plus constants. -/
 theorem tableWord_pad (r l : Nat) (hr : r < 16) (hl : l < 4) :
@@ -155,7 +156,7 @@ theorem tableWord_pad (r l : Nat) (hr : r < 16) (hl : l < 4) :
   -- The offset falls in the four-lane padding words' part of the table.
   unfold padShaNi
   unfold tableWord
-  simp (disch := omega) only [if_neg, if_pos]
+  simp (disch := omega) only [ite_eq_right, ite_eq_left]
   exact congrArg paddingWK (by omega)
 
 /-- The table's four-lane byte-reversal mask. -/
@@ -163,12 +164,12 @@ theorem tableWord_reverse (l : Nat) (hl : l < 4) : tableWord (bswapShaNi / 4 + l
   -- The offset falls in the four-lane byte-reversal mask's part of the table.
   unfold bswapShaNi
   unfold tableWord
-  simp (disch := omega) only [if_neg]
+  simp (disch := omega) only [ite_eq_right]
   exact congrArg reverseLane (by omega)
 
 /-- The table's initial state, as ABEF and CDGH. -/
 theorem tableWord_iv :
-    Packed (fun l => tableWord (ivAbef / 4 + l.val)) (fun l => tableWord (ivCdgh / 4 + l.val)) initialState := by
+    Packed (fun l => tableWord (ivAbef / 4 + l.val)) (fun l => tableWord (ivCdgh / 4 + l.val)) Cryptography.Hash.Sha256.IV := by
   -- Each of the eight words is a literal, checked by evaluation.
   simp only [Packed, Quad]
   decide
@@ -193,7 +194,7 @@ theorem foldl_finRange (n : Nat) (f : Vector UInt32 8 → Nat → Vector UInt32 
 /-- Compression is the feed-forward of sixty-four rounds. -/
 theorem compress_rounds (st : Vector UInt32 8) (block : ByteArray) (start : Nat) :
     compress st block start =
-      st.zipWith (· + ·) (rounds st (fun i => roundConstants[i]!) (fun i => (schedule block start)[i]!) 64) := by
+      st.zipWith (· + ·) (rounds st (fun i => Cryptography.Hash.Sha256.K[i]!) (fun i => (schedule block start)[i]!) 64) := by
   -- Both fold the same rounds over the same indices.
   simp only [compress]
   congr 1
@@ -303,4 +304,4 @@ theorem step_frame (i : Instr) (d : Vreg) (h : writes i = some d) (s : State) :
     (exec1 i s).mem = s.mem ∧ (exec1 i s).gpr = s.gpr ∧ ∀ v, v ≠ d → (exec1 i s).vec v = s.vec v :=
   ⟨(writes_frame i d h s).2.1, (writes_frame i d h s).1, fun v hv => writes_other i d v h hv s⟩
 
-end Ssz.Native.Kernel.ShaNi
+end EthLib.Consensus.Ssz.Native.Kernel.ShaNi

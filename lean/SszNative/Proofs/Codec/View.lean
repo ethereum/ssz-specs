@@ -1,7 +1,7 @@
 import SszNative.Codec
 import SszNative.Proofs.Validate.Seq
 import SszNative.Proofs.Validate.Struct
-import Ssz.Proofs.Codec.StructOrder
+import EthLib.Consensus.Proofs.Ssz.Codec.StructOrder
 
 /-!
 The ranges a composite's encoding is cut into are where deserialization cuts the slices it decodes the parts from.
@@ -9,9 +9,9 @@ The ranges a composite's encoding is cut into are where deserialization cuts the
 A range of an encoding stands for the slice deserialization would cut out of it.
 -/
 
-namespace Ssz.Native
+namespace EthLib.Consensus.Ssz.Native
 
-open Ssz
+open EthLib.Consensus.Ssz
 
 /-- The slices a list of ranges cuts out of an encoding. -/
 def slicesOf (b : ByteArray) (ranges : List (Nat × Nat)) : List Bytes :=
@@ -177,4 +177,4 @@ theorem view_union (selectors : List Nat) (options : List Desc) (b : ByteArray) 
     simp only [deserialize, size, show ¬ stop - start < 1 by omega, ↓reduceIte]
     rw [slice_getElem! b start stop 0 inside (by omega), Nat.add_zero, ← size, rest]
 
-end Ssz.Native
+end EthLib.Consensus.Ssz.Native

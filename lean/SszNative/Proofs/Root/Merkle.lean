@@ -1,14 +1,14 @@
-import Ssz.Proofs.Merkle.Tree
+import EthLib.Consensus.Proofs.Ssz.Merkle.Tree
 import SszNative.Proofs.Root.Nodes
-import Ssz.Proofs.Codec.ProgressiveProofTree
-import Ssz.Proofs.Codec.Table
-import Ssz.Proofs.Merkle.Merkleize
+import EthLib.Consensus.Proofs.Ssz.Codec.ProgressiveProofTree
+import EthLib.Consensus.Proofs.Ssz.Codec.Table
+import EthLib.Consensus.Proofs.Ssz.Merkle.Merkleize
 
 /-! Trees over node buffers are the specification's trees over arrays of nodes. -/
 
-namespace Ssz.Native
+namespace EthLib.Consensus.Ssz.Native
 
-open Ssz
+open EthLib.Consensus.Ssz
 
 /-- A buffer of exactly one node is that node. -/
 theorem nodeOf_single (n : ByteArray) (wide : n.size = 32) : nodeOf n 0 0 = n.data := by
@@ -68,7 +68,7 @@ theorem zeroRoot_spec (h : Nat) : (zeroRoot h).size = 32 ∧ (zeroRoot h).data =
   split
   · rename_i covered
     simp only [zeroRoots, Array.getElem!_eq_getD, Array.getD_eq_getD_getElem?, Array.getElem?_map,
-      Array.getElem?_range, show h < cachedHeights + 1 by omega, if_true, Option.map_some, Option.getD_some]
+      Array.getElem?_range, show h < cachedHeights + 1 by omega, ite_true, Option.map_some, Option.getD_some]
     exact entry cachedHeights covered
   · exact entry h (Nat.le_refl _)
 
@@ -196,7 +196,7 @@ theorem fold_spec (leaves : Array Bytes) (r : Nat) :
           have last : j = (width / 2) := by omega
           have tail := hashFixed_node level (offset + 32 * (width - 1)) 1 0 (zeroRoot h) (by decide)
             (by omega) small (zeroRoot_size h)
-          simp only [parentsOf, odd, show (1 == 0) = false by rfl, Bool.false_eq_true, if_false]
+          simp only [parentsOf, odd, show (1 == 0) = false by rfl, Bool.false_eq_true, ite_false]
           rw [hashFixed_one, nodeOf_append_right _ _ _ (by rw [pairsSize, last]), tail, zeroRoot_data,
             nodeOf_shift,
             Nat.add_zero, nodes (width - 1) (by omega), show width - 1 = 2 * j by omega,
@@ -224,7 +224,7 @@ theorem concat_nodes (f : Nat → ByteArray) (init : ByteArray) (empty : init.si
 private theorem leaves_spec (nodes : ByteArray) (offset count : Nat) :
     ∀ j < count, nodeOf nodes offset j = subtreeAt (nodesFrom nodes offset count) 0 (j * 2 ^ 0) := by
   intro j lt
-  rw [Nat.pow_zero, Nat.mul_one, subtreeAt_leaf, nodesFrom_get?, if_pos lt]
+  rw [Nat.pow_zero, Nat.mul_one, subtreeAt_leaf, nodesFrom_get?, ite_eq_left lt]
   rfl
 
 /--
@@ -274,8 +274,8 @@ theorem merkleizeAt_spec (nodes : ByteArray) (offset count depth : Nat) (fits : 
           nodeOf_shift, show 2 ^ 11 = 2048 by rfl, Nat.zero_add, Nat.mul_comm k 2048]
         simp only [show 2 ^ 11 = 2048 by rfl] at lt
         by_cases here : i < min 2048 (count - 2048 * k)
-        · rw [if_pos here, if_pos (by omega)]
-        · rw [if_neg here, if_neg (by omega)]
+        · rw [ite_eq_left here, ite_eq_left (by omega)]
+        · rw [ite_eq_right here, ite_eq_right (by omega)]
       obtain ⟨rootsSize, rootsNodes⟩ := concat_nodes piece (ByteArray.emptyWithCapacity (32 * parts + 32)) rfl
         parts fun k lt => (pieces k lt).1
       have := fold_spec (nodesFrom nodes offset count) (depth - 11)
@@ -325,7 +325,7 @@ theorem spine_spec (nodes : ByteArray) (count : Nat) (inside : 32 * count ≤ no
     · -- Out of nodes: the closing zero node.
       rename_i done
       rw [Ssz.merkleizeProgressiveUnchecked]
-      simp only [List.isEmpty_iff, List.drop_eq_nil_iff, Array.length_toList, nodesFrom_size, done, if_true]
+      simp only [List.isEmpty_iff, List.drop_eq_nil_iff, Array.length_toList, nodesFrom_size, done, ite_true]
       exact ⟨rfl, rfl⟩
     · rename_i more
       have positive : 0 < 4 ^ level := Nat.pow_pos (by decide)
@@ -345,7 +345,7 @@ theorem spine_spec (nodes : ByteArray) (count : Nat) (inside : 32 * count ≤ no
       have nonempty : ((nodesFrom nodes 0 count).toList.drop start).isEmpty = false := by
         simp only [List.isEmpty_eq_false_iff, ne_eq, List.drop_eq_nil_iff, Array.length_toList, nodesFrom_size]
         omega
-      rw [nonempty, if_neg (by decide)]
+      rw [nonempty, ite_eq_right (by decide)]
       dsimp only
       rw [List.drop_drop, four_pow_eq, depthFor_pow, Nat.log2_two_pow,
         ← four_pow_eq]
@@ -408,4 +408,4 @@ theorem activeFieldsNode_spec (active : List Bool) : (activeFieldsNode active).d
     simp only [List.range, List.range.loop, List.foldl, or_ite, UInt8.zero_or]
     simp only [Nat.mul_comm 8 i]
 
-end Ssz.Native
+end EthLib.Consensus.Ssz.Native

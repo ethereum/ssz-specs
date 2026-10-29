@@ -2,9 +2,9 @@ import SszNative.Proofs.Driver.Branch.FoldParents
 
 /-! The multiproof verifier, restated in the steps the compiled verifier takes. -/
 
-namespace Ssz.Native.Driver.BranchProof
+namespace EthLib.Consensus.Ssz.Native.Driver.BranchProof
 
-open Ssz.Native.Ir Ssz.Native.Asm
+open EthLib.Consensus.Ssz.Native.Ir EthLib.Consensus.Ssz.Native.Asm
 
 /-- A level whose pairs all join folds into the next level's node set: its parents, then the entries off it. -/
 theorem foldToRoot_succ_ok (d : Nat) (N ps : List (Nat × ByteArray)) (h : levelParents (d + 1) N N = .ok ps) :
@@ -71,4 +71,4 @@ theorem verifyMerkleMultiproof_eq (leaves proof : List ByteArray) (indices : Lis
       · simp [lc, pc, bind, Except.bind, throw, throwThe, MonadExceptOf.throw]
   · simp [lc, bind, Except.bind, throw, throwThe, MonadExceptOf.throw]
 
-end Ssz.Native.Driver.BranchProof
+end EthLib.Consensus.Ssz.Native.Driver.BranchProof

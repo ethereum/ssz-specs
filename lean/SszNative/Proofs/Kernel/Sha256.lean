@@ -1,35 +1,13 @@
 import SszNative.Kernel.Constants
 import SszNative.Asm.Semantics
-import Ssz.Proofs.Hash.Sha256Laws
+import EthLib.Cryptography.Proofs.Hash.Sha256
 
 /-! What the kernels compute, in the specification's terms: two compressions per pair, and constants from the table. -/
 
-namespace Ssz.Native.Kernel
+namespace EthLib.Consensus.Ssz.Native.Kernel
 
-open Ssz.Sha256 Ssz.Native.Asm
-
-/-- The schedule reads only the sixty-four bytes of its block. -/
-theorem schedulePrefix_congr (b₁ b₂ : ByteArray) (s₁ s₂ : Nat)
-    (same : ∀ i < 64, b₁.get! (s₁ + i) = b₂.get! (s₂ + i)) (n : Nat) (within : n ≤ 64) :
-    schedulePrefix b₁ s₁ n = schedulePrefix b₂ s₂ n := by
-  -- Induction on the words computed so far.
-  induction n with
-  | zero => rfl
-  | succ n ih =>
-    simp only [schedulePrefix, ih (by omega)]
-    -- An input word reads four bytes of the block.
-    by_cases first : n < 16
-    · simp only [first, ↓reduceDIte, wordAt, Nat.add_assoc]
-      rw [same (4 * n + 1) (by omega), same (4 * n + 2) (by omega), same (4 * n + 3) (by omega),
-        same (4 * n) (by omega)]
-    · simp only [first, ↓reduceDIte]
-
-/-- Compression reads only the sixty-four bytes of its block. -/
-theorem compress_congr (state : Vector UInt32 8) (b₁ b₂ : ByteArray) (s₁ s₂ : Nat)
-    (same : ∀ i < 64, b₁.get! (s₁ + i) = b₂.get! (s₂ + i)) :
-    compress state b₁ s₁ = compress state b₂ s₂ := by
-  -- The schedules agree, so do the rounds over them.
-  simp only [compress, schedule, schedulePrefix_congr b₁ b₂ s₁ s₂ same 64 (Nat.le_refl _)]
+open EthLib.Cryptography.Hash.Sha256 hiding K IV
+open EthLib.Consensus.Ssz.Native.Asm
 
 /-- The padding block, byte by byte: the closing bit, zeros, then the length 512 in bits. -/
 private theorem paddingBlock_data :
@@ -81,23 +59,31 @@ theorem table_get (i : Nat) (within : i < tableSize) :
   rw [get!_eq _ _ (by simp [table, ByteArray.size]; exact within)]
   simp [table, ByteArray.getElem_eq_getElem_data]
 
+/-- Reading a byte with `[i]!` is reading it with `get!`. -/
+theorem getElem!_eq_get! (a : ByteArray) (i : Nat) : a[i]! = a.get! i := by
+  by_cases h : i < a.size
+  · rw [getElem!_pos a i h, get!_eq a i h]
+  · rw [getElem!_neg a i h, get!_out a i h]
+
 /-- The digest of a 64-byte message: the message compressed, then the padding block. -/
 theorem hash_pair (message : ByteArray) (size : message.size = 64) :
-    Sha256.hash message = digest (compress (compress initialState message 0) paddingBlock 0) := by
+    Cryptography.Hash.Sha256.hash message = digest (compress (compress Cryptography.Hash.Sha256.IV message 0) paddingBlock 0) := by
   -- A 64-byte message pads to two blocks.
   have padded : (pad message).size = 128 := by
     rw [pad_pair message size, ByteArray.size_append, size]
     rfl
-  simp only [Sha256.hash, padded]
+  simp only [Cryptography.Hash.Sha256.hash, padded]
   -- Two blocks: the message's bytes, then the padding block's.
   simp only [show List.range (128 / 64) = [0, 1] by rfl, List.foldl_cons, List.foldl_nil]
   rw [pad_pair message size]
   apply congrArg digest
   rw [compress_congr _ (message ++ paddingBlock) paddingBlock (64 * 1) 0 fun i _ => by
-    rw [Nat.zero_add, show 64 * 1 + i = message.size + i by omega, get!_append_right]]
+    rw [getElem!_eq_get!, getElem!_eq_get!, Nat.zero_add, show 64 * 1 + i = message.size + i by omega,
+      get!_append_right]]
   apply congrArg (compress · paddingBlock 0)
-  exact compress_congr _ _ _ _ _ fun i within =>
-    by simpa using get!_append_left message paddingBlock i (by omega)
+  exact compress_congr _ _ _ _ _ fun i within => by
+    rw [getElem!_eq_get!, getElem!_eq_get!]
+    simpa using get!_append_left message paddingBlock i (by omega)
 
 /-- Whether memory holds the constant table from an address. -/
 def TableAt (mem : Nat → UInt8) (base : Nat) : Prop :=
@@ -128,4 +114,4 @@ theorem readWord_table (mem : Nat → UInt8) (base : Nat) (holds : TableAt mem b
     byte 3 (by omega)]
   exact recombine _
 
-end Ssz.Native.Kernel
+end EthLib.Consensus.Ssz.Native.Kernel

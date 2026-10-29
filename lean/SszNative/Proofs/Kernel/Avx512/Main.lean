@@ -10,9 +10,10 @@ After a batch, the pointers advance, the count goes down, and the loop branches 
 At the end, the routine clears the upper vector state and returns.
 -/
 
-namespace Ssz.Native.Kernel.Avx512
+namespace EthLib.Consensus.Ssz.Native.Kernel.Avx512
 
-open Ssz.Sha256 Ssz.Native.Asm
+open EthLib.Cryptography.Hash.Sha256 hiding K IV
+open EthLib.Consensus.Ssz.Native.Asm
 
 /-- A pair's message is 64 bytes. -/
 theorem pairMessage_size (mem : Nat → UInt8) (l r : Nat) : (pairMessage mem l r).size = 64 := by
@@ -34,7 +35,7 @@ set_option maxRecDepth 100000 in
 /-- One batch: sixteen pairs read from the node addresses, sixteen digests written from the output address. -/
 theorem batch (ls rs : Nat) (s : State) (table : TableAt s.mem (s.gpr tbl).toNat) :
     (∀ p < 16, ∀ k < 32, (exec (batchCode ls rs) s).mem ((s.gpr out).toNat + 32 * p + k) =
-      (Sha256.hash (pairMessage s.mem ((s.gpr left).toNat + ls * p) ((s.gpr right).toNat + rs * p))).get! k) ∧
+      (Cryptography.Hash.Sha256.hash (pairMessage s.mem ((s.gpr left).toNat + ls * p) ((s.gpr right).toNat + rs * p))).get! k) ∧
     (∀ a, ¬ ((s.gpr out).toNat ≤ a ∧ a < (s.gpr out).toNat + 512) → (exec (batchCode ls rs) s).mem a = s.mem a) ∧
     (exec (batchCode ls rs) s).gpr = s.gpr := by
   -- The loads and transpose, the rounds, then the transpose back and the stores.
@@ -257,7 +258,7 @@ The result register holds zero.
 def Done (ls rs : Nat) (s : State) (c : Nat) (f : State) : Prop :=
   f.status = .returned ∧
   (∀ p < 16 * c, ∀ k < 32, f.mem ((s.gpr out).toNat + 32 * p + k) =
-    (Sha256.hash (pairMessage s.mem ((s.gpr left).toNat + ls * p) ((s.gpr right).toNat + rs * p))).get! k) ∧
+    (Cryptography.Hash.Sha256.hash (pairMessage s.mem ((s.gpr left).toNat + ls * p) ((s.gpr right).toNat + rs * p))).get! k) ∧
   (∀ a, ¬ ((s.gpr out).toNat ≤ a ∧ a < (s.gpr out).toNat + 32 * (16 * c)) → f.mem a = s.mem a) ∧
   (∀ r ∈ calleeSaved, f.gpr r = s.gpr r) ∧ f.gpr .rax = 0
 
@@ -321,7 +322,7 @@ theorem loop (ls rs : Nat) (c : Nat) : ∀ s : State, s.pc = loopHead → s.stat
     have zf : (exec (tailCode ls rs) (exec (batchCode ls rs) s)).zf = true := by
       rw [tail_zf, kept, one]; rfl
     refine ⟨(batchCode ls rs).length + 5 + 3, ?_⟩
-    rw [run_add, iteration ls rs s tableEntry running, zf, if_pos rfl]
+    rw [run_add, iteration ls rs s tableEntry running, zf, ite_eq_left rfl]
     obtain ⟨st, mem, gpr⟩ := closing ls rs { exec (tailCode ls rs) (exec (batchCode ls rs) s) with
       pc := finishAt ls rs } rfl (by simp only; rw [tail_status, exec_status]; exact running)
     -- Every digest is this batch's, and nothing else changed.
@@ -434,7 +435,7 @@ theorem program_correct (ls rs : Nat) (s : State) (start : s.pc = 0) (running : 
     ∃ steps,
       (run (program ls rs) steps s).status = .returned ∧
       (∀ p < n, ∀ k < 32, (run (program ls rs) steps s).mem ((s.gpr out).toNat + 32 * p + k) =
-        (Sha256.hash (pairMessage s.mem ((s.gpr left).toNat + ls * p) ((s.gpr right).toNat + rs * p))).get! k) ∧
+        (Cryptography.Hash.Sha256.hash (pairMessage s.mem ((s.gpr left).toNat + ls * p) ((s.gpr right).toNat + rs * p))).get! k) ∧
       (∀ a, ¬ ((s.gpr out).toNat ≤ a ∧ a < (s.gpr out).toNat + 32 * n) → (run (program ls rs) steps s).mem a = s.mem a) ∧
       (∀ r ∈ calleeSaved, (run (program ls rs) steps s).gpr r = s.gpr r) ∧
       (run (program ls rs) steps s).gpr .rax = 0 := by

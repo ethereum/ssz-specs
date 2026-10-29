@@ -6,7 +6,7 @@ Timing the native implementation on beacon-chain workloads: `lake exe bench`.
 Each workload prints its root, so other implementations fed the same data can be checked against it.
 -/
 
-open Ssz Ssz.Native
+open EthLib.Consensus.Ssz EthLib.Consensus.Ssz.Native
 
 /-- Little-endian bytes of a word, appended. -/
 def pushWord (b : ByteArray) (x : Nat) (width : Nat) : ByteArray :=

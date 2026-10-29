@@ -8,11 +8,11 @@ The plan's check and every routine it calls only read memory, and call only one 
 So a call of one of them that happened returns what the forward proof of that call says, whatever stack it had.
 -/
 
-namespace Ssz.Native.Driver.Validate
+namespace EthLib.Consensus.Ssz.Native.Driver.Validate
 
 set_option maxRecDepth 20000
 
-open Ssz Ssz.Native Ssz.Native.Ir Ssz.Native.Asm Ssz.Native.Ir.Stmt Ssz.Native.Ir.Expr
+open EthLib.Consensus.Ssz EthLib.Consensus.Ssz.Native EthLib.Consensus.Ssz.Native.Ir EthLib.Consensus.Ssz.Native.Asm EthLib.Consensus.Ssz.Native.Ir.Stmt EthLib.Consensus.Ssz.Native.Ir.Expr
 
 /-- The routines the plan's check reaches. -/
 def planNames : List String :=
@@ -329,4 +329,4 @@ theorem depth_deep {m : Module} {w : World} (hm : Loaded m) (d : Desc) : DeepOk 
     wsteps []
     wfin []
 
-end Ssz.Native.Driver.Validate
+end EthLib.Consensus.Ssz.Native.Driver.Validate

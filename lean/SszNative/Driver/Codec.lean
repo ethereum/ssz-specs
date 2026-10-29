@@ -32,10 +32,10 @@ A byte array's are its bytes, cut anywhere.
 Words read from a plan are the plan's numbers; a width no fixed-size type has stands for a variable size.
 -/
 
-namespace Ssz.Native.Driver
+namespace EthLib.Consensus.Ssz.Native.Driver
 
-open Ssz.Native.Ir Ssz.Native.Ir.Expr Ssz.Native.Ir.Stmt
-open Ssz.Native.Asm (Width)
+open EthLib.Consensus.Ssz.Native.Ir EthLib.Consensus.Ssz.Native.Ir.Expr EthLib.Consensus.Ssz.Native.Ir.Stmt
+open EthLib.Consensus.Ssz.Native.Asm (Width)
 
 /-- The word standing for a variable size, or for no bound. -/
 abbrev none64 : Nat := 2 ^ 64 - 1
@@ -707,4 +707,4 @@ def codecFns : List (String × Fn) :=
 /-- Every codec driver fits the compiler's assumptions. -/
 theorem codecFns_wf : codecFns.all (fun f => f.2.wf) = true := by decide +kernel
 
-end Ssz.Native.Driver
+end EthLib.Consensus.Ssz.Native.Driver

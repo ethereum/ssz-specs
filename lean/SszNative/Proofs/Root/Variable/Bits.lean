@@ -1,12 +1,12 @@
-import Ssz.Proofs.Codec.DecodeFits
+import EthLib.Consensus.Proofs.Ssz.Codec.DecodeFits
 import SszNative.Proofs.Root.Variable.Facts
-import Ssz.Proofs.Codec.RoundTripScalar
+import EthLib.Consensus.Proofs.Ssz.Codec.RoundTripScalar
 
 /-! The nodes of a bit list: its bytes without the closing bit, as the specification packs its bits. -/
 
-namespace Ssz.Native.RootProof
+namespace EthLib.Consensus.Ssz.Native.RootProof
 
-open Ssz Ssz.Native
+open EthLib.Consensus.Ssz EthLib.Consensus.Ssz.Native
 
 set_option maxRecDepth 100000 in
 /-- Clearing one bit of a byte clears that bit and leaves every other bit as it was. -/
@@ -96,7 +96,7 @@ theorem packByte_delimited (data : Bytes) (j : Nat)
   rw [bitAt]
   by_cases shared : ((8 * (data.size - 1) + h) % 8 != 0) = true ∧ j = (8 * (data.size - 1) + h) / 8
   · -- The byte holding the closing bit: the cleared bit and those above it read as zero.
-    rw [if_pos shared]
+    rw [ite_eq_left shared]
     obtain ⟨notWhole, hj⟩ := shared
     have m : (8 * (data.size - 1) + h) % 8 = h := by omega
     have last : (8 * (data.size - 1) + h) / 8 = data.size - 1 := by omega
@@ -105,15 +105,15 @@ theorem packByte_delimited (data : Bytes) (j : Nat)
     rw [m, clear_bit _ ⟨h, hlt⟩ ⟨o, small⟩, hf]
     have positive : h ≠ 0 := by simp at notWhole; omega
     by_cases below : o < h
-    · rw [if_pos (by omega)]
+    · rw [ite_eq_left (by omega)]
       simp [show o ≠ h by omega]
-    · rw [if_neg (by omega)]
+    · rw [ite_eq_right (by omega)]
       by_cases tableEntry : o = h
       · subst tableEntry; simp
       · rw [above_highest final ⟨o, small⟩ (by rw [hh]; simp; omega)]
         simp
   · -- Any other byte holds eight decoded bits.
-    rw [if_neg shared, if_pos (by
+    rw [ite_eq_right shared, ite_eq_left (by
       by_cases ending : (8 * (data.size - 1) + h) % 8 = 0
       · omega
       · have : j ≠ (8 * (data.size - 1) + h) / 8 := fun e => shared ⟨by simpa using ending, e⟩
@@ -171,7 +171,7 @@ theorem bitNodes_data (b : ByteArray) (start stop : Nat) (ordered : start ≤ st
     simp only [Array.size_extract] at hk
     rw [lane k (by omega)]
     simp only [packBits, Array.getElem_ofFn]
-    rw [byte k (by omega), if_neg (by simp at whole; omega)]
+    rw [byte k (by omega), ite_eq_right (by simp at whole; omega)]
   -- Otherwise the closing bit is cleared from the last counted byte.
   · rename_i shared
     have tableEntry : count / 8 < (count + 7) / 8 := by simp at shared; omega
@@ -185,9 +185,9 @@ theorem bitNodes_data (b : ByteArray) (start stop : Nat) (ordered : start ≤ st
     rw [byte k (by omega), Array.getElem_setIfInBounds (by simp; omega)]
     by_cases same : count / 8 = k
     · subst same
-      rw [if_pos rfl, if_pos ⟨by simpa using shared, rfl⟩, getElem!_pos _ (count / 8) (by simp; omega),
+      rw [ite_eq_left rfl, ite_eq_left ⟨by simpa using shared, rfl⟩, getElem!_pos _ (count / 8) (by simp; omega),
         Array.getElem_append_left (by simp; omega), lane _ tableEntry]
-    · rw [if_neg same, if_neg (fun h => same h.2.symm), lane k (by omega)]
+    · rw [ite_eq_right same, ite_eq_right (fun h => same h.2.symm), lane k (by omega)]
 
 /-- The nodes of a decoded bit list are, node by node, the specification's packed bits. -/
 theorem bitNodes_nodes (b : ByteArray) (start stop : Nat) (ordered : start ≤ stop) (inside : stop ≤ b.size)
@@ -212,4 +212,4 @@ theorem bitNodes_nodes (b : ByteArray) (start stop : Nat) (ordered : start ≤ s
     simp [sized, nodesFor]
     omega
 
-end Ssz.Native.RootProof
+end EthLib.Consensus.Ssz.Native.RootProof

@@ -2,9 +2,9 @@ import SszNative.Proofs.Validate.Slices
 
 /-! The checks of a range agreeing with deserialization's checks of its slice, one kind of type at a time. -/
 
-namespace Ssz.Native
+namespace EthLib.Consensus.Ssz.Native
 
-open Ssz
+open EthLib.Consensus.Ssz
 
 /-- A delimited bit encoding is refused for the same reason in both readings. -/
 theorem delimited_agrees (b : ByteArray) (start stop : Nat) (limit : Option Nat) (ordered : start ≤ stop)
@@ -92,4 +92,4 @@ theorem stride_cut (b : ByteArray) (start stop width count : Nat) (ordered : sta
     simp only [Nat.succ_mul] at *
     omega
 
-end Ssz.Native
+end EthLib.Consensus.Ssz.Native

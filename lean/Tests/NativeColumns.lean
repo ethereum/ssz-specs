@@ -1,11 +1,11 @@
 import SszNative
-import Ssz.Type.Valid
+import EthLib.Consensus.Ssz.Type.Valid
 
 /-! Composite vector columns preserve element and record order, including wide vectors. -/
 
 namespace Tests.NativeColumns
 
-open Ssz
+open EthLib.Consensus.Ssz
 
 private def check (width : Nat) : IO Unit := do
   let shape := Desc.list (.vector (.byteVector 1) width) 2

@@ -18,9 +18,9 @@ Every fact the drivers' theorems take of a module holds of this one, so each of 
 machine running the shipped image, from a call instruction to the instruction after it.
 -/
 
-namespace Ssz.Native
+namespace EthLib.Consensus.Ssz.Native
 
-open Ssz.Native.Ir Ssz.Native.Asm Ssz.Native.Driver
+open EthLib.Consensus.Ssz.Native.Ir EthLib.Consensus.Ssz.Native.Asm EthLib.Consensus.Ssz.Native.Driver
 
 /-- The shipped image passes the link check. -/
 theorem shipped_linkCheck : linkCheck shippedFns shippedExterns = true := by
@@ -204,7 +204,7 @@ theorem shipped_returns {w : World} {name : String} {sp : Nat} {args : List UInt
 
 /-! ## The exported routines on the shipped image -/
 
-open Ssz in
+open EthLib.Consensus.Ssz in
 /--
 The root of an encoding validation accepted, on the shipped image: the call returns zero and writes the
 specification's root of the value the encoding holds.
@@ -222,7 +222,7 @@ theorem shipped_hashTreeRoot {w : World} {d : Desc} {sp : Nat} (room : w.stackLo
     hashTreeRoot_calls (shipped_hashing w) shipped_gather shipped_range room pre
   exact ⟨mem', shipped_returns call, root, ready, keep⟩
 
-open Ssz Ssz.Native.Driver.Validate in
+open EthLib.Consensus.Ssz EthLib.Consensus.Ssz.Native.Driver.Validate in
 /--
 The native decoding check on the shipped image, for a type whose fields carry any names.
 
@@ -240,7 +240,7 @@ theorem shipped_validate {w : World} (d : Desc) (wf : d.wellFormed = .ok ()) (fi
   shipped_returns (Plan.validate_calls_named shipped_loaded d wf fit deep plan data err sp mem b hplan hd cp cd ok
     small room)
 
-open Ssz Ssz.Native.Driver.Validate in
+open EthLib.Consensus.Ssz EthLib.Consensus.Ssz.Native.Driver.Validate in
 /--
 The plan's own check on the shipped image accepts the bytes of a plan of a legal type that fits the native check,
 names its fields by position, and nests no deeper than a plan may be: it returns zero and leaves memory as it was.
@@ -252,7 +252,7 @@ theorem shipped_checkPlan_accepts {w : World} (plan len sp : Nat) (mem : Memory)
   obtain ⟨mem', call⟩ := (checkPlan_iff shipped_loaded plan len sp mem acc room).mpr legal
   exact ⟨mem', shipped_returns call⟩
 
-open Ssz Ssz.Native.Driver.Validate in
+open EthLib.Consensus.Ssz EthLib.Consensus.Ssz.Native.Driver.Validate in
 /--
 Any answer of the plan's own check runs on the shipped image, and is zero exactly when the bytes are the plan of a
 legal type that fits the native check, names its fields by position, and nests no deeper than a plan may be.
@@ -269,7 +269,7 @@ theorem shipped_checkPlan {w : World} (plan len sp : Nat) (mem : Memory) (acc : 
   · obtain ⟨mem'', zero⟩ := (checkPlan_iff shipped_loaded plan len sp mem acc room).mpr legal
     exact (Calls.unique call zero).1
 
-open Ssz in
+open EthLib.Consensus.Ssz in
 /-- The tree store's build on the shipped image leaves the whole tree over the leaves in memory, and returns zero. -/
 theorem shipped_treeBuild {w : World} {sp : Nat} {mem : Memory} {tree leaves count K ctx table zeros pad : Nat}
     {mask : UInt64} (pre : BuildPre w mem tree leaves count K ctx table zeros pad mask) (kernels : KernelsRun w mask)
@@ -281,7 +281,7 @@ theorem shipped_treeBuild {w : World} {sp : Nat} {mem : Memory} {tree leaves cou
   obtain ⟨mem', call, ok, frame⟩ := treeBuild_calls (shipped_hashing w) rfl pre kernels room
   exact ⟨mem', shipped_returns call, ok, frame⟩
 
-open Ssz in
+open EthLib.Consensus.Ssz in
 /--
 The tree store's update on the shipped image, after some leaves are rewritten in place, leaves the whole tree over
 the new leaves, and returns zero.
@@ -303,7 +303,7 @@ theorem shipped_treeUpdate {w : World} {sp : Nat} {mem mem0 : Memory}
     fits was inner leavesAt kept
   exact ⟨mem', shipped_returns call, ok, frame⟩
 
-open Ssz in
+open EthLib.Consensus.Ssz in
 /--
 The tree store's root on the shipped image writes the specification's root of the leaves at the depth, with the word
 mixed in if one is given, and returns zero.
@@ -320,7 +320,7 @@ theorem shipped_treeRoot {w : World} {sp : Nat} {mem : Memory} {tree K depth mix
   obtain ⟨mem', call, root, frame⟩ := treeRoot_calls (shipped_hashing w) rfl pre kernels room ok
   exact ⟨mem', shipped_returns call, root, frame⟩
 
-open Ssz.Native.Driver.BranchProof in
+open EthLib.Consensus.Ssz.Native.Driver.BranchProof in
 /--
 The branch verifier on the shipped image answers what the Lean verifier answers on the leaf, branch, index and root
 its job names.
@@ -337,7 +337,7 @@ theorem shipped_verifyBranch {w : World} {ctx : UInt64} {table pad : Nat} {mask 
   obtain ⟨mem', call, ready, keep⟩ := verify_branch_hashing (shipped_hashing w) rfl rfl rfl deep rd j
   exact ⟨mem', shipped_returns call, ready, keep⟩
 
-open Ssz.Native.Driver.BranchProof in
+open EthLib.Consensus.Ssz.Native.Driver.BranchProof in
 /--
 The multiproof verifier on the shipped image answers what the Lean verifier answers on the leaves, proof nodes,
 indices and root its job names.
@@ -357,7 +357,7 @@ theorem shipped_verifyMultiproof {w : World} {ctx : UInt64} {table pad : Nat} {m
   obtain ⟨mem', call, ready, keep⟩ := verify_multiproof_hashing (shipped_hashing w) shipped_multi deep rd j
   exact ⟨mem', shipped_returns call, ready, keep⟩
 
-open Ssz Ssz.Native.Driver.ProveProof Ssz.Native.Driver.BranchProof in
+open EthLib.Consensus.Ssz EthLib.Consensus.Ssz.Native.Driver.ProveProof EthLib.Consensus.Ssz.Native.Driver.BranchProof in
 /--
 The node builder on the shipped image answers what the Lean node answers on an encoding validation accepts, and writes
 the node when there is one.
@@ -381,7 +381,7 @@ theorem shipped_proveNode {w : World} {d : Desc} {b : ByteArray} {plan data ctx 
     rfl st deep job index out scr mem r0 j
   exact ⟨r, mem', shipped_returns call, rc, node, keep⟩
 
-open Ssz Ssz.Native.Driver.ProveProof Ssz.Native.Driver.BranchProof in
+open EthLib.Consensus.Ssz EthLib.Consensus.Ssz.Native.Driver.ProveProof EthLib.Consensus.Ssz.Native.Driver.BranchProof in
 /--
 The branch builder on the shipped image answers what the Lean branch answers on an encoding validation accepts, and
 writes the branch when there is one.
@@ -407,7 +407,7 @@ theorem shipped_proveBranch {w : World} {d : Desc} {b : ByteArray} {plan data ct
     rfl st deep job index out scr mem r0 j jobPad
   exact ⟨r, mem', shipped_returns call, rc, nodes, keep⟩
 
-open Ssz Ssz.Native.Driver.ProveProof Ssz.Native.Driver.BranchProof in
+open EthLib.Consensus.Ssz EthLib.Consensus.Ssz.Native.Driver.ProveProof EthLib.Consensus.Ssz.Native.Driver.BranchProof in
 /--
 The multiproof builder on the shipped image answers what the Lean multiproof answers on an encoding validation
 accepts, and writes its nodes and their count when there are some.
@@ -433,7 +433,7 @@ theorem shipped_proveMultiproof {w : World} {d : Desc} {b : ByteArray} {plan dat
     jobPad
   exact ⟨r, mem', shipped_returns call, rc, nodes, keep⟩
 
-open Ssz in
+open EthLib.Consensus.Ssz in
 /-- The prover's scratch bound on the shipped image returns the Lean bound, and leaves memory as it was. -/
 theorem shipped_proveScratch {w : World} (d : Desc) (a size sp : Nat) (mem : Memory)
     (hw : WordsAt w mem a (Plan.words d)) (fits : Driver.Fits (Plan.words d)) (hp : d.wellFormed = .ok ())
@@ -442,4 +442,4 @@ theorem shipped_proveScratch {w : World} (d : Desc) (a size sp : Nat) (mem : Mem
       mem :=
   shipped_returns (prove_scratch_calls shipped_plan rfl rfl d a size sp mem hw fits hp hsz stack)
 
-end Ssz.Native
+end EthLib.Consensus.Ssz.Native

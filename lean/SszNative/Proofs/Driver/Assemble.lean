@@ -7,9 +7,9 @@ Parts sit in memory as a table of pairs, where each part starts and how many byt
 A driver checks the parts whole, then writes the encoding to the output, or answers a code with nothing written.
 -/
 
-namespace Ssz.Native.Driver
+namespace EthLib.Consensus.Ssz.Native.Driver
 
-open Ssz.Native.Ir Ssz.Native.Asm Ssz.Native.Plan
+open EthLib.Consensus.Ssz.Native.Ir EthLib.Consensus.Ssz.Native.Asm EthLib.Consensus.Ssz.Native.Plan
 
 /-- Memory after bytes are written from an address. -/
 def placed (mem : Memory) (out : Nat) (b : ByteArray) : Memory :=
@@ -144,14 +144,14 @@ theorem copied_placed (mem : Memory) (out : Nat) (J part : ByteArray) (p : Nat) 
   by_cases inside : out + J.size ≤ x ∧ x < out + J.size + part.size
   · have away : ¬ (out ≤ p + (x - (out + J.size)) ∧ p + (x - (out + J.size)) < out + J.size) := by omega
     have whole : out ≤ x ∧ x < out + (J.size + part.size) := by omega
-    rw [if_pos inside, if_neg away, if_pos whole, bytes _ (by omega),
+    rw [ite_eq_left inside, ite_eq_right away, ite_eq_left whole, bytes _ (by omega),
       show x - out = J.size + (x - (out + J.size)) by omega, Kernel.get!_append_right]
-  · rw [if_neg inside]
+  · rw [ite_eq_right inside]
     by_cases before : out ≤ x ∧ x < out + J.size
     · have whole : out ≤ x ∧ x < out + (J.size + part.size) := by omega
-      rw [if_pos before, if_pos whole, Kernel.get!_append_left _ _ _ (by omega)]
+      rw [ite_eq_left before, ite_eq_left whole, Kernel.get!_append_left _ _ _ (by omega)]
     · have outside : ¬ (out ≤ x ∧ x < out + (J.size + part.size)) := by omega
-      rw [if_neg before, if_neg outside]
+      rw [ite_eq_right before, ite_eq_right outside]
 
 /-- A table address, from the table's start and a part's index, does not wrap. -/
 theorem table_addr (parts i : Nat) (small : parts + 16 * i + 8 < 2 ^ 64) :
@@ -313,7 +313,7 @@ theorem join_ok (m : Module) (w : World) (linked : HasCodec m) (sp : Nat) (mem :
           keep k hk]
       · simp [assign]
       · simp [assign, next]
-      · simp only [assign, if_neg (show (9 : Nat) ≠ 7 by decide), if_neg (show (9 : Nat) ≠ 8 by decide), if_pos rfl,
+      · simp only [assign, ite_eq_right (show (9 : Nat) ≠ 7 by decide), ite_eq_right (show (9 : Nat) ≠ 8 by decide), ite_eq_left rfl,
           wrap', next]
         rcases e9 with ⟨w0, lo⟩ | ⟨w1, hi⟩
         · by_cases over : 2 ^ 64 ≤ a % 2 ^ 64 + b
@@ -352,7 +352,7 @@ theorem join_ok (m : Module) (w : World) (linked : HasCodec m) (sp : Nat) (mem :
     have away : ∀ x, (x < out ∨ out + cap ≤ x) → cur x = mem x := by
       intro x far
       rw [hc]; simp only [placed, store]
-      rw [if_neg (by rw [sizeJ]; omega)]
+      rw [ite_eq_right (by rw [sizeJ]; omega)]
     have tableKept : ∀ x, parts ≤ x → x < parts + 16 * ps.length → cur x = mem x := by
       intro x lo hi; apply away; have := to.apartTable; omega
     obtain ⟨readSize, readStart⟩ := at_.read env cur i more 7 (by rw [keep 0 (by decide)]; rfl) e7 tableKept
@@ -378,7 +378,7 @@ theorem join_ok (m : Module) (w : World) (linked : HasCodec m) (sp : Nat) (mem :
         (fun x lo hi => by
           have := to.apartTable
           simp only [placed, store]
-          rw [if_neg (by rw [sizeJ']; omega)])).1
+          rw [ite_eq_right (by rw [sizeJ']; omega)])).1
     refine ⟨assign (assign (assign env 11 0) 8 (sizesUpTo ps (i + 1)).toUInt64) 7 (i + 1).toUInt64,
       placed mem out (joinParts (ps.take (i + 1))), ?_, ⟨?_, i + 1, more, ?_, ?_, rfl⟩, ?_⟩
     · rw [joinCopy_body, hc]
@@ -438,7 +438,7 @@ theorem join_ok (m : Module) (w : World) (linked : HasCodec m) (sp : Nat) (mem :
   case inr =>
     -- The sum passed what a word holds: far past any length or limit.
     have no : ¬ (if exact then sizesUpTo ps N = n else sizesUpTo ps N ≤ n) := by cases exact <;> simp <;> omega
-    rw [if_neg no]
+    rw [ite_eq_right no]
     exact head _ mem _ (Runs.ite_false (by simp [Expr.eq, eval, assign, w1, Cond.holds]) (Runs.skip _ _ _ _ _))
       (by cases exact <;> simp [assign, errCode, assembleOutcome])
   -- The sum fits a word, so the word is the sum.
@@ -452,24 +452,24 @@ theorem join_ok (m : Module) (w : World) (linked : HasCodec m) (sp : Nat) (mem :
   by_cases fits : (if exact then sizesUpTo ps N = n else sizesUpTo ps N ≤ n)
   case neg =>
     -- A size the type does not allow: the refusal code stays.
-    rw [if_neg fits]
+    rw [ite_eq_right fits]
     have check : Runs m w inner env₂ mem (.ite (.var 3) (.ite (Expr.eq (.var 8) (.var 2)) (.set 6 0) .skip)
         (.ite (Expr.le (.var 8) (.var 2)) (.set 6 0) .skip)) env₂ mem := by
       cases exact
       · refine Runs.ite_false (by simp [eval, env₂, assign, a3]) (Runs.ite_false ?_ (Runs.skip _ _ _ _ _))
         simp at fits
         rw [eval_cmp_le (x := (sizesUpTo ps N).toUInt64) (y := n.toUInt64) (by simp [eval, env₂, assign, e8])
-          (by simp [eval, env₂, assign, a2]), if_neg (fun h => by have := (sumWord n smallN).2.1.mp h; omega)]
+          (by simp [eval, env₂, assign, a2]), ite_eq_right (fun h => by have := (sumWord n smallN).2.1.mp h; omega)]
       · refine Runs.ite_true 1 (by simp [eval, env₂, assign, a3]) (by decide)
           (Runs.ite_false ?_ (Runs.skip _ _ _ _ _))
         simp at fits
         rw [eval_cmp_eq (x := (sizesUpTo ps N).toUInt64) (y := n.toUInt64) (by simp [eval, env₂, assign, e8])
-          (by simp [eval, env₂, assign, a2]), if_neg (fun h => by have := (sumWord n smallN).1.mp h; omega)]
+          (by simp [eval, env₂, assign, a2]), ite_eq_right (fun h => by have := (sumWord n smallN).1.mp h; omega)]
     exact head env₂ mem _ (Runs.ite_true 1 (by simp [Expr.eq, eval, env₂, assign, w0, Cond.holds]) (by decide)
       (Runs.seq check (Runs.ite_false (by simp [Expr.eq, eval, env₂, assign, Cond.holds]; decide)
         (Runs.skip _ _ _ _ _))))
       (by cases exact <;> simp [env₂, assign, errCode, assembleOutcome])
-  rw [if_pos fits]
+  rw [ite_eq_left fits]
   let env₃ := assign env₂ 6 0
   have check : Runs m w inner env₂ mem (.ite (.var 3) (.ite (Expr.eq (.var 8) (.var 2)) (.set 6 0) .skip)
       (.ite (Expr.le (.var 8) (.var 2)) (.set 6 0) .skip)) env₃ mem := by
@@ -478,23 +478,23 @@ theorem join_ok (m : Module) (w : World) (linked : HasCodec m) (sp : Nat) (mem :
         (Runs.set _ _ _ _ _ 6 _ _ rfl))
       simp at fits
       rw [eval_cmp_le (x := (sizesUpTo ps N).toUInt64) (y := n.toUInt64) (by simp [eval, env₂, assign, e8])
-        (by simp [eval, env₂, assign, a2]), if_pos ((sumWord n smallN).2.1.mpr fits)]
+        (by simp [eval, env₂, assign, a2]), ite_eq_left ((sumWord n smallN).2.1.mpr fits)]
     · refine Runs.ite_true 1 (by simp [eval, env₂, assign, a3]) (by decide) (Runs.ite_true 1 ?_ (by decide)
         (Runs.set _ _ _ _ _ 6 _ _ rfl))
       simp at fits
       rw [eval_cmp_eq (x := (sizesUpTo ps N).toUInt64) (y := n.toUInt64) (by simp [eval, env₂, assign, e8])
-        (by simp [eval, env₂, assign, a2]), if_pos ((sumWord n smallN).1.mpr fits)]
+        (by simp [eval, env₂, assign, a2]), ite_eq_left ((sumWord n smallN).1.mpr fits)]
   have limitSmall : (offsetLimit : Nat) < 2 ^ 64 := by decide
   by_cases big : sizesUpTo ps N ≥ offsetBound
   · -- Past what a four-byte offset names.
-    rw [if_pos big]
+    rw [ite_eq_left big]
     refine head _ mem _ (Runs.ite_true 1 (by simp [Expr.eq, eval, env₂, assign, w0, Cond.holds]) (by decide)
       (Runs.seq check (Runs.ite_true 1 (by simp [Expr.eq, eval, env₃, assign, Cond.holds]) (by decide)
         (Runs.seq (Runs.set _ _ _ _ _ 6 _ _ rfl) (Runs.ite_false ?_ (Runs.skip _ _ _ _ _))))))
       (by simp [assign, errCode, assembleOutcome])
     simp [Expr.lt, eval, env₃, env₂, assign, e8, Cond.holds, (sumWord _ limitSmall).2.2]
     simp [offsetBound] at big; omega
-  rw [if_neg big]
+  rw [ite_eq_right big]
   simp only [assembleOutcome, sizeS]
   have inLimit : eval w (assign env₃ 6 (codeOverflow : Nat).toUInt64) mem
       (Expr.lt (.var 8) (.lit (offsetLimit : Nat).toUInt64)) = some 1 := by
@@ -502,7 +502,7 @@ theorem join_ok (m : Module) (w : World) (linked : HasCodec m) (sp : Nat) (mem :
     simp [offsetBound] at big; omega
   let env₄ := assign (assign env₃ 6 (codeOverflow : Nat).toUInt64) 6 (codeCapacity : Nat).toUInt64
   by_cases room' : sizesUpTo ps N ≤ cap
-  · rw [if_pos room']
+  · rw [ite_eq_left room']
     obtain ⟨env₅, mem₅, ran₂, ⟨keep₅, i, within', f7, f8, f9⟩, exit₂⟩ := loop₂ room'
       (assign (assign env₄ 8 0) 7 0) mem
       ⟨fun k hk => by simp [env₄, env₃, env₂, assign, show k ≠ 6 by omega, show k ≠ 7 by omega,
@@ -523,15 +523,15 @@ theorem join_ok (m : Module) (w : World) (linked : HasCodec m) (sp : Nat) (mem :
             (Runs.seq (Runs.set _ _ _ _ _ 8 _ _ rfl) (Runs.seq (Runs.set _ _ _ _ _ 7 _ _ rfl)
               (Runs.seq ran₂ (Runs.set _ _ _ _ _ 6 _ _ rfl))))))))))) (by simp [assign, f8])
     rw [eval_cmp_le (x := (sizesUpTo ps N).toUInt64) (y := cap.toUInt64) (by simp [eval, env₄, env₃, env₂, assign, e8])
-      (by simp [eval, env₄, env₃, env₂, assign, a5]), if_pos ((sumWord _ capSmall).2.1.mpr room')]
+      (by simp [eval, env₄, env₃, env₂, assign, a5]), ite_eq_left ((sumWord _ capSmall).2.1.mpr room')]
   · -- Too big for the output.
-    rw [if_neg room']
+    rw [ite_eq_right room']
     refine head _ mem _ (Runs.ite_true 1 (by simp [Expr.eq, eval, env₂, assign, w0, Cond.holds]) (by decide)
       (Runs.seq check (Runs.ite_true 1 (by simp [Expr.eq, eval, env₃, assign, Cond.holds]) (by decide)
         (Runs.seq (Runs.set _ _ _ _ _ 6 _ _ rfl) (Runs.ite_true 1 inLimit (by decide)
           (Runs.seq (Runs.set _ _ _ _ _ 6 _ _ rfl) (Runs.ite_false ?_ (Runs.skip _ _ _ _ _)))))))) (by simp [assign])
     rw [eval_cmp_le (x := (sizesUpTo ps N).toUInt64) (y := cap.toUInt64) (by simp [eval, env₄, env₃, env₂, assign, e8])
-      (by simp [eval, env₄, env₃, env₂, assign, a5]), if_neg (fun h => room' ((sumWord _ capSmall).2.1.mp h))]
+      (by simp [eval, env₄, env₃, env₂, assign, a5]), ite_eq_right (fun h => room' ((sumWord _ capSmall).2.1.mp h))]
 
 /-! ## Bit lists -/
 
@@ -542,16 +542,16 @@ theorem placed_push (mem : Memory) (out : Nat) (J : ByteArray) (f : Nat → UInt
   simp only [placed, store, ByteArray.size_push]
   by_cases last : x = out + J.size
   · subst last
-    rw [if_pos (by omega), if_pos (by omega), Nat.sub_self, show out + J.size - out = J.size by omega]
+    rw [ite_eq_left (by omega), ite_eq_left (by omega), Nat.sub_self, show out + J.size - out = J.size by omega]
     rw [Kernel.get!_eq _ _ (by simp)]
     cases J with
     | mk d => exact Array.getElem_push_eq.symm
-  · rw [if_neg (by omega)]
+  · rw [ite_eq_right (by omega)]
     by_cases inside : out ≤ x ∧ x < out + J.size
-    · rw [if_pos inside, if_pos (by omega), Kernel.get!_eq (J.push (f 0)) (x - out) (by rw [ByteArray.size_push]; omega), Kernel.get!_eq J (x - out) (by omega)]
+    · rw [ite_eq_left inside, ite_eq_left (by omega), Kernel.get!_eq (J.push (f 0)) (x - out) (by rw [ByteArray.size_push]; omega), Kernel.get!_eq J (x - out) (by omega)]
       cases J with
       | mk d => exact (Array.getElem_push_lt (by simp [ByteArray.size] at inside ⊢; omega)).symm
-    · rw [if_neg inside, if_neg (by omega)]
+    · rw [ite_eq_right inside, ite_eq_right (by omega)]
 
 /-- A byte array with one byte changed, at its place. -/
 theorem get!_set (J : ByteArray) (i : Nat) (v : UInt8) (k : Nat) (h : k < J.size) :
@@ -571,12 +571,12 @@ theorem placed_set (mem : Memory) (out : Nat) (J : ByteArray) (i : Nat) (inside 
   simp only [placed, store, ByteArray.size_set!]
   by_cases here : x = out + i
   · subst here
-    rw [if_pos (by omega), if_pos (by omega), Nat.sub_self, show out + i - out = i by omega,
-      get!_set _ _ _ _ inside, if_pos rfl]
-  · rw [if_neg (by omega)]
+    rw [ite_eq_left (by omega), ite_eq_left (by omega), Nat.sub_self, show out + i - out = i by omega,
+      get!_set _ _ _ _ inside, ite_eq_left rfl]
+  · rw [ite_eq_right (by omega)]
     by_cases within : out ≤ x ∧ x < out + J.size
-    · rw [if_pos within, if_pos within, get!_set _ _ _ _ (by omega), if_neg (by omega)]
-    · rw [if_neg within, if_neg within]
+    · rw [ite_eq_left within, ite_eq_left within, get!_set _ _ _ _ (by omega), ite_eq_right (by omega)]
+    · rw [ite_eq_right within, ite_eq_right within]
 
 /-- The closing bit set above the last bit, in a byte. -/
 theorem or_bit (x : UInt8) (used : Nat) (h : used < 8) :
@@ -650,19 +650,19 @@ theorem assembleBits_eq (limit : Option Nat) (count : Nat) (packed : ByteArray) 
   cases limit with
   | none =>
     have : count ≤ limitWord none := by simp [limitWord]; omega
-    simp only [this, if_true]
+    simp only [this, ite_true]
     by_cases s : packed.size = (count + 7) / 8 <;> by_cases u : count % 8 = 0 <;>
       simp_all [assembleBits, boundCheck, throw, throwThe, MonadExceptOf.throw, Bind.bind, Except.bind, pure,
         Except.pure, ← UInt8.toNat_inj]
   | some l =>
     by_cases b : count ≤ l
     · have : count ≤ limitWord (some l) := b
-      simp only [this, if_true]
+      simp only [this, ite_true]
       by_cases s : packed.size = (count + 7) / 8 <;> by_cases u : count % 8 = 0 <;>
         simp_all [assembleBits, boundCheck, throw, throwThe, MonadExceptOf.throw, Bind.bind, Except.bind, pure,
           Except.pure, ← UInt8.toNat_inj]
     · have : ¬ count ≤ limitWord (some l) := b
-      simp only [this, if_false]
+      simp only [this, ite_false]
       simp [assembleBits, boundCheck, b, limitWord, throw, throwThe, MonadExceptOf.throw, Bind.bind, Except.bind]
 
 set_option linter.unusedSimpArgs false in
@@ -707,12 +707,12 @@ theorem bits_ok (m : Module) (w : World) (linked : HasCodec m) (sp : Nat) (mem :
     simp only [Nat.toUInt64_eq, ofNat_le_iff count _ smallCount smallLimit]
   by_cases within : count ≤ limitWord limit
   case neg =>
-    rw [if_neg within]
+    rw [ite_eq_right within]
     refine finish env₁ mem _ ?_ (by simp [env₁, assign, assembleOutcome, errCode])
     rw [bitsParts_body]
     exact Runs.block_cons (Runs.set _ _ _ _ _ 5 _ _ rfl) (Runs.ite_false (by rw [bound]; simp [within])
       (Runs.skip _ _ _ _ _))
-  rw [if_pos within]
+  rw [ite_eq_left within]
   -- The part's start and size, and the bits used in the last byte.
   have r0 := at_.start 0 (by simp)
   have r8 := at_.size 0 (by simp)
@@ -787,17 +787,17 @@ theorem bits_ok (m : Module) (w : World) (linked : HasCodec m) (sp : Nat) (mem :
       (by decide) (Runs.block_append setup (Runs.ite_true 1 (by rw [sized]; simp [fits]) (by decide) ran)))
   by_cases fits : len = (count + 7) / 8
   case neg =>
-    rw [if_neg fits]
+    rw [ite_eq_right fits]
     refine finish env₂ mem _ ?_ (by simp [env₂, assign, assembleOutcome, errCode])
     rw [bitsParts_body]
     exact Runs.block_cons (Runs.set _ _ _ _ _ 5 _ _ rfl) (Runs.ite_true 1 (by rw [bound]; simp [within])
       (by decide) (Runs.block_append setup (Runs.ite_false (by rw [sized]; simp [fits]) (Runs.skip _ _ _ _ _))))
-  rw [if_pos fits]
+  rw [ite_eq_left fits]
   have usedSmall : used < 8 := Nat.mod_lt _ (by decide)
   have copyRoom : w.stackLo + 8 + 8 * copyBytes.frame ≤ inner := by simp only [inner]; omega
   by_cases whole : count % 8 = 0
   · -- A whole number of bytes: the closing bit takes a byte of its own.
-    rw [if_pos whole]
+    rw [ite_eq_left whole]
     have u0 : used = 0 := whole
     simp only [assembleOutcome, ByteArray.size_push]
     let env₃ := assign env₂ 5 (codeCapacity : Nat).toUInt64
@@ -806,7 +806,7 @@ theorem bits_ok (m : Module) (w : World) (linked : HasCodec m) (sp : Nat) (mem :
         (by simp [eval, env₃, assign, e4])]
       simp only [Nat.toUInt64_eq, ofNat_lt_ofNat len cap lenSmall capSmall]
     by_cases fitsOut : packed.size + 1 ≤ cap
-    · rw [if_pos fitsOut]
+    · rw [ite_eq_left fitsOut]
       have copiedNow := copy_correct m w linked inner mem out.toUInt64 ptr.toUInt64 len.toUInt64 copyRoom
         (by rw [toNat_toUInt64 _ (by omega), toNat_toUInt64 _ (by omega)]; exact at_.readable 0 (by simp))
         (by rw [toNat_toUInt64 _ (by omega), toNat_toUInt64 _ (by omega)]
@@ -826,12 +826,12 @@ theorem bits_ok (m : Module) (w : World) (linked : HasCodec m) (sp : Nat) (mem :
               (by simp [eval, assign, env₃, e7, aluResult]))))))) rfl
         fits ?_
       simp [assign, len]
-    · rw [if_neg fitsOut]
+    · rw [ite_eq_right fitsOut]
       exact head _ _ _ _ (Runs.ite_true 1 (by simp [Expr.eq, eval, e8, u0, Cond.holds]) (by decide)
         (Runs.block_cons (Runs.set _ _ _ _ _ 5 _ _ rfl) (Runs.ite_false (by rw [test]; simp; omega)
           (Runs.skip _ _ _ _ _)))) rfl fits (by simp [assign])
   -- Some bits of the last byte are used: the closing bit goes right above them.
-  rw [if_neg whole]
+  rw [ite_eq_right whole]
   have u0 : used ≠ 0 := whole
   have lenPos : 1 ≤ len := by simp only [len] at fits ⊢; omega
   have usedNe : (used.toUInt64 == 0) = false := by
@@ -939,10 +939,10 @@ theorem bits_ok (m : Module) (w : World) (linked : HasCodec m) (sp : Nat) (mem :
   have lenEq : packed.size - 1 = len - 1 := rfl
   by_cases padded : last.toNat / 2 ^ used ≠ 0
   · -- A padding bit set: refused.
-    rw [if_pos (show (packed.get! (packed.size - 1)).toNat / 2 ^ (count % 8) ≠ 0 from padded)]
+    rw [ite_eq_left (show (packed.get! (packed.size - 1)).toNat / 2 ^ (count % 8) ≠ 0 from padded)]
     exact head _ _ _ _ (tail _ _ (Runs.ite_false (by rw [padTest]; simp [padded]) (Runs.skip _ _ _ _ _))) rfl fits
       (by simp [envC, assign, assembleOutcome, errCode])
-  rw [if_neg (show ¬ (packed.get! (packed.size - 1)).toNat / 2 ^ (count % 8) ≠ 0 from padded)]
+  rw [ite_eq_right (show ¬ (packed.get! (packed.size - 1)).toNat / 2 ^ (count % 8) ≠ 0 from padded)]
   simp only [assembleOutcome, ByteArray.size_set!]
   have clear : last.toNat / 2 ^ used = 0 := by simpa using padded
   let envD := assign envC 5 (codeCapacity : Nat).toUInt64
@@ -952,7 +952,7 @@ theorem bits_ok (m : Module) (w : World) (linked : HasCodec m) (sp : Nat) (mem :
       (by simp [eval, envD, envC, assign, g 4 (by decide) (by decide), e4])]
     simp only [Nat.toUInt64_eq, ofNat_le_iff len cap lenSmall capSmall]
   by_cases fitsOut : packed.size ≤ cap
-  · rw [if_pos fitsOut]
+  · rw [ite_eq_left fitsOut]
     have copiedNow := copy_correct m w linked inner mem out.toUInt64 ptr.toUInt64 len.toUInt64 copyRoom
       (by rw [toNat_toUInt64 _ (by omega), toNat_toUInt64 _ (by omega)]; exact at_.readable 0 (by simp))
       (by rw [toNat_toUInt64 _ (by omega), toNat_toUInt64 _ (by omega)]
@@ -983,7 +983,7 @@ theorem bits_ok (m : Module) (w : World) (linked : HasCodec m) (sp : Nat) (mem :
           (Runs.block_cons stored (Runs.set _ _ _ _ _ 5 _ len.toUInt64
             (by simp [eval, assign, envE, envD, envC, g 7 (by decide) (by decide), e7])))))))) rfl fits
       (by simp [assign, len])
-  · rw [if_neg fitsOut]
+  · rw [ite_eq_right fitsOut]
     exact head _ _ _ _ (tail _ _ (Runs.ite_true 1 (by rw [padTest]; simp [clear]) (by decide)
       (Runs.block_cons (Runs.set _ _ _ _ _ 5 _ _ rfl) (Runs.ite_false (by rw [test]; simp [len]; omega)
         (Runs.skip _ _ _ _ _))))) rfl fits (by simp [envD, assign])
@@ -1035,7 +1035,7 @@ theorem lookupOption_first : ∀ (selectors : List Nat) (options : List Desc) (s
   | x :: xs, o :: os, s, 0, _, _, hx, _ => by simp at hx; simp [lookupOption, hx]
   | x :: xs, o :: os, s, idx + 1, len, h, hx, before => by
     have x0 : x ≠ s := before 0 (by omega)
-    simp only [lookupOption, beq_iff_eq, x0, if_false]
+    simp only [lookupOption, beq_iff_eq, x0, ite_false]
     exact lookupOption_first xs os s idx (by simpa using len) (by simpa using h) (by simpa using hx)
       (fun k hk => by simpa using before (k + 1) (by omega))
 
@@ -1048,7 +1048,7 @@ theorem lookupOption_none : ∀ (selectors : List Nat) (options : List Desc) (s 
   | _ :: _, [], _, len, _ => by simp at len
   | x :: xs, o :: os, s, len, none_ => by
     have x0 : x ≠ s := none_ 0 (by simp)
-    simp only [lookupOption, beq_iff_eq, x0, if_false]
+    simp only [lookupOption, beq_iff_eq, x0, ite_false]
     exact lookupOption_none xs os s (by simpa using len) (fun k hk => by
       have := none_ (k + 1) (by simp; omega)
       simpa using this)
@@ -1496,11 +1496,11 @@ theorem union_ok (m : Module) (w : World) (linked : HasCodec m) (sp : Nat) (mem 
       simp only [Nat.toUInt64_eq, ofNat_lt_ofNat _ cap bodySmall capSmall]
     by_cases fitsOut : 1 + body.size ≤ cap
     case neg =>
-      rw [if_neg fitsOut]
+      rw [ite_eq_right fitsOut]
       exact reach _ _ _ (Runs.ite_true 1 (by rw [fitTest]; simp [fitsPart, Except.toBool]) (by decide)
         (Runs.block_cons (Runs.set _ _ _ _ _ 5 _ _ rfl) (Runs.ite_false (by rw [capTest]; simp; omega)
           (Runs.skip _ _ _ _ _)))) (by simp [assign])
-    rw [if_pos fitsOut]
+    rw [ite_eq_left fitsOut]
     -- The selector byte, then the body after it.
     have apart1 := to.apartParts 1 (by simp) (by simp)
     simp at apart1
@@ -1515,7 +1515,7 @@ theorem union_ok (m : Module) (w : World) (linked : HasCodec m) (sp : Nat) (mem 
       apply readLE_congr
       intro k hk
       simp only [placed, store, one]
-      rw [if_neg (by have := to.apartTable; simp at this; omega)]
+      rw [ite_eq_right (by have := to.apartTable; simp at this; omega)]
     have copiedNow := copy_correct m w linked inner (placed mem out sel) (out + 1).toUInt64 p1.toUInt64
       body.size.toUInt64 (by simp only [inner]; rw [ur] at room; omega)
       (by rw [toNat_toUInt64 _ (by omega), toNat_toUInt64 _ (by omega)]; simpa using at_.readable 1 (by simp))
@@ -1535,4 +1535,4 @@ theorem union_ok (m : Module) (w : World) (linked : HasCodec m) (sp : Nat) (mem 
       args, aluResult, Width.bytes, a16, c16, kept16,
       show (parts + 16) % 18446744073709551616 = parts + 16 from Nat.mod_eq_of_lt (by omega)]
 
-end Ssz.Native.Driver
+end EthLib.Consensus.Ssz.Native.Driver

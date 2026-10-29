@@ -8,9 +8,9 @@ Each level lands right after the one before it, and the last one lands in the ou
 The proof follows the Lean computation's levels one at a time, as buffers held in memory.
 -/
 
-namespace Ssz.Native.Driver
+namespace EthLib.Consensus.Ssz.Native.Driver
 
-open Ssz.Native.Ir Ssz.Native.Ir.Expr Ssz.Native.Ir.Stmt Ssz.Native.Asm
+open EthLib.Consensus.Ssz.Native.Ir EthLib.Consensus.Ssz.Native.Ir.Expr EthLib.Consensus.Ssz.Native.Ir.Stmt EthLib.Consensus.Ssz.Native.Asm
 
 /-! ### A filled context -/
 
@@ -120,12 +120,12 @@ theorem RootReady.zeroRoot_holds {w : World} {ctx table zeros pad : Nat} {mask :
 /-- A store elsewhere leaves eight bytes as they were. -/
 theorem readLE_store_apart (mem : Memory) (a b n : Nat) (f : Nat → UInt8) (h : a + 8 ≤ b ∨ b + n ≤ a) :
     readLE (store mem b n f) a 8 = readLE mem a 8 :=
-  readLE_congr _ _ a 8 fun k hk => by simp only [Asm.store]; rw [if_neg (by omega)]
+  readLE_congr _ _ a 8 fun k hk => by simp only [Asm.store]; rw [ite_eq_right (by omega)]
 
 /-- A store leaves every byte outside it as it was. -/
 theorem store_outside {mem : Memory} {b n : Nat} {f : Nat → UInt8} {a : Nat} (h : ¬ (b ≤ a ∧ a < b + n)) :
     store mem b n f a = mem a := by
-  simp only [Asm.store]; rw [if_neg h]
+  simp only [Asm.store]; rw [ite_eq_right h]
 
 /-! ### The blocks' size -/
 
@@ -227,9 +227,9 @@ theorem packedStart_runs {m : Module} {w : World} (hd : m.fns.lookup "ssz_depth_
   obtain ⟨E4, loop, e7, keep⟩ := slotDoubling_runs (m := m) (w := w) (sp := sp) (mem := mem) D dsmall D 0 E3
     (by omega) (by simp [E3, Asm.assign]) (by simp [E3, Asm.assign]) (by simp [E3, Asm.assign])
   have k : ∀ v, v < 7 → E4 v = Asm.assign E0 6 D.toUInt64 v := fun v hv => by
-    rw [keep v (by omega) (by omega)]; simp only [E3, Asm.assign]; rw [if_neg (by omega), if_neg (by omega)]
+    rw [keep v (by omega) (by omega)]; simp only [E3, Asm.assign]; rw [ite_eq_right (by omega), ite_eq_right (by omega)]
   have e6 : E4 6 = UInt64.ofNat D := by rw [k 6 (by decide)]; simp [Asm.assign]
-  have arg : ∀ v, v < 6 → E4 v = E0 v := fun v hv => by rw [k v (by omega)]; simp only [Asm.assign]; rw [if_neg (by omega)]
+  have arg : ∀ v, v < 6 → E4 v = E0 v := fun v hv => by rw [k v (by omega)]; simp only [Asm.assign]; rw [ite_eq_right (by omega)]
   have eo : E4 4 = UInt64.ofNat out := by rw [arg 4 (by decide)]; rfl
   have ec : E4 3 = UInt64.ofNat count := by rw [arg 3 (by decide)]; rfl
   have pre : Runs m w sp E0 mem (.block (packedStart.take 4)) E4 mem :=
@@ -252,7 +252,7 @@ theorem packedStart_runs {m : Module} {w : World} (hd : m.fns.lookup "ssz_depth_
         (Asm.assign E4 8 (UInt64.ofNat (out + 32 * count))) mem :=
       Runs.block_cons (Runs.ifElse_false (by simp [eval, Cond.holds, e6, nz])
         (Runs.set' (eval_add (eval_var eo) (eval_mul (eval_lit 32) (eval_var ec))))) (Runs.block_nil _ _ _ _ _)
-    exact ⟨_, Runs.block_append pre tail, by rw [if_neg zero]; exact env5 _⟩
+    exact ⟨_, Runs.block_append pre tail, by rw [ite_eq_right zero]; exact env5 _⟩
 
 /-! ### The gather -/
 
@@ -354,7 +354,7 @@ theorem packedGather_runs {m : Module} {w : World} (gather : GatherCalls m w) {s
     exact holds_gathered holds3 g start stride width count (32 * 2 ^ depth) fits gap inside (by omega) (by omega)
       (by omega) (by omega) (by omega)
   · simp only [gathered]
-    rw [slotEq, if_neg hg, m3 a hp]
+    rw [slotEq, ite_eq_right hg, m3 a hp]
 
 /-! ### The levels -/
 
@@ -473,18 +473,18 @@ theorem packedLevel_step (hash : HashCalls m w .pairs) (room : w.stackLo + hashS
   generalize hSh : levelSize count depth h = Sh at *
   generalize hSn : levelSize count depth (h + 1) = Sn at *
   have lvlEq : levelAt out g count depth h = g + 2 * (S0 - Sh) := by
-    simp only [levelAt, hS0, hSh]; rw [if_neg (by omega)]
+    simp only [levelAt, hS0, hSh]; rw [ite_eq_right (by omega)]
   obtain ⟨dst, hdst⟩ : ∃ dst, dst = if h + 1 = depth then out else levelAt out g count depth h + Sh := ⟨_, rfl⟩
   have dstAt : levelAt out g count depth (h + 1) = dst := by
     rw [hdst]
     by_cases last : h + 1 = depth
-    · rw [if_pos last]; simp only [levelAt]; rw [if_pos last]
-    · rw [if_neg last, lvlEq]; simp only [levelAt, hS0, hSn]; rw [if_neg last]; omega
+    · rw [ite_eq_left last]; simp only [levelAt]; rw [ite_eq_left last]
+    · rw [ite_eq_right last, lvlEq]; simp only [levelAt, hS0, hSn]; rw [ite_eq_right last]; omega
   have dstIn : out ≤ dst ∧ dst + Sn ≤ out + (32 * count + 2 * S0) := by
     rw [hdst]
     by_cases last : h + 1 = depth
-    · rw [if_pos last]; rw [last] at hSn; omega
-    · rw [if_neg last, lvlEq]; omega
+    · rw [ite_eq_left last]; rw [last] at hSn; omega
+    · rw [ite_eq_right last, lvlEq]; omega
   have v := st.vars
   -- The branch picks the next level's place.
   have branch : Runs m w sp env mem (ifElse (eq (RootPacked.h + 1) RootPacked.depth) [RootPacked.dst ::= RootPacked.out]
@@ -492,11 +492,11 @@ theorem packedLevel_step (hash : HashCalls m w .pairs) (room : w.stackLo + hashS
     have c := eval_eq_nat (w := w) (env := env) (mem := mem) (a := RootPacked.h + 1) (b := RootPacked.depth)
       (eval_add (eval_var st.height) (eval_lit 1)) (eval_var v.levels) (by omega) (by omega)
     by_cases last : h + 1 = depth
-    · rw [if_pos last] at c
-      rw [hdst, if_pos last]
+    · rw [ite_eq_left last] at c
+      rw [hdst, ite_eq_left last]
       exact Runs.ifElse_true 1 c (by decide) (Runs.set' (eval_var v.out))
-    · rw [if_neg last] at c
-      rw [hdst, if_neg last]
+    · rw [ite_eq_right last] at c
+      rw [hdst, ite_eq_right last]
       exact Runs.ifElse_false c (Runs.set' (eval_add (eval_var st.lvl) (eval_var (hSh ▸ st.size))))
   -- The hashing run's conditions: its digests and inputs lie in the output's region, apart from each other.
   have lvl := st.lvl
@@ -504,8 +504,8 @@ theorem packedLevel_step (hash : HashCalls m w .pairs) (room : w.stackLo + hashS
   have dstCase : (dst = out ∧ Sn = 32 * count) ∨ dst = g + 2 * (S0 - Sh) + Sh := by
     rw [hdst]
     by_cases last : h + 1 = depth
-    · rw [if_pos last]; rw [last] at hSn; exact .inl ⟨rfl, by omega⟩
-    · rw [if_neg last, lvlEq]; exact .inr rfl
+    · rw [ite_eq_left last]; rw [last] at hSn; exact .inl ⟨rfl, by omega⟩
+    · rw [ite_eq_right last, lvlEq]; exact .inr rfl
   have pre : RunPre w mem 64 64 dst (g + 2 * (S0 - Sh)) (g + 2 * (S0 - Sh) + 32) q ctx table pad mask :=
     st.ready.runPre (lo := out) (span := 32 * count + 2 * S0) acc rPad rCtx rTable ⟨dstIn.1, by omega⟩
       (fun p hp => ⟨by omega, by omega, by omega, by omega⟩) ⟨by simp only [addressBound]; omega, by simp only [addressBound]; omega⟩
@@ -597,7 +597,7 @@ theorem packedLevels_runs (hash : HashCalls m w .pairs) (room : w.stackLo + hash
     simp only [Nat.add_zero] at hk
     subst hk
     refine ⟨env, mem, Runs.loop_exit _ _ _ _ _ _ _ ?_, st⟩
-    rw [eval_lt (eval_var st.height) (eval_var st.vars.levels) (by omega) (by omega), if_neg (Nat.lt_irrefl _)]
+    rw [eval_lt (eval_var st.height) (eval_var st.vars.levels) (by omega) (by omega), ite_eq_right (Nat.lt_irrefl _)]
   | succ k ih =>
     -- Below the top, one pass, then the rest.
     intro h env mem hk st
@@ -605,7 +605,7 @@ theorem packedLevels_runs (hash : HashCalls m w .pairs) (room : w.stackLo + hash
       (by omega) st
     obtain ⟨env', mem', rest, fin⟩ := ih (h + 1) env₁ mem₁ (by omega) st₁
     refine ⟨env', mem', Runs.loop_step 1 ?_ (by decide) pass rest, fin⟩
-    rw [eval_lt (eval_var st.height) (eval_var st.vars.levels) (by omega) (by omega), if_pos (by omega)]
+    rw [eval_lt (eval_var st.height) (eval_var st.vars.levels) (by omega) (by omega), ite_eq_left (by omega)]
 
 end Levels
 
@@ -624,10 +624,10 @@ theorem packedSpan_eq {width count : Nat} (below : packedNeed width count < scra
   generalize depthFor (nodesFor width) = D at below ⊢
   have pos : 0 < 2 ^ D := Nat.pow_pos (by decide)
   by_cases z : D = 0
-  · simp only [if_pos z] at below ⊢
+  · simp only [ite_eq_left z] at below ⊢
     simp only [smul, sat] at below ⊢
     omega
-  · simp only [if_neg z] at below ⊢
+  · simp only [ite_eq_right z] at below ⊢
     simp only [sadd, smul, sat] at below ⊢
     rcases Nat.eq_zero_or_pos count with c0 | cp
     · subst c0
@@ -706,8 +706,8 @@ theorem rootPacked_calls {m : Module} {w : World} (hash : HashingOk m w) (gmod :
   have blocksIn : (if D = 0 then out else out + 32 * count) + 32 * 2 ^ D * count ≤
       out + (if D = 0 then 32 * count else 32 * count + 2 * levelSize count D 0) := by
     by_cases z : D = 0
-    · subst z; rw [if_pos rfl, if_pos rfl]; simp only [Nat.pow_zero]; omega
-    · rw [if_neg z, if_neg z, S0eq]; omega
+    · subst z; rw [ite_eq_left rfl, ite_eq_left rfl]; simp only [Nat.pow_zero]; omega
+    · rw [ite_eq_right z, ite_eq_right z, S0eq]; omega
   have outLe : 32 * count ≤ (if D = 0 then 32 * count else 32 * count + 2 * levelSize count D 0) := by
     split <;> omega
   -- The gather's conditions.
@@ -720,7 +720,7 @@ theorem rootPacked_calls {m : Module} {w : World} (hash : HashingOk m w) (gmod :
     · rw [strideEq]; have := inside i hi; exact access_sub bAcc (by omega) (by omega)
     · rw [strideEq]; simp only [addressBound]; omega
     · rw [slotEq, strideEq]; have := inside i hi; simp only [Apart]
-      by_cases z : D = 0 <;> simp only [z, if_true, if_false] at blocksIn ob ⊢ <;> omega
+      by_cases z : D = 0 <;> simp only [z, ite_true, ite_false] at blocksIn ob ⊢ <;> omega
   obtain ⟨E6, memG, gath, v6, heldG, frameG⟩ := packedGather_runs (sp := sp - 8 - 8 * RootPacked.fn.frame)
     (gatherCalls w gmod) (by omega) v5 rd holds rfl
     gap strideSmall fits dsmall pre inside (by simp only [Apart] at bPad ⊢; omega) usize
@@ -758,7 +758,7 @@ theorem rootPacked_calls {m : Module} {w : World} (hash : HashingOk m w) (gmod :
     simp only [Apart] at pc pt pz oc ot oz
     exact rd.frame fun a held => by
       simp only [RootReady.Held] at held
-      exact frameG a (by omega) (by by_cases z : D = 0 <;> simp only [z, if_true, if_false] at blocksIn oc ot oz ⊢ <;> omega)
+      exact frameG a (by omega) (by by_cases z : D = 0 <;> simp only [z, ite_true, ite_false] at blocksIn oc ot oz ⊢ <;> omega)
   by_cases z : D = 0
   · -- Values of one node: the gathered blocks are the roots, and no level is hashed.
     subst z
@@ -774,13 +774,13 @@ theorem rootPacked_calls {m : Module} {w : World} (hash : HashingOk m w) (gmod :
     · simpa using heldG
     · exact frameG a (fun h => p ⟨h.1, by omega⟩) (by simp at o ⊢; omega)
   · -- Blocks of several nodes: the levels are hashed down to the roots.
-    rw [if_neg z] at acc slack oPad oCtx oTable oZeros heldG frameG l1 l2 l3 v9 ⊢
+    rw [ite_eq_right z] at acc slack oPad oCtx oTable oZeros heldG frameG l1 l2 l3 v9 ⊢
     let E9 := Asm.assign (Asm.assign (Asm.assign E6 11 (UInt64.ofNat (out + 32 * count))) 12
       (UInt64.ofNat (count * (32 * 2 ^ D)))) 13 (UInt64.ofNat 0)
     have st0 : PackedAt w width (base + start) stride count out ctx D (out + 32 * count) table zeros pad mask mem
         slots E9 memG 0 := by
       have lvl0 : levelAt out (out + 32 * count) count D 0 = out + 32 * count := by
-        simp only [levelAt]; rw [if_neg (by omega)]; omega
+        simp only [levelAt]; rw [ite_eq_right (by omega)]; omega
       refine ⟨v9, by simp [E9, Asm.assign, lvl0], ?_, by simp [E9, Asm.assign], by omega, ?_, ?_, readyG, ?_⟩
       · simp only [E9, Asm.assign]; simp [levelSize]
       · rw [lvl0]; exact heldG
@@ -795,4 +795,4 @@ theorem rootPacked_calls {m : Module} {w : World} (hash : HashingOk m w) (gmod :
     exact ⟨mem', Calls.fn hf (by rw [frame]; omega) rfl (Runs.block_append firstRuns
       (Runs.block_cons l1 (Runs.block_cons l2 (Runs.block_cons l3 loopRuns)))) rfl, held, fin.ready, fin.frame⟩
 
-end Ssz.Native.Driver
+end EthLib.Consensus.Ssz.Native.Driver

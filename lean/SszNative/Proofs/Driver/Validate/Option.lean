@@ -4,11 +4,11 @@ import SszNative.Proofs.Driver.Validate.Struct
 The option a union selector names, found by walking the selectors and the options side by side.
 -/
 
-namespace Ssz.Native.Driver.Validate
+namespace EthLib.Consensus.Ssz.Native.Driver.Validate
 
 set_option maxRecDepth 20000
 
-open Ssz Ssz.Native Ssz.Native.Ir Ssz.Native.Asm Ssz.Native.Ir.Stmt Ssz.Native.Ir.Expr
+open EthLib.Consensus.Ssz EthLib.Consensus.Ssz.Native EthLib.Consensus.Ssz.Native.Ir EthLib.Consensus.Ssz.Native.Asm EthLib.Consensus.Ssz.Native.Ir.Stmt EthLib.Consensus.Ssz.Native.Ir.Expr
 
 /-- Passing a selector that does not match moves on to the next option. -/
 theorem validateOption_skip (s : Nat) (sels : List Nat) (o : Desc) (opts : List Desc) (sel : Nat) (b : ByteArray)
@@ -22,7 +22,7 @@ theorem validateOption_hit (s : Nat) (sels : List Nat) (o : Desc) (opts : List D
     validateOption (s :: sels) (o :: opts) sel b start stop =
       if 1 ≤ sel ∧ sel ≤ 127 then validateRange o b start stop else .error (.unionSelectorRange sel 1 127) := by
   rw [validateOption]
-  simp only [eq, beq_self_eq_true, if_true, checkSelector, minSelector, maxSelector]
+  simp only [eq, beq_self_eq_true, ite_true, checkSelector, minSelector, maxSelector]
   split <;> simp [Bind.bind, Except.bind]
 
 set_option maxHeartbeats 8000000 in
@@ -110,7 +110,7 @@ theorem option_calls {m : Module} {w : World} (hm : Loaded m) (sels : List Nat) 
     have dsel : sels.drop i = sels[i]'(by omega) :: sels.drop (i + 1) := List.drop_eq_getElem_cons (by omega)
     rw [dsel, drop_cons opts i hlt, validateOption_hit _ _ _ _ _ _ _ _ hit] at rest
     by_cases rng : 1 ≤ sel ∧ sel ≤ 127
-    · rw [if_pos rng] at rest
+    · rw [ite_eq_left rng] at rest
       obtain ⟨_, hpj, slen⟩ := fieldAt ho i hlt
       have cpj : Clear err (q + 8 * opts.length + 8 * (Plan.wordsAll (opts.take i)).length)
           (8 * (Plan.words opts[i]).length) := by unfold Clear at co ⊢; omega
@@ -124,7 +124,7 @@ theorem option_calls {m : Module} {w : World} (hm : Loaded m) (sels : List Nat) 
       wcall step [h7, h3, h4, h5]
       wsteps []
       wfin [rest]
-    · rw [if_neg rng] at rest
+    · rw [ite_eq_right rng] at rest
       have c : sel < 1 ∨ 127 < sel := by omega
       rcases c with c | c
       · wsteps [h9, h2, c]
@@ -136,4 +136,4 @@ theorem option_calls {m : Module} {w : World} (hm : Loaded m) (sels : List Nat) 
         wsteps []
         wfin [rest, res, after, wrote_eq]
 
-end Ssz.Native.Driver.Validate
+end EthLib.Consensus.Ssz.Native.Driver.Validate

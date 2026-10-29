@@ -12,9 +12,9 @@ The stack belongs to the compiled code.
 The language cannot see it: a load or store landing on it has no meaning, and neither does a call too deep for it.
 -/
 
-namespace Ssz.Native.Ir
+namespace EthLib.Consensus.Ssz.Native.Ir
 
-open Ssz.Native.Asm
+open EthLib.Consensus.Ssz.Native.Asm
 
 /-- Variables, by number. -/
 abbrev Env := Nat → UInt64
@@ -161,4 +161,4 @@ def exec (m : Module) (w : World) : (fuel : Nat) → (sp : Nat) → Env → Memo
       let (r, mem) ← called
       return (assign env dst r, mem)
 
-end Ssz.Native.Ir
+end EthLib.Consensus.Ssz.Native.Ir
