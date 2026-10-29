@@ -7,7 +7,7 @@ package ssz where
   leanOptions := #[⟨`warningAsError, true⟩, ⟨`autoImplicit, false⟩, ⟨`relaxedAutoImplicit, false⟩]
 
 /-- The Lean specification of SSZ, and its proofs, as `EthLib.Consensus.Ssz`. -/
-require EthLib from git "https://github.com/tcoratger/ethlib" @ "b7e2b022c9cdd7aeb7292936538de446920371da"
+require EthLib from git "https://github.com/ethereum/EthLib" @ "18f1e9280d09bcb45b6afc99e684d125c0bcc4f7"
 
 /-- SSZ read straight from encodings, on native kernels printed from Lean programs. -/
 @[default_target]
