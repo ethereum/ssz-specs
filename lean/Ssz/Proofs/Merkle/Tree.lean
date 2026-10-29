@@ -33,11 +33,11 @@ theorem zeroRootsUpTo_get (built : Nat) :
     -- Either the entry was already there before this level, or it is the one just added.
     by_cases below : depth < built + 1
     · -- A shallower entry was already in the table, and pushing on the end left it alone.
-      simp only [zeroRootsUpTo, Array.getElem?_push, zeroRootsUpTo_size, if_neg (Nat.ne_of_lt below)]
+      simp only [zeroRootsUpTo, Array.getElem?_push, zeroRootsUpTo_size, ite_eq_right (Nat.ne_of_lt below)]
       exact ih depth (by omega)
     · -- The new entry folds the previous one against itself, which is the level above.
       obtain rfl : depth = built + 1 := by omega
-      simp only [zeroRootsUpTo, Array.getElem?_push, zeroRootsUpTo_size, if_pos, Option.getD_some, zeroRoot]
+      simp only [zeroRootsUpTo, Array.getElem?_push, zeroRootsUpTo_size, ite_eq_left, Option.getD_some, zeroRoot]
       -- The entry below it is already known to be the subtree one level down.
       rw [ih built (Nat.le_refl built)]
 
@@ -151,8 +151,8 @@ theorem subtreeAt_split (chunks : Array Bytes) {depth : Nat}
   split
   · -- Wholly past the data, so both halves read the zero subtree one level down.
     rename_i past
-    rw [subtreeAt.eq_def chunks depth start, if_pos past, subtreeAt.eq_def chunks depth (start + 2 ^ depth),
-      if_pos (Nat.le_add_right_of_le past), zeroSubtree_eq, zeroSubtree_eq]
+    rw [subtreeAt.eq_def chunks depth start, ite_eq_left past, subtreeAt.eq_def chunks depth (start + 2 ^ depth),
+      ite_eq_left (Nat.le_add_right_of_le past), zeroSubtree_eq, zeroSubtree_eq]
     rfl
   · rfl
 
@@ -177,7 +177,7 @@ theorem subtreeAt_past (chunks : Array Bytes) (depth start : Nat) (past : chunks
     subtreeAt chunks depth start = zeroSubtree depth := by
   -- The walk checks for this case first and answers from the zero tree.
   unfold subtreeAt
-  rw [if_pos past]
+  rw [ite_eq_left past]
 
 /-- A subtree reads only the leaves under it. -/
 theorem subtreeAt_congr (left right : Array Bytes) (depth leftStart rightStart : Nat)
@@ -212,7 +212,7 @@ theorem merkleizeBoundedUnchecked_window (chunks : Array Bytes) {depth : Nat}
     rw [Array.size_extract]
     generalize 2 ^ depth = width
     omega
-  simp only [merkleizeBoundedUnchecked, if_neg (Nat.not_lt.mpr span), depthFor_pow, pure, Except.pure,
+  simp only [merkleizeBoundedUnchecked, ite_eq_right (Nat.not_lt.mpr span), depthFor_pow, pure, Except.pure,
     Except.ok.injEq]
   -- Both sides are the specification's tree, over leaf supplies that have yet to be compared.
   rw [subtreeAt_zero_eq _, subtreeAt_eq_subtreeRoot chunks depth start]
@@ -236,8 +236,8 @@ theorem merkleizeBoundedUnchecked_append_zeros (chunks : Array Bytes)
     merkleizeBoundedUnchecked (chunks ++ Array.replicate count zeroChunk) (some capacity)
       = merkleizeBoundedUnchecked chunks (some capacity) := by
   -- The padded buffer is longer, but still inside the capacity, so neither side refuses.
-  simp only [merkleizeBoundedUnchecked, Array.size_append, Array.size_replicate, if_neg (by omega : ¬ capacity < chunks.size + count),
-    if_neg (by omega : ¬ capacity < chunks.size)]
+  simp only [merkleizeBoundedUnchecked, Array.size_append, Array.size_replicate, ite_eq_right (by omega : ¬ capacity < chunks.size + count),
+    ite_eq_right (by omega : ¬ capacity < chunks.size)]
   -- Both roots are then the specification's, over leaf supplies already known equal.
   rw [subtreeAt_zero_eq _, subtreeAt_zero_eq _, padded_append_zeros]
 
@@ -246,7 +246,7 @@ theorem merkleizeBoundedUnchecked_empty {capacity : Nat} :
     merkleizeBoundedUnchecked #[] (some capacity)
       = .ok (zeroRoot combine zeroChunk (depthFor capacity)) := by
   -- An empty buffer is under any capacity, so the merkleizer answers rather than refusing.
-  simp only [merkleizeBoundedUnchecked, Array.size_empty, if_neg (by omega : ¬ capacity < 0)]
+  simp only [merkleizeBoundedUnchecked, Array.size_empty, ite_eq_right (by omega : ¬ capacity < 0)]
   -- Every leaf then reads as zero, which is the constant supply the table entry stands for.
   rw [subtreeAt_zero_eq _, ← subtreeRoot_const_zero combine zeroChunk]
   rfl
@@ -259,7 +259,7 @@ theorem merkleizeProgressiveUnchecked_eq (chunks : List Bytes) (level : Nat) :
   | case1 chunks level empty =>
     simp [merkleizeProgressiveUnchecked, progressiveRoot, empty]
   | case2 chunks level nonempty width ih =>
-    rw [merkleizeProgressiveUnchecked, progressiveRoot, if_neg nonempty, if_neg nonempty]
+    rw [merkleizeProgressiveUnchecked, progressiveRoot, ite_eq_right nonempty, ite_eq_right nonempty]
     -- The bounded subtree equivalence is valid at every depth.
     dsimp only
     rw [subtreeAt_zero_eq, ih]

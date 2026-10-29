@@ -21,7 +21,7 @@ theorem boundedNode_window {budget : Nat} {layout : MerkleLayout} {chunks : Arra
   -- The remaining width is a power of two, so interval merkleization is exactly a subtree.
   have width : nextPow2 capacity >>> depth = 2 ^ (depthFor capacity - depth) := by
     rw [nextPow2, Nat.shiftRight_eq_div_pow, Nat.pow_div inside (by decide)]
-  simp only [boundedNode, nextPow2, Nat.log2_two_pow, if_pos inside]
+  simp only [boundedNode, nextPow2, Nat.log2_two_pow, ite_eq_left inside]
   rw [show 2 ^ depthFor capacity >>> depth = 2 ^ (depthFor capacity - depth) from width]
   simp only [windows, Bind.bind, Except.bind]
   exact merkleizeBoundedUnchecked_window chunks _

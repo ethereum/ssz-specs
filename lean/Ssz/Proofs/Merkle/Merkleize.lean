@@ -16,7 +16,7 @@ theorem le_two_pow_depthFor (leafCount : Nat) : leafCount ≤ 2 ^ depthFor leafC
   -- Widths double one level up, and the halved count already fits the level below.
   induction leafCount using depthFor.induct with
   | case1 leafCount small => simp [depthFor, small]
-  | case2 leafCount large ih => rw [depthFor, if_neg large, Nat.pow_succ]; omega
+  | case2 leafCount large ih => rw [depthFor, ite_eq_right large, Nat.pow_succ]; omega
 
 /--
 No shallower tree holds them, so the depth chosen is the least one that does.
@@ -32,7 +32,7 @@ theorem depthFor_le_of_le_two_pow {leafCount depth : Nat} (holds : leafCount ≤
     simp [depthFor, small]
   | case2 leafCount large ih =>
     -- Two or more leaves need a level, so the bound must have come from one too.
-    rw [depthFor, if_neg large]
+    rw [depthFor, ite_eq_right large]
     cases depth with
     | zero => simp at holds; omega
     | succ shallower =>

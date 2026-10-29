@@ -153,7 +153,7 @@ theorem helperFrontier_children {indices helpers : List Nat}
 theorem levelOf_parent {index : Nat} (below : 2 ≤ index) :
     levelOf index = levelOf (index / 2) + 1 := by
   -- The recursive logarithm removes the lowest branch bit.
-  exact (Nat.log2_def index).trans (if_pos below)
+  exact (Nat.log2_def index).trans (ite_eq_left below)
 
 /-- Siblings below the root have equal depths. -/
 theorem levelOf_sibling {index : Nat} (below : 2 ≤ index) :

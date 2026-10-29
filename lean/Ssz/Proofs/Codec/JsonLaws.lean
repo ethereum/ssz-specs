@@ -69,15 +69,15 @@ theorem valueOf_jsonOf_uint {spelling : Spelling} {width n : Nat} {document : Js
     have small : n < 256 := by rw [single] at fitted; simpa using fitted
     have byte : (UInt8.ofNat n).toNat = n := by
       simpa [UInt8.toNat_ofNat] using Nat.mod_eq_of_lt small
-    simp only [wide, if_false, alias?, if_true, Except.ok.injEq] at written
+    simp only [wide, ite_false, alias?, ite_true, Except.ok.injEq] at written
     subst written
-    rw [valueOf, if_pos alias?]
+    rw [valueOf, ite_eq_left alias?]
     simp [ofHex_toHex, byte, Bind.bind, Except.bind, pure, Except.pure]
-  · rw [if_neg wide, if_neg (by simpa using alias?), Except.ok.injEq] at written
+  · rw [ite_eq_right wide, ite_eq_right (by simpa using alias?), Except.ok.injEq] at written
     subst written
     -- The digits have to be a constructor before the reader's own match can reduce.
     simp only [decimal]
-    rw [valueOf, if_neg alias?, readNat_str]
+    rw [valueOf, ite_eq_right alias?, readNat_str]
     simp [wide, Bind.bind, Except.bind, pure, Except.pure]
 
 /-- A byte array document reads back as the bytes it was written from. -/

@@ -15,7 +15,7 @@ theorem boundedNode_nested (layout : MerkleLayout) (budget : Nat)
     boundedNode budget layout index depth start capacity =
       nodeRoot child inner (gindexRebase index (depth - depthFor capacity)) := by
   -- The outer tree consumes its height, leaving the remaining turns inside the child.
-  simp only [boundedNode, nextPow2, Nat.log2_two_pow, if_neg (Nat.not_le.mpr deeper), nested, selected]
+  simp only [boundedNode, nextPow2, Nat.log2_two_pow, ite_eq_right (Nat.not_le.mpr deeper), nested, selected]
   exact nodeRootAt_eq_nodeRoot child inner _ budget enough
 
 /-- At a filled composite leaf, the outer tree commits to exactly the child's own root. -/

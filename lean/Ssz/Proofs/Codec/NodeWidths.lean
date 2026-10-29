@@ -256,7 +256,7 @@ theorem nodeRootAt_size (budget : Nat) (shape : Desc) (value : Value) (index : N
     | ok layout =>
       -- Direct mixing-word reads use the layout’s own width guarantee.
       have widths := merkleLayout_width shape value layout laid
-      simp only [nodeRootAt, if_neg invalid, beq_iff_eq, if_neg root, laid, Bind.bind, Except.bind] at read
+      simp only [nodeRootAt, ite_eq_right invalid, beq_iff_eq, ite_eq_right root, laid, Bind.bind, Except.bind] at read
       -- A mixing-word read returns that word, and every other read descends into the leaves.
       cases hg : gindexLength index <;> cases mixed : layout.mixin <;> cases limit : layout.limit <;>
         simp only [hg, mixed, limit, reduceCtorEq] at read <;> (repeat' split at read) <;>

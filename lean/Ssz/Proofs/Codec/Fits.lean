@@ -94,6 +94,6 @@ theorem boundCheck_of_withinBound : ∀ (limit : Option Nat) (count : Nat),
     withinBound limit count = true → boundCheck limit count = .ok ()
   | none, _, _ => rfl
   | some bound, count, within => by
-    rw [boundCheck, if_pos (by simpa [withinBound] using within)]
+    rw [boundCheck, ite_eq_left (by simpa [withinBound] using within)]
 
 end Ssz

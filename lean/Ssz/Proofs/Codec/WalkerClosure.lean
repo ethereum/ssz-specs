@@ -25,10 +25,10 @@ private theorem boundedTreeNode_parent (chunks : Array Bytes) (height index dept
   rcases Nat.mod_two_eq_zero_or_one index with even | odd
   · obtain ⟨child, sibling⟩ := gindexSibling_even even
     rw [← sibling, ← child] at equation
-    simpa only [if_pos even] using equation
+    simpa only [ite_eq_left even] using equation
   · obtain ⟨child, sibling⟩ := gindexSibling_odd odd
     rw [← child, ← sibling] at equation
-    simpa only [if_neg (by omega : index % 2 ≠ 0)] using equation
+    simpa only [ite_eq_right (by omega : index % 2 ≠ 0)] using equation
 
 /-- A successful bounded read has a sibling and parent whenever nested values do. -/
 theorem boundedNode_closed (layout : MerkleLayout) (budget : Nat) (chunks : Array Bytes)
@@ -52,7 +52,7 @@ theorem boundedNode_closed (layout : MerkleLayout) (budget : Nat) (chunks : Arra
       boundedTreeNode_parent chunks _ index depth start positive inside⟩
   · have deeper : depthFor capacity < depth := by omega
     -- Below leaf depth, success requires a filled composite slot.
-    simp only [boundedNode, nextPow2, Nat.log2_two_pow, if_neg inside] at read
+    simp only [boundedNode, nextPow2, Nat.log2_two_pow, ite_eq_right inside] at read
     cases nested : layout.leaves with
     | packed data => simp [nested, throw, throwThe, MonadExceptOf.throw] at read
     | nested slots =>

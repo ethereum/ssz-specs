@@ -39,7 +39,7 @@ theorem sequenceLayout_injective {element : Desc} {left right : List Value}
   -- Basic elements share packed nodes, while composite elements remain explicit values in the unhashed layout.
   by_cases basic : element.isBasic = true
   · cases a : serializeEach element left <;> cases b : serializeEach element right <;>
-      simp only [sequenceLayout, basic, if_true, a, b, Bind.bind, Except.bind,
+      simp only [sequenceLayout, basic, ite_true, a, b, Bind.bind, Except.bind,
         pure, Except.pure, Except.ok.injEq, reduceCtorEq] at first second
     rename_i parts other
     -- Equality of the layouts preserves the packed encoded streams.
@@ -51,7 +51,7 @@ theorem sequenceLayout_injective {element : Desc} {left right : List Value}
     -- The common element count and width recover the same ordered sequence from the packed stream.
     exact packElements_injective sound fixed counts leftFits rightFits a b packed
   · have noBasic : element.isBasic = false := Bool.eq_false_iff.mpr basic
-    simp only [sequenceLayout, noBasic, Bool.false_eq_true, if_false, pure, Except.pure,
+    simp only [sequenceLayout, noBasic, Bool.false_eq_true, ite_false, pure, Except.pure,
       Except.ok.injEq] at first second
     -- For composite elements, each occupied slot still stores its original value and type.
     have entries := Leaves.nested.inj (congrArg MerkleLayout.leaves (first.trans second.symm))
@@ -101,7 +101,7 @@ private theorem layoutDetermines_byteList (capacity : Nat) : LayoutDeterminesVal
       | byteList bound =>
         cases rightSized with
         | byteList otherBound =>
-          simp only [merkleLayout, Nat.not_lt.mpr limit, Nat.not_lt.mpr otherLimit, if_false,
+          simp only [merkleLayout, Nat.not_lt.mpr limit, Nat.not_lt.mpr otherLimit, ite_false,
             pure, Except.pure, Except.ok.injEq] at first second
           have same := first.trans second.symm
           -- Equal mixing words recover equal payload counts before the packed nodes are unpacked.
@@ -120,7 +120,7 @@ private theorem layoutDetermines_byteVector (count : Nat) :
     cases rightFits with
     | byteVector otherLength =>
       simp only [merkleLayout, length, otherLength, bne_self_eq_false, Bool.false_eq_true,
-        if_false, pure, Except.pure, Except.ok.injEq] at first second
+        ite_false, pure, Except.pure, Except.ok.injEq] at first second
       exact congrArg Value.bytes (packBytes_injective (length.trans otherLength.symm)
         (Leaves.packed.inj (congrArg MerkleLayout.leaves (first.trans second.symm))))
 
@@ -133,7 +133,7 @@ private theorem layoutDetermines_bitVector (count : Nat) : LayoutDeterminesValue
     cases rightFits with
     | bitVector otherLength =>
       simp only [merkleLayout, length, otherLength, bne_self_eq_false, Bool.false_eq_true,
-        if_false, pure, Except.pure, Except.ok.injEq] at first second
+        ite_false, pure, Except.pure, Except.ok.injEq] at first second
       exact congrArg Value.bits (packedBits_injective (length.trans otherLength.symm)
         (Leaves.packed.inj (congrArg MerkleLayout.leaves (first.trans second.symm))))
 
@@ -149,7 +149,7 @@ private theorem layoutDetermines_bitList (capacity : Nat) : LayoutDeterminesValu
       | bitList bound =>
         cases rightSized with
         | bitList otherBound =>
-          simp only [merkleLayout, Nat.not_lt.mpr limit, Nat.not_lt.mpr otherLimit, if_false,
+          simp only [merkleLayout, Nat.not_lt.mpr limit, Nat.not_lt.mpr otherLimit, ite_false,
             pure, Except.pure, Except.ok.injEq] at first second
           have same := first.trans second.symm
           -- Equal mixing words recover equal payload counts before the packed nodes are unpacked.
@@ -190,7 +190,7 @@ private theorem layoutDetermines_vector (element : Desc) (count : Nat) : LayoutD
     cases rightFits with
     | vector otherCount otherEach =>
       simp only [merkleLayout, count, otherCount, bne_self_eq_false, Bool.false_eq_true,
-        if_false] at first second
+        ite_false] at first second
       -- The well-formed enclosing type guarantees a well-formed element type for recovering each element.
       have childSound := wellFormed_vector sound
       exact congrArg Value.seq (sequenceLayout_injective childSound (count.trans otherCount.symm)
@@ -208,7 +208,7 @@ private theorem layoutDetermines_list (element : Desc) (capacity : Nat) : Layout
       | list bound _ =>
         cases rightSized with
         | list otherBound _ =>
-          simp only [merkleLayout, Nat.not_lt.mpr limit, Nat.not_lt.mpr otherLimit, if_false] at first second
+          simp only [merkleLayout, Nat.not_lt.mpr limit, Nat.not_lt.mpr otherLimit, ite_false] at first second
           -- The well-formed enclosing type guarantees a well-formed element type for recovering each element.
           have childSound := wellFormed_list sound
           exact congrArg Value.seq (sequenceLayout_injective childSound
@@ -243,7 +243,7 @@ private theorem layoutDetermines_container (names : List String) (fields : List 
     cases rightFits with
     | container otherCount _ =>
       simp only [merkleLayout, ← count, ← otherCount, bne_self_eq_false, Bool.false_eq_true,
-        if_false, pure, Except.pure, Except.ok.injEq] at first second
+        ite_false, pure, Except.pure, Except.ok.injEq] at first second
       -- Equal nested positions recover equal field-value pairs, with no hashing involved yet.
       have pairs := Leaves.nested.inj (congrArg MerkleLayout.leaves (first.trans second.symm))
       have same := (List.map_inj_right (fun _ _ equal => Option.some.inj equal)).mp pairs
@@ -264,7 +264,7 @@ private theorem layoutDetermines_progressiveContainer (active : List Bool) (name
       -- Equal nested leaves retain identical placed fields, including identical gaps.
       have same := Leaves.nested.inj (congrArg MerkleLayout.leaves (first.trans second.symm))
       simp only [layoutSlots, ← count, ← otherCount, bne_self_eq_false, Bool.false_eq_true,
-        if_false] at a b
+        ite_false] at a b
       split at a <;> try contradiction
       split at b <;> try contradiction
       -- Removing inactive positions restores all original field-value pairs in declaration order.

@@ -24,7 +24,7 @@ theorem log2_small (index : Nat) (small : index ≤ 1) : Nat.log2 index = 0 := b
 theorem gindexLength_of_two {index : Nat} (two : 2 ≤ index) : gindexLength index = .ok (Nat.log2 index) := by
   -- Neither refusal applies: the index names a node, and that node is below the root.
   have half := log2_half index two
-  simp only [gindexLength, gindexDepth, show ¬ index < 1 by omega, if_false, bind, Except.bind]
+  simp only [gindexLength, gindexDepth, show ¬ index < 1 by omega, ite_false, bind, Except.bind]
   simp only [show (Nat.log2 index == 0) = false by simp; omega]
   rfl
 
@@ -80,7 +80,7 @@ theorem rejectClaimPaths_cons (indices : List Nat) (claim : Nat) (rest : List Na
   have two : 2 ≤ claim := by omega
   have path : getPathIndices claim = .ok (pathOf claim) := by
     simp [getPathIndices, gindexLength_of_two two, pathOf, bind, Except.bind, pure, Except.pure]
-  simp only [rejectClaimPaths, path, zero, one, if_false, bind, Except.bind, pathOf_cons claim two,
+  simp only [rejectClaimPaths, path, zero, one, ite_false, bind, Except.bind, pathOf_cons claim two,
     List.drop_succ_cons, List.drop_zero, rejectAncestors_eq]
   by_cases a : ∃ x, x ∈ pathOf (claim / 2) ∧ x ∈ indices <;> simp [a]
 

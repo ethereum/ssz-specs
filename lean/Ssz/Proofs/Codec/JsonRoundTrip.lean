@@ -145,23 +145,23 @@ theorem valueOfOption_found (spelling : Spelling) (payload : Json) (option : Des
   | chosen :: selectors, first :: options, start, selector, slot, found, named, inner => by
     rw [lookupOption] at named
     by_cases here : chosen == selector
-    · rw [if_pos here] at named
+    · rw [ite_eq_left here] at named
       simp only [Except.ok.injEq] at named
       subst named
       have zero : slot = 0 := by
-        rw [List.findIdx?_cons, if_pos (by simpa using here)] at found
+        rw [List.findIdx?_cons, ite_eq_left (by simpa using here)] at found
         simpa using found.symm
-      rw [valueOfOption, if_pos here]
+      rw [valueOfOption, ite_eq_left here]
       simp only [Bind.bind, Except.bind, pure, Except.pure]
       rw [show start + slot = start from by omega] at inner
       rw [inner]
-    · rw [if_neg here] at named
+    · rw [ite_eq_right here] at named
       obtain ⟨earlier, place, split⟩ : ∃ earlier, selectors.findIdx? (· == selector) = some earlier
           ∧ slot = earlier + 1 := by
-        rw [List.findIdx?_cons, if_neg (by simpa using here)] at found
+        rw [List.findIdx?_cons, ite_eq_right (by simpa using here)] at found
         obtain ⟨earlier, place, plus⟩ := Option.map_eq_some_iff.mp found
         exact ⟨earlier, place, by omega⟩
-      rw [valueOfOption, if_neg here]
+      rw [valueOfOption, ite_eq_right here]
       refine valueOfOption_found spelling payload option value selectors options
         (start + 1) selector earlier place named ?_
       rw [show start + 1 + earlier = start + slot from by omega]
@@ -175,18 +175,18 @@ theorem valueOfSequence_jsonOfSequence (element : Desc) (spelling : Spelling)
     valueOfSequence element spelling document = .ok elements := by
   rw [jsonOfSequence] at wrote
   by_cases alias? : spelling.isByte = true
-  · rw [if_pos alias?] at wrote
+  · rw [ite_eq_left alias?] at wrote
     cases run : byteRun elements <;> simp [run, Bind.bind, Except.bind, pure, Except.pure] at wrote
     subst wrote
-    rw [valueOfSequence, if_pos alias?]
+    rw [valueOfSequence, ite_eq_left alias?]
     simp [collectionHex, ofHex_toHex, byteElements_byteRun elements _ run,
       Bind.bind, Except.bind, pure, Except.pure]
     simp
-  · rw [if_neg alias?] at wrote
+  · rw [ite_eq_right alias?] at wrote
     cases each : jsonOfEach element spelling elements <;>
       simp [each, Bind.bind, Except.bind, pure, Except.pure] at wrote
     subst wrote
-    rw [valueOfSequence, if_neg alias?]
+    rw [valueOfSequence, ite_eq_right alias?]
     simpa using valueOfEntries_jsonOfEach element spelling (fun v d => back spelling v d)
       elements _ fitted each
 
@@ -268,7 +268,7 @@ theorem valueOf_union {selectors : List Nat} {options : List Desc} {spelling : S
     back _ data payload fitted (by simpa using wrote)
   rw [Json.mkObj, valueOf]
   simp only [Json.mkObj] at names tagged carried
-  simp only [names, List.isEmpty_cons, Bool.false_eq_true, if_false, tagged, carried,
+  simp only [names, List.isEmpty_cons, Bool.false_eq_true, ite_false, tagged, carried,
     Except.toOption, Bind.bind, Except.bind, readNat_decimal]
   exact valueOfOption_found spelling payload option data selectors options 0 selector slot
     place named inner
@@ -333,7 +333,7 @@ theorem valueOf_jsonOf : ∀ (shape : Desc), shape.wellFormed = .ok () → Rewri
     intro sound spelling _ document fitted wrote
     cases fitted with
     | vector count each =>
-      rw [jsonOf, if_pos (by simp [count])] at wrote
+      rw [jsonOf, ite_eq_left (by simp [count])] at wrote
       rw [valueOf, valueOfSequence_jsonOfSequence element _ (ih (wellFormed_vector sound)) _
         document each wrote]
       simp [count, Bind.bind, Except.bind]
@@ -342,7 +342,7 @@ theorem valueOf_jsonOf : ∀ (shape : Desc), shape.wellFormed = .ok () → Rewri
     intro sound spelling _ document fitted wrote
     cases fitted with
     | list within each =>
-      rw [jsonOf, if_pos within] at wrote
+      rw [jsonOf, ite_eq_left within] at wrote
       rw [valueOf, valueOfSequence_jsonOfSequence element _ (ih (wellFormed_list sound)) _
         document each wrote]
       simp [Nat.not_lt.mpr within, Bind.bind, Except.bind]

@@ -29,11 +29,11 @@ theorem listSlices_concat_fixed {element : Desc} {width : Nat}
     -- Adding a capacity check changes only whether the recovered count is permitted.
     cases limit <;>
       simp only [listSlices, sizeIs, fixed, beq_iff_eq, bne_iff_ne,
-        if_neg notEmpty, if_neg (Nat.ne_of_gt positive), if_neg (Nat.not_le.mpr nameable),
-        Nat.mul_mod_left, ne_self_iff_false, counted, if_false, Bind.bind, Except.bind, Pure.pure,
+        ite_eq_right notEmpty, ite_eq_right (Nat.ne_of_gt positive), ite_eq_right (Nat.not_le.mpr nameable),
+        Nat.mul_mod_left, ne_self_iff_false, counted, ite_false, Bind.bind, Except.bind, Pure.pure,
         Except.pure]
     · exact congrArg Except.ok extracted
-    · rw [if_neg (Nat.not_lt.mpr (within _ rfl))]
+    · rw [ite_eq_right (Nat.not_lt.mpr (within _ rfl))]
       exact congrArg Except.ok extracted
 
 /-- A variable-width sequence splits at the offsets originally written for its parts. -/
@@ -83,10 +83,10 @@ theorem listSlices_offset_parts {element : Desc} (varying : element.fixedSize = 
       ++ concatParts parts) = .ok parts
     -- Both capacity choices use the same recovered offsets and body spans.
     cases limit <;>
-      simp only [listSlices, varying, sizeIs, firstIs, counted, if_neg (Nat.not_le.mpr nameable),
-        beq_iff_eq, bne_iff_ne, if_neg notEmpty, if_neg scopeEnough, if_neg firstEnough,
-        Nat.mul_mod_left, ne_self_iff_false, if_false, if_neg inScope]
-    all_goals try rw [if_neg (Nat.not_lt.mpr (within _ rfl))]
+      simp only [listSlices, varying, sizeIs, firstIs, counted, ite_eq_right (Nat.not_le.mpr nameable),
+        beq_iff_eq, bne_iff_ne, ite_eq_right notEmpty, ite_eq_right scopeEnough, ite_eq_right firstEnough,
+        Nat.mul_mod_left, ne_self_iff_false, ite_false, ite_eq_right inScope]
+    all_goals try rw [ite_eq_right (Nat.not_lt.mpr (within _ rfl))]
     all_goals simpa only [readOffsets_headOf parts _ _ nameable, offsetSpans_runningOffsets,
       Bind.bind, Except.bind, Pure.pure, Except.pure] using congrArg Except.ok extracted
 

@@ -53,7 +53,7 @@ theorem foldLevelNodes_reads {read : Nat → Except Err Bytes} (closed : WalkerC
           cases readsSibling
           -- The stored parent is the ordered hash of this readable child and its supplied sibling.
           have parentAgrees : read (gindexParent index) = .ok (combine node siblingValue) := by
-            rw [if_pos even] at equation
+            rw [ite_eq_left even] at equation
             rwa [← equation]
           cases rec : foldLevelNodes depth nodes rest <;>
             simp [sibling, rec, Bind.bind, Except.bind, Pure.pure, Except.pure] at folded

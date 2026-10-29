@@ -79,7 +79,7 @@ theorem spineWalk_append_left (count outer combined extra : Nat)
     simp only [spineWalk] at walked
     by_cases empty : start ≥ count
     · simp [empty, throw, throwThe, MonadExceptOf.throw, Bind.bind, Except.bind] at walked
-    · simp only [if_neg empty] at walked ⊢
+    · simp only [ite_eq_right empty] at walked ⊢
       rw [bit]
       -- The preserved turn either exits at the same bounded segment or continues along the same spine prefix.
       cases turn : gindexBit outer depth with

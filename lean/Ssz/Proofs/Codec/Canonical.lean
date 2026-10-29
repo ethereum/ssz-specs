@@ -65,7 +65,7 @@ theorem canonical_byteList {limit : Nat} {data : Bytes} {value : Value}
   repeat' split at read
   all_goals cases read
   simp only [serialize, Bind.bind, Except.bind, pure, Except.pure]
-  rw [if_neg (by omega), if_neg (by omega)]
+  rw [ite_eq_right (by omega), ite_eq_right (by omega)]
 
 set_option maxRecDepth 4096 in
 private theorem byte_bit (byte : UInt8) (offset : Fin 8) :
@@ -159,7 +159,7 @@ theorem canonical_bitVector {length : Nat} {data : Bytes} {value : Value}
   all_goals simp_all [Bind.bind, Except.bind, pure, Except.pure]
   all_goals
     subst value
-    simp only [serialize, unpackBits_size, beq_self_eq_true, if_pos]
+    simp only [serialize, unpackBits_size, beq_self_eq_true, ite_eq_left]
     exact congrArg Except.ok (by simpa only [sized] using canonical)
 
 /-- A boolean has exactly one accepted byte for each of its two values. -/

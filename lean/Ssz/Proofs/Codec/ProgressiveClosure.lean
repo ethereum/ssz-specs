@@ -20,10 +20,10 @@ private theorem progressiveReading_parent_eq (chunks : Array Bytes) (index depth
   rcases Nat.mod_two_eq_zero_or_one index with even | odd
   · obtain ⟨child, sibling⟩ := gindexSibling_even even
     rw [← sibling, ← child] at equation
-    simpa only [if_pos even] using equation
+    simpa only [ite_eq_left even] using equation
   · obtain ⟨child, sibling⟩ := gindexSibling_odd odd
     rw [← child, ← sibling] at equation
-    simpa only [if_neg (by omega : index % 2 ≠ 0)] using equation
+    simpa only [ite_eq_right (by omega : index % 2 ≠ 0)] using equation
 
 /-- A successful progressive read has a sibling and parent whenever its nested values do. -/
 theorem progressiveNode_closed (layout : MerkleLayout) (budget : Nat) (chunks : Array Bytes)
@@ -43,7 +43,7 @@ theorem progressiveNode_closed (layout : MerkleLayout) (budget : Nat) (chunks : 
     have count := layoutChunksAt_size budget layout chunks materialized
     -- A successful nonterminal spine read implies the current segment actually exists.
     have occupied : start < layout.leaves.count := Nat.lt_of_not_ge fun past => by
-      rw [progressiveNode_step, if_pos past] at read
+      rw [progressiveNode_step, ite_eq_left past] at read
       cases read
     cases depth with
     | zero =>
@@ -64,26 +64,26 @@ theorem progressiveNode_closed (layout : MerkleLayout) (budget : Nat) (chunks : 
       have parentTurn : gindexBit (index / 2) depth = gindexBit index (depth + 1) := by
         simp [gindexBit, Nat.testBit_add_one]
       have siblingTurn := gindexBit_sibling_high index (depth + 1) (by omega)
-      rw [progressiveNode_step, if_neg (by omega)] at read
+      rw [progressiveNode_step, ite_eq_right (by omega)] at read
       by_cases left : (!gindexBit index (depth + 1)) = true
-      · rw [if_pos left] at read
+      · rw [ite_eq_left left] at read
         -- The selected segment or remaining spine supplies the same ordered parent hash for all three reads.
         obtain ⟨parent, sibling, parentRead, siblingRead, equation⟩ :=
           boundedNode_closed layout budget chunks materialized children index (depth + 1)
             start (4 ^ level) (by omega) node read
         refine ⟨parent, sibling, ?_, ?_, equation⟩
-        · simpa only [Nat.add_sub_cancel, progressiveNode_step, if_neg (by omega : ¬start ≥ layout.leaves.count),
-            parentTurn, if_pos left] using parentRead
-        · simpa only [progressiveNode_step, if_neg (by omega : ¬start ≥ layout.leaves.count),
-            siblingTurn, if_pos left] using siblingRead
-      · rw [if_neg left, ← Nat.pow_succ] at read
+        · simpa only [Nat.add_sub_cancel, progressiveNode_step, ite_eq_right (by omega : ¬start ≥ layout.leaves.count),
+            parentTurn, ite_eq_left left] using parentRead
+        · simpa only [progressiveNode_step, ite_eq_right (by omega : ¬start ≥ layout.leaves.count),
+            siblingTurn, ite_eq_left left] using siblingRead
+      · rw [ite_eq_right left, ← Nat.pow_succ] at read
         -- The selected segment or remaining spine supplies the same ordered parent hash for all three reads.
         obtain ⟨parent, sibling, parentRead, siblingRead, equation⟩ :=
           ih (start + 4 ^ level) (level + 1) (by omega) node read
         refine ⟨parent, sibling, ?_, ?_, equation⟩
-        · simpa only [Nat.add_sub_cancel, progressiveNode_step, if_neg (by omega : ¬start ≥ layout.leaves.count),
-            parentTurn, if_neg left, Nat.pow_succ] using parentRead
-        · simpa only [progressiveNode_step, if_neg (by omega : ¬start ≥ layout.leaves.count),
-            siblingTurn, if_neg left, Nat.pow_succ] using siblingRead
+        · simpa only [Nat.add_sub_cancel, progressiveNode_step, ite_eq_right (by omega : ¬start ≥ layout.leaves.count),
+            parentTurn, ite_eq_right left, Nat.pow_succ] using parentRead
+        · simpa only [progressiveNode_step, ite_eq_right (by omega : ¬start ≥ layout.leaves.count),
+            siblingTurn, ite_eq_right left, Nat.pow_succ] using siblingRead
 
 end Ssz

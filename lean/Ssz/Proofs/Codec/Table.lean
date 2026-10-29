@@ -122,7 +122,7 @@ theorem readSlots_headOf :
       cases fixed : field.fixedSize with
       | some width =>
         obtain rfl : part.size = width := widths (field, part) (by simp) width fixed
-        simp only [headOf, bodyWidth, headWidth, if_pos, expectedSlots,
+        simp only [headOf, bodyWidth, headWidth, ite_eq_left, expectedSlots,
           Desc.isFixed, fixed, Option.isSome_some] at nameable ⊢
         -- The rest of the read is the same claim with this field behind it.
         have inner := ih parts (front ++ part) bodies bodyStart
@@ -132,7 +132,7 @@ theorem readSlots_headOf :
         simp [readSlots, fixed, inner, Nat.add_assoc, Bind.bind, Except.bind, pure, Except.pure]
       | none =>
         simp only [headOf, bodyWidth, headWidth, expectedSlots, Desc.isFixed, fixed,
-          Option.isSome_none, Bool.false_eq_true, if_false] at nameable ⊢
+          Option.isSome_none, Bool.false_eq_true, ite_false] at nameable ⊢
         -- The offset stands in for the body, and the body follows the fixed part.
         have inner := ih parts (front ++ uintBytes bytesPerOffset bodyStart) bodies
           (bodyStart + part.size) (by simpa using paired) narrowed (by omega)
@@ -348,7 +348,7 @@ theorem structSlices_assemble :
   have shape : (fields.map Desc.isFixed).zip parts = slotsOf fields parts := rfl
   -- The encoder writes the fixed part and then the bodies, and refuses neither.
   simp only [assemble, shape]
-  rw [if_neg (by omega)]
+  rw [ite_eq_right (by omega)]
   show structSlices fields (headOf (headWidth (slotsOf fields parts)) (slotsOf fields parts)
     ++ bodiesOf (slotsOf fields parts)) = .ok parts
   -- The fixed part reads back the slots that wrote it.
@@ -361,7 +361,7 @@ theorem structSlices_assemble :
     simp [headOf_size, bodiesOf_size]
   have settled := structBudget_of_written fields parts paired widths
   simp only [structSlices, structSlots, structBodies, read, bodyStarts_expectedSlots, widthIs,
-    settled, if_neg (Nat.not_le.mpr nameable), Bind.bind, Except.bind]
+    settled, ite_eq_right (Nat.not_le.mpr nameable), Bind.bind, Except.bind]
   -- Either the layout opened no body at all, or the first one starts where the slots end.
   cases named : bodyOffsets (headWidth (slotsOf fields parts)) fields parts with
   | nil =>
@@ -394,7 +394,7 @@ theorem assemble_size (inline : List Bool) (parts : List Bytes) (bytes : Bytes)
     bytes.size = headWidth (inline.zip parts) + bodyWidth (inline.zip parts) := by
   -- Successful assembly has already established that its total width is representable.
   have nameable := assemble_nameable inline parts bytes wrote
-  simp only [assemble, if_neg (show ¬ headWidth (inline.zip parts)
+  simp only [assemble, ite_eq_right (show ¬ headWidth (inline.zip parts)
     + bodyWidth (inline.zip parts) ≥ 2 ^ (8 * bytesPerOffset) by omega),
     Pure.pure, Except.pure] at wrote
   -- Identify the returned bytes as the header followed by the bodies, then add their widths.
@@ -458,7 +458,7 @@ theorem assemble_inline (parts : List Bytes) (bytes : Bytes)
     bytes = concatParts parts := by
   -- Successful assembly passes the composite size bound even when no offsets are stored.
   have nameable := assemble_nameable (parts.map fun _ => true) parts bytes wrote
-  simp only [assemble, if_neg (show ¬ headWidth ((parts.map fun _ => true).zip parts)
+  simp only [assemble, ite_eq_right (show ¬ headWidth ((parts.map fun _ => true).zip parts)
     + bodyWidth ((parts.map fun _ => true).zip parts) ≥ 2 ^ (8 * bytesPerOffset) by omega),
     Pure.pure, Except.pure] at wrote
   rw [← Except.ok.inj wrote]
@@ -604,7 +604,7 @@ theorem assemble_offset (parts : List Bytes) (bytes : Bytes)
     bytes = headOf (parts.length * bytesPerOffset) (offsetSlots parts) ++ concatParts parts := by
   -- Successful assembly guarantees that the entire table and payload fit the offset range.
   have nameable := assemble_nameable (parts.map fun _ => false) parts bytes wrote
-  simp only [assemble, if_neg (show ¬ headWidth ((parts.map fun _ => false).zip parts)
+  simp only [assemble, ite_eq_right (show ¬ headWidth ((parts.map fun _ => false).zip parts)
     + bodyWidth ((parts.map fun _ => false).zip parts) ≥ 2 ^ (8 * bytesPerOffset) by omega),
     Pure.pure, Except.pure] at wrote
   rw [← Except.ok.inj wrote]

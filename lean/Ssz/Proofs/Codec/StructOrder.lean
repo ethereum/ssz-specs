@@ -72,7 +72,7 @@ theorem deserializeStruct_of {fields : List Desc} {data : Bytes} {slices : List 
   -- With offsets, every inline field was cut out as is, so the early check passes.
   have inline : (bodyStarts slots).isEmpty = false → checkInline fields slots = .ok () := by
     intro hasBodies
-    simp only [structBodies, hasBodies, Bool.false_eq_true, if_false] at bodies
+    simp only [structBodies, hasBodies, Bool.false_eq_true, ite_false] at bodies
     split at bodies
     · simp [throw_error, Bind.bind, Except.bind] at bodies
     · obtain ⟨spans, -, taken⟩ := checksPassed bodies

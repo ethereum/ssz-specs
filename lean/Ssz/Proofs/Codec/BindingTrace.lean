@@ -69,8 +69,8 @@ decreasing_by
   | case2 trees level nonempty ih =>
     -- The current level separates into a bounded prefix and the remaining progressive suffix.
     -- The suffix has the same root by recursion, and taking prefixes commutes with reading child roots.
-    rw [progressive, if_neg nonempty, merkleizeProgressiveUnchecked]
-    simp only [List.isEmpty_map, nonempty, Bool.false_eq_true, if_false, root,
+    rw [progressive, ite_eq_right nonempty, merkleizeProgressiveUnchecked]
+    simp only [List.isEmpty_map, nonempty, Bool.false_eq_true, ite_false, root,
       bounded_root, ih, List.map_toArray, List.map_take, List.map_drop]
 
 /-- The bounded or progressive contents of one layout. -/

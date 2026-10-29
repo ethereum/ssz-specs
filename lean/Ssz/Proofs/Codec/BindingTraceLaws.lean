@@ -32,7 +32,7 @@ theorem progressive_complete (trees : List CommitmentTree) (level : Nat)
   induction trees, level using progressive.induct with
   | case1 trees level empty => simp [progressive, empty, Complete]
   | case2 trees level nonempty ih =>
-    rw [progressive, if_neg nonempty]
+    rw [progressive, ite_eq_right nonempty]
     exact ⟨bounded_complete _ _ (fun tree member => complete tree
       (List.mem_of_mem_take (by simpa using member))),
       ih (fun tree member => complete tree (List.mem_of_mem_drop member))⟩

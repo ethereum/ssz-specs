@@ -118,7 +118,7 @@ theorem progressive_included (trees : List CommitmentTree) (level i : Nat)
     obtain rfl := List.isEmpty_iff.mp empty
     simp at within
   | case2 trees level nonempty ih =>
-    rw [progressive, if_neg nonempty]
+    rw [progressive, ite_eq_right nonempty]
     -- Prefix capacities grow as 1, 4, 16, and so on, while later positions continue down the right spine.
     by_cases before : i < 4 ^ level
     · have member : i < (trees.take (4 ^ level)).toArray.size := by simp; omega
@@ -149,8 +149,8 @@ theorem progressive_roots (left right : List CommitmentTree) (level : Nat)
     -- If one suffix is nonempty, the equal count forces the other suffix to be nonempty too.
     have otherNonempty : ¬ right.isEmpty = true := by
       simp_all [List.isEmpty_iff, ← List.length_eq_zero_iff]
-    rw [progressive.eq_def left level, if_neg nonempty] at first clean same
-    rw [progressive.eq_def right level, if_neg otherNonempty] at second clean same
+    rw [progressive.eq_def left level, ite_eq_right nonempty] at first clean same
+    rw [progressive.eq_def right level, ite_eq_right otherNonempty] at second clean same
     -- The enclosing hash authenticates both the bounded prefix root and the remaining spine root.
     have both := clean.fork_roots first second same
     -- The collision-free assumption applies separately to each pair of subcomputations.

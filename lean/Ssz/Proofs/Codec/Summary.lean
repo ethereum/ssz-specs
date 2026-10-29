@@ -28,7 +28,7 @@ theorem hashTreeRoot_chunk {data : Bytes} (width : data.size = bytesPerChunk) :
     hashTreeRoot (.byteVector bytesPerChunk) (.bytes data) = .ok data := by
   have flat : depthFor 1 = 0 := depthFor_pow 0
   simp only [hashTreeRoot, Desc.nesting, hashTreeRootAt, merkleLayout, width, bne_self_eq_false,
-    Bool.false_eq_true, if_false, Bind.bind, Except.bind, pure, Except.pure,
+    Bool.false_eq_true, ite_false, Bind.bind, Except.bind, pure, Except.pure,
     MerkleLayout.packing, packBytes_chunk width, layoutChunksAt, Leaves.count]
   simp only [merkleizeBoundedUnchecked, flat, subtreeAt, padded, Array.size_singleton,
     Bind.bind, Except.bind, pure, Except.pure]
@@ -246,7 +246,7 @@ private theorem lookupOption_at {selector : Nat} :
   | first :: selectors, _ :: options, slot, _, paired, indexed, declared => by
     by_cases matched : first = selector
     · subst matched
-      simp only [List.idxOf?_cons, beq_self_eq_true, if_true, Option.some.injEq] at indexed
+      simp only [List.idxOf?_cons, beq_self_eq_true, ite_true, Option.some.injEq] at indexed
       subst indexed
       simp_all [lookupOption]
     · cases slot <;> simp_all [lookupOption, List.idxOf?_cons]
