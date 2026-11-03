@@ -1,8 +1,8 @@
 """The two tree shapes SSZ merkleizes into: bounded by a declared capacity, or progressive."""
 
 from collections.abc import Sequence
-from hashlib import sha256
 
+from ssz import backend
 from ssz.chunks import (
     BYTES_PER_CHUNK,
     ZERO_CHUNK,
@@ -65,6 +65,9 @@ def merkleize(chunks: Sequence[bytes], limit: int | None = None) -> Root:
     # A one-leaf tree has no parent to hash: the leaf is already a chunk-wide root.
     if width == 1:
         return Root._trusted(chunks[0])
+    # A backend that is on folds the same tree; None leaves it to the fold below.
+    if backend.merkleize is not None and (native := backend.merkleize(chunks, width)) is not None:
+        return Root._trusted(native)
 
     # Zero data under zero padding is a zero tree, at any width.
     # The fold below fires only from a level spanning its data tree.
@@ -101,7 +104,7 @@ def merkleize(chunks: Sequence[bytes], limit: int | None = None) -> Root:
         # Supplying it here, rather than once per pair, keeps the branch out of the loop.
         if len(level) & 1:
             level.append(zero_tree_root(subtree_size))
-        level = [sha256(level[i] + level[i + 1]).digest() for i in range(0, len(level), 2)]
+        level = backend.hash_level(level)
         subtree_size *= 2
 
     # Neither spine above this point branches.
@@ -111,10 +114,10 @@ def merkleize(chunks: Sequence[bytes], limit: int | None = None) -> Root:
     # - Up to the full width: every sibling is the all-zero subtree beside the data.
     node = level[0]
     while subtree_size < data_width:
-        node = sha256(node + node).digest()
+        node = backend.hash_pair(node, node)
         subtree_size *= 2
     while subtree_size < width:
-        node = sha256(node + zero_tree_root(subtree_size)).digest()
+        node = backend.hash_pair(node, zero_tree_root(subtree_size))
         subtree_size *= 2
     # Invariant: a width above one leaves at least one height.
     # One spine above therefore hashed.
@@ -171,4 +174,4 @@ def merkleize_progressive(chunks: Sequence[bytes], num_leaves: int = 1) -> Root:
     successor_root = merkleize_progressive(chunks[num_leaves:], num_leaves * 4)
 
     # Invariant: a digest is exactly the chunk width.
-    return Root._trusted(sha256(subtree_root + successor_root).digest())
+    return Root._trusted(backend.hash_pair(subtree_root, successor_root))

@@ -1,9 +1,9 @@
 """The unit a Merkle tree is built from, and the roots of the trees that hold none."""
 
-from hashlib import sha256
 from itertools import accumulate, repeat
 from typing import Final
 
+from ssz import backend
 from ssz.byte_arrays import ByteVector
 from ssz.exceptions import SSZValueError, ValueFault
 
@@ -49,7 +49,7 @@ ZERO_CHUNK: Final = bytes(BYTES_PER_CHUNK)
 _ZERO_ROOTS: Final[tuple[Root, ...]] = tuple(
     accumulate(
         repeat(None, 64),
-        lambda previous, _: Root(sha256(previous + previous).digest()),
+        lambda previous, _: Root(backend.hash_pair(previous, previous)),
         initial=ZERO_ROOT,
     )
 )
@@ -83,5 +83,5 @@ def zero_tree_root(width: int) -> Root:
     root = _ZERO_ROOTS[-1]
     for _ in range(len(_ZERO_ROOTS) - 1, depth):
         # Each parent doubles the leaf count by joining two identical zero subtrees.
-        root = Root(sha256(root + root).digest())
+        root = Root(backend.hash_pair(root, root))
     return root

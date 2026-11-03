@@ -24,6 +24,7 @@ from ssz import (
     Uint128,
     Uint256,
     ValueFault,
+    native,
     roots,
 )
 from ssz.bitfields import BitList, BitVector, ProgressiveBitList
@@ -2187,6 +2188,9 @@ def test_a_capacity_rewritten_under_a_rooted_value_leaves_a_stale_root() -> None
 
 
 @memo_in_force
+@pytest.mark.skipif(
+    native.enabled(), reason="the native backend hears of the interior change, and is not stale"
+)
 def test_a_leaf_typed_slot_holding_a_value_with_an_interior_leaves_a_stale_root() -> None:
     """
     The residual risk in dropping leaf fields from the witness, pinned rather than hidden.
