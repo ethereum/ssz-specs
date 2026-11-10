@@ -5,7 +5,7 @@ The corpus writes them the way the released vectors write them, so the Lean side
 generated case with the same readers it reads a released one with:
 
     descriptor   <->  Conformance.readDescriptor
-    json_value   <->  Ssz.valueOf
+    json_value   <->  EthLib.Consensus.Ssz.valueOf
     Step         <->  Conformance.readProofStep
 """
 
