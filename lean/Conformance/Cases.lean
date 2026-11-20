@@ -1,4 +1,5 @@
 import Conformance.Reader
+import SszNative.Branch
 
 /-! What each conformance vector format asserts, one checker per format. -/
 
@@ -28,6 +29,22 @@ def sameNodes (what : String) (got expected : List Bytes) : Except String Unit :
 def sameVerdict (got expected : Bool) : Except String Unit :=
   if got == expected then .ok ()
   else .error s!"verification answered {got}, expected {expected}"
+
+/-- Check that the native path answers exactly what the specification answers, refusals included. -/
+def sameOutcome {α : Type} [BEq α] (what : String) (got expected : Except Err α) : Except String Unit :=
+  let agree := match got, expected with
+    | .ok a, .ok b => a == b
+    | .error a, .error b => a == b
+    | _, _ => false
+  if agree then .ok () else .error s!"{what} disagrees with the specification"
+
+/-- The encoding of a value, which the native path reads in place of the value. -/
+def encodingOf (shape : Desc) (value : Value) : Except String ByteArray := do
+  return ⟨← orFail "encoding" (serialize shape value)⟩
+
+/-- The nodes of a native answer, as the specification writes them. -/
+def nodesOf (nodes : Except Err (List ByteArray)) : Except Err (List Bytes) :=
+  nodes.map (·.map (·.data))
 
 /-- The refusal name a vector requires, or nothing where it names none. -/
 def refusalName (vector : Json) : Option String :=
@@ -100,14 +117,18 @@ def checkSsz (vector : Json) (valid : Bool) : Except String Unit := do
   let serialized ← hexField vector "serialized"
   if !valid then
     let expected ← requiredName vector
-    return ← refusedWith expected "decoding" (deserialize shape serialized)
+    refusedWith expected "decoding" (deserialize shape serialized)
+    -- The native path refuses the same bytes for the same reason.
+    return ← refusedWith expected "native decoding" (Native.validate shape ⟨serialized⟩)
   let value ← carried shape spelling vector
   let root ← hexField vector "root"
   let encoded ← orFail "encoding" (serialize shape value)
   let rooted ← orFail "rooting" (hashTreeRoot shape value)
   let decoded ← orFail "decoding" (deserialize shape serialized)
+  let native ← orFail "native rooting" (Native.hashTreeRoot shape ⟨serialized⟩)
   sameBytes "encoded" encoded serialized
   sameBytes "rooted" rooted root
+  sameBytes "native rooted" native.data root
   unless decoded == value do .error "decoded a different value than the one encoded"
 
 /--
@@ -177,11 +198,17 @@ untampered one is held to the nodes the tree does produce.
 def checkBranch (shape : Desc) (value : Value) (vector : Json) (index : Nat)
     (root leaf : Bytes) (branch : List Bytes) (valid : Bool) : Except String Unit := do
   let verified := verifyMerkleProof leaf branch index root
+  -- The native verifier answers what the specification's does, refusals included.
+  sameOutcome "native verification" (Native.verifyMerkleProof ⟨leaf⟩ (branch.map (⟨·⟩)) index ⟨root⟩) verified
   if let some name := refusalName vector then
     return ← refusedWith name "verification" verified
   if valid then
     let node ← orFail "node" (nodeRoot shape value index)
     let built ← orFail "branch" (buildProof shape value index)
+    -- The native path reads the same node and branch from the encoding.
+    let encoded ← encodingOf shape value
+    sameOutcome "native node" ((Native.nodeRoot shape encoded index).map (·.data)) (.ok node)
+    sameOutcome "native branch" (nodesOf (Native.buildProof shape encoded index)) (.ok built)
     let order ← orFail "branch indices" (getBranchIndices index)
     let claimedOrder ← numberList vector "branchIndices"
     sameBytes "node" node leaf
@@ -194,6 +221,7 @@ def checkBranch (shape : Desc) (value : Value) (vector : Json) (index : Nat)
 def checkAbsentNode (shape : Desc) (value : Value) (vector : Json) (index : Nat) :
     Except String Unit := do
   refusedWith (← requiredName vector) "node" (nodeRoot shape value index)
+  refusedWith (← requiredName vector) "native node" (Native.nodeRoot shape (← encodingOf shape value) index)
 
 /--
 A proof vector: one Merkle branch, checked as four separate claims.
@@ -240,10 +268,13 @@ def checkMultiproof (vector : Json) (valid : Bool) : Except String Unit := do
     orFail "index" (← indexOfSteps shape readProofStep path)
   sameNumbers "paths resolved to" resolved indices
   let verified := verifyMerkleMultiproof leaves supplied indices root
+  sameOutcome "native verification" (Native.verifyMerkleMultiproof (leaves.map (⟨·⟩)) (supplied.map (⟨·⟩)) indices ⟨root⟩) verified
   if let some name := refusalName vector then
     return ← refusedWith name "verification" verified
   if valid then
     let built ← orFail "multiproof" (buildMultiproof shape value indices)
+    let encoded ← encodingOf shape value
+    sameOutcome "native multiproof" (nodesOf (Native.buildMultiproof shape encoded indices)) (.ok built)
     let order ← orFail "helper indices" (getHelperIndices indices)
     let claimedOrder ← numberList vector "helperIndices"
     sameNodes "multiproof" built supplied

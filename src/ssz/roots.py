@@ -5,8 +5,9 @@ from __future__ import annotations
 import os
 from collections.abc import Callable
 from functools import cache, singledispatch
-from typing import Final
+from typing import Final, cast
 
+from ssz import backend
 from ssz.bitfields import BitList, BitVector, ProgressiveBitList
 from ssz.boolean import Boolean
 from ssz.byte_arrays import ByteList, ByteVector
@@ -178,17 +179,8 @@ def _witness_fields(value: Container | ProgressiveContainer | CompatibleUnion) -
     return (value._version, tuple([_witness_rule(type(field))(field) for field in fields]))
 
 
-def _root_from_layout(value: object) -> Root:
-    """
-    Root a value from its layout, remembering nothing.
-
-    Raises:
-        SSZTypeError: A value whose type has no registered handler.
-    """
-    layout = merkle_layout(value)
-    chunks = layout_chunks(
-        layout,
-    )
+def root_of_layout(layout: MerkleLayout, chunks: list[bytes]) -> Root:
+    """The root of a layout's leaves, already rooted into chunks, under its tree and mixin."""
     # The two tree shapes are the only ones SSZ defines.
     # A layout names one of them.
     if layout.limit is None:
@@ -197,6 +189,17 @@ def _root_from_layout(value: object) -> Root:
         root = merkleize(chunks, layout.limit)
     # A shape that mixes a word in puts its contents on the left and the word on the right.
     return root if layout.mixin is None else mix_in(root, layout.mixin)
+
+
+def _root_from_layout(value: object) -> Root:
+    """
+    Root a value from its layout, remembering nothing.
+
+    Raises:
+        SSZTypeError: A value whose type has no registered handler.
+    """
+    layout = merkle_layout(value)
+    return root_of_layout(layout, layout_chunks(layout))
 
 
 def hash_tree_root(value: object) -> Root:
@@ -226,6 +229,9 @@ def hash_tree_root(value: object) -> Root:
         if len(value) <= BYTES_PER_CHUNK:
             return Root._trusted(value.ljust(BYTES_PER_CHUNK, b"\x00"))
     elif isinstance(value, SSZModel):
+        # A backend that keeps roots current needs no witness to know when one is stale.
+        if backend.model_root is not None:
+            return cast("Root", backend.model_root(value))
         witness = _witness_rule(type(value))(value)
         memo = value._root_memo
         if memo is not None and memo[0] == witness:

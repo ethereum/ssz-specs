@@ -70,15 +70,24 @@ test-paranoid *args:
     SSZ_PARANOID_ROOTS=1 uv run --locked --group test pytest -n auto \
         --maxprocesses=10 --dist=worksteal --no-cov "$@"
 
+# Run unit tests with roots, trees and proof checks on the native routines, failing where they cannot run
+test-native *args:
+    SSZ_BACKEND=native SSZ_REQUIRE_NATIVE=1 uv run --locked --group test pytest -n auto \
+        --maxprocesses=10 --dist=worksteal --no-cov "$@"
+
 # Run unit tests with coverage report (HTML + terminal)
 [group('tests')]
 test-cov *args:
     uv run --locked --group test pytest --cov --cov-report=html --cov-report=term "$@"
 
-# Run unit tests with coverage gate (fails below 100%)
+# Run unit tests with coverage gate (fails below 100%), over the Python and the native routines
+#
+# The native code runs only with the backend on, so the gate adds that run to the plain one.
 [group('tests')]
 test-cov-gate *args:
-    uv run --locked --group test pytest --cov --cov-report=term-missing --cov-fail-under=100 "$@"
+    uv run --locked --group test pytest --cov --cov-report= "$@"
+    SSZ_BACKEND=native SSZ_REQUIRE_NATIVE=1 uv run --locked --group test pytest --cov \
+        --cov-append --cov-report=term-missing --cov-fail-under=100 "$@"
 
 # Build the eth-ssz-specs sdist and wheel into dist/
 [group('release')]
@@ -195,3 +204,13 @@ lean-test: lean
 [group('lean')]
 lean-parity *args: lean
     uv run --locked --group test pytest tests/parity --no-cov "$@"
+
+# Print the native kernels from their Lean programs, into the committed assembler file
+[group('lean')]
+lean-kernels:
+    cd lean && lake build SszNative.Kernel.Assembly && lake env lean --run scripts/kernels.lean
+
+# Time the native Lean implementation on beacon-chain workloads
+[group('lean')]
+lean-bench:
+    cd lean && lake build bench && ./.lake/build/bin/bench

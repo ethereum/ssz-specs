@@ -6,8 +6,9 @@ An alphabetical listing scrambles that order.
 
     exceptions    the two ways SSZ refuses something, and every reason for each
     base          pydantic glue shared by the types
-    ssz_base      the abstract bases every SSZ type stands on
     offsets       the table a variable-size shape puts in front of its bodies
+    lazy          elements read from an encoding on first use, for the native decoder
+    ssz_base      the abstract bases every SSZ type stands on
 
     boolean       a true or false value
     uint          the unsigned integers, and the byte
@@ -28,10 +29,17 @@ An alphabetical listing scrambles that order.
     proofs        reading an index against a value, and building the proofs
     verification  rebuilding a root from chunks and indices, reading no declaration
 
+    backend       which implementation computes roots and proof checks
+
+    native        the proved x86-64 routines, as an optional backend
+    stored        decoding by the native backend, over the encoding it checked
+    kept          roots the native backend keeps current by change notification
+
 Serialization, deserialization and the JSON mapping have no module of their own.
 Each type carries them as methods, since every shape encodes itself.
 """
 
+import os
 from importlib.metadata import version
 
 from ssz.bitfields import BitList, BitVector, ProgressiveBitList
@@ -211,3 +219,11 @@ __all__ = [
     "verify_merkle_proof",
     "zero_tree_root",
 ]
+
+# SSZ_BACKEND=native routes roots and proof checks through the proved native routines.
+if os.environ.get("SSZ_BACKEND") == "native":
+    from ssz import native as _native
+
+    # SSZ_REQUIRE_NATIVE=1 refuses the Python alone, so a test run cannot pass by falling back.
+    if not _native.enable() and os.environ.get("SSZ_REQUIRE_NATIVE") == "1":
+        raise RuntimeError("SSZ_REQUIRE_NATIVE=1, but the native routines cannot run here")

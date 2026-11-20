@@ -49,6 +49,51 @@ sha256sum --check "ssz-test-vectors-$TAG.tar.gz.sha256"
 tar -xzf "ssz-test-vectors-$TAG.tar.gz"   # extracts fixtures/
 ```
 
+## Native backend
+
+The package can compute roots, decoding checks, Merkle trees and proof verification with x86-64 routines.
+They are written and proved equal to the specification in Lean, then printed to assembly; `lean/README.md` explains how.
+
+The backend is off by default.
+Turn it on before importing `ssz`:
+
+```bash
+SSZ_BACKEND=native python ...
+```
+
+Or at run time:
+
+```python
+import ssz.native
+
+ssz.native.enable()  # True when the routines run here
+```
+
+`SSZ_REQUIRE_NATIVE=1`, next to `SSZ_BACKEND=native`, makes the import fail where the routines cannot run, instead of falling back.
+
+The routines need an x86-64 processor on Linux and a C compiler.
+On first use, `cc` (or `$CC`) assembles the shipped `kernels_x86.S` into a library cached in `~/.cache/eth-ssz-specs`, or under `$XDG_CACHE_HOME` when it is set.
+`SSZ_NATIVE_LIB` points to a library built elsewhere instead.
+On any other platform `enable()` returns `False`, and everything runs in Python as before.
+
+Every x86-64 processor runs the routines; nothing is configured.
+At load, a proved detection routine reads `cpuid` and `xgetbv`, and each hash picks the fastest kernel the processor allows:
+
+| processor offers | SHA-256 kernel |
+|---|---|
+| AVX-512 | 32 or 16 pairs at a time; the rest padded to 16, or given to SHA |
+| SHA extensions | two pairs at a time, then one, for the rest |
+| AVX2, without AVX-512 or SHA extensions | 8 pairs at a time |
+| none of these | SSE2, which every x86-64 processor has, 4 pairs at a time |
+
+A processor with both AVX-512 and the SHA extensions uses AVX-512 for large batches and SHA for what remains.
+
+Calls keep their signatures, answers and errors, so downstream code such as consensus-specs changes nothing.
+An input the routines do not cover is computed by the Python.
+
+One difference is visible: a long vector or list of composite elements, decoded in native mode, holds a lazy sequence in `.data` rather than a list.
+It behaves as a mutable sequence, and decodes each element the first time it is read.
+
 ## Types
 
 ### `Boolean`

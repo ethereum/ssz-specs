@@ -5,8 +5,8 @@ Each is built at the chunk width, which yields exactly that width or raises.
 """
 
 from collections.abc import Sequence
-from hashlib import sha256
 
+from ssz import backend
 from ssz.chunks import BITS_PER_CHUNK, BYTES_PER_CHUNK, Chunk, Root
 from ssz.exceptions import SSZValueError, ValueFault
 
@@ -14,7 +14,7 @@ from ssz.exceptions import SSZValueError, ValueFault
 def mix_in(root: Root, word: Chunk) -> Root:
     """Hash a subtree root against the word its shape mixes in, as the right child."""
     # Invariant: a digest is exactly the chunk width.
-    return Root._trusted(sha256(root + word).digest())
+    return Root._trusted(backend.hash_pair(root, word))
 
 
 def length_word(length: int) -> Chunk:
